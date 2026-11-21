@@ -2,6 +2,11 @@
 
 `sim/tilemap`. The map of a zone: never changes once made; every copy of the zone state shares it. Positions and radii are in units; a tile is 1024 units wide and high, a detail private to the package.
 
+## Storage
+
+- One bit for each tile, row by row, in a [`bitset.Array`](bitset.md); `width * height` bits.
+- Compared with a `[]bool` in [the benchmarks of a move](benchmark/move.md#tile-storage).
+
 ## Construction
 
 `New(width, height, spawn, walls, exits) (*TileMap, error)`; sizes and coordinates in tiles. Returns an error that wraps `ErrInvalid` and says what is wrong when the map is not well formed:
