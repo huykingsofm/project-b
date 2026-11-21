@@ -5,7 +5,7 @@ and combat, effects, storage, network, accounts, a client, tools and content (th
 [plan/en/phases.md](plan/en/phases.md)). What exists today is the simulation core, which touches
 nothing outside: no gateway, no database, no network. Outside code gives it commands and takes what
 changed. It builds and its tests pass;
-`go run ./server/cmd/world` runs the whole flow as a script and prints what the clients would hear.
+`go run ./server/cmd/world` runs the whole flow as a script and prints what the clients would hear; with `-replay-dir <dir>` it also writes the replay log of every engine to files and reads it back.
 
 ```
 make hooks   # once for each clone: runs make ci before every commit
