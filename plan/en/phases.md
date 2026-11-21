@@ -1,0 +1,147 @@
+# Phases
+
+Every phase has tasks and a measurable acceptance. There are no weeks: a phase starts when the one before it has passed acceptance. Every design marked `(pending approval)` needs the owner's approval before any code is written; state methods and actions are the owner's (R26). Running phases in parallel is up to the owner, who opens separate sessions and branches; the plan only states the dependencies.
+
+The performance targets are the minimum for every phase: 2,000 players at once on one machine (one machine is one world), p99 of a tick under 20 ms at the network layer and under 45 ms per layer.
+
+## Order and dependencies
+
+```
+0 Foundation: entities and items
+  1 Durable engine: checkpoint and replay log
+    2 Early playable slice (first client: fight, pick up, drop, monsters)
+      ├─ 3 Space ── 4 Characters and combat ── 5 Effects
+      ├─ 6 Storage
+      ├─ 7 Network and accounts (complete)
+      └─ 8 Client and tools (complete)
+            9 Content before base-v1 ── tag base-v1
+                                          10 Game business
+```
+
+After phase 2, the branches 3 to 5, 6, 7 and 8 do not depend on one another beyond the interfaces already fixed; phase 9 needs all of them.
+
+---
+
+## Phase 0: Foundation: entities and items
+
+Clean up what is unfinished and lay the foundation for entities before building further.
+
+- Update `README.md`, `docs/action/*.md` and the rules (R3, R4 and the opening of `plan/rule/index.md`) to match the scope of the plan.
+- **An entity is an interface** (detail pending approval): `ID()`, `KindID()`, `Position()`, `Radius()`, `BoundingBox()` (the smallest rectangle that contains the entity, derived from the position and the radius, for the grid). Collision uses the radius. Every entity is a value type (R29); a change replaces the value in its container.
+- `CharacterEntity` and `ItemEntity` (a dropped item with an expiry: `Expired`). The body of a character exists today; move it to this interface.
+- A pickup action: the picker must be within a given radius and chooses the exact `EntityID` of the item (the client works out which). The item is removed from the zonelayer first, and only then is a message sent to the world to add it to the inventory (R28). (pending approval)
+- Events: item appeared, item disappeared (with an ID registered in `events.go`).
+- An R29 test for every state: changing the state after `Clone` does not change the copy.
+- Rules R28 (one engine owns a piece of data) and R29 (value or `Clone`) are written; keep them in step with `plan/rule/index.md`.
+- Business examples in the code (item, monster, sample stats) are only examples, to expose a design that does not fit early; a base game changes them later.
+
+**Acceptance:** `make ci` passes; the documents match the code; pickup tests (inside and outside the radius, an item already taken, an expired item, two players at once and only one gets it); the R29 test; the owner has confirmed every "pending approval" point of this phase.
+
+## Phase 1: Durable engine: checkpoint and replay log
+
+- **The replay log is written to a file, append-only** (like Kafka): divided into segments, indexed by `Step`; not pushed to S3 yet. The format is agreed, see [proposed-designs.md](proposed-designs.md).
+- **Periodic checkpoint:** write the whole state of some engines so that a replay does not have to start from the beginning. The period is a config parameter, much rarer than the hash. Engines do not write at the same time: each engine has its own offset (like the sparse hash) to avoid CPU peaks. Writing happens after the tick ends (R28). (agreed)
+- Loading (option A): every engine loads its own latest checkpoint and replays its own input to the end of the log.
+- The replay runner reads the replay log, runs the cluster again in `Step` order and compares the hash at each checkpoint. No replay of a single engine.
+- Add and remove zonelayers while running; a zone creates a layer when someone arrives (on demand). (pending approval)
+- Change layer within the same zone (a person moves to another layer). (pending approval)
+- Graceful stop: `Run` ends, drains the queue and returns the messages that remain.
+- Back-pressure: count the messages that are refused (`Full`) and lost (`Dropped`), with configured thresholds.
+- Plain engine metrics: players, capacity, tick time histogram (the engine does not know Prometheus). (pending approval)
+- A test that `Step` and `Run` give the same result for the same input.
+- A baseline benchmark for one full zonelayer and for many zonelayers in parallel.
+
+**Acceptance:** a replay of the whole cluster from a checkpoint matches the hash; the checkpoints of the engines do not fall on the same tick (CPU peak measured); the metrics and benchmarks are recorded; a kill and a graceful stop do not lose a message that was received.
+
+## Phase 2: Early playable slice
+
+Goal: a client that works from end to end (client to server and back to client) with the basic functions, so that the later phases can run in parallel with the frontend.
+
+- **Protocol:** protobuf with `buf`, binary frames over WebSocket, events batched per tick, generated code for Go and TypeScript. (pending approval)
+- **Gateway:** WebSocket; authentication once when the connection opens (password hashing with argon2id, session token), later messages are not authenticated again; heartbeat; a bounded send queue, slow clients are disconnected. (pending approval)
+- **In-memory store** (accounts, characters) behind a port defined by the caller (R1); Postgres takes its place in phase 6 without changing the simulation.
+- **Functions:** enter the world, walk, fight (normal attack), monsters (NPCs with a minimal AI), a drop when a monster dies, pick up an item, chat.
+- **Web client:** TypeScript, PixiJS and Vite; it only needs to draw the map, entities, health bars, a minimal inventory and chat. The owner does not review the frontend, so the tools are chosen to be fast and stable, and the code is kept small.
+- A Go bot that uses the same protocol to test.
+
+**Acceptance:** a real player enters from a browser, walks, fights a monster, sees the drop and picks it up; 2,000 bots enter and walk at once, p99 of a tick under 20 ms at the network layer and under 45 ms per layer; a client that does not read is disconnected while the server keeps running; a packet test shows no information leaks.
+
+## Phase 3: Space
+
+- **Grid:** a spatial index and localizing the map: each entity belongs to one or more cells by its `BoundingBox`, lookup by area, and knowing which cells changed in the tick. (agreed, detailed design pending approval)
+- **Sight:** entering and leaving sight; who sees whom. (pending approval)
+- **Loading state:** a new entity stays hidden until it has loaded. (agreed, detail pending approval)
+- **`observe`:** project events into observations per viewer; group by cell once and reuse; a no-leak test (see [proposed-designs.md](proposed-designs.md)). (pending approval)
+- Read the map from a file (Tiled, or another format the owner picks): map, spawns, destinations, exits. (pending approval)
+- More kinds of entity when needed: corpse, resource, portal, trap, projectile (see [proposed-designs.md](proposed-designs.md)). (pending approval)
+
+**Acceptance:** tests for entering and leaving sight; the no-leak test; lookup by area is correct; a benchmark of 150 entities in one layer is recorded.
+
+## Phase 4: Characters and core combat
+
+- Character stats and derived stats come from a data file; table-driven tests. The set of stats is decided by the data. (pending approval)
+- Attack and defense formulas (replacing the temporary damage `1`), dodge, critical hit. (pending approval)
+- Death, respawn (a gameplay design), level and experience. (pending approval)
+- Skills (normal attack is a skill) with the cooldown as a config parameter. (pending approval)
+- A design for hit resolution under network lag: how far the server trusts the client. (pending approval)
+- Replace the temporary regen with the owner's new design. (pending approval)
+
+**Acceptance:** formula tests by table; death and respawn are correct; the replay of a fight keeps the hash.
+
+## Phase 5: Effects
+
+- The effect framework: the `Effect` interface, a registry by ID, standing actions by scope (the owner acts, the owner is acted on, around the owner, in the zone, on the whole server). (pending approval)
+- Plan indexes by kind and target when a benchmark requires it (`FindType` exists).
+- 10 sample abilities covering all three scopes; an activated ability stays in the state until it expires. (pending approval)
+- Ability secrecy: recognized through `observe`, with a no-leak test.
+- **Performance gate:** one full layer of 150 entities and 4 layers in parallel, each entity with one effect ability, p99 of a tick under 45 ms per layer. If it is not met, stop and fix the effect design before building further. (agreed)
+
+**Acceptance:** the performance gate is passed; the no-leak test through `observe` passes; every sample effect has a test and lives in one file.
+
+## Phase 6: Storage
+
+- **Postgres** holds the important data: accounts, characters, inventory, configuration, chat history, seasons. The schema is divided by account and by season; migrations (goose); generated queries (sqlc). (pending approval)
+- Replace the in-memory store of phase 2 with a Postgres adapter, without changing the simulation.
+- A write-behind queue: save positions and characters without blocking a tick; always write after the tick ends (R28). (pending approval)
+- Character names: normalization, alphabet, duplicate check, banned words. (pending approval)
+- Push closed replay log segments and checkpoints to S3, keeping the keys and hashes in Postgres. (low priority, last in this phase)
+- Seasons and offline cultivation computed once at login (a gameplay design). (pending approval)
+- Preventing duplicated items: an item has an ID of its own and exactly one owner (an entity on the ground, an inventory or a corpse); a transfer is one operation (R28); entity and item IDs are never reused. (pending approval)
+- `Character` already moves intact between layers: reuse it for saving and loading.
+
+**Acceptance:** after a sudden stop and a restart, a character keeps its position and inventory (error at most one write period) and no item is duplicated; tests on a real Postgres with `-race`.
+
+## Phase 7: Network and accounts (complete)
+
+The basics of the gateway and the protocol exist from phase 2; this phase completes them.
+
+- The full protocol: error codes; text keys and parameters for localization; a protocol version. (pending approval)
+- Gateway: a command rate limit, packets batched per tick, reconnection. (pending approval)
+- Accounts: guest, registration, linking a password; one connection per account. (pending approval)
+- Character creation; chat history.
+- Configuration in the database, reloaded while running (a watcher), a whole set is rejected when one value is wrong.
+- Adapters follow R1; `cmd/*` is the only place that connects the layers.
+
+**Acceptance:** 2,000 bots log in, walk across many zones and chat; p99 of a tick under 20 ms; the packet no-leak test passes; the command rate limit tests pass.
+
+## Phase 8: Client and tools (complete)
+
+- Web client (TypeScript, PixiJS): the image pipeline, pixel art and map tools, the remaining screens.
+- Load bots for measurement scenarios.
+- Deployment: docker compose, CI, a git hook that runs everything CI runs.
+- Observability (low priority): metrics, pprof, a dashboard, non-blocking logs; done last when the rest is stable.
+
+**Acceptance:** a real player can play the full version in a browser; it runs with docker compose.
+
+## Phase 9: Content before `base-v1`
+
+- Monsters with a full AI state machine, spawn areas, drop tables. (pending approval)
+- Items, inventory, equipment.
+- Basic quests. (pending approval)
+- A semantic review (R4): code, names, config variables, and sample content marked as examples; then tag `base-v1`.
+
+**Acceptance:** the semantic review passes; tag `base-v1`; a player can fight a monster, pick up items and take a quest.
+
+## Phase 10: Game business (after `base-v1`)
+
+The game's own business enters through the extension points of the base (R4): cultivation, quests and story, economy (a system market), sects, war and territory, large-scale abilities, seasons and closed testing, full localization. Each group will have a plan file of its own when its turn comes.

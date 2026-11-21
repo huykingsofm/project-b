@@ -1,0 +1,5 @@
+# R12. Organization of files and names (hard)
+
+A file holds one responsibility and its name says what that is. A type, function, constant or package name says what the thing is, and is not reused for something else in the repo. When a file mixes responsibilities (public types, the state of one thing, the behavior of another), split it. When a name is vague, wrong, or collides with another (a type named like a package, one word used for two things), rename it. Do it in the change that finds it, or in a pull request right after. A scan for such files and names is a semantic review of every package, not a keyword search.
+
+Settled terms: the world, a zone and a zonelayer are called **scopes** (`Scope`); `level` is the level of a character and is not used for them. The layer of a zone is called a **zonelayer** and never just a layer, because a map has layers too (a layer of tiles) and the two are easy to confuse. the queue that other code sends an engine things through is a **channel** (a Go channel), never "mailbox"; a zone stays a zone.

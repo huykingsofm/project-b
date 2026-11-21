@@ -1,0 +1,3 @@
+# R10. Writing: replace in place, read as if always so
+
+A replacement is made in place and the old text is deleted: no old copies, no "superseded" notes, no compatibility shims, no dead code. Edited text reads as if it had always been so (no "no longer", "instead of", "changed from"), and every other mention of the replaced thing is updated in the same change. Scans for leftovers are semantic reviews of docs, code, tests and names, not keyword searches. Tests are code: a replaced or deleted thing takes its tests with it, and a test is written for what exists, never because something was removed.
