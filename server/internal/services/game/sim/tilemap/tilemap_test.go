@@ -146,6 +146,9 @@ func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
 		"exit reversed": func() (*tilemap.TileMap, error) {
 			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 2}}})
 		},
+		"too many tiles": func() (*tilemap.TileMap, error) { return tilemap.New(4097, 4096, tilemap.Tile{}, nil, nil) },
+		"side too long":  func() (*tilemap.TileMap, error) { return tilemap.New(1<<20+1, 1, tilemap.Tile{}, nil, nil) },
+		"sides overflow": func() (*tilemap.TileMap, error) { return tilemap.New(1<<31-1, 1<<31-1, tilemap.Tile{}, nil, nil) },
 		"exit outside": func() (*tilemap.TileMap, error) {
 			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 4}}})
 		},
@@ -153,6 +156,14 @@ func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
 		m, err := make()
 		if m != nil || !errors.Is(err, tilemap.ErrInvalid) {
 			t.Errorf("%s: got map %v and error %v, want no map and ErrInvalid", name, m, err)
+		}
+	}
+}
+
+func TestTheLargestMapsAreAccepted(t *testing.T) {
+	for _, size := range [][2]int32{{4096, 4096}, {1 << 20, 16}} {
+		if m, err := tilemap.New(size[0], size[1], tilemap.Tile{}, nil, nil); m == nil || err != nil {
+			t.Errorf("%d by %d: got %v, %v", size[0], size[1], m, err)
 		}
 	}
 }
@@ -280,7 +291,7 @@ func TestABodyOfManyTilesIsStoppedByAWallAndDoesNotFitInANarrowPlace(t *testing.
 // reachByEveryUnit is the answer by the plain way: one unit at a time, as long as the body fits.
 func reachByEveryUnit(m *tilemap.TileMap, from state.Vec, dir state.Dir, distance, radius int32) state.Vec {
 	at := from
-	for i := int32(0); i < distance; i++ {
+	for range distance {
 		next := state.Vec{X: at.X + dir.Vec().X, Y: at.Y + dir.Vec().Y}
 		if !m.FreeForBody(next, radius) {
 			break
@@ -293,7 +304,7 @@ func reachByEveryUnit(m *tilemap.TileMap, from state.Vec, dir state.Dir, distanc
 func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 	random := rand.New(rand.NewPCG(1, 2))
 	var walls []tilemap.Tile
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		w := tilemap.Tile{X: random.Int32N(20), Y: random.Int32N(20)}
 		if w != (tilemap.Tile{X: 10, Y: 10}) {
 			walls = append(walls, w)
@@ -302,7 +313,7 @@ func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 	m := tilemaptest.New(t, 20, 20, tilemap.Tile{X: 10, Y: 10}, walls, nil)
 	dirs := []state.Dir{state.North, state.NorthEast, state.East, state.SouthEast, state.South, state.SouthWest, state.West, state.NorthWest}
 	checked := 0
-	for i := 0; i < 4000; i++ {
+	for range 4000 {
 		radius := []int32{0, 1, 100, 511, 700, 1500, 2048}[random.IntN(7)]
 		from := state.Vec{X: random.Int32N(20 * tile), Y: random.Int32N(20 * tile)}
 		if !m.FreeForBody(from, radius) {

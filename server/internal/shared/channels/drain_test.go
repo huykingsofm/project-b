@@ -25,7 +25,7 @@ func TestDrainTakesWhatIsThereInOrderAndLeavesTheChannelEmpty(t *testing.T) {
 
 func TestDrainTakesOnlyWhatWasThereWhenItWasCalled(t *testing.T) {
 	ch := make(chan int, 8)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		ch <- i
 	}
 	taken := channels.Drain(ch)

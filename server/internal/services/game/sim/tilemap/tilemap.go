@@ -62,16 +62,26 @@ type TileMap struct {
 	exits         []entity.ExitEntity
 }
 
+// The largest map: positions are int32 units, so a side of 2^20 tiles (2^30 units) fits; a map of 4096 by
+// 4096 tiles takes 2 MiB of bits.
+const (
+	maxSide  = 1 << 20
+	maxTiles = 4096 * 4096
+)
+
 // ErrInvalid is wrapped by the error of New when a map is not well formed.
 var ErrInvalid = errors.New("tilemap: the map is not well formed")
 
 // New makes a map of width by height tiles with the given spawn tile, walls and exits. It returns an error
 // that wraps ErrInvalid and says what is wrong when the map is not well formed: the size is at least one tile
-// each way, the walls, the spawn and the exits are inside the map, the spawn is not a wall, and an exit has
+// each way and no larger than the limits above, the walls, the spawn and the exits are inside the map, the spawn is not a wall, and an exit has
 // its Min before its Max.
 func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) (*TileMap, error) {
 	if width < 1 || height < 1 {
 		return nil, fmt.Errorf("%w: a map is at least one tile each way, got %d by %d", ErrInvalid, width, height)
+	}
+	if width > maxSide || height > maxSide || int64(width)*int64(height) > maxTiles {
+		return nil, fmt.Errorf("%w: a map is at most %d tiles on a side and %d tiles in all, got %d by %d", ErrInvalid, maxSide, maxTiles, width, height)
 	}
 	blocked, err := bitset.New(int(width) * int(height))
 	if err != nil {
@@ -130,11 +140,22 @@ func (m *TileMap) freeTiles(min, max Tile) bool {
 	if !m.inside(min) || !m.inside(max) {
 		return false
 	}
-	for y := min.Y; y <= max.Y; y++ {
-		for x := min.X; x <= max.X; x++ {
-			if !m.free(Tile{X: x, Y: y}) {
-				return false
+	run := int(max.X-min.X) + 1
+	// A row of tiles is bits next to each other, which AnyInRange looks at in a read or two; for a run of a
+	// few tiles, and for a column (its tiles are a width apart), a read of each tile costs less.
+	if run < 4 {
+		for y := min.Y; y <= max.Y; y++ {
+			for x := min.X; x <= max.X; x++ {
+				if m.isWall(Tile{X: x, Y: y}) {
+					return false
+				}
 			}
+		}
+		return true
+	}
+	for y := min.Y; y <= max.Y; y++ {
+		if m.blocked.AnyInRange(int(y)*int(m.width)+int(min.X), run) {
+			return false
 		}
 	}
 	return true

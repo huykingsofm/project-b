@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs everything CI runs before a commit is made. Install it with: make hooks
+exec make ci

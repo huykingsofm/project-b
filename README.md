@@ -8,6 +8,7 @@ changed. It builds and its tests pass;
 `go run ./server/cmd/world` runs the whole flow as a script and prints what the clients would hear.
 
 ```
+make hooks   # once for each clone: runs make ci before every commit
 make ci && go run ./server/cmd/world
 ```
 

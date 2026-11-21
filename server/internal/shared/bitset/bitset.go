@@ -61,3 +61,36 @@ func (a *Array) Count() int {
 	}
 	return n
 }
+
+// AnyInRange reports whether any of the n bits from bit lo is set. The part of the range outside the array
+// is clear, so it is not looked at. It reads one word for each 64 bits of the range, and a range inside
+// one word takes a single read.
+func (a *Array) AnyInRange(lo, n int) bool {
+	if n <= 0 || lo >= a.k {
+		return false
+	}
+	if lo < 0 {
+		n += lo
+		lo = 0
+		if n <= 0 {
+			return false
+		}
+	}
+	n = min(n, a.k-lo)
+	hi := lo + n - 1
+	first, last := lo>>6, hi>>6
+	head := ^uint64(0) << (uint(lo) & 63)
+	tail := ^uint64(0) >> (63 - uint(hi)&63)
+	if first == last {
+		return a.words[first]&head&tail != 0
+	}
+	if a.words[first]&head != 0 || a.words[last]&tail != 0 {
+		return true
+	}
+	for _, w := range a.words[first+1 : last] {
+		if w != 0 {
+			return true
+		}
+	}
+	return false
+}
