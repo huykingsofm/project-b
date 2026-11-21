@@ -18,7 +18,7 @@ var allActions = []any{
 	WorldChatPrivateSendAction{}, WorldCharacterItemAddAction{},
 	ZoneChatSendAction{}, ZoneCharacterEnterAction{},
 	ZoneLayerChatSendAction{}, ZoneLayerCharacterEnterAction{}, ZoneLayerCharacterMoveAction{},
-	ZoneLayerCharacterNormalAttackAction{}, ZoneLayerCharacterDamageAction{}, ZoneLayerCharacterShieldAction{},
+	ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{}, ZoneLayerCharacterShieldGrantAction{},
 	ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{}, ZoneLayerCharacterItemPickupAction{},
 	ZoneLayerItemEntityAddAction{}, ZoneLayerItemEntityRemoveAction{},
 }

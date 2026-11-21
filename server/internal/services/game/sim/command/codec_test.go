@@ -245,3 +245,32 @@ func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 		}
 	}
 }
+
+func TestACommandThatHoldsMoreThanValuesIsIsolatedFromItsSender(t *testing.T) {
+	for _, c := range examples {
+		typ := reflect.TypeOf(c)
+		_, isolated := isolators[c.ID()]
+		isValue := aliasing.CheckCloneable(typ, aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[any]()}}) == nil
+		if !isValue && !isolated {
+			t.Errorf("%v holds more than values and has no isolator", typ)
+		}
+	}
+	sent := ZoneCharacterEnterCommand{Character: characterWithCooldowns()}
+	kept := Isolate(sent)
+	if err := aliasing.Disjoint(sent, kept); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sent, kept) {
+		t.Fatal("the isolated command is not the same command")
+	}
+	if got := Isolate(ZoneLayerCharacterMoveCommand{CharacterID: 1}); got.CharacterID != 1 {
+		t.Fatal("a command that is a value was changed")
+	}
+	var zone ZoneCommand = sent
+	if _, ok := Isolate(zone).(ZoneCharacterEnterCommand); !ok {
+		t.Fatal("a command that is held as its interface lost its type")
+	}
+	if Isolate[ZoneCommand](nil) != nil {
+		t.Fatal("nil was changed")
+	}
+}

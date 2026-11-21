@@ -44,6 +44,7 @@ func (e *ZoneEngine) AddCron(every uint64, actions ...action.ZoneAction) {
 
 // Send gives the zone a command, without waiting. It reports false when the queue is full.
 func (e *ZoneEngine) Send(c command.ZoneCommand) bool {
+	c = command.Isolate(c) // the caller keeps its command and may change it: the engine keeps a copy
 	select {
 	case e.commands <- c:
 		return true

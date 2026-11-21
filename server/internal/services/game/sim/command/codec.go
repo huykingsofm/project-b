@@ -28,6 +28,30 @@ var decoders = map[ID]func(r *binarycodec.Reader, version binarycodec.Version) (
 	ZoneLayerCharacterShieldGrantCommandID:         decodeZoneLayerCharacterShieldGrantCommand,
 }
 
+// isolators say how to copy a command that holds more than values, so that what it holds is not shared with the
+// goroutine that sent it. A command that holds only values is not here: assignment copies it. A test fails when
+// a command that is not a value has no entry.
+var isolators = map[ID]func(Command) Command{
+	ZoneCharacterEnterCommandID: func(c Command) Command {
+		enter := c.(ZoneCharacterEnterCommand)
+		enter.Character = enter.Character.Clone()
+		return enter
+	},
+}
+
+// Isolate returns the command as an engine should keep it: a copy that shares nothing with the caller, which goes on
+// using the command it sent. The engines call it when a command comes in.
+func Isolate[C Command](c C) C {
+	cmd := Command(c)
+	if cmd == nil {
+		return c
+	}
+	if own, ok := isolators[cmd.ID()]; ok {
+		return own(cmd).(C)
+	}
+	return c
+}
+
 // Encode writes a command: its ID and then its fields. It returns ErrNoCodec, and writes nothing that can be
 // read, for a command whose ID has no decoder: what is written must be readable.
 func Encode(w *binarycodec.Writer, c Command) error {

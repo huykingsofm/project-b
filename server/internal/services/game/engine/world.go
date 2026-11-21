@@ -44,6 +44,7 @@ func (e *WorldEngine) AddCron(every uint64, actions ...action.WorldAction) {
 
 // Send gives the world a command, without waiting. It reports false when the queue is full.
 func (e *WorldEngine) Send(c command.WorldCommand) bool {
+	c = command.Isolate(c) // the caller keeps its command and may change it: the engine keeps a copy
 	select {
 	case e.commands <- c:
 		return true

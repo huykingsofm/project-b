@@ -16,7 +16,7 @@ import (
 func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCooldowns(t *testing.T) {
 	c, _, _, _ := newWorld(t, 1, 0)
 	kept := newCharacter(1, "An", 100, 1000, 0)
-	kept.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackActionCooldownKey, 5)
+	kept.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 5)
 	kept.Cooldowns.Set(action.ZoneLayerCharacterMoveActionCooldownKey, 7)
 	target := newCharacter(2, "Binh", 1000, 1000, 0)
 
@@ -30,7 +30,7 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 
 	deadline := time.Now().Add(150 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		c.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackCommand{CharacterID: 1, TargetID: 2})
+		c.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 		c.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 1})
 		// the caller reads what it kept, as a gateway that saves the character would
 		_ = kept.Cooldowns.Len()
@@ -41,7 +41,7 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 	cancel()
 	wg.Wait()
 
-	if got, _ := kept.Cooldowns.Get(action.ZoneLayerCharacterNormalAttackActionCooldownKey); got != 5 {
+	if got, _ := kept.Cooldowns.Get(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey); got != 5 {
 		t.Fatalf("the engine changed the cooldown of the character that was sent: %d, want 5", got)
 	}
 	if kept.Cooldowns.Len() != 2 {

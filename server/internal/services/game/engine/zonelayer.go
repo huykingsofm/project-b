@@ -51,6 +51,7 @@ func (e *ZoneLayerEngine) AddCron(every uint64, actions ...action.ZoneLayerActio
 
 // Send gives the zonelayer a command, without waiting. It reports false when the queue is full.
 func (e *ZoneLayerEngine) Send(c command.ZoneLayerCommand) bool {
+	c = command.Isolate(c) // the caller keeps its command and may change it: the engine keeps a copy
 	select {
 	case e.commands <- c:
 		return true
