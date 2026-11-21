@@ -9,7 +9,8 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
+	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -20,6 +21,7 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	zonelayerevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 // printer is the output of the engines: it shows each change with the scope that made it.
@@ -44,6 +46,15 @@ func (printer) EmitZoneLayer(from action.Address, tick uint64, events []zonelaye
 }
 
 func main() {
+	closeLogs, err := logging.Init(logging.NewWriterConsumer(os.Stderr),
+		logging.WithCapacity(4096),
+		logging.WithFlushEvery(time.Second))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer closeLogs()
+
 	exitEast := tilemap.ExitDefinition{Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 2}}
 	exitWest := tilemap.ExitDefinition{Min: tilemap.Tile{X: 0, Y: 0}, Max: tilemap.Tile{X: 0, Y: 4}, ToZoneID: 1, Arrival: tilemap.Tile{X: 8, Y: 2}}
 	spawn := tilemap.Tile{X: 1, Y: 2}
@@ -77,7 +88,7 @@ func main() {
 	}{{1, "An"}, {2, "Binh"}} {
 		character, err := zonelayerstate.NewCharacter(c.id, c.name, 100, 1000, 256)
 		if err != nil {
-			log.Printf("%s does not enter: %v", c.name, err)
+			logging.Error("character does not enter", "name", c.name, "err", err)
 			continue
 		}
 		cluster.Zone(1).Send(command.EnterWorldZoneCommand{Character: character})

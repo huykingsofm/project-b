@@ -1,10 +1,12 @@
 package action
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 // PlanKey names a set of actions that a plan keeps an index of: the actions of one ID that one
@@ -103,6 +105,7 @@ func (p *Plan[A]) Next() (*PlanEntry[A], bool) {
 		if int(e.depth) > MaxDepth.Get(p.cfg) {
 			e.cancelled = true
 			p.tooDeep = append(p.tooDeep, e)
+			logging.Warn("action cut: its chain is too deep", "action", fmt.Sprintf("%T", e.action), "depth", e.depth, "max_depth", MaxDepth.Get(p.cfg))
 			continue
 		}
 		e.ran = true

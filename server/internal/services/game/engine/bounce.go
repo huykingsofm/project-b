@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 // bouncer decides what a message that could not be delivered means. The message says it itself
@@ -43,7 +44,10 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 	d := l.Bounce(r)
 	switch d.Kind {
 	case action.DecisionRetry, action.DecisionRedirect:
-		if b.stopping || l.Attempts() >= action.MaxAttempts.Get(cfg) {
+		if b.stopping {
+			d = action.Decision{Kind: action.DecisionDrop}
+		} else if l.Attempts() >= action.MaxAttempts.Get(cfg) {
+			logging.Warn("message dropped: too many attempts", "from", l.Head().From, "dest", l.Dest(), "reason", r, "attempts", l.Attempts())
 			d = action.Decision{Kind: action.DecisionDrop}
 		}
 	case action.DecisionEscalate:
@@ -53,6 +57,7 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 	}
 	run, ok := decide[d.Kind]
 	if !ok {
+		logging.Error("message dropped: its decision has no kind in the table", "from", l.Head().From, "dest", l.Dest(), "reason", r, "kind", d.Kind)
 		run = decide[action.DecisionDrop]
 	}
 	run(b, l, d)

@@ -7,10 +7,11 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | File | Benchmarks | Code |
 |---|---|---|
 | [move.md](move.md) | the path of a move: `TileMap.Reach` and `State.MoveEntity` | `sim/tilemap`, `sim/state/zonelayer` |
+| [logging.md](logging.md) | a log call and the encoding of a batch | `shared/logging` |
 
 ## Run
 
-- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 <packages>`, from `server/internal/services/game/sim`.
+- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 <packages>`, from `server/internal/services/game/sim` (`server/internal/shared/logging` for logging).
 - Record the median of the runs.
 
 ## Record
