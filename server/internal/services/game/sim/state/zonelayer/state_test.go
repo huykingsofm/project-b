@@ -258,8 +258,8 @@ func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 }
 
 func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
-	// an Entity is implemented only by value types, and a cooldown key is a value of a struct{} type of its action
-	rules := aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity](), reflect.TypeFor[any]()}, Skip: []string{"zonelayer.State.events"}}
+	// an Entity is implemented only by value types
+	rules := aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity]()}, Skip: []string{"zonelayer.State.events"}}
 	if err := aliasing.CheckCloneable(reflect.TypeFor[zonelayer.State](), rules); err != nil {
 		t.Fatal(err)
 	}

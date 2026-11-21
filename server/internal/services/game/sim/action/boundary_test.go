@@ -60,8 +60,7 @@ func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {
 // An action is made by one engine and may be put in a message for another, so what it holds is a value or a type
 // with Clone, and whoever stores it in a state copies it (R29).
 func TestEveryActionHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
-	// a cooldown key is a value of a struct{} type that its action defines
-	rules := aliasing.Rules{Boundary: true, Interfaces: []reflect.Type{reflect.TypeFor[any]()}}
+	rules := aliasing.Rules{Boundary: true}
 	for _, a := range allActions {
 		if err := aliasing.CheckCloneable(reflect.TypeOf(a), rules); err != nil {
 			t.Errorf("%T: %v", a, err)

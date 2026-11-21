@@ -236,9 +236,9 @@ func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
 }
 
 // Commands come from outside, with the goroutine that sends one still holding what it sent, so what a command holds is
-// a value or has Clone, and the state that takes it copies it (R29). A cooldown key is a value of a struct{} type.
+// a value or has Clone, and the state that takes it copies it (R29).
 func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
-	rules := aliasing.Rules{Boundary: true, Interfaces: []reflect.Type{reflect.TypeFor[any]()}}
+	rules := aliasing.Rules{Boundary: true}
 	for _, c := range examples {
 		if err := aliasing.CheckCloneable(reflect.TypeOf(c), rules); err != nil {
 			t.Errorf("%T: %v", c, err)
@@ -250,7 +250,7 @@ func TestACommandThatHoldsMoreThanValuesIsIsolatedFromItsSender(t *testing.T) {
 	for _, c := range examples {
 		typ := reflect.TypeOf(c)
 		_, isolated := isolators[c.ID()]
-		isValue := aliasing.CheckCloneable(typ, aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[any]()}}) == nil
+		isValue := aliasing.CheckCloneable(typ, aliasing.Rules{}) == nil
 		if !isValue && !isolated {
 			t.Errorf("%v holds more than values and has no isolator", typ)
 		}
