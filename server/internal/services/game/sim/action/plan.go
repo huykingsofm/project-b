@@ -10,10 +10,12 @@ import (
 )
 
 // PlanKey names a set of actions that a plan keeps an index of: the actions of one ID that one
-// actor performs, or, with a nil Actor, all the actions of one ID.
+// actor performs, or, with a nil Actor, all the actions of one ID; or, with Type set and nothing else, the
+// actions of one Go type.
 type PlanKey struct {
 	Actor any
 	ID    ID
+	Type  reflect.Type
 }
 
 // PlanEntry is an action in a plan, with what the plan knows of it.
@@ -85,7 +87,7 @@ func (p *Plan[A]) Append(a A) {
 	id := a.ID()
 	byID := PlanKey{ID: id}
 	p.buckets[byID] = append(p.buckets[byID], e)
-	byType := PlanKey{ID: reflect.TypeOf(a)}
+	byType := PlanKey{Type: reflect.TypeOf(a)}
 	p.buckets[byType] = append(p.buckets[byType], e)
 	if who, ok := any(a).(Acting); ok {
 		byActor := PlanKey{Actor: who.Actor(), ID: id}
@@ -139,7 +141,7 @@ type Hit[A Action, T any] struct {
 // actions it changes without an ID value and without asserting a type itself.
 func (p *Plan[A]) FindType[T any]() []Hit[A, T] {
 	var out []Hit[A, T]
-	for _, e := range p.buckets[PlanKey{ID: reflect.TypeFor[T]()}] {
+	for _, e := range p.buckets[PlanKey{Type: reflect.TypeFor[T]()}] {
 		if e.ran || e.cancelled {
 			continue
 		}

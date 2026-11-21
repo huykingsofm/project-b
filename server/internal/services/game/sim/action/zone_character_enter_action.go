@@ -10,9 +10,6 @@ import (
 // not a tile, so the zonelayer puts the character at the spawn point of its map.
 var zoneCharacterEnterActionArrival = state.Vec{X: -1, Y: -1}
 
-// ZoneCharacterEnterActionID is the ID of ZoneCharacterEnterAction.
-type ZoneCharacterEnterActionID struct{}
-
 // ZoneCharacterEnterAction puts a character that entered the world in a zonelayer of the zone: it sends the
 // character it carries, with its health and cooldowns as they were, to the first zonelayer that holds fewer characters than its capacity. It
 // counts from what the zonelayers published, which may be a few ticks old, and does not wait for the
@@ -21,7 +18,7 @@ type ZoneCharacterEnterAction struct {
 	Character zonelayerstate.Character
 }
 
-func (a *ZoneCharacterEnterAction) ID() ID          { return ZoneCharacterEnterActionID{} }
+func (a *ZoneCharacterEnterAction) ID() ID          { return ZoneCharacterEnterActionID }
 func (a *ZoneCharacterEnterAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneCharacterEnterAction) Actor() any      { return a.Character.CharacterID }
 

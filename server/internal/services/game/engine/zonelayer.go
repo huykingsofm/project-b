@@ -113,6 +113,7 @@ func (e *ZoneLayerEngine) Step() {
 	e.stable.PublishZoneLayer(e.st.Clone())
 	e.recordHash(cfg, e.tick, e.st.Hash)
 	e.flush(cfg, e.reg.Take())
+	e.endTick(e.tick)
 }
 
 // planSelf puts in the plan what the engine set for itself in the last tick.

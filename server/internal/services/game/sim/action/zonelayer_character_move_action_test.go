@@ -37,7 +37,7 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
 
 	run.ApplyZoneLayer(&Context{Tick: 10}, st, reg, plan)
-	if got := st.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](1); got != 15 {
+	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 15 {
 		t.Fatalf("the cooldown ends at %d, want 15", got)
 	}
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Pos != (state.Vec{X: 2500, Y: 2500}) {
@@ -47,7 +47,7 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	// A run that is cancelled frees the character at once.
 	var cancellable ZoneLayerCancellableAction = run
 	cancellable.ApplyZoneLayerCancel(&Context{Tick: 12}, st, reg)
-	if got := st.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](1); got != 12 {
+	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 12 {
 		t.Fatalf("after the cancel the cooldown ends at %d, want 12", got)
 	}
 }
@@ -70,12 +70,12 @@ func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 }
 
 // otherCooldownKey stands for the key of some other action.
-type otherCooldownKey struct{}
+const otherCooldownKey zonelayerstate.CooldownKey = 60000
 
 func TestACooldownKeyOfOneActionIsNotTheKeyOfAnother(t *testing.T) {
 	st, _ := newMoveTestWorld(t, true)
-	st.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](1, 99)
-	if got := st.CooldownUntil[otherCooldownKey](1); got != 0 {
+	st.SetCooldown(1, ZoneLayerCharacterMoveActionCooldownKey, 99)
+	if got := st.CooldownUntil(1, otherCooldownKey); got != 0 {
 		t.Fatalf("the other cooldown is %d, want none", got)
 	}
 }

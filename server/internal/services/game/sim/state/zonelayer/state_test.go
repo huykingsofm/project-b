@@ -14,7 +14,7 @@ import (
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
 const tile = 1024
 
-type cooldownKey struct{}
+const cooldownKey zonelayer.CooldownKey = 1
 
 func newState() *zonelayer.State { return zonelayer.NewState(1, 1) }
 
@@ -106,7 +106,7 @@ func TestOnlyADamageableEntityLosesHealth(t *testing.T) {
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
 	st := newState()
 	st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500})
-	st.SetCooldown[cooldownKey](1, 5)
+	st.SetCooldown(1, cooldownKey, 5)
 	st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "hi"})
 
@@ -114,7 +114,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	chatBefore := st.Chat.Len()
 	copied := st.Clone()
 
-	st.SetCooldown[cooldownKey](1, 99)
+	st.SetCooldown(1, cooldownKey, 99)
 	st.DamageEntity(1, 3)
 	st.AddItemEntity(8, 1, state.Vec{X: 4500, Y: 4500}, 0)
 	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "again"})
@@ -123,12 +123,12 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	}
 
 	copiedHash := copied.Hash()
-	copied.SetCooldown[cooldownKey](1, 7)
+	copied.SetCooldown(1, cooldownKey, 7)
 	copied.RemoveItemEntity(2)
 	if st.Hash() == copiedHash {
 		t.Fatal("the test did not change the state apart from the copy")
 	}
-	if until := st.CooldownUntil[cooldownKey](1); until != 99 {
+	if until := st.CooldownUntil(1, cooldownKey); until != 99 {
 		t.Fatalf("a change of the copy changed the state: cooldown = %d", until)
 	}
 	if _, ok := st.ItemEntityByID(2); !ok {

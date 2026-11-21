@@ -107,23 +107,20 @@ func (s *State) CharacterEntityByCharacterID(characterID state.CharacterID) (ent
 	return e, ok
 }
 
-// CooldownUntil returns the first tick at which the character is free of what the key K stands
-// for, or 0 when the key has no cooldown. A key is an empty struct type that an action defines, and it
-// is given as a type argument: s.CooldownUntil[MoveCooldownKey](characterID).
-func (s *State) CooldownUntil[K comparable](characterID state.CharacterID) uint64 {
+// CooldownUntil returns the first tick at which the character is free of what the key stands for, or 0
+// when the key has no cooldown.
+func (s *State) CooldownUntil(characterID state.CharacterID, key CooldownKey) uint64 {
 	c, ok := s.Characters.Get(characterID)
 	if !ok {
 		return 0
 	}
-	var key K
 	until, _ := c.Cooldowns.Get(key)
 	return until
 }
 
-// SetCooldown sets the first tick at which the character is free of what the key K stands for.
-func (s *State) SetCooldown[K comparable](characterID state.CharacterID, until uint64) {
+// SetCooldown sets the first tick at which the character is free of what the key stands for.
+func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, until uint64) {
 	if c := s.Characters.Ptr(characterID); c != nil {
-		var key K
 		c.Cooldowns.Set(key, until)
 	}
 }

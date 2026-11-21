@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -16,7 +17,7 @@ func publishedAt(stable *StableStateRegistry, tick uint64) *zonelayerstate.State
 
 func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 	stable := NewStableStateRegistry(1)
-	replayLog := &MemReplayLog{}
+	replayLog := &replay.MemLog{}
 	view := stable.View(action.ZoneAddress(1), replayLog)
 
 	first := publishedAt(stable, 3)
@@ -37,7 +38,7 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 
 func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 	stable := NewStableStateRegistry(1)
-	replayLog := &MemReplayLog{}
+	replayLog := &replay.MemLog{}
 	view := stable.View(action.ZoneAddress(1), replayLog)
 	publishedAt(stable, 3)
 
@@ -48,16 +49,16 @@ func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 	view.begin(11)
 	view.ZoneLayer(7)
 
-	var got []Record
+	var got []replay.Record
 	for _, r := range replayLog.Records {
-		if r.Kind == RecordStableRead {
+		if r.Kind == replay.KindStableRead {
 			got = append(got, r)
 		}
 	}
-	want := []Record{
-		{Kind: RecordStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(7), Value: 3},
-		{Kind: RecordStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(8), Value: 0},
-		{Kind: RecordStableRead, Engine: action.ZoneAddress(1), Tick: 11, Source: action.ZoneLayerAddress(7), Value: 3},
+	want := []replay.Record{
+		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(7), Value: 3},
+		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(8), Value: 0},
+		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 11, Source: action.ZoneLayerAddress(7), Value: 3},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("%d records, want %d: %+v", len(got), len(want), got)

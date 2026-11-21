@@ -5,9 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerCharacterEnterActionID is the ID of ZoneLayerCharacterEnterAction.
-type ZoneLayerCharacterEnterActionID struct{}
-
 // ZoneLayerCharacterEnterAction puts a character in the zonelayer: gives it a body at a position. It is
 // the one way in: a character that enters the world, a character that comes through an exit
 // (ZoneLayerCharacterExitToAction), and a character that is put back after it could not go, all arrive
@@ -21,7 +18,7 @@ type ZoneLayerCharacterEnterAction struct {
 	At        state.Vec
 }
 
-func (a *ZoneLayerCharacterEnterAction) ID() ID          { return ZoneLayerCharacterEnterActionID{} }
+func (a *ZoneLayerCharacterEnterAction) ID() ID          { return ZoneLayerCharacterEnterActionID }
 func (a *ZoneLayerCharacterEnterAction) Priority() int16 { return PriorityResolve }
 func (a *ZoneLayerCharacterEnterAction) Actor() any      { return a.Character.CharacterID }
 

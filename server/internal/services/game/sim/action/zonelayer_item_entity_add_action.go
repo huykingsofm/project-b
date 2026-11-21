@@ -5,9 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerItemEntityAddActionID is the ID of ZoneLayerItemEntityAddAction.
-type ZoneLayerItemEntityAddActionID struct{}
-
 // ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the removal
 // of it (ZoneLayerItemEntityRemoveAction) for the end of its expiry. It is how an item comes to the
 // ground anywhere, and how it comes back when it could not be taken: the world sends it when the inventory
@@ -21,7 +18,7 @@ type ZoneLayerItemEntityAddAction struct {
 	Expiry uint64
 }
 
-func (a *ZoneLayerItemEntityAddAction) ID() ID          { return ZoneLayerItemEntityAddActionID{} }
+func (a *ZoneLayerItemEntityAddAction) ID() ID          { return ZoneLayerItemEntityAddActionID }
 func (a *ZoneLayerItemEntityAddAction) Priority() int16 { return PriorityResolve }
 
 // ApplyZoneLayer puts the items on the ground and sets their removal.

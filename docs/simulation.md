@@ -46,7 +46,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - Never fail, never leave their scope; what must happen outside goes in the registry ([registry](action/index.md#registry)).
 - An action that must wait sets itself at the tick it knows it can run.
-- The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldAction`](action/zonelayer.md#zonelayercharactershieldaction) is the pattern.
+- The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldGrantAction`](action/zonelayer.md#zonelayercharactershieldaction) is the pattern.
 - A cancellable action implements `ZoneLayerCancellableAction` (a `ZoneLayerAction` with one more method).
 - Cooldowns: [action/index.md](action/index.md#cooldowns).
 
@@ -87,7 +87,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `StableStateRegistry` | the latest published state of every engine |
 | `StableStateView` | what one engine reads of the registry; fixed within a tick, first read of each scope written to the replay log |
 | `Emitter` | three (world, zone, zonelayer); send events out |
-| `ReplayLog` | records the input from outside and the state hash (sparse, offset per engine) |
+| `replay.Log` | records the input from outside and the state hash (sparse, offset per engine); `EndTick` says an engine is done with a tick; `replay.MemLog` keeps the records in memory, `replay.FileLog` writes them to files ([replay_log](replay_log.md)) |
 | `PlanPool` | one per scope |
 
 ## Plan
@@ -106,6 +106,10 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/registry` | the latest published copy under a key |
 | `shared/bimap` | two-way map (the zonelayer state links characters and bodies with it) |
 | `shared/channels` | `Drain` |
+| `shared/logging` | key=value log lines; a call only fills a channel ([logging](logging.md)) |
+| `shared/bitset` | K bits, the walls of a `TileMap` ([bitset](bitset.md)) |
+| `shared/segmentlog` | append-only log in segment files, under the replay log ([segmentlog](segmentlog.md)) |
+| `shared/binarycodec` | integers and strings as bytes, and `Version`, the version of the data that a `Decode` reads, for the replay log |
 | `config` | `Var[T]` with defaults and limits; a snapshot taken once per tick; a whole set is rejected when one value is wrong |
 
 ## Temporary values
@@ -114,4 +118,6 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Replay
 
-- Needs only the inputs from outside (`engine/replay_log.go`); what engines send themselves is made again from the state.
+- Needs only the inputs from outside (`engine/replay/`); what engines send themselves is made again from the state.
+- An engine records, in its own log: the messages it took (header and action numbers), the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
+- In files: [replay_log](replay_log.md).

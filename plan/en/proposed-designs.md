@@ -15,7 +15,7 @@ Both are only ideas so far, with no code.
 **`effects`**
 - An effect is an ability, a technique, a piece of equipment or a talisman. Each effect is a Go type that implements the `Effect` interface, lives in one file and registers itself by ID, with its numbers as config variables (power can be tuned without a deploy).
 - An effect consists of **standing actions** that wait in the plan, watch the actions that stand after them, and change or cancel them, by scope: the owner acts, the owner is acted on, around the owner, in the zone, on the whole server.
-- `ZoneLayerCharacterShieldAction` in project-b is the first example of this kind (it blocks the first damage). The plan mechanism (`FindType`, `Cancel`, depth) is its foundation.
+- `ZoneLayerCharacterShieldGrantAction` in project-b is the first example of this kind (it blocks the first damage). The plan mechanism (`FindType`, `Cancel`, depth) is its foundation.
 
 ## Entities
 
@@ -40,11 +40,12 @@ An item has an ID of its own and exactly one owner (an entity on the ground, an 
 Agreed (phase 1).
 
 - **One log per engine.** Each engine writes only to its own file, with no shared lock; the cluster is put back in order by `tick` when replayed.
-- **Segments.** `replay/<engine>/seg-<first tick>.log`, closed when it reaches a configured size. A tick is found by searching the file names, so no index file is needed.
-- **Record framing like Kafka's.** `[u32 length][u32 crc][payload]`, and the payload is `[kind][tick delta][body]`. After a crash, a half-written record at the end is detected through the length and the crc and cut off.
-- **Segment header.** Magic, format version, engine address, first tick, seed and config version.
-- **Record bodies.** Commands and actions are encoded through a registry of codecs by ID, so a new kind is new code and changes nothing that exists.
-- **No cost during the tick.** The methods of `ReplayLog` only append to a reused per-tick buffer. When the tick ends, the buffer goes to one writer goroutine that uses `bufio` and syncs at a configured interval (group commit), not on every tick.
+- **Two layers.** `shared/segmentlog` is a general append-only log: it knows segments, framing and the crash repair, and nothing of ticks or engines. The replay log puts what it needs in the two places the segment log leaves to its user, the meta of a segment header and the payload of a record.
+- **Segments.** `<dir>/<scope>-<id>/seg-<index>.log` (for example `zonelayer-3/seg-00000000000000000000.log`), the index in 20 digits counted from 0 in the order the segments were made, closed when it reaches a configured size.
+- **Record framing like Kafka's.** `[u32 length][u32 crc][payload]`, and a batch (a tick) ends with a commit marker, so a batch is all or nothing. After a crash, a half-written record or a batch with no commit at the end is detected through the length, the crc and the commit, and cut off (and kept next to the segment). The payload is the replay log's own: `[kind][tick][body]`, with the tick whole in each record so that a record does not depend on its segment.
+- **Segment header.** Magic, format version and a meta. The replay log's meta is the format version of its records, the engine address, the seed, and the tick of the first record of the segment; a tick is found by reading the meta of about log2(n) segments, so no index file is needed.
+- **Record bodies.** Commands and actions are written as numbers of registers (action ID, command ID, cooldown key); a command writes its own fields with its `Encode`, and a function in its file reads them, found by the ID in a table, so a new kind is new code and changes nothing that exists.
+- **No cost during the tick.** The methods of `replay.Log` only append to a reused per-tick buffer. When the tick ends, the buffer goes to one writer goroutine that writes each batch with one `Write` and syncs at a configured interval (group commit), not on every tick.
 - **Checkpoint.** `ckpt-<tick>.snap` (written to a temporary file, then renamed) encodes the copy the engine already published, outside the engine's goroutine. R29 guarantees the copy does not change. The log has a marker record at that tick; segments older than the oldest kept checkpoint are deleted (the number of kept checkpoints is a config parameter). The period is a config parameter, rarer than the hash, and offset per engine.
 - **Recovery (option A).** Every engine loads its own latest checkpoint and replays its own input (messages, commands, config) to the end of the log. `StableRead` is not recorded by value, so after a failure the actions that read another engine's state run against the recovered states. A verifying replay of the whole cluster from tick 0 still compares the hash.
 - **S3.** Pushing closed segments and checkpoints to S3 is in the plan at low priority (phase 6), not now.

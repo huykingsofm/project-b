@@ -7,14 +7,11 @@ import (
 // regenAmount is the health that every living entity gets each time. It is 1 for now.
 const regenAmount = 1
 
-// ZoneLayerCharacterRegenActionID is the ID of ZoneLayerCharacterRegenAction.
-type ZoneLayerCharacterRegenActionID struct{}
-
 // ZoneLayerCharacterRegenAction gives a little health to every living entity. It has no state, so one value of
 // it is the action of a cron and runs every time the cron is due.
 type ZoneLayerCharacterRegenAction struct{}
 
-func (a *ZoneLayerCharacterRegenAction) ID() ID          { return ZoneLayerCharacterRegenActionID{} }
+func (a *ZoneLayerCharacterRegenAction) ID() ID          { return ZoneLayerCharacterRegenActionID }
 func (a *ZoneLayerCharacterRegenAction) Priority() int16 { return PrioritySystem }
 
 // ApplyZoneLayer heals everyone.

@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-type testID struct{}
+// testID is the ID of the actions of these tests; it is not one of the register.
+const testID ID = 60000
 
 // anonymousAction has an ID and a priority and no author.
 type anonymousAction struct {
@@ -13,7 +14,7 @@ type anonymousAction struct {
 	priority int16
 }
 
-func (a *anonymousAction) ID() ID          { return testID{} }
+func (a *anonymousAction) ID() ID          { return testID }
 func (a *anonymousAction) Priority() int16 { return a.priority }
 
 // authoredAction has an author too.

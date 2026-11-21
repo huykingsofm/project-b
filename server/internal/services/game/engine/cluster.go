@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"sync"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 type Env struct {
 	Router    *Router
 	Cfg       *config.Store
-	ReplayLog ReplayLog
+	ReplayLog replay.Log
 	Stable    *StableStateRegistry
 	Graph     *WorldGraph
 	QueueSize int

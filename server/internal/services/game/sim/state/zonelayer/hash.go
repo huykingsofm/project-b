@@ -1,8 +1,6 @@
 package zonelayer
 
 import (
-	"reflect"
-
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 )
 
@@ -25,7 +23,7 @@ func (s *State) Hash() uint64 {
 		h.String(c.Name)
 		h.U64(uint64(uint32(c.Speed)))
 		for key, until := range c.Cooldowns.All() {
-			h.String(reflect.TypeOf(key).String())
+			h.U64(uint64(key))
 			h.U64(until)
 		}
 	}

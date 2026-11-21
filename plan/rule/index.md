@@ -116,7 +116,7 @@ A name is never defined as another name for something already defined, not even 
 
 ### [R25. Actions: names, files and IDs (hard)](r25-action-naming-and-files.md)
 
-Every action belongs to exactly one scope (world, zone or zonelayer), all in one package. Its type is the scope, then the words of its name, then `Action`, its file is `<scope>_<name>_action.go`, the words go from the general to the specific so related actions stand next to each other, it implements the interface of its scope, and its ID is a `struct{}` type defined in its own file. A cancellable action embeds its scope's action interface.
+Every action belongs to exactly one scope (world, zone or zonelayer), all in one package. Its type is the scope, then the words of its name, then `Action`, its file is `<scope>_<name>_action.go`, the words go from the general to the specific so related actions stand next to each other, it implements the interface of its scope, and its ID is a number of the register of IDs. A cancellable action embeds its scope's action interface. A command is named, filed and numbered the same way (`ZoneLayerCharacterMoveCommand`, `zonelayer_character_move_command.go`, a number of the register of command IDs).
 
 ### [R26. The owner decides state methods and actions (hard)](r26-owner-decides-state-and-actions.md)
 
@@ -141,6 +141,10 @@ The documents under `docs/` are looked up as much as read: facts are list items,
 ### [R31. No panic while the server runs (hard)](r31-no-panic-at-runtime.md)
 
 After startup nothing panics: a mistake found while running is returned as an `error`, or logged when nothing above can take it, and the code carries on; whatever is dropped or skipped because of a fault is logged, never silent. A `panic` is allowed only at startup, for content or configuration the owner must fix; type assertions on values the package controls need no check.
+
+### [R32. A change to how data is encoded makes a new version (hard, after pre-alpha)](r32-versioned-data-formats.md)
+
+Written data has two versions: the format of the container (owned by the library, such as `segmentlog`) and the version of the data (written in the meta by the user of the container and passed to `Decode`). A breaking change to an `Encode` makes a new data version and keeps the `Decode` of the older ones until nothing of them can be read; it never overwrites. While the project is in pre-alpha (no official production, until the owner says it is over) there is no version and no back-compatibility for any breaking change in the code, not only written data: a breaking change is made as it is and everything that depends on it is refactored.
 
 ## 5. Ways of working
 

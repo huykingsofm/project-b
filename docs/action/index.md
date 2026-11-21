@@ -8,8 +8,8 @@ An action is one step of a scope's plan. Each belongs to exactly one scope: [wor
 |---|---|
 | Type | `<Scope><Words>Action`, words from general to specific |
 | File | `<scope>_<words>_action.go` |
-| ID | `<Type>ID`, a `struct{}` |
-| Cooldown key | `<Type>CooldownKey`, a `struct{}` |
+| ID | `<Type>ID`, a constant of type `ID` in the register `id.go` |
+| Cooldown key | `<Type>CooldownKey`, a constant of type `CooldownKey` in the register `cooldown_key.go` |
 
 ## Keys of an entry
 
@@ -83,9 +83,9 @@ A message names what a failed delivery means: `OnFailDrop`, `OnFailRetry`, `OnFa
 | zone | [ZoneCharacterEnterAction](zone.md#zonecharacterenteraction) | intent |
 | zone | [ZoneChatSendAction](zone.md#zonechatsendaction) | intent |
 | zonelayer | [ZoneLayerCharacterMoveAction](zonelayer.md#zonelayercharactermoveaction) | intent, cancellable |
-| zonelayer | [ZoneLayerCharacterNormalAttackAction](zonelayer.md#zonelayercharacternormalattackaction) | intent |
+| zonelayer | [ZoneLayerCharacterNormalAttackTriggerAction](zonelayer.md#zonelayercharacternormalattackaction) | intent |
 | zonelayer | [ZoneLayerCharacterDamageAction](zonelayer.md#zonelayercharacterdamageaction) | made |
-| zonelayer | [ZoneLayerCharacterShieldAction](zonelayer.md#zonelayercharactershieldaction) | intent, standing |
+| zonelayer | [ZoneLayerCharacterShieldGrantAction](zonelayer.md#zonelayercharactershieldaction) | intent, standing |
 | zonelayer | [ZoneLayerCharacterRegenAction](zonelayer.md#zonelayercharacterregenaction) | system |
 | zonelayer | [ZoneLayerCharacterEnterAction](zonelayer.md#zonelayercharacterenteraction) | message |
 | zonelayer | [ZoneLayerCharacterExitToAction](zonelayer.md#zonelayercharacterexittoaction) | intent |
