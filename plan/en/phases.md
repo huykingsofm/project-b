@@ -4,6 +4,10 @@ Every phase has tasks and a measurable acceptance. There are no weeks: a phase s
 
 The performance targets are the minimum for every phase: 2,000 players at once on one machine (one machine is one world), p99 of a tick under 20 ms at the network layer and under 45 ms per layer.
 
+## Progress
+
+Every phase records its progress directly under its heading, in a `**Progress:**` line with one of three values: `not started`, `in progress` or `done`. A short note after the value says what is already built and what is missing. The line is updated in the same PR that lands a task of the phase, and a phase becomes `done` only when its acceptance has passed.
+
 ## Order and dependencies
 
 ```
@@ -24,6 +28,8 @@ After phase 2, the branches 3 to 5, 6, 7 and 8 do not depend on one another beyo
 
 ## Phase 0: Foundation: entities and items
 
+**Progress:** not started. The character body exists; none of the tasks below is done yet.
+
 Clean up what is unfinished and lay the foundation for entities before building further.
 
 - Update `README.md`, `docs/action/*.md` and the rules (R3, R4 and the opening of `plan/rule/index.md`) to match the scope of the plan.
@@ -38,6 +44,8 @@ Clean up what is unfinished and lay the foundation for entities before building 
 **Acceptance:** `make ci` passes; the documents match the code; pickup tests (inside and outside the radius, an item already taken, an expired item, two players at once and only one gets it); the R29 test; the owner has confirmed every "pending approval" point of this phase.
 
 ## Phase 1: Durable engine: checkpoint and replay log
+
+**Progress:** not started. An in-memory `ReplayLog` and the sparse hash exist; no file-based log, checkpoint or replay runner yet.
 
 - **The replay log is written to a file, append-only** (like Kafka): divided into segments, indexed by `Step`; not pushed to S3 yet. The format is agreed, see [proposed-designs.md](proposed-designs.md).
 - **Periodic checkpoint:** write the whole state of some engines so that a replay does not have to start from the beginning. The period is a config parameter, much rarer than the hash. Engines do not write at the same time: each engine has its own offset (like the sparse hash) to avoid CPU peaks. Writing happens after the tick ends (R28). (agreed)
@@ -55,6 +63,8 @@ Clean up what is unfinished and lay the foundation for entities before building 
 
 ## Phase 2: Early playable slice
 
+**Progress:** not started
+
 Goal: a client that works from end to end (client to server and back to client) with the basic functions, so that the later phases can run in parallel with the frontend.
 
 - **Protocol:** protobuf with `buf`, binary frames over WebSocket, events batched per tick, generated code for Go and TypeScript. (pending approval)
@@ -68,6 +78,8 @@ Goal: a client that works from end to end (client to server and back to client) 
 
 ## Phase 3: Space
 
+**Progress:** not started
+
 - **Grid:** a spatial index and localizing the map: each entity belongs to one or more cells by its `BoundingBox`, lookup by area, and knowing which cells changed in the tick. (agreed, detailed design pending approval)
 - **Sight:** entering and leaving sight; who sees whom. (pending approval)
 - **Loading state:** a new entity stays hidden until it has loaded. (agreed, detail pending approval)
@@ -78,6 +90,8 @@ Goal: a client that works from end to end (client to server and back to client) 
 **Acceptance:** tests for entering and leaving sight; the no-leak test; lookup by area is correct; a benchmark of 150 entities in one layer is recorded.
 
 ## Phase 4: Characters and core combat
+
+**Progress:** not started
 
 - Character stats and derived stats come from a data file; table-driven tests. The set of stats is decided by the data. (pending approval)
 - Attack and defense formulas (replacing the temporary damage `1`), dodge, critical hit. (pending approval)
@@ -90,6 +104,8 @@ Goal: a client that works from end to end (client to server and back to client) 
 
 ## Phase 5: Effects
 
+**Progress:** not started
+
 - The effect framework: the `Effect` interface, a registry by ID, standing actions by scope (the owner acts, the owner is acted on, around the owner, in the zone, on the whole server). (pending approval)
 - Plan indexes by kind and target when a benchmark requires it (`FindType` exists).
 - 10 sample abilities covering all three scopes; an activated ability stays in the state until it expires. (pending approval)
@@ -99,6 +115,8 @@ Goal: a client that works from end to end (client to server and back to client) 
 **Acceptance:** the performance gate is passed; the no-leak test through `observe` passes; every sample effect has a test and lives in one file.
 
 ## Phase 6: Storage
+
+**Progress:** not started
 
 - **Postgres** holds the important data: accounts, characters, inventory, configuration, chat history, seasons. The schema is divided by account and by season; migrations (goose); generated queries (sqlc). (pending approval)
 - Replace the in-memory store of phase 2 with a Postgres adapter, without changing the simulation.
@@ -113,6 +131,8 @@ Goal: a client that works from end to end (client to server and back to client) 
 
 ## Phase 7: Network and accounts (complete)
 
+**Progress:** not started
+
 The basics of the gateway and the protocol exist from phase 2; this phase completes them.
 
 - The full protocol: error codes; text keys and parameters for localization; a protocol version. (pending approval)
@@ -126,6 +146,8 @@ The basics of the gateway and the protocol exist from phase 2; this phase comple
 
 ## Phase 8: Client and tools (complete)
 
+**Progress:** not started
+
 - Web client (TypeScript, PixiJS): the image pipeline, pixel art and map tools, the remaining screens.
 - Load bots for measurement scenarios.
 - Deployment: docker compose, CI, a git hook that runs everything CI runs.
@@ -135,6 +157,8 @@ The basics of the gateway and the protocol exist from phase 2; this phase comple
 
 ## Phase 9: Content before `base-v1`
 
+**Progress:** not started
+
 - Monsters with a full AI state machine, spawn areas, drop tables. (pending approval)
 - Items, inventory, equipment.
 - Basic quests. (pending approval)
@@ -143,5 +167,7 @@ The basics of the gateway and the protocol exist from phase 2; this phase comple
 **Acceptance:** the semantic review passes; tag `base-v1`; a player can fight a monster, pick up items and take a quest.
 
 ## Phase 10: Game business (after `base-v1`)
+
+**Progress:** not started
 
 The game's own business enters through the extension points of the base (R4): cultivation, quests and story, economy (a system market), sects, war and territory, large-scale abilities, seasons and closed testing, full localization. Each group will have a plan file of its own when its turn comes.
