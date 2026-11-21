@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 type routerData struct {
@@ -92,13 +93,16 @@ func (rt *Router) Deliver(l action.Message) (action.Reason, bool) {
 // Return gives a message that its receiver could not take back to its sender. A sender that
 // is gone or full loses it, and it is counted.
 func (rt *Router) Return(l action.Message, r action.Reason) {
-	ch, ok := rt.data.Load().chans[l.Head().From]
+	from := l.Head().From
+	ch, ok := rt.data.Load().chans[from]
 	if !ok {
 		rt.dropped.Add(1)
+		logging.Warn("returned message lost: its sender is gone", "from", from, "dest", l.Dest(), "reason", r)
 		return
 	}
 	if !ch.SendBack(ReturnedMessage{Message: l, Reason: r}) {
 		rt.dropped.Add(1)
+		logging.Warn("returned message lost: the back channel of its sender is full", "from", from, "dest", l.Dest(), "reason", r)
 	}
 }
 

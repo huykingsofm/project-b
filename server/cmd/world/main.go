@@ -9,7 +9,8 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
+	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -20,6 +21,7 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	zonelayerevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 // printer is the output of the engines: it shows each change with the scope that made it.
@@ -44,10 +46,33 @@ func (printer) EmitZoneLayer(from action.Address, tick uint64, events []zonelaye
 }
 
 func main() {
+	closeLogs, err := logging.Init(logging.NewWriterConsumer(os.Stderr),
+		logging.WithCapacity(4096),
+		logging.WithFlushEvery(time.Second))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer closeLogs()
+	fail := func(msg string, err error) {
+		logging.Error(msg, "err", err)
+		closeLogs() // os.Exit skips the deferred call, and the line would be lost
+		os.Exit(1)
+	}
+
 	exitEast := tilemap.ExitDefinition{Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 2}}
 	exitWest := tilemap.ExitDefinition{Min: tilemap.Tile{X: 0, Y: 0}, Max: tilemap.Tile{X: 0, Y: 4}, ToZoneID: 1, Arrival: tilemap.Tile{X: 8, Y: 2}}
 	spawn := tilemap.Tile{X: 1, Y: 2}
 	walls := []tilemap.Tile{{X: 5, Y: 0}, {X: 5, Y: 1}}
+
+	zone1Tiles, err := tilemap.New(10, 5, spawn, walls, []tilemap.ExitDefinition{exitEast})
+	if err != nil {
+		fail("the map of zone 1 is not well formed", err)
+	}
+	zone2Tiles, err := tilemap.New(10, 5, spawn, nil, []tilemap.ExitDefinition{exitWest})
+	if err != nil {
+		fail("the map of zone 2 is not well formed", err)
+	}
 
 	cluster, err := engine.NewBuilder().
 		WithSeed(1).
@@ -55,13 +80,13 @@ func main() {
 		WithZoneEmitter(printer{}).
 		WithZoneLayerEmitter(printer{}).
 		WithWorld(engine.WorldParams{ID: 1}).
-		WithZone(engine.ZoneParams{ID: 1, Tiles: tilemap.New(10, 5, spawn, walls, []tilemap.ExitDefinition{exitEast}), Adjacent: []state.ZoneID{2}}).
+		WithZone(engine.ZoneParams{ID: 1, Tiles: zone1Tiles, Adjacent: []state.ZoneID{2}}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 2, Capacity: 2, RegenEvery: 10}).
-		WithZone(engine.ZoneParams{ID: 2, Tiles: tilemap.New(10, 5, spawn, nil, []tilemap.ExitDefinition{exitWest}), Adjacent: []state.ZoneID{1}}).
+		WithZone(engine.ZoneParams{ID: 2, Tiles: zone2Tiles, Adjacent: []state.ZoneID{1}}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 4, RegenEvery: 10}).
 		Build()
 	if err != nil {
-		panic(err)
+		fail("the cluster could not be built", err)
 	}
 
 	step := func(title string, n int) {
@@ -77,7 +102,7 @@ func main() {
 	}{{1, "An"}, {2, "Binh"}} {
 		character, err := zonelayerstate.NewCharacter(c.id, c.name, 100, 1000, 256)
 		if err != nil {
-			log.Printf("%s does not enter: %v", c.name, err)
+			logging.Error("character does not enter", "name", c.name, "err", err)
 			continue
 		}
 		cluster.Zone(1).Send(command.EnterWorldZoneCommand{Character: character})

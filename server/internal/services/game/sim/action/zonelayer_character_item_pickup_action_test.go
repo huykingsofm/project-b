@@ -15,8 +15,8 @@ func (testGraph) World() state.WorldID { return 1 }
 // newPickupTestLayer makes a zonelayer with characters 1 and 2 standing in the middle of tiles (1,2) and
 // (9,2) in a map 10 by 5, and an item lying in the middle of tile (2,2) It returns the
 // layer, its registry and the entity of the item.
-func newPickupTestLayer() (*zonelayerstate.State, *ZoneLayerRegistry, state.EntityID) {
-	st, reg := newMoveTestWorld(true)
+func newPickupTestLayer(t *testing.T) (*zonelayerstate.State, *ZoneLayerRegistry, state.EntityID) {
+	st, reg := newMoveTestWorld(t, true)
 	reg.Graph = testGraph{}
 	st.AddCharacterEntity(newCharacter(2, "b", 100, 1000, 0), state.Vec{X: 9500, Y: 2500})
 	return st, reg, st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
@@ -28,7 +28,7 @@ func pickup(characterID state.CharacterID, item state.EntityID, tick uint64, st 
 }
 
 func TestAnItemWithinTheRadiusIsTakenOffTheGroundAndSentToTheWorld(t *testing.T) {
-	st, reg, item := newPickupTestLayer()
+	st, reg, item := newPickupTestLayer(t)
 	pickup(1, item, 10, st, reg)
 
 	if _, ok := st.EntityByID(item); ok {
@@ -40,7 +40,7 @@ func TestAnItemWithinTheRadiusIsTakenOffTheGroundAndSentToTheWorld(t *testing.T)
 }
 
 func TestAnItemOutsideTheRadiusStaysOnTheGround(t *testing.T) {
-	st, reg, item := newPickupTestLayer()
+	st, reg, item := newPickupTestLayer(t)
 	pickup(2, item, 10, st, reg) // seven tiles away; the radius is 2 tiles
 
 	if _, ok := st.ItemEntityByID(item); !ok {
@@ -52,7 +52,7 @@ func TestAnItemOutsideTheRadiusStaysOnTheGround(t *testing.T) {
 }
 
 func TestTheReachIsASquareOfUnitsAroundTheItem(t *testing.T) {
-	st, reg, _ := newPickupTestLayer()
+	st, reg, _ := newPickupTestLayer(t)
 	// The character is at (1500, 2500). The reach is 2000 units on every side of the item's point.
 	inside := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 4500}, 0)
 	pickup(1, inside, 10, st, reg)
@@ -67,7 +67,7 @@ func TestTheReachIsASquareOfUnitsAroundTheItem(t *testing.T) {
 }
 
 func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
-	st, reg, _ := newPickupTestLayer()
+	st, reg, _ := newPickupTestLayer(t)
 	big := newCharacter(5, "boss", 1000, 1000, 1500)
 	st.AddCharacterEntity(big, state.Vec{X: 5500, Y: 4500})
 	// The edge of the body is at 4000 on x, and the reach, 2000 units, is from there; the centre is 3500 from the item.
@@ -84,7 +84,7 @@ func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
 }
 
 func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testing.T) {
-	st, reg, _ := newPickupTestLayer()
+	st, reg, _ := newPickupTestLayer(t)
 	at := state.Vec{X: 2500, Y: 2500}
 	stack := st.AddItemEntity(8, 5, at, 40)
 	pickup(1, stack, 10, st, reg)
@@ -106,7 +106,7 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 }
 
 func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testing.T) {
-	st, reg, _ := newPickupTestLayer()
+	st, reg, _ := newPickupTestLayer(t)
 	at := state.Vec{X: 2500, Y: 2500}
 	stack := st.AddItemEntity(8, 5, at, 40)
 	pickup(1, stack, 10, st, reg)
@@ -142,7 +142,7 @@ type entityItem struct {
 }
 
 func TestTwoCharactersPickingUpTheSameItemInOneTickOnlyOneGetsIt(t *testing.T) {
-	st, reg, item := newPickupTestLayer()
+	st, reg, item := newPickupTestLayer(t)
 	st.AddCharacterEntity(newCharacter(3, "c", 100, 1000, 0), state.Vec{X: 1500, Y: 1500})
 	pickup(1, item, 10, st, reg)
 	pickup(3, item, 10, st, reg)
@@ -153,7 +153,7 @@ func TestTwoCharactersPickingUpTheSameItemInOneTickOnlyOneGetsIt(t *testing.T) {
 }
 
 func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
-	st, reg, item := newPickupTestLayer()
+	st, reg, item := newPickupTestLayer(t)
 	pickup(1, item, 10, st, reg)
 	reg.Take()
 	pickup(1, item, 11, st, reg)
@@ -165,7 +165,7 @@ func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
 }
 
 func TestACharacterWithNoHealthOrNotInTheZonelayerPicksNothingUp(t *testing.T) {
-	st, reg, item := newPickupTestLayer()
+	st, reg, item := newPickupTestLayer(t)
 	st.DamageEntity(1, 1000)
 	pickup(1, item, 10, st, reg)
 	pickup(42, item, 10, st, reg)

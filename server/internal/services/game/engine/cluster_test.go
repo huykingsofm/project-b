@@ -19,6 +19,7 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	zonelayerevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
@@ -85,9 +86,9 @@ func newWorld(t *testing.T, seed uint64, regenEvery uint64) (*engine.Cluster, *r
 		WithZoneEmitter(rec).
 		WithZoneLayerEmitter(rec).
 		WithWorld(engine.WorldParams{ID: 1}).
-		WithZone(engine.ZoneParams{ID: 1, Tiles: tilemap.New(10, 5, spawn, nil, []tilemap.ExitDefinition{exit1}), Adjacent: []state.ZoneID{2}}).
+		WithZone(engine.ZoneParams{ID: 1, Tiles: tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit1}), Adjacent: []state.ZoneID{2}}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 2, Capacity: 2, RegenEvery: regenEvery}).
-		WithZone(engine.ZoneParams{ID: 2, Tiles: tilemap.New(10, 5, spawn, nil, []tilemap.ExitDefinition{exit2}), Adjacent: []state.ZoneID{1}}).
+		WithZone(engine.ZoneParams{ID: 2, Tiles: tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit2}), Adjacent: []state.ZoneID{1}}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 1, RegenEvery: regenEvery}).
 		Build()
 	if err != nil {
@@ -316,7 +317,7 @@ func TestAnExitToAZoneThatIsNotBuiltDoesNothing(t *testing.T) {
 	c, err := engine.NewBuilder().
 		WithSeed(1).
 		WithWorld(engine.WorldParams{ID: 1}).
-		WithZone(engine.ZoneParams{ID: 1, Tiles: tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, nil, []tilemap.ExitDefinition{exit})}).
+		WithZone(engine.ZoneParams{ID: 1, Tiles: tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, []tilemap.ExitDefinition{exit})}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 1, Capacity: 4}).
 		Build()
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
 // testStable is a StableView that holds the state of one zone.
@@ -17,12 +18,12 @@ func (t testStable) World() *worldstate.State                          { return 
 func (t testStable) Zone(zoneID state.ZoneID) *zonestate.State         { return t.zone }
 func (t testStable) ZoneLayer(state.ZoneLayerID) *zonelayerstate.State { return nil }
 
-func newMoveTestWorld(zonePublished bool) (*zonelayerstate.State, *ZoneLayerRegistry) {
+func newMoveTestWorld(t *testing.T, zonePublished bool) (*zonelayerstate.State, *ZoneLayerRegistry) {
 	st := zonelayerstate.NewState(1, 1)
 	st.AddCharacterEntity(newCharacter(1, "a", 100, 1000, 0), state.Vec{X: 1500, Y: 2500})
 	reg := &ZoneLayerRegistry{}
 	if zonePublished {
-		tiles := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+		tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 		reg.Common = Common{Stable: testStable{zone: zonestate.NewState(1, tiles)}}
 	} else {
 		reg.Common = Common{Stable: testStable{}}
@@ -31,7 +32,7 @@ func newMoveTestWorld(zonePublished bool) (*zonelayerstate.State, *ZoneLayerRegi
 }
 
 func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
-	st, reg := newMoveTestWorld(true)
+	st, reg := newMoveTestWorld(t, true)
 	plan := NewPlan[ZoneLayerAction]()
 	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
 
@@ -52,7 +53,7 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 }
 
 func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
-	st, reg := newMoveTestWorld(false)
+	st, reg := newMoveTestWorld(t, false)
 	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
 	run.ApplyZoneLayer(&Context{Tick: 10}, st, reg, NewPlan[ZoneLayerAction]())
 
@@ -72,7 +73,7 @@ func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 type otherCooldownKey struct{}
 
 func TestACooldownKeyOfOneActionIsNotTheKeyOfAnother(t *testing.T) {
-	st, _ := newMoveTestWorld(true)
+	st, _ := newMoveTestWorld(t, true)
 	st.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](1, 99)
 	if got := st.CooldownUntil[otherCooldownKey](1); got != 0 {
 		t.Fatalf("the other cooldown is %d, want none", got)
@@ -81,7 +82,7 @@ func TestACooldownKeyOfOneActionIsNotTheKeyOfAnother(t *testing.T) {
 
 func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 	for _, speed := range []int32{250, 1000, 3000} {
-		st, reg := newMoveTestWorld(true)
+		st, reg := newMoveTestWorld(t, true)
 		ch, _ := st.RemoveCharacterEntity(1)
 		ch.Speed = speed
 		st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
@@ -99,7 +100,7 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 }
 
 func TestACharacterWithNoSpeedDoesNotMove(t *testing.T) {
-	st, reg := newMoveTestWorld(true)
+	st, reg := newMoveTestWorld(t, true)
 	ch, _ := st.RemoveCharacterEntity(1)
 	ch.Speed = 0
 	st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})

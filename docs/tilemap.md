@@ -4,7 +4,7 @@
 
 ## Construction
 
-`New(width, height, spawn, walls, exits)`; sizes and coordinates in tiles. Panics when the map is not well formed:
+`New(width, height, spawn, walls, exits) (*TileMap, error)`; sizes and coordinates in tiles. Returns an error that wraps `ErrInvalid` and says what is wrong when the map is not well formed:
 
 | Rule | |
 |---|---|

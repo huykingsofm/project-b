@@ -5,6 +5,7 @@
 package tilemap
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -60,27 +61,30 @@ type TileMap struct {
 	exits         []entity.ExitEntity
 }
 
-// New makes a map of width by height tiles with the given spawn tile, walls and exits. A map is content that
-// is written once, so one that is not well formed is a mistake of whoever wrote it and New panics with what is
-// wrong: the size is at least one tile each way, the walls, the spawn and the exits are inside the map, the
-// spawn and the arrival of an exit are not walls, and an exit has its Min before its Max.
-func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) *TileMap {
+// ErrInvalid is wrapped by the error of New when a map is not well formed.
+var ErrInvalid = errors.New("tilemap: the map is not well formed")
+
+// New makes a map of width by height tiles with the given spawn tile, walls and exits. It returns an error
+// that wraps ErrInvalid and says what is wrong when the map is not well formed: the size is at least one tile
+// each way, the walls, the spawn and the exits are inside the map, the spawn is not a wall, and an exit has
+// its Min before its Max.
+func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) (*TileMap, error) {
 	if width < 1 || height < 1 {
-		panic(fmt.Sprintf("tilemap: a map is at least one tile each way, got %d by %d", width, height))
+		return nil, fmt.Errorf("%w: a map is at least one tile each way, got %d by %d", ErrInvalid, width, height)
 	}
 	m := &TileMap{width: width, height: height, spawn: spawn.center(), blocked: make([]bool, int(width)*int(height))}
 	for _, t := range walls {
 		if !m.inside(t) {
-			panic(fmt.Sprintf("tilemap: the wall %+v is outside the map of %d by %d", t, width, height))
+			return nil, fmt.Errorf("%w: the wall %+v is outside the map of %d by %d", ErrInvalid, t, width, height)
 		}
 		m.blocked[int(t.Y)*int(width)+int(t.X)] = true
 	}
 	if !m.inside(spawn) || m.isWall(spawn) {
-		panic(fmt.Sprintf("tilemap: the spawn %+v is outside the map or a wall", spawn))
+		return nil, fmt.Errorf("%w: the spawn %+v is outside the map or a wall", ErrInvalid, spawn)
 	}
 	for _, d := range exits {
 		if !m.inside(d.Min) || !m.inside(d.Max) || d.Min.X > d.Max.X || d.Min.Y > d.Max.Y {
-			panic(fmt.Sprintf("tilemap: the exit from %+v to %+v is outside the map or has its Min after its Max", d.Min, d.Max))
+			return nil, fmt.Errorf("%w: the exit from %+v to %+v is outside the map or has its Min after its Max", ErrInvalid, d.Min, d.Max)
 		}
 		m.exits = append(m.exits, entity.ExitEntity{
 			Area:     state.Rect{Min: state.Vec{X: d.Min.X * tileSize, Y: d.Min.Y * tileSize}, Max: state.Vec{X: (d.Max.X+1)*tileSize - 1, Y: (d.Max.Y+1)*tileSize - 1}},
@@ -88,7 +92,7 @@ func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) 
 			Arrival:  d.Arrival.center(),
 		})
 	}
-	return m
+	return m, nil
 }
 
 // SpawnPosition is where characters appear: the middle of the spawn tile, which is never a wall.

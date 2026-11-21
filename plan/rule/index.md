@@ -138,6 +138,10 @@ A type held in a state is either a value type (no pointer, slice, map, channel o
 
 The documents under `docs/` are looked up as much as read: facts are list items, key and value pairs, table rows and numbered steps, every thing of a kind has the same keys in the same order, and a sentence of explanation appears only when the structure cannot say the thing. Nothing a rule or the code already says is repeated, and each fact has one home.
 
+### [R31. No panic while the server runs (hard)](r31-no-panic-at-runtime.md)
+
+After startup nothing panics: a mistake found while running is returned as an `error`, or logged when nothing above can take it, and the code carries on; whatever is dropped or skipped because of a fault is logged, never silent. A `panic` is allowed only at startup, for content or configuration the owner must fix; type assertions on values the package controls need no check.
+
 ## 5. Ways of working
 
 ### [Ways of working](ways-of-working.md)
