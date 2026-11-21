@@ -109,3 +109,76 @@ func BenchmarkSetRandom(b *testing.B) {
 		})
 	}
 }
+
+// masks is the table of the 64 single-bit masks, for the benchmark of looking the mask up instead of
+// shifting for it.
+var masks = func() (m [64]uint64) {
+	for i := range m {
+		m[i] = 1 << i
+	}
+	return
+}()
+
+// tableArray is bitset.Array with Get that takes its mask from the table.
+type tableArray struct {
+	words []uint64
+	k     int
+}
+
+func (a *tableArray) Get(i int) bool {
+	if uint(i) >= uint(a.k) {
+		return false
+	}
+	return a.words[i>>6]&masks[i&63] != 0
+}
+
+func BenchmarkGetMaskTable(b *testing.B) {
+	for _, size := range sizes {
+		shift, _ := filled(b, size)
+		table := &tableArray{words: make([]uint64, (size+63)/64), k: size}
+		for i := 0; i < size; i++ {
+			if shift.Get(i) {
+				table.words[i>>6] |= masks[i&63]
+			}
+		}
+		seqMask := size - 1
+		idx := indexes(size)
+		idxMask := len(idx) - 1
+		b.Run(fmt.Sprintf("bits=%d/sequential/shift", size), func(b *testing.B) {
+			n := 0
+			for i := 0; i < b.N; i++ {
+				if shift.Get(i & seqMask) {
+					n++
+				}
+			}
+			sink = n
+		})
+		b.Run(fmt.Sprintf("bits=%d/sequential/table", size), func(b *testing.B) {
+			n := 0
+			for i := 0; i < b.N; i++ {
+				if table.Get(i & seqMask) {
+					n++
+				}
+			}
+			sink = n
+		})
+		b.Run(fmt.Sprintf("bits=%d/random/shift", size), func(b *testing.B) {
+			n := 0
+			for i := 0; i < b.N; i++ {
+				if shift.Get(idx[i&idxMask]) {
+					n++
+				}
+			}
+			sink = n
+		})
+		b.Run(fmt.Sprintf("bits=%d/random/table", size), func(b *testing.B) {
+			n := 0
+			for i := 0; i < b.N; i++ {
+				if table.Get(idx[i&idxMask]) {
+					n++
+				}
+			}
+			sink = n
+		})
+	}
+}
