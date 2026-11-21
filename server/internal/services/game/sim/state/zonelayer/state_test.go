@@ -8,6 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
@@ -17,7 +18,9 @@ type cooldownKey struct{}
 
 func newState() *zonelayer.State { return zonelayer.NewState(1, 1) }
 
-func map10x5() *tilemap.TileMap { return tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil) }
+func map10x5(t testing.TB) *tilemap.TileMap {
+	return tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+}
 
 func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 	st := newState()
@@ -43,7 +46,7 @@ func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 
 func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 	st := newState()
-	tiles := map10x5()
+	tiles := map10x5(t)
 	item := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	if !st.MoveEntity(tiles, item, state.East, 2000) {
 		t.Fatal("an item did not move")
@@ -134,7 +137,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 }
 
 func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T) {
-	walls := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	st := newState()
 	id := st.AddItemEntity(7, 1, state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}, 0)
 	// The item is in the middle of tile (2,3); the wall is tile (4,3), which starts a tile and a half away.
@@ -169,7 +172,7 @@ func TestTheRadiusOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 }
 
 func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
-	walls := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	st := newState()
 	at := state.Vec{X: 2 * tile, Y: 2*tile + tile/2}
 	point := st.AddCharacterEntity(newCharacter(1, "point", 10, 1000, 0), at)
@@ -188,7 +191,7 @@ func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
 }
 
 func BenchmarkMoveEntity(b *testing.B) {
-	tiles := tilemap.New(200, 200, tilemap.Tile{}, nil, nil)
+	tiles := tilemaptest.New(b, 200, 200, tilemap.Tile{}, nil, nil)
 	for _, radius := range []int32{0, 256} {
 		b.Run(fmt.Sprintf("radius %d/a character's step of a tick", radius), func(b *testing.B) {
 			st := newState()

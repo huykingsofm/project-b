@@ -1,6 +1,7 @@
 package tilemap_test
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -9,13 +10,14 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
 const tile = 1024
 
 func TestFreeTilesAreInsideTheMapAndNotWalls(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
 	for _, c := range []struct {
 		at   state.Vec
 		want bool
@@ -37,7 +39,7 @@ func TestFreeTilesAreInsideTheMapAndNotWalls(t *testing.T) {
 
 func TestExitsAreEntitiesInUnitsAndAreCopiedOutOfTheMap(t *testing.T) {
 	exit := tilemap.ExitDefinition{Min: tilemap.Tile{X: 3, Y: 0}, Max: tilemap.Tile{X: 3, Y: 2}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 1}}
-	m := tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit})
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit})
 
 	got := m.Exits()
 	want := entity.ExitEntity{
@@ -55,7 +57,7 @@ func TestExitsAreEntitiesInUnitsAndAreCopiedOutOfTheMap(t *testing.T) {
 }
 
 func TestReachStopsAtTheLastUnitBeforeAWall(t *testing.T) {
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2} // the middle of tile (2,3), the wall is tile (4,3)
 	if got := m.Reach(from, state.East, 5*tile, 0); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east = %+v, want the last unit before the wall (tile 4)", got)
@@ -72,14 +74,14 @@ func TestReachStopsAtTheLastUnitBeforeAWall(t *testing.T) {
 }
 
 func TestTheSpawnIsTheMiddleOfItsTile(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	if m.SpawnPosition() != (state.Vec{X: tile + tile/2, Y: 2*tile + tile/2}) {
 		t.Fatalf("Spawn = %+v, want the middle of tile (1,2)", m.SpawnPosition())
 	}
 }
 
 func TestTilesAtNegativePositionsAreOutsideTheMap(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{}, nil, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{}, nil, nil)
 	for _, v := range []state.Vec{{X: -1, Y: 0}, {X: 0, Y: -1}, {X: -1000, Y: -1000}, {X: -1001, Y: 500}} {
 		if m.Free(v) {
 			t.Errorf("Free(%+v) = true, want false", v)
@@ -88,12 +90,12 @@ func TestTilesAtNegativePositionsAreOutsideTheMap(t *testing.T) {
 }
 
 func TestReachDoesNotJumpOverAWallHoweverFarItGoes(t *testing.T) {
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: tile / 2, Y: 3*tile + tile/2}
 	if got := m.Reach(from, state.East, 2_000_000_000, 0); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east by a huge distance = %+v, want it stopped by the wall", got)
 	}
-	open := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+	open := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	if got := open.Reach(from, state.East, 2_000_000_000, 0); got != (state.Vec{X: 10*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east by a huge distance = %+v, want the last unit of the map", got)
 	}
@@ -101,7 +103,7 @@ func TestReachDoesNotJumpOverAWallHoweverFarItGoes(t *testing.T) {
 
 func TestADiagonalMoveDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T) {
 	// Walls at (4,3) and (5,2) touch at a corner; the way from tile (4,2) to tile (5,3) goes between them.
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
 	from := state.Vec{X: 4*tile + tile/2, Y: 2*tile + tile/2}
 	got := m.Reach(from, state.SouthEast, 2*tile, 0)
 	if tileOfUnits(got) != (tilemap.Tile{X: 4, Y: 2}) {
@@ -110,7 +112,7 @@ func TestADiagonalMoveDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T)
 }
 
 func TestADiagonalMoveInTheOpenGoesTheWholeDistanceInBothAxes(t *testing.T) {
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	from := state.Vec{X: tile + tile/2, Y: tile + tile/2}
 	if got := m.Reach(from, state.SouthEast, tile, 0); got != (state.Vec{X: 2*tile + tile/2, Y: 2*tile + tile/2}) {
 		t.Fatalf("Reach south-east = %+v, want one tile in each axis", got)
@@ -121,7 +123,7 @@ func TestADiagonalMoveInTheOpenGoesTheWholeDistanceInBothAxes(t *testing.T) {
 }
 
 func TestAPositionThatCannotBeStoodOnDoesNotMove(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
 	inWall := state.Vec{X: 2*tile + 5, Y: tile + 5}
 	if got := m.Reach(inWall, state.West, tile, 0); got != inWall {
 		t.Fatalf("Reach from a wall = %+v, want it not to move", got)
@@ -132,26 +134,26 @@ func TestAPositionThatCannotBeStoodOnDoesNotMove(t *testing.T) {
 }
 
 func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
-	for name, make := range map[string]func(){
-		"no size":         func() { tilemap.New(0, 3, tilemap.Tile{}, nil, nil) },
-		"wall outside":    func() { tilemap.New(4, 3, tilemap.Tile{}, []tilemap.Tile{{X: 4, Y: 0}}, nil) },
-		"spawn outside":   func() { tilemap.New(4, 3, tilemap.Tile{X: 9, Y: 9}, nil, nil) },
-		"spawn in a wall": func() { tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 1, Y: 1}}, nil) },
-		"exit reversed": func() {
-			tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 2}}})
+	for name, make := range map[string]func() (*tilemap.TileMap, error){
+		"no size": func() (*tilemap.TileMap, error) { return tilemap.New(0, 3, tilemap.Tile{}, nil, nil) },
+		"wall outside": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4, 3, tilemap.Tile{}, []tilemap.Tile{{X: 4, Y: 0}}, nil)
 		},
-		"exit outside": func() {
-			tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 4}}})
+		"spawn outside": func() (*tilemap.TileMap, error) { return tilemap.New(4, 3, tilemap.Tile{X: 9, Y: 9}, nil, nil) },
+		"spawn in a wall": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 1, Y: 1}}, nil)
+		},
+		"exit reversed": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 2}}})
+		},
+		"exit outside": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 4}}})
 		},
 	} {
-		func() {
-			defer func() {
-				if recover() == nil {
-					t.Errorf("%s: the map was made", name)
-				}
-			}()
-			make()
-		}()
+		m, err := make()
+		if m != nil || !errors.Is(err, tilemap.ErrInvalid) {
+			t.Errorf("%s: got map %v and error %v, want no map and ErrInvalid", name, m, err)
+		}
 	}
 }
 
@@ -159,7 +161,7 @@ func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
 func tileOfUnits(v state.Vec) tilemap.Tile { return tilemap.Tile{X: v.X / tile, Y: v.Y / tile} }
 
 func TestABodyWithARadiusStopsWhenItsEdgeTouchesAWall(t *testing.T) {
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: tile / 2, Y: 3*tile + tile/2}
 	const radius = 300
 	if got := m.Reach(from, state.East, 5*tile, radius); got != (state.Vec{X: 4*tile - 1 - radius, Y: 3*tile + tile/2}) {
@@ -170,7 +172,7 @@ func TestABodyWithARadiusStopsWhenItsEdgeTouchesAWall(t *testing.T) {
 func TestABodyIsStoppedByAWallBesideItsPathThatAPointWouldPass(t *testing.T) {
 	// The path is along the middle of row 2; the wall is in row 3, below it. A point passes, a body that reaches
 	// 600 units to each side touches row 3 (the row is 1024 high and the middle is 512 from its edge).
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: 2 * tile, Y: 2*tile + tile/2}
 	if got := m.Reach(from, state.East, 20*tile, 0); got.X != 10*tile-1 {
 		t.Fatalf("a point stopped at %+v, want it to pass", got)
@@ -181,7 +183,7 @@ func TestABodyIsStoppedByAWallBesideItsPathThatAPointWouldPass(t *testing.T) {
 }
 
 func TestABodyDoesNotFitWhereItsEdgeTouchesAWallOrTheEdgeOfTheMap(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
 	for name, c := range map[string]struct {
 		at     state.Vec
 		radius int32
@@ -200,7 +202,7 @@ func TestABodyDoesNotFitWhereItsEdgeTouchesAWallOrTheEdgeOfTheMap(t *testing.T) 
 }
 
 func TestABodyDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T) {
-	m := tilemap.New(10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
+	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
 	from := state.Vec{X: 4*tile + tile/2, Y: 2*tile + tile/2}
 	if got := m.Reach(from, state.SouthEast, 2*tile, 100); tileOfUnits(got) != (tilemap.Tile{X: 4, Y: 2}) {
 		t.Fatalf("Reach south-east = %+v, want it to stay in tile (4,2)", got)
@@ -208,7 +210,7 @@ func TestABodyDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T) {
 }
 
 func TestABodyThatDoesNotFitDoesNotMove(t *testing.T) {
-	m := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
+	m := tilemaptest.New(t, 4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 1}}, nil)
 	at := state.Vec{X: 2*tile - 100, Y: tile + tile/2}
 	if got := m.Reach(at, state.West, tile, 200); got != at {
 		t.Fatalf("Reach = %+v, want a body that touches a wall not to move", got)
@@ -216,7 +218,7 @@ func TestABodyThatDoesNotFitDoesNotMove(t *testing.T) {
 }
 
 func BenchmarkReach(b *testing.B) {
-	m := tilemap.New(200, 200, tilemap.Tile{}, nil, nil)
+	m := tilemaptest.New(b, 200, 200, tilemap.Tile{}, nil, nil)
 	for _, radius := range []int32{0, 256, 511, 2048} {
 		// The first place where the body fits: the middle of the first tile, or the body's radius from the corner.
 		corner := max(tile/2, radius)
@@ -240,7 +242,7 @@ func BenchmarkReach(b *testing.B) {
 }
 
 func TestABodyOfManyTilesIsStoppedByAWallAndDoesNotFitInANarrowPlace(t *testing.T) {
-	m := tilemap.New(20, 10, tilemap.Tile{X: 4, Y: 4}, []tilemap.Tile{{X: 12, Y: 5}}, nil)
+	m := tilemaptest.New(t, 20, 10, tilemap.Tile{X: 4, Y: 4}, []tilemap.Tile{{X: 12, Y: 5}}, nil)
 	const radius = 2 * tile // a boss five tiles wide
 	from := state.Vec{X: 4*tile + tile/2, Y: 4*tile + tile/2}
 	if got := m.Reach(from, state.East, 30*tile, radius); got != (state.Vec{X: 12*tile - 1 - radius, Y: 4*tile + tile/2}) {
@@ -273,7 +275,7 @@ func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 			walls = append(walls, w)
 		}
 	}
-	m := tilemap.New(20, 20, tilemap.Tile{X: 10, Y: 10}, walls, nil)
+	m := tilemaptest.New(t, 20, 20, tilemap.Tile{X: 10, Y: 10}, walls, nil)
 	dirs := []state.Dir{state.North, state.NorthEast, state.East, state.SouthEast, state.South, state.SouthWest, state.West, state.NorthWest}
 	checked := 0
 	for i := 0; i < 4000; i++ {
@@ -295,7 +297,7 @@ func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 }
 
 func TestABodyOfNoSizeThatCanBeMeasuredFitsNowhere(t *testing.T) {
-	m := tilemap.New(10, 10, tilemap.Tile{X: 1, Y: 1}, nil, nil)
+	m := tilemaptest.New(t, 10, 10, tilemap.Tile{X: 1, Y: 1}, nil, nil)
 	at := state.Vec{X: 5 * tile, Y: 5 * tile}
 	for _, radius := range []int32{-1, -2048, math.MinInt32} {
 		if m.FreeForBody(at, radius) {
@@ -308,7 +310,7 @@ func TestABodyOfNoSizeThatCanBeMeasuredFitsNowhere(t *testing.T) {
 }
 
 func TestAHugeRadiusOrPositionDoesNotWrapAround(t *testing.T) {
-	m := tilemap.New(10, 10, tilemap.Tile{X: 1, Y: 1}, nil, nil)
+	m := tilemaptest.New(t, 10, 10, tilemap.Tile{X: 1, Y: 1}, nil, nil)
 	at := state.Vec{X: 5 * tile, Y: 5 * tile}
 	for _, radius := range []int32{math.MaxInt32, math.MaxInt32 - 1000, 1 << 30} {
 		if m.FreeForBody(at, radius) {

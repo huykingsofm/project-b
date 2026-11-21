@@ -5,15 +5,16 @@ import (
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
-func newState() *zone.State {
+func newState(t *testing.T) *zone.State {
 	exit := tilemap.ExitDefinition{Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2}
-	return zone.NewState(1, tilemap.New(10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}))
+	return zone.NewState(1, tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}))
 }
 
 func TestTheExitsOfTheMapStandInTheZoneAsEntities(t *testing.T) {
-	st := newState()
+	st := newState(t)
 	exit, ok := st.ExitEntityByID(1)
 	if !ok || exit.ToZoneID != 2 || exit.EntityID != 1 {
 		t.Fatalf("ExitEntityByID(1) = %+v, %v", exit, ok)
@@ -25,7 +26,7 @@ func TestTheExitsOfTheMapStandInTheZoneAsEntities(t *testing.T) {
 
 // R29: nothing in a state is shared with its clone, except the map, which never changes.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
-	st := newState()
+	st := newState(t)
 	st.ZoneLayers.Set(1, zone.ZoneLayerSlot{ID: 1, Capacity: 4})
 	before := st.Hash()
 	copied := st.Clone()
