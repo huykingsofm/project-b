@@ -8,10 +8,11 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 |---|---|---|
 | [move.md](move.md) | the path of a move: `TileMap.Reach` and `State.MoveEntity` | `sim/tilemap`, `sim/state/zonelayer` |
 | [logging.md](logging.md) | a log call and the encoding of a batch | `shared/logging` |
+| [bitset.md](bitset.md) | `bitset.Array` against `[]bool` | `shared/bitset` |
 
 ## Run
 
-- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 <packages>`, from `server/internal/services/game/sim` (`server/internal/shared/logging` for logging).
+- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 <packages>`, from `server/internal/services/game/sim` (`server/internal/shared/logging` for logging, `server/internal/shared/bitset` for the bitset).
 - Record the median of the runs.
 
 ## Record
