@@ -11,6 +11,7 @@ import (
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
+	"github.com/huykingsofm/project-b/server/internal/shared/bitset"
 )
 
 // tileSize is how many units a tile is wide and high. It is a detail of the map: nothing outside this
@@ -57,7 +58,7 @@ type ExitDefinition struct {
 type TileMap struct {
 	width, height int32 // in tiles
 	spawn         state.Vec
-	blocked       []bool
+	blocked       *bitset.Array // one bit for each tile, row by row
 	exits         []entity.ExitEntity
 }
 
@@ -72,12 +73,16 @@ func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) 
 	if width < 1 || height < 1 {
 		return nil, fmt.Errorf("%w: a map is at least one tile each way, got %d by %d", ErrInvalid, width, height)
 	}
-	m := &TileMap{width: width, height: height, spawn: spawn.center(), blocked: make([]bool, int(width)*int(height))}
+	blocked, err := bitset.New(int(width) * int(height))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	m := &TileMap{width: width, height: height, spawn: spawn.center(), blocked: blocked}
 	for _, t := range walls {
 		if !m.inside(t) {
 			return nil, fmt.Errorf("%w: the wall %+v is outside the map of %d by %d", ErrInvalid, t, width, height)
 		}
-		m.blocked[int(t.Y)*int(width)+int(t.X)] = true
+		m.blocked.Set(int(t.Y)*int(width) + int(t.X))
 	}
 	if !m.inside(spawn) || m.isWall(spawn) {
 		return nil, fmt.Errorf("%w: the spawn %+v is outside the map or a wall", ErrInvalid, spawn)
@@ -100,7 +105,7 @@ func (m *TileMap) SpawnPosition() state.Vec { return m.spawn }
 
 func (m *TileMap) inside(t Tile) bool { return t.X >= 0 && t.Y >= 0 && t.X < m.width && t.Y < m.height }
 
-func (m *TileMap) isWall(t Tile) bool { return m.blocked[int(t.Y)*int(m.width)+int(t.X)] }
+func (m *TileMap) isWall(t Tile) bool { return m.blocked.Get(int(t.Y)*int(m.width) + int(t.X)) }
 
 // free reports whether a character can stand on the tile: it is in the map and not a wall.
 func (m *TileMap) free(t Tile) bool { return m.inside(t) && !m.isWall(t) }

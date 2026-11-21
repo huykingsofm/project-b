@@ -241,6 +241,30 @@ func BenchmarkReach(b *testing.B) {
 	}
 }
 
+// BenchmarkReachLargeMap moves from many places of a map of 4096 by 4096 tiles, so that the tiles looked at
+// are not the same ones in the cache each time.
+func BenchmarkReachLargeMap(b *testing.B) {
+	const side = 4096
+	m := tilemaptest.New(b, side, side, tilemap.Tile{}, nil, nil)
+	r := rand.New(rand.NewPCG(1, 2))
+	froms := make([]state.Vec, 1<<12)
+	for i := range froms {
+		froms[i] = state.Vec{X: (1 + r.Int32N(side-20)) * tile, Y: (1 + r.Int32N(side-20)) * tile}
+	}
+	for _, radius := range []int32{256, 2048} {
+		b.Run(fmt.Sprintf("radius %d/a step of a quarter tile", radius), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				m.Reach(froms[i&(len(froms)-1)], state.East, tile/4, radius)
+			}
+		})
+		b.Run(fmt.Sprintf("radius %d/diagonal, 10 tiles", radius), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				m.Reach(froms[i&(len(froms)-1)], state.SouthEast, 10*tile, radius)
+			}
+		})
+	}
+}
+
 func TestABodyOfManyTilesIsStoppedByAWallAndDoesNotFitInANarrowPlace(t *testing.T) {
 	m := tilemaptest.New(t, 20, 10, tilemap.Tile{X: 4, Y: 4}, []tilemap.Tile{{X: 12, Y: 5}}, nil)
 	const radius = 2 * tile // a boss five tiles wide
