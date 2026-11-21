@@ -1,13 +1,15 @@
 // Package table is a list of rows kept in memory, that rows are found in by the value of a
 // column, and that remembers which rows changed.
 //
-// It is a library of its own that happens to be written here: it imports nothing of this
-// project and knows nothing of what it is used for.
+// It is a library of its own that happens to be written here: it imports only the package clone
+// and knows nothing of what it is used for.
 package table
 
 import (
 	"maps"
 	"slices"
+
+	"github.com/huykingsofm/project-b/server/internal/shared/clone"
 )
 
 // Row is a type that a Table can hold. A row says by which columns it is found: Index returns,
@@ -57,7 +59,7 @@ func (t *Table[T]) Get(i int) (T, bool) {
 }
 
 // Rows returns a copy of the rows, in order.
-func (t *Table[T]) Rows() []T { return slices.Clone(t.rows) }
+func (t *Table[T]) Rows() []T { return clone.Slice(t.rows) }
 
 // Add appends a row, marks it dirty, and returns its position.
 func (t *Table[T]) Add(row T) int {
@@ -131,11 +133,12 @@ func (t *Table[T]) Dirty() []int { return slices.Sorted(maps.Keys(t.dirty)) }
 // ClearDirty forgets which rows changed.
 func (t *Table[T]) ClearDirty() { t.dirty = nil }
 
-// Clone returns a copy that shares nothing with the table: the rows are copied as they are,
-// so it is right for rows that hold no slice, map or pointer that is changed in place. The
-// indexes are copied too, so the copy can be searched at once. It has no dirty rows.
+// Clone returns a copy that shares nothing with the table: the rows are copied with their Clone method
+// when the type of the rows has one (see package clone), and by assignment otherwise, so the type of the
+// rows must be a value or have Clone. The indexes are copied too, so the copy can be searched at once. It
+// has no dirty rows.
 func (t *Table[T]) Clone() Table[T] {
-	c := Table[T]{rows: slices.Clone(t.rows)}
+	c := Table[T]{rows: clone.Slice(t.rows)}
 	if t.indexBy != nil {
 		c.indexBy = make(map[string]map[any][]int, len(t.indexBy))
 		for column, byValue := range t.indexBy {

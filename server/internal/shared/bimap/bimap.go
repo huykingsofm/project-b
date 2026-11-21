@@ -135,7 +135,8 @@ func (b *BiMap[V1, V2]) AllV2() iter.Seq2[V2, V1] {
 	}
 }
 
-// Clone returns a copy that shares nothing with the map.
+// Clone returns a copy that shares nothing with the map. The values are identifiers, comparable values that are
+// never changed in place, so they are copied by assignment.
 func (b *BiMap[V1, V2]) Clone() BiMap[V1, V2] {
 	return BiMap[V1, V2]{
 		index1: maps.Clone(b.index1), index2: maps.Clone(b.index2),

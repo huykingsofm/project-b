@@ -106,3 +106,21 @@ func TestACloneSharesNothingAndCanBeSearchedAtOnce(t *testing.T) {
 		t.Fatalf("clone len %d, dirty %v", c.Len(), c.Dirty())
 	}
 }
+
+// listRow is a row that holds a slice, and so has a Clone method.
+type listRow struct {
+	ID    int
+	Items []int
+}
+
+func (r listRow) Index() map[string]any { return map[string]any{"id": r.ID} }
+func (r listRow) Clone() listRow        { return listRow{ID: r.ID, Items: append([]int(nil), r.Items...)} }
+
+func TestACloneCopiesRowsThatHaveACloneWithTheirClone(t *testing.T) {
+	tb := table.Build([]listRow{{ID: 1, Items: []int{1, 2}}})
+	c := tb.Clone()
+	c.Rows()[0].Items[0] = 99
+	if tb.Rows()[0].Items[0] != 1 {
+		t.Fatal("a change of the copy changed the table")
+	}
+}
