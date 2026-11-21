@@ -1,0 +1,11 @@
+# R25. Actions: names, files and IDs (hard)
+
+Every action belongs to exactly one scope: the world, a zone or a zonelayer. (The word for them is **scope**; `level` clashes with the level of a character.) All the actions are in the one package `action`, and what ties each one to its scope is a rule:
+
+- **The type is the scope, then the words of the name, then `Action`:** `ZoneLayerCharacterMoveAction`, `ZoneChatSendAction`, `WorldChatPrivateSendAction`.
+- **The file is the scope, then the same words, then `_action.go`:** `zonelayer_character_move_action.go`, `zone_chat_send_action.go`, `world_chat_private_send_action.go`. One action to a file.
+- **The words of the name go from the general to the specific,** so that related actions share the beginning of their names and stand next to each other in a listing of files: `zonelayer_character_attack_action.go`, `zonelayer_character_damage_action.go`, `zonelayer_character_enter_action.go`, `zonelayer_character_exit_to_action.go`, `zonelayer_character_move_action.go`. A new action takes its place among the actions it is related to; when related actions are not next to each other, they are renamed in the same change ([R11](r11-refactor.md)).
+- **It implements the interface of its scope:** `ZoneLayerAction`, `ZoneAction` or `WorldAction`. The three interfaces share no base interface and repeat what they have in common (an ID, a priority); two actions of two scopes with the same name are not a clash.
+- **An action that has something to settle when it is cancelled** implements `<Scope>CancellableAction`, which embeds the interface of the scope and adds the method for the cancel. It is an action in every way: it has an ID and a priority.
+- **Its ID is a type, not a constant:** a `struct{}` type named `<Scope><Name>ActionID`, defined in the same file as the action, that the action's `ID()` returns a value of. There is no list of IDs and no file of them to edit. A cooldown key is made the same way: a `struct{}` type of the action's own file, so two actions never share a key by accident.
+- **An action's author** (the actor that performs it: a character, a player) is given by the method `Actor()`. The plan is indexed by the ID of its actions and by their author.
