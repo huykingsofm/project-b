@@ -5,6 +5,7 @@
 ## Storage
 
 - One bit for each tile, row by row, in a [`bitset.Array`](bitset.md); `width * height` bits.
+- A row of 4 or more tiles of a body is read with `AnyInRange`; a column, or a row of fewer tiles, bit by bit.
 - Compared with a `[]bool` in [the benchmarks of a move](benchmark/move.md#tile-storage).
 
 ## Construction
@@ -13,7 +14,7 @@
 
 | Rule | |
 |---|---|
-| size | at least one tile each way |
+| size | at least one tile each way, at most 2^20 tiles on a side and 4096 * 4096 tiles in all |
 | walls | inside the map |
 | spawn | inside the map, not a wall |
 | exit | `Min` and `Max` inside the map, `Min` not after `Max` |

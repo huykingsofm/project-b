@@ -11,6 +11,7 @@ Each one runs on `bitset.Array` and on `[]bool` of the same size, filled the sam
 | `BenchmarkGetSequential` | `shared/bitset` | `Get` of the indexes 0, 1, 2, ... wrapping at the size, counting the set bits |
 | `BenchmarkGetRandom` | `shared/bitset` | `Get` of random indexes, counting the set bits |
 | `BenchmarkSetRandom` | `shared/bitset` | `Set` of random indexes |
+| `BenchmarkAnyInRange` | `shared/bitset` | looking for a set bit in a range of 1, 5, 64 and 1,000 bits that has none, in a 1,048,576-bit array: `AnyInRange` against a `Get` of each bit, and a `[]bool` read the same way |
 | `BenchmarkGetMaskTable` | `shared/bitset` | `Get` with the mask shifted for (`1 << (i & 63)`, what `Array` does) against the mask read from a table of the 64 masks |
 
 - Sizes in bits: 65,536 (8 KiB as bits, 64 KiB as bools), 1,048,576 (128 KiB, 1 MiB), 16,777,216 (2 MiB, 16 MiB; a map of 4096 by 4096 tiles).
@@ -42,3 +43,12 @@ Mask from a table of 64, ns/op:
 | 1,048,576 | random | 0.80 | 0.94 |
 | 16,777,216 | sequential | 2.15 | 2.15 |
 | 16,777,216 | random | 1.11 | 1.23 |
+
+Looking for a set bit in a range that has none, ns/op:
+
+| range in bits | `AnyInRange` | `Get` of each | `[]bool` of each |
+|---|---|---|---|
+| 1 | 3.24 | 1.46 | 1.06 |
+| 5 | 3.21 | 4.09 | 3.00 |
+| 64 | 3.95 | 43.2 | 31.0 |
+| 1,000 | 11.1 | 666 | 365 |

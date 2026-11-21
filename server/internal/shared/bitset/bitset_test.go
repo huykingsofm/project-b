@@ -23,7 +23,7 @@ func TestANewArrayHasKBitsAllClear(t *testing.T) {
 		if a.Len() != k || a.Count() != 0 {
 			t.Fatalf("k=%d: Len %d, Count %d", k, a.Len(), a.Count())
 		}
-		for i := 0; i < k; i++ {
+		for i := range k {
 			if a.Get(i) {
 				t.Fatalf("k=%d: bit %d is set", k, i)
 			}
@@ -65,7 +65,7 @@ func TestItAgreesWithASliceOfBoolOnRandomOperations(t *testing.T) {
 	const k = 1000
 	a, want := mustNew(t, k), make([]bool, k)
 	r := rand.New(rand.NewPCG(1, 2))
-	for n := 0; n < 20000; n++ {
+	for range 20000 {
 		i := r.IntN(k)
 		if r.IntN(2) == 0 {
 			a.Set(i)
@@ -86,5 +86,43 @@ func TestItAgreesWithASliceOfBoolOnRandomOperations(t *testing.T) {
 	}
 	if a.Count() != count {
 		t.Fatalf("Count %d, want %d", a.Count(), count)
+	}
+}
+
+func TestAnyInRangeAgreesWithLookingAtEveryBitOfTheRange(t *testing.T) {
+	const k = 300
+	r := rand.New(rand.NewPCG(5, 6))
+	for range 200 {
+		a, bools := mustNew(t, k), make([]bool, k)
+		for i := 0; i < r.IntN(6); i++ { // few bits, so that ranges without any are common
+			j := r.IntN(k)
+			a.Set(j)
+			bools[j] = true
+		}
+		for range 400 {
+			lo, length := r.IntN(k+80)-40, r.IntN(200)-5 // starts and ends outside the array, and lengths that are not positive
+			want := false
+			for i := lo; i < lo+length; i++ {
+				if i >= 0 && i < k && bools[i] {
+					want = true
+				}
+			}
+			if got := a.AnyInRange(lo, length); got != want {
+				t.Fatalf("AnyInRange(%d, %d) = %v, want %v", lo, length, got, want)
+			}
+		}
+	}
+}
+
+func TestAnyInRangeAtTheEdgesOfWords(t *testing.T) {
+	a := mustNew(t, 192)
+	a.Set(63)
+	for _, c := range []struct {
+		lo, n int
+		want  bool
+	}{{0, 63, false}, {0, 64, true}, {63, 1, true}, {64, 128, false}, {62, 2, true}, {63, 1 << 62, true}, {-1 << 62, 1 << 62, false}, {1 << 62, 1 << 62, false}} {
+		if got := a.AnyInRange(c.lo, c.n); got != c.want {
+			t.Errorf("AnyInRange(%d, %d) = %v, want %v", c.lo, c.n, got, c.want)
+		}
 	}
 }

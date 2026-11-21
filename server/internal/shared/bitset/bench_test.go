@@ -136,7 +136,7 @@ func BenchmarkGetMaskTable(b *testing.B) {
 	for _, size := range sizes {
 		shift, _ := filled(b, size)
 		table := &tableArray{words: make([]uint64, (size+63)/64), k: size}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			if shift.Get(i) {
 				table.words[i>>6] |= masks[i&63]
 			}
@@ -179,6 +179,56 @@ func BenchmarkGetMaskTable(b *testing.B) {
 				}
 			}
 			sink = n
+		})
+	}
+}
+
+// BenchmarkAnyInRange looks for a set bit in a range with none, which is the case that has to look at the
+// whole range: one AnyInRange against a Get of each bit, and the same on a []bool.
+func BenchmarkAnyInRange(b *testing.B) {
+	const size = 1 << 20
+	a, err := bitset.New(size)
+	if err != nil {
+		b.Fatal(err)
+	}
+	bools := make([]bool, size)
+	starts := indexes(size - 4096)
+	for _, n := range []int{1, 5, 64, 1000} {
+		mask := len(starts) - 1
+		b.Run(fmt.Sprintf("range=%d/AnyInRange", n), func(b *testing.B) {
+			c := 0
+			for i := 0; i < b.N; i++ {
+				if a.AnyInRange(starts[i&mask], n) {
+					c++
+				}
+			}
+			sink = c
+		})
+		b.Run(fmt.Sprintf("range=%d/Get each", n), func(b *testing.B) {
+			c := 0
+			for i := 0; i < b.N; i++ {
+				lo := starts[i&mask]
+				for j := lo; j < lo+n; j++ {
+					if a.Get(j) {
+						c++
+						break
+					}
+				}
+			}
+			sink = c
+		})
+		b.Run(fmt.Sprintf("range=%d/bool each", n), func(b *testing.B) {
+			c := 0
+			for i := 0; i < b.N; i++ {
+				lo := starts[i&mask]
+				for j := lo; j < lo+n; j++ {
+					if bools[j] {
+						c++
+						break
+					}
+				}
+			}
+			sink = c
 		})
 	}
 }

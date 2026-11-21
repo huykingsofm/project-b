@@ -1,7 +1,7 @@
 # Ways of working
 
 - **Ask until it is clear before starting.** Ask until every point is clear; state the impact on later features before any work. When asking the owner to decide, also state the cases that one option handles and the others cannot, with the risk and the impact.
-- **Run `make ci` before every reply, commit and push.** `make ci` runs the format check, `go vet`, `go test -race` and every check added to it later (a new check is a new target in the `Makefile`). It is run, and passes, before every reply to the owner that reports work, and before every commit or push; never `--no-verify`. The result reported is the result of that run.
+- **Run `make ci` before every reply, commit and push.** `make ci` runs the format check, `go vet`, `go test -race` and every check added to it later (a new check is a new target in the `Makefile`). It is run, and passes, before every reply to the owner that reports work, and before every commit or push; never `--no-verify`. The pre-commit hook in `.githooks/` runs it on every commit (`make hooks` installs it, once for each clone). The result reported is the result of that run.
 - **Commits.** Every commit has a subject and a clear body, wrapped at 72 columns. No `Co-Authored-By` line and no "Generated with ..." line of Claude. No "part X" in a commit message or in a PR title or body; splitting into parts is local planning.
 - **Delete merged branches**, local and remote, once it is verified safe.
 - **The plan is the source of work.** Read the plan fully at the start of every session and let it drive the work; whatever is decided and not yet done is recorded in the plan at its place. A refactor has no progress row of its own; only new rules and new pending work reach the plan.
