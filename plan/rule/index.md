@@ -1,6 +1,6 @@
 # Rules
 
-The rules of project-b. Most come from the working conventions and architecture principles of the project-a roadmap, rewritten for project-b; section 4 holds the rules that are new here. A rule marked **(hard)** in its file has no exceptions unless the owner decides one.
+The rules of project-b. They apply to every phase of the [plan](../en/phases.md), which covers a whole online game and not only the simulation core. Most come from the working conventions and architecture principles of the project-a roadmap, rewritten for project-b; section 4 holds the rules that are new here. A rule marked **(hard)** in its file has no exceptions unless the owner decides one.
 
 Each rule has a file of its own that says what it forbids or requires, why, and how it applies; this index gives a short summary of each. When a rule changes, change its file and its summary here, and every other place that mentions it, in the same change.
 
@@ -8,7 +8,7 @@ Each rule has a file of its own that says what it forbids or requires, why, and 
 
 ### [R0. SOLID, above all open for extension (hard)](r00-solid.md)
 
-Every design follows SOLID, and above all it is open for extension: a new kind, use or provider is added by writing new code, never by changing code that works, so what varies is given to a mechanism (a function, an interface, an entry that declares itself) and not branched on inside it. When R0 conflicts with another rule, the other is read in its light.
+Every design follows SOLID, and above all it is open for extension: a new kind, use or provider is added by writing new code, never by changing code that works, so what varies is given to a mechanism (a function, an interface, an entry that declares itself) and not branched on inside it. Refactoring may be as strong as the design needs, including deleting a part and replacing it wholly with a new design; when the replacement changes what the owner decided, it is proposed to the owner first. When R0 conflicts with another rule, the other is read in its light.
 
 ## 1. Architecture
 
@@ -26,7 +26,7 @@ Use an external library when one exists; only what none provides is written in `
 
 ### [R4. Generic base until the tag `base-v1` (hard)](r04-generic-base.md)
 
-Until the tag `base-v1`, the mechanisms, names and config variables of the core carry none of this game's own business. Sample content may be added as marked examples that can be replaced without changing the mechanism. The business enters later through the extension points of the base, and a semantic review precedes the tag.
+Until the tag `base-v1`, the mechanisms, names and config variables of the base carry none of this game's own business. Sample content may be added as marked examples that can be replaced without changing the mechanism. The business enters later through the extension points of the base, and a semantic review precedes the tag.
 
 ### [R5. What the design makes essential is built now (hard)](r05-essentials-built-now.md)
 
@@ -64,7 +64,7 @@ A file holds one responsibility and a name says what a thing is and is not reuse
 
 ### [R13. Performance: benchmarks are mandatory](r13-benchmarks.md)
 
-After a change that could affect performance or behavior, run the tests, the linter and the relevant benchmarks, compare with the previous numbers and record them in the PR. Opt-in optimizations are deferred, and a measured cost that is not a design problem is recorded and left alone.
+After a change that could affect performance or behavior, run the tests, the linter and the relevant benchmarks, compare with the previous numbers and replace the numbers in `docs/benchmark/` in place; the file shows the latest run and git keeps the history. Opt-in optimizations are deferred, and a measured cost that is not a design problem is recorded and left alone.
 
 ### [R14. The protocol is not frozen until the first release](r14-protocol-not-frozen.md)
 
@@ -124,7 +124,7 @@ A state method, an action and the mechanism of either are the owner's to define.
 
 ### [R27. State methods have explicit names](r27-explicit-state-method-names.md)
 
-The name of a state method says plainly what it does and to what, even when long: `SendMessage`, `AttachCharacter`, `MoveEntity`, `DamageEntity`.
+The name of a state method says plainly what it does and to what, even when long: `SendMessage`, `AddCharacterEntity`, `MoveEntity`, `DamageEntity`.
 
 ### [R28. Every piece of data has exactly one owning engine (hard)](r28-one-owner-per-datum.md)
 
@@ -133,6 +133,10 @@ A piece of data belongs to exactly one engine and only that engine changes it; o
 ### [R29. Every piece of data in the simulation is a value or can be cloned (hard)](r29-clone-or-value.md)
 
 A type held in a state is either a value type (no pointer, slice, map, channel or function) or has a `Clone` method that the `Clone` of the state calls. An interface held in a state is implemented only by value types, and a change replaces the value. Nothing is shared with a published copy.
+
+### [R30. Documents of the code are reference, written as structure (hard)](r30-docs-are-reference.md)
+
+The documents under `docs/` are looked up as much as read: facts are list items, key and value pairs, table rows and numbered steps, every thing of a kind has the same keys in the same order, and a sentence of explanation appears only when the structure cannot say the thing. Nothing a rule or the code already says is repeated, and each fact has one home.
 
 ## 5. Ways of working
 

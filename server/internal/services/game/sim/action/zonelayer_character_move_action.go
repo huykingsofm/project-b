@@ -1,12 +1,9 @@
 package action
 
 import (
-	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
-
-var zoneLayerCharacterMoveActionStep = config.NewVar("zonelayer.move.step", 1, config.Range(1, 8))
 
 // ZoneLayerCharacterMoveActionID is the ID of ZoneLayerCharacterMoveAction.
 type ZoneLayerCharacterMoveActionID struct{}
@@ -24,33 +21,34 @@ type ZoneLayerCharacterMoveActionCooldownKey struct{}
 // step will be done) and is set for the tick the character is free, which is how runs that arrive
 // while another is moving are applied one after the other and never at the same time.
 //
-// It needs the map to move, and reads it from the state of the zone. When the zone has not
+// Each tick it moves the character by its speed (Character.Speed, in units a tick); a character with no
+// speed does not move. It needs the map to move, and reads it from the state of the zone. When the zone has not
 // published its state yet it does nothing in that tick and tries again in the next.
 type ZoneLayerCharacterMoveAction struct {
-	CharID state.CharacterID
-	Dir    state.Dir
-	Ticks  uint32 // ticks still to move
+	CharacterID state.CharacterID
+	Dir         state.Dir
+	Ticks       uint32 // ticks still to move
 
 	reserved bool
 }
 
 func (a *ZoneLayerCharacterMoveAction) ID() ID          { return ZoneLayerCharacterMoveActionID{} }
 func (a *ZoneLayerCharacterMoveAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneLayerCharacterMoveAction) Actor() any      { return a.CharID }
+func (a *ZoneLayerCharacterMoveAction) Actor() any      { return a.CharacterID }
 
 // ApplyZoneLayer moves the character one step, or takes its place in the cooldown.
 func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, _ *Plan[ZoneLayerAction]) {
-	ch, ok := s.CharacterByID(a.CharID)
+	ch, ok := s.CharacterByID(a.CharacterID)
 	if !ok {
 		return
 	}
-	entity, _ := s.EntityOfCharacter(a.CharID)
-	if ch.Health <= 0 || a.Ticks == 0 {
+	entity, _ := s.CharacterEntityByCharacterID(a.CharacterID)
+	if ch.Health <= 0 || ch.Speed <= 0 || a.Ticks == 0 {
 		return
 	}
 	if !a.reserved {
-		start := max(c.Tick, s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharID))
-		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharID, start+uint64(a.Ticks))
+		start := max(c.Tick, s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID))
+		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID, start+uint64(a.Ticks))
 		a.reserved = true
 		if start > c.Tick {
 			r.ToSelfAt(start, a)
@@ -62,7 +60,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(c *Context, s *zonelayerst
 		r.ToSelf(a)
 		return
 	}
-	s.MoveEntity(zone.Tiles, entity.ID, a.Dir, int32(zoneLayerCharacterMoveActionStep.Get(c.Cfg)))
+	s.MoveEntity(zone.Tiles, entity.ID(), a.Dir, ch.Speed)
 	a.Ticks--
 	if a.Ticks > 0 {
 		r.ToSelf(a)
@@ -71,7 +69,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(c *Context, s *zonelayerst
 
 // ApplyZoneLayerCancel frees the character of the movement that this run had reserved.
 func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayerCancel(c *Context, s *zonelayerstate.State, _ *ZoneLayerRegistry) {
-	if a.reserved && s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharID) > c.Tick {
-		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharID, c.Tick)
+	if a.reserved && s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID) > c.Tick {
+		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID, c.Tick)
 	}
 }

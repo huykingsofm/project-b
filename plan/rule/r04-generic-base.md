@@ -1,6 +1,6 @@
 # R4. Generic base until the tag `base-v1` (hard)
 
-The core is a generic multiplayer game base: state, actions, plan, effects, engines, zones, zonelayers. Until the base is tagged `base-v1`, the mechanisms, names and config variables of the core carry none of this game's own business (cultivation, realms, spiritual roots, sects, techniques, tribulation, talismans, territory wars). The business enters after the tag, through the extension points the base offers (effects, actions, content, config variables), not by editing the base.
+The base is generic multiplayer game machinery, and the core is its first part: state, entities, actions, plan, effects, engines, zones, zonelayers; storage, network, accounts, the client and the tools join it in the later phases of the [plan](../en/phases.md). Until the base is tagged `base-v1`, the mechanisms, names and config variables of the base carry none of this game's own business (cultivation, realms, spiritual roots, sects, techniques, tribulation, talismans, territory wars). The business enters after the tag, through the extension points the base offers (effects, actions, entities, content, config variables), not by editing the base.
 
 **Examples are allowed.** Sample game content may be added to the base as an example, such as an item, a monster, a stat, a skill or an action like picking up an item. An example:
 

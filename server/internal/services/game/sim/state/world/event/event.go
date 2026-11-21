@@ -3,6 +3,8 @@
 // the same name in two of them is not a clash.
 package event
 
+import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+
 // ID names a kind of event of the world, so that a client or an encoder can tell the kinds apart by
 // number. The numbers count up from 1 and 0 is no event. Each event type returns its own, with a method
 // ID() in its file.
@@ -14,9 +16,16 @@ type ID uint16
 
 // Event is one thing that happened to the state of the world in a tick. What an event is made of is in
 // the file of each event. The events of a tick are kept in a state.Events[Event].
-type Event interface{ ID() ID }
+//
+// An event also says who receives it, with Audience: what only one player should hear is never in the
+// audience of everyone.
+type Event interface {
+	ID() ID
+	Audience() state.Audience
+}
 
 // The IDs of the events.
 const (
 	PrivateChatMessageSentID ID = iota + 1
+	CharacterItemAddedID
 )

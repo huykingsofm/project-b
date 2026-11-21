@@ -1,0 +1,175 @@
+package action
+
+import (
+	"testing"
+
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+)
+
+// testGraph is a Graph of a world with the ID 1 and nothing else.
+type testGraph struct{ Graph }
+
+func (testGraph) World() state.WorldID { return 1 }
+
+// newPickupTestLayer makes a zonelayer with characters 1 and 2 standing in the middle of tiles (1,2) and
+// (9,2) in a map 10 by 5, and an item lying in the middle of tile (2,2) It returns the
+// layer, its registry and the entity of the item.
+func newPickupTestLayer() (*zonelayerstate.State, *ZoneLayerRegistry, state.EntityID) {
+	st, reg := newMoveTestWorld(true)
+	reg.Graph = testGraph{}
+	st.AddCharacterEntity(newCharacter(2, "b", 100, 1000, 0), state.Vec{X: 9500, Y: 2500})
+	return st, reg, st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
+}
+
+func pickup(characterID state.CharacterID, item state.EntityID, tick uint64, st *zonelayerstate.State, reg *ZoneLayerRegistry) {
+	a := &ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
+	a.ApplyZoneLayer(&Context{Tick: tick}, st, reg, NewPlan[ZoneLayerAction]())
+}
+
+func TestAnItemWithinTheRadiusIsTakenOffTheGroundAndSentToTheWorld(t *testing.T) {
+	st, reg, item := newPickupTestLayer()
+	pickup(1, item, 10, st, reg)
+
+	if _, ok := st.EntityByID(item); ok {
+		t.Fatal("the item is still on the ground")
+	}
+	if got := len(reg.Take()); got != 1 {
+		t.Fatalf("%d messages were sent, want 1 to the world", got)
+	}
+}
+
+func TestAnItemOutsideTheRadiusStaysOnTheGround(t *testing.T) {
+	st, reg, item := newPickupTestLayer()
+	pickup(2, item, 10, st, reg) // seven tiles away; the radius is 2 tiles
+
+	if _, ok := st.ItemEntityByID(item); !ok {
+		t.Fatal("an item out of reach was taken")
+	}
+	if got := len(reg.Take()); got != 0 {
+		t.Fatalf("%d messages were sent, want none", got)
+	}
+}
+
+func TestTheReachIsASquareOfUnitsAroundTheItem(t *testing.T) {
+	st, reg, _ := newPickupTestLayer()
+	// The character is at (1500, 2500). The reach is 2000 units on every side of the item's point.
+	inside := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 4500}, 0)
+	pickup(1, inside, 10, st, reg)
+	if _, ok := st.ItemEntityByID(inside); ok {
+		t.Fatal("an item exactly at the edge of the reach, on the diagonal, was out of reach")
+	}
+	outside := st.AddItemEntity(7, 1, state.Vec{X: 3501, Y: 2500}, 0)
+	pickup(1, outside, 10, st, reg)
+	if _, ok := st.ItemEntityByID(outside); !ok {
+		t.Fatal("an item one unit past the reach was taken")
+	}
+}
+
+func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
+	st, reg, _ := newPickupTestLayer()
+	big := newCharacter(5, "boss", 1000, 1000, 1500)
+	st.AddCharacterEntity(big, state.Vec{X: 5500, Y: 4500})
+	// The edge of the body is at 4000 on x, and the reach, 2000 units, is from there; the centre is 3500 from the item.
+	near := st.AddItemEntity(7, 1, state.Vec{X: 2000, Y: 4500}, 0)
+	pickup(5, near, 10, st, reg)
+	if _, ok := st.ItemEntityByID(near); ok {
+		t.Fatal("an item within the reach of the edge of the body was out of reach")
+	}
+	far := st.AddItemEntity(7, 1, state.Vec{X: 1999, Y: 4500}, 0)
+	pickup(5, far, 10, st, reg)
+	if _, ok := st.ItemEntityByID(far); !ok {
+		t.Fatal("an item one unit past the reach of the edge of the body was taken")
+	}
+}
+
+func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testing.T) {
+	st, reg, _ := newPickupTestLayer()
+	at := state.Vec{X: 2500, Y: 2500}
+	stack := st.AddItemEntity(8, 5, at, 40)
+	pickup(1, stack, 10, st, reg)
+	messages := reg.Take()
+	if len(messages) != 1 {
+		t.Fatalf("%d messages were sent, want 1", len(messages))
+	}
+	if _, ok := st.ItemEntityByID(stack); ok {
+		t.Fatal("the stack is still on the ground")
+	}
+	add, ok := messages[0].(*ScopedMessage[WorldAction]).Actions[0].(*WorldCharacterItemAddAction)
+	if !ok {
+		t.Fatalf("the message does not carry a WorldCharacterItemAddAction: %+v", messages[0])
+	}
+	want := WorldCharacterItemAddAction{CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID, At: at, Expiry: 40}
+	if *add != want {
+		t.Fatalf("the message is %+v, want %+v", *add, want)
+	}
+}
+
+func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testing.T) {
+	st, reg, _ := newPickupTestLayer()
+	at := state.Vec{X: 2500, Y: 2500}
+	stack := st.AddItemEntity(8, 5, at, 40)
+	pickup(1, stack, 10, st, reg)
+	message := reg.Take()[0]
+
+	back := message.Bounce(Retired)
+	if back.Kind != DecisionCompensate {
+		t.Fatalf("a failed delivery decides %v, want to compensate", back.Kind)
+	}
+	put, ok := back.With.(*ScopedMessage[ZoneLayerAction]).Actions[0].(*ZoneLayerItemEntityAddAction)
+	if !ok {
+		t.Fatalf("the compensation does not carry a ZoneLayerItemEntityAddAction: %+v", back.With)
+	}
+	if want := (ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}); *put != want {
+		t.Fatalf("the compensation is %+v, want %+v", *put, want)
+	}
+	put.ApplyZoneLayer(&Context{Tick: 12}, st, reg, NewPlan[ZoneLayerAction]())
+	var found entityItem
+	for _, id := range st.Entities.Keys() {
+		if item, ok := st.ItemEntityByID(id); ok {
+			found = entityItem{item.ItemID, item.Count, item.Pos}
+		}
+	}
+	if found != (entityItem{8, 5, at}) {
+		t.Fatalf("the item on the ground is %+v, want kind 8, count 5, same place", found)
+	}
+}
+
+type entityItem struct {
+	itemID state.ItemID
+	count  uint32
+	pos    state.Vec
+}
+
+func TestTwoCharactersPickingUpTheSameItemInOneTickOnlyOneGetsIt(t *testing.T) {
+	st, reg, item := newPickupTestLayer()
+	st.AddCharacterEntity(newCharacter(3, "c", 100, 1000, 0), state.Vec{X: 1500, Y: 1500})
+	pickup(1, item, 10, st, reg)
+	pickup(3, item, 10, st, reg)
+
+	if got := len(reg.Take()); got != 1 {
+		t.Fatalf("%d messages were sent, want 1: the item was given twice", got)
+	}
+}
+
+func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
+	st, reg, item := newPickupTestLayer()
+	pickup(1, item, 10, st, reg)
+	reg.Take()
+	pickup(1, item, 11, st, reg)
+	pickup(1, 1, 11, st, reg) // the entity of the character itself
+	pickup(1, 999, 11, st, reg)
+	if got := len(reg.Take()); got != 0 {
+		t.Fatalf("%d messages were sent for things that cannot be picked up", got)
+	}
+}
+
+func TestACharacterWithNoHealthOrNotInTheZonelayerPicksNothingUp(t *testing.T) {
+	st, reg, item := newPickupTestLayer()
+	st.DamageEntity(1, 1000)
+	pickup(1, item, 10, st, reg)
+	pickup(42, item, 10, st, reg)
+	if _, ok := st.ItemEntityByID(item); !ok {
+		t.Fatal("an item was taken by a character that could not")
+	}
+}

@@ -10,3 +10,6 @@ type ChatMessageSent struct {
 }
 
 func (ChatMessageSent) ID() ID { return ChatMessageSentID }
+
+// Audience is everyone in the zonelayer.
+func (ChatMessageSent) Audience() state.Audience { return state.AudienceEveryone() }

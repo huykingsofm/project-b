@@ -11,6 +11,9 @@ func (s *State) Hash() uint64 {
 		h.U64(uint64(l.ID))
 		h.U64(uint64(uint32(l.Capacity)))
 	}
+	for _, e := range s.Entities.All() {
+		e.Hash(&h)
+	}
 	h.U64(uint64(s.Chat.Len()))
 	return h.Sum()
 }

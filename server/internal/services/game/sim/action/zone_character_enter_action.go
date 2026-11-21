@@ -23,16 +23,16 @@ type ZoneCharacterEnterAction struct {
 
 func (a *ZoneCharacterEnterAction) ID() ID          { return ZoneCharacterEnterActionID{} }
 func (a *ZoneCharacterEnterAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneCharacterEnterAction) Actor() any      { return a.Character.CharID }
+func (a *ZoneCharacterEnterAction) Actor() any      { return a.Character.CharacterID }
 
 // ApplyZone picks a zonelayer and sends it the character.
 func (a *ZoneCharacterEnterAction) ApplyZone(_ *Context, s *zonestate.State, r *ZoneRegistry, _ *Plan[ZoneAction]) {
-	for zoneLayerID, slot := range s.ZoneLayers.All() {
+	for zoneLayerID, zoneLayerSlot := range s.ZoneLayers.All() {
 		held := 0
 		if layer := r.Stable.ZoneLayer(zoneLayerID); layer != nil {
 			held = layer.CharacterCount()
 		}
-		if held >= int(slot.Capacity) {
+		if held >= int(zoneLayerSlot.Capacity) {
 			continue
 		}
 		r.ToZoneLayer(zoneLayerID, OnFailDrop, &ZoneLayerCharacterEnterAction{Character: a.Character, At: zoneCharacterEnterActionArrival})

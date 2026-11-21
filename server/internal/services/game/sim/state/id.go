@@ -23,5 +23,5 @@ type (
 // enters a zonelayer.
 type EntityID uint64
 
-// ExitID names an exit of a map.
-type ExitID uint32
+// ItemID names a kind of item: what a dropped item is, and what an inventory holds.
+type ItemID uint32

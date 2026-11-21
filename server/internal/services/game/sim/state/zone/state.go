@@ -2,12 +2,17 @@
 // rules as the state of a zonelayer: data and nothing else, changed only through its own methods,
 // with events of its own.
 //
+// The zone also holds entities that belong to it and not to one of its zonelayers, such as the exits of
+// its map: they stand in every zonelayer of the zone at once. The ID of an entity is unique in the scope
+// that holds it, so an ID of the zone and an ID of one of its zonelayers can be the same number.
+//
 // The zone does not keep count of who is in its zonelayers. An action that needs a count reads it from
 // what the zonelayers published.
 package zone
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/shared/orderedmap"
@@ -39,21 +44,41 @@ type State struct {
 	ID         state.ZoneID
 	Tick       uint64
 	Tiles      *tilemap.TileMap
+	Entities   orderedmap.Map[state.EntityID, entity.Entity]
 	ZoneLayers orderedmap.Map[state.ZoneLayerID, ZoneLayerSlot]
 	Chat       table.Table[ChatMessage]
+
+	nextEntityID state.EntityID
 
 	// Events: not data, never cloned.
 	events state.Events[event.Event]
 }
 
-// NewState makes the state of a zone with no zonelayer, on a map.
+// NewState makes the state of a zone with no zonelayer, on a map. The exits of the map stand in the
+// zone as entities.
 func NewState(zoneID state.ZoneID, tiles *tilemap.TileMap) *State {
-	return &State{ID: zoneID, Tiles: tiles}
+	s := &State{ID: zoneID, Tiles: tiles}
+	for _, exit := range tiles.Exits() {
+		s.nextEntityID++
+		exit.EntityID = s.nextEntityID
+		s.Entities.Set(exit.EntityID, exit)
+	}
+	return s
 }
 
 // Clone returns a copy of the data, with an empty event. The copy shares the map, which never changes.
 func (s *State) Clone() *State {
-	return &State{ID: s.ID, Tick: s.Tick, Tiles: s.Tiles, ZoneLayers: s.ZoneLayers.Clone(), Chat: s.Chat.Clone()}
+	return &State{ID: s.ID, Tick: s.Tick, Tiles: s.Tiles, Entities: s.Entities.Clone(), ZoneLayers: s.ZoneLayers.Clone(), Chat: s.Chat.Clone(), nextEntityID: s.nextEntityID}
+}
+
+// ExitEntityByID returns the entity with the ID when it is an exit.
+func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool) {
+	e, ok := s.Entities.Get(entityID)
+	if !ok {
+		return entity.ExitEntity{}, false
+	}
+	exit, ok := e.(entity.ExitEntity)
+	return exit, ok
 }
 
 // SetTick sets the tick that the state is at.

@@ -4,12 +4,11 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 )
 
 func smallMap() *tilemap.TileMap {
-	return tilemap.New(5, 5, state.Vec{X: 1, Y: 1}, nil, nil)
+	return tilemap.New(5, 5, tilemap.Tile{X: 1, Y: 1}, nil, nil)
 }
 
 func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {

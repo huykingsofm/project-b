@@ -13,7 +13,7 @@ type ZoneLayerCharacterEnterActionID struct{}
 // (ZoneLayerCharacterExitToAction), and a character that is put back after it could not go, all arrive
 // this way.
 //
-// It needs the map, to see whether the position can be stood on and where the spawn point is, and
+// It needs the map, to see whether the body fits at the position and where the spawn point is, and
 // reads it from the state of the zone. The character is in the message and nowhere else, so when the
 // zone has not published its state yet the action tries again in the next tick.
 type ZoneLayerCharacterEnterAction struct {
@@ -23,11 +23,11 @@ type ZoneLayerCharacterEnterAction struct {
 
 func (a *ZoneLayerCharacterEnterAction) ID() ID          { return ZoneLayerCharacterEnterActionID{} }
 func (a *ZoneLayerCharacterEnterAction) Priority() int16 { return PriorityResolve }
-func (a *ZoneLayerCharacterEnterAction) Actor() any      { return a.Character.CharID }
+func (a *ZoneLayerCharacterEnterAction) Actor() any      { return a.Character.CharacterID }
 
 // ApplyZoneLayer gives the character a body.
 func (a *ZoneLayerCharacterEnterAction) ApplyZoneLayer(_ *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, _ *Plan[ZoneLayerAction]) {
-	if _, held := s.CharacterByID(a.Character.CharID); held {
+	if _, held := s.CharacterByID(a.Character.CharacterID); held {
 		return
 	}
 	zone := r.Stable.Zone(s.ZoneID)
@@ -36,8 +36,8 @@ func (a *ZoneLayerCharacterEnterAction) ApplyZoneLayer(_ *Context, s *zonelayers
 		return
 	}
 	at := a.At
-	if !zone.Tiles.Free(at) {
-		at = zone.Tiles.Spawn
+	if !zone.Tiles.FreeForBody(at, a.Character.Radius) {
+		at = zone.Tiles.SpawnPosition()
 	}
-	s.AttachCharacter(a.Character, at)
+	s.AddCharacterEntity(a.Character, at)
 }

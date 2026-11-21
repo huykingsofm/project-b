@@ -8,4 +8,6 @@ Every design follows the SOLID principles. This rule comes before all the others
 - **Interface segregation.** An interface is small and has only what its caller needs ([R1](r01-layer-dependency.md)).
 - **Dependency inversion.** Code depends on interfaces that the caller defines, not on concrete providers ([R1](r01-layer-dependency.md)).
 
+- **Refactor boldly.** Whatever stands in the way of a better design may be changed as much as needed: renamed, moved, split, deleted, or replaced wholly by a new design, with the old one removed and not kept beside it ([R10](r10-writing.md), [R11](r11-refactor.md)). Only a replacement that changes something the owner decided, or that the owner could not foresee from the plan, is proposed to the owner first; any other is done and reported afterwards.
+
 Where the owner's own design fixes a central place on purpose (the action IDs are constants of one file), that is the owner's decision and stays; it is not a reason to add other central places.

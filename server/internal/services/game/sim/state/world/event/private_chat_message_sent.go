@@ -11,3 +11,8 @@ type PrivateChatMessageSent struct {
 }
 
 func (PrivateChatMessageSent) ID() ID { return PrivateChatMessageSentID }
+
+// Audience is the two players, and nobody else.
+func (e PrivateChatMessageSent) Audience() state.Audience {
+	return state.AudiencePlayers(e.FromID, e.ToID)
+}
