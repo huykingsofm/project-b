@@ -1,11 +1,14 @@
 package zone_test
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
+	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 )
 
 func newState(t *testing.T) *zone.State {
@@ -40,5 +43,31 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	copied.ZoneLayers.Delete(1)
 	if st.ZoneLayers.Len() != 2 {
 		t.Fatal("a change of the copy changed the state")
+	}
+}
+
+func TestAClonedZoneStateSharesNoMemoryWithTheStateExceptTheMapThatNeverChanges(t *testing.T) {
+	st := newState(t)
+	st.ZoneLayers.Set(1, zone.ZoneLayerSlot{ID: 1, Capacity: 4})
+	copied := st.Clone()
+	if copied.Tiles != st.Tiles {
+		t.Fatal("the map of the zone is meant to be shared")
+	}
+	// the map is shared on purpose, so it is not looked at: compare the rest
+	a, b := *st, *copied
+	a.Tiles, b.Tiles = nil, nil
+	if err := aliasing.Disjoint(a, b); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheTypesOfTheZoneStateObeyTheRuleOfData(t *testing.T) {
+	rules := aliasing.Rules{
+		Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity]()},
+		Shared:     []reflect.Type{reflect.TypeFor[*tilemap.TileMap]()},
+		Skip:       []string{"zone.State.events"},
+	}
+	if err := aliasing.CheckCloneable(reflect.TypeFor[zone.State](), rules); err != nil {
+		t.Fatal(err)
 	}
 }

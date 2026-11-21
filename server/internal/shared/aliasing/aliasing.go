@@ -139,7 +139,7 @@ func (r Rules) has(list []reflect.Type, t reflect.Type) bool {
 // by the path of its fields, where it does not.
 //
 //   - A value type (numbers, bool, string, and arrays and structs of them) is copied by assignment.
-//   - Any other type must have a method Clone() T, which is trusted to copy what the type holds. What the type
+//   - Any other type must have a method Clone() T (or Clone() *T), which is trusted to copy what the type holds. What the type
 //     holds is still looked at: a slice, a map or a pointer inside it is allowed, but the types they hold must
 //     be values or have Clone too, because a container copies them with Clone when they have it and by
 //     assignment when they have not.
@@ -147,7 +147,7 @@ func (r Rules) has(list []reflect.Type, t reflect.Type) bool {
 //     of a map, because a key is an identifier.
 func CheckCloneable(t reflect.Type, rules Rules) error {
 	c := checker{rules: rules, active: map[reflect.Type]bool{}}
-	return c.element(t, t.String(), false)
+	return c.element(t, t.String(), false, false)
 }
 
 type checker struct {
@@ -155,10 +155,10 @@ type checker struct {
 	active map[reflect.Type]bool
 }
 
-// hasClone says whether the type, or its pointer, has a method Clone() T.
+// hasClone says whether the type, or its pointer, has a method Clone that returns the type or a pointer to it.
 func hasClone(t reflect.Type) bool {
 	m, ok := reflect.PointerTo(t).MethodByName("Clone")
-	return ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 && m.Type.Out(0) == t
+	return ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 && (m.Type.Out(0) == t || m.Type.Out(0) == reflect.PointerTo(t))
 }
 
 // pure says whether assignment copies everything the type holds.
@@ -182,11 +182,16 @@ func pure(t reflect.Type) bool {
 }
 
 // element checks a type that is held as a value, as an element of a container or a field: it is a value, or a
-// type with Clone whose contents are right too.
-func (c *checker) element(t reflect.Type, path string, isKey bool) error {
+// type with Clone whose contents are right too. Inside a type with Clone (trusted) a slice, a map or a pointer
+// is a structure of that type, which its Clone copies, and only the types at its leaves are looked at. That is as
+// far as a type can see: a container whose element is itself a slice would share it, and Disjoint finds that on a
+// value that holds data.
+func (c *checker) element(t reflect.Type, path string, isKey, trusted bool) error {
 	switch {
 	case pure(t) || c.rules.has(c.rules.Shared, t):
 		return nil
+	case trusted && (t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map || t.Kind() == reflect.Pointer):
+		return c.held(t, path) // a structure inside a type with Clone: that Clone is trusted to copy it, and its leaves are looked at
 	case t.Kind() == reflect.Interface:
 		if c.rules.has(c.rules.Interfaces, t) || isKey {
 			return nil
@@ -231,18 +236,18 @@ func (c *checker) held(t reflect.Type, path string) error {
 		if c.rules.has(c.rules.Shared, t) {
 			return nil
 		}
-		return c.element(t.Elem(), path+"[]", false)
+		return c.element(t.Elem(), path+"[]", false, true)
 	case reflect.Map:
-		if err := c.element(t.Key(), path+"[key]", true); err != nil {
+		if err := c.element(t.Key(), path+"[key]", true, true); err != nil {
 			return err
 		}
-		return c.element(t.Elem(), path+"[value]", false)
+		return c.element(t.Elem(), path+"[value]", false, true)
 	case reflect.Struct:
 		if pure(t) || hasClone(t) {
-			return c.element(t, path, false)
+			return c.element(t, path, false, true)
 		}
 		return c.contents(t, path) // part of the same implementation
 	default:
-		return c.element(t, path, false)
+		return c.element(t, path, false, true)
 	}
 }

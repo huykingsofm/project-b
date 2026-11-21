@@ -45,11 +45,8 @@ func NewState(zoneLayerID state.ZoneLayerID, zoneID state.ZoneID) *State {
 func (s *State) Clone() *State {
 	return &State{
 		ID: s.ID, ZoneID: s.ZoneID, Tick: s.Tick,
-		Entities: s.Entities.Clone(),
-		Characters: s.Characters.CloneFunc(func(c Character) Character {
-			c.Cooldowns = c.Cooldowns.Clone()
-			return c
-		}),
+		Entities:     s.Entities.Clone(),
+		Characters:   s.Characters.Clone(),
 		Chat:         s.Chat.Clone(),
 		bodies:       s.bodies.Clone(),
 		nextEntityID: s.nextEntityID,
@@ -130,6 +127,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.nextEntityID++
 	e := entity.CharacterEntity{EntityID: s.nextEntityID, Pos: at, Rad: c.Radius, Hp: c.Health, MaxHp: c.MaxHealth}
 	s.Entities.Set(e.EntityID, e)
+	c = c.Clone()                             // the state owns its copy: what the caller sent, and keeps, is never changed by the engine (R29)
 	c.Health, c.MaxHealth, c.Radius = 0, 0, 0 // from here on they are the body's
 	s.Characters.Set(c.CharacterID, c)
 	s.bodies.Link(c.CharacterID, e.EntityID)

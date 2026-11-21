@@ -1,12 +1,14 @@
 package world_test
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world/event"
+	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {
@@ -89,4 +91,19 @@ func itemsHeld(st *world.State, characterID state.CharacterID, itemID state.Item
 		}
 	}
 	return total
+}
+
+func TestAClonedWorldStateSharesNoMemoryWithTheState(t *testing.T) {
+	st := world.NewState(1)
+	st.AddItemToCharacter(1, 7, 1, 3, 10)
+	st.SendPrivateMessage(world.PrivateChatMessage{FromID: 1, ToID: 2, Text: "hi"})
+	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
+	if err := aliasing.CheckCloneable(reflect.TypeFor[world.State](), aliasing.Rules{Skip: []string{"world.State.events"}}); err != nil {
+		t.Fatal(err)
+	}
 }

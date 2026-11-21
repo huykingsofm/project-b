@@ -16,18 +16,6 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
-// snapshot copies what a command shares with the state of the engine. A replay.MemLog keeps a command as the value
-// it was given, and the cooldowns of the character in ZoneCharacterEnterCommand share their memory with the state it
-// enters: when the engine later sets a cooldown, the command in the memory log changes. A replay.FileLog writes
-// the command when it is recorded, so it holds what was sent.
-func snapshot(c command.ZoneCommand) command.ZoneCommand {
-	if enter, ok := c.(command.ZoneCharacterEnterCommand); ok {
-		enter.Character.Cooldowns = enter.Character.Cooldowns.Clone()
-		return enter
-	}
-	return c
-}
-
 // teeReplayLog gives every record to two replay logs.
 type teeReplayLog struct{ a, b replay.Log }
 
@@ -40,7 +28,7 @@ func (t teeReplayLog) WorldCommand(e action.Address, tick uint64, c command.Worl
 	t.b.WorldCommand(e, tick, c)
 }
 func (t teeReplayLog) ZoneCommand(e action.Address, tick uint64, c command.ZoneCommand) {
-	t.a.ZoneCommand(e, tick, snapshot(c))
+	t.a.ZoneCommand(e, tick, c)
 	t.b.ZoneCommand(e, tick, c)
 }
 func (t teeReplayLog) ZoneLayerCommand(e action.Address, tick uint64, c command.ZoneLayerCommand) {
