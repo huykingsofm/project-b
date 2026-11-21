@@ -14,6 +14,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
@@ -231,5 +232,16 @@ func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
 	// A number that changes breaks every log that was written: add commands at the end, never renumber.
 	if WorldChatPrivateSendCommandID != 1 || ZoneCharacterEnterCommandID != 2 || ZoneLayerCharacterMoveCommandID != 4 || ZoneLayerCharacterShieldGrantCommandID != 9 {
 		t.Fatal("the ID of a command changed")
+	}
+}
+
+// Commands come from outside, with the goroutine that sends one still holding what it sent, so what a command holds is
+// a value or has Clone, and the state that takes it copies it (R29). A cooldown key is a value of a struct{} type.
+func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
+	rules := aliasing.Rules{Boundary: true, Interfaces: []reflect.Type{reflect.TypeFor[any]()}}
+	for _, c := range examples {
+		if err := aliasing.CheckCloneable(reflect.TypeOf(c), rules); err != nil {
+			t.Errorf("%T: %v", c, err)
+		}
 	}
 }

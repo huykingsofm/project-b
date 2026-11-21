@@ -16,6 +16,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/bimap"
 	"github.com/huykingsofm/project-b/server/internal/shared/orderedmap"
 	"github.com/huykingsofm/project-b/server/internal/shared/table"
+	"slices"
 )
 
 // State is the state of a zonelayer.
@@ -236,5 +237,5 @@ func (s *State) SendMessage(m ChatMessage) {
 
 // NoticeToCharacter tells a character something.
 func (s *State) NoticeToCharacter(characterID state.CharacterID, key string, args ...any) {
-	s.events.Add(event.CharacterNoticed{CharacterID: characterID, Key: key, Args: args})
+	s.events.Add(event.CharacterNoticed{CharacterID: characterID, Key: key, Args: slices.Clone(args)}) // the event goes to another goroutine: it owns its arguments
 }

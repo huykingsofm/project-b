@@ -126,6 +126,11 @@ type Rules struct {
 	// Shared are types that may be shared on purpose because they never change once made, like the map of a
 	// zone. They are named by the type that is shared, for example *tilemap.TileMap.
 	Shared []reflect.Type
+	// Boundary is for the types of what crosses from one goroutine to another (a command, an action, an event): a
+	// struct of such a type is accepted when each of its fields is a value or has Clone, without a Clone of its own,
+	// because it is the one that stores a field that copies it. Without it a struct that holds anything but values
+	// must have Clone itself.
+	Boundary bool
 	// Skip are fields that are not data and are not copied, named "type.field" as reflect writes the type
 	// (for example "*zonelayer.State.events").
 	Skip []string
@@ -199,6 +204,16 @@ func (c *checker) element(t reflect.Type, path string, isKey, trusted bool) erro
 		return fmt.Errorf("%s is the interface %s, which the rules do not allow", path, t)
 	case t.Kind() == reflect.Chan || t.Kind() == reflect.Func || t.Kind() == reflect.UnsafePointer:
 		return fmt.Errorf("%s is a %s, which cannot be copied", path, t.Kind())
+	case !hasClone(t) && t.Kind() == reflect.Struct && c.rules.Boundary:
+		for f := range t.Fields() {
+			if slices.Contains(c.rules.Skip, t.String()+"."+f.Name) {
+				continue
+			}
+			if err := c.element(f.Type, path+"."+f.Name, false, false); err != nil {
+				return err
+			}
+		}
+		return nil
 	case !hasClone(t):
 		return fmt.Errorf("%s is %s, which holds a reference and has no Clone method", path, t)
 	}

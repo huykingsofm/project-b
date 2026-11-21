@@ -168,3 +168,20 @@ func TestCheckCloneableAllowsSharedTypesAndSkipsFieldsThatAreNotData(t *testing.
 		t.Errorf("a field that is skipped: %v", err)
 	}
 }
+
+type carries struct {
+	Count int
+	List  listWithClone
+}
+
+func TestBoundaryAcceptsAStructOfValuesAndTypesWithCloneThatHasNoCloneItself(t *testing.T) {
+	if err := check(reflect.TypeFor[carries](), aliasing.Rules{}); err == nil {
+		t.Error("without Boundary a struct that holds a type with Clone needs a Clone of its own")
+	}
+	if err := check(reflect.TypeFor[carries](), aliasing.Rules{Boundary: true}); err != nil {
+		t.Errorf("with Boundary: %v", err)
+	}
+	if err := check(reflect.TypeFor[badHolder](), aliasing.Rules{Boundary: true}); err == nil {
+		t.Error("with Boundary a slice that is not in a type with Clone was accepted")
+	}
+}

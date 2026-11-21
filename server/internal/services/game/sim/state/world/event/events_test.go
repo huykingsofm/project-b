@@ -1,14 +1,19 @@
 package event
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 )
 
+// allEvents has an event of every kind of the package, for the tests that look at all of them.
+var allEvents = []Event{PrivateChatMessageSent{}, CharacterItemAdded{}}
+
 func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
-	all := []Event{PrivateChatMessageSent{}, CharacterItemAdded{}}
+	all := allEvents
 	seen := map[ID]Event{}
 	for _, e := range all {
 		if e.ID() == 0 {
@@ -29,5 +34,14 @@ func TestPrivateEventsGoOnlyToTheOnesTheyAreAbout(t *testing.T) {
 	item := CharacterItemAdded{CharacterID: 5}.Audience()
 	if item.Kind != state.CharactersKind || !slices.Equal(item.Characters, []state.CharacterID{5}) {
 		t.Fatalf("an item added has the audience %+v, want character 5", item)
+	}
+}
+
+// Events leave the engine to the emitter, which reads them on another goroutine, so they are values (R29).
+func TestEveryEventIsAValue(t *testing.T) {
+	for _, e := range allEvents {
+		if err := aliasing.CheckCloneable(reflect.TypeOf(e), aliasing.Rules{}); err != nil {
+			t.Errorf("%T: %v", e, err)
+		}
 	}
 }
