@@ -27,36 +27,36 @@ type ZoneLayerCharacterNormalAttackActionCooldownKey struct{}
 // attack, a ZoneLayerCharacterDamageAction that it adds to the plan behind itself, so effects see the hit
 // before it lands.
 type ZoneLayerCharacterNormalAttackAction struct {
-	CharID   state.CharacterID
-	TargetID state.CharacterID // the character it hits
+	CharacterID state.CharacterID
+	TargetID    state.CharacterID // the character it hits
 }
 
 func (a *ZoneLayerCharacterNormalAttackAction) ID() ID {
 	return ZoneLayerCharacterNormalAttackActionID{}
 }
 func (a *ZoneLayerCharacterNormalAttackAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneLayerCharacterNormalAttackAction) Actor() any      { return a.CharID }
+func (a *ZoneLayerCharacterNormalAttackAction) Actor() any      { return a.CharacterID }
 
 // ApplyZoneLayer sets the cooldown and adds the hit to the plan, or does nothing.
 func (a *ZoneLayerCharacterNormalAttackAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, _ *ZoneLayerRegistry, p *Plan[ZoneLayerAction]) {
-	ch, ok := s.CharacterByID(a.CharID)
+	ch, ok := s.CharacterByID(a.CharacterID)
 	if !ok || ch.Health <= 0 {
 		return
 	}
-	source, ok := s.EntityOfCharacter(a.CharID)
+	source, ok := s.CharacterEntityByCharacterID(a.CharacterID)
 	if !ok {
 		return
 	}
-	victim, ok := s.EntityOfCharacter(a.TargetID)
+	victim, ok := s.CharacterEntityByCharacterID(a.TargetID)
 	if !ok {
 		return
 	}
 	if target, _ := s.CharacterByID(a.TargetID); target.Health <= 0 {
 		return
 	}
-	if s.CooldownUntil[ZoneLayerCharacterNormalAttackActionCooldownKey](a.CharID) > c.Tick {
+	if s.CooldownUntil[ZoneLayerCharacterNormalAttackActionCooldownKey](a.CharacterID) > c.Tick {
 		return
 	}
-	s.SetCooldown[ZoneLayerCharacterNormalAttackActionCooldownKey](a.CharID, c.Tick+uint64(zoneLayerCharacterNormalAttackActionCooldown.Get(c.Cfg)))
-	p.Append(&ZoneLayerCharacterDamageAction{SourceID: source.ID, VictimID: victim.ID, Amount: normalAttackDamage})
+	s.SetCooldown[ZoneLayerCharacterNormalAttackActionCooldownKey](a.CharacterID, c.Tick+uint64(zoneLayerCharacterNormalAttackActionCooldown.Get(c.Cfg)))
+	p.Append(&ZoneLayerCharacterDamageAction{SourceID: source.ID(), VictimID: victim.ID(), Amount: normalAttackDamage})
 }

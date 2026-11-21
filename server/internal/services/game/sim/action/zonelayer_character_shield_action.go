@@ -14,8 +14,8 @@ type ZoneLayerCharacterShieldActionID struct{}
 // cancels the first damage that is aimed at the entity of its character. It is the pattern that
 // every effect that changes an action it was not written for follows.
 type ZoneLayerCharacterShieldAction struct {
-	CharID   state.CharacterID
-	Duration uint64 // for how many ticks it stands, counted from the first tick it runs
+	CharacterID state.CharacterID
+	Duration    uint64 // for how many ticks it stands, counted from the first tick it runs
 
 	started bool
 	until   uint64
@@ -23,7 +23,7 @@ type ZoneLayerCharacterShieldAction struct {
 
 func (a *ZoneLayerCharacterShieldAction) ID() ID          { return ZoneLayerCharacterShieldActionID{} }
 func (a *ZoneLayerCharacterShieldAction) Priority() int16 { return PriorityModifier }
-func (a *ZoneLayerCharacterShieldAction) Actor() any      { return a.CharID }
+func (a *ZoneLayerCharacterShieldAction) Actor() any      { return a.CharacterID }
 
 // ApplyZoneLayer blocks the first damage that is aimed at the character, or stands again next tick.
 func (a *ZoneLayerCharacterShieldAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, p *Plan[ZoneLayerAction]) {
@@ -33,12 +33,12 @@ func (a *ZoneLayerCharacterShieldAction) ApplyZoneLayer(c *Context, s *zonelayer
 	if c.Tick >= a.until {
 		return
 	}
-	entity, ok := s.EntityOfCharacter(a.CharID)
+	entity, ok := s.CharacterEntityByCharacterID(a.CharacterID)
 	if !ok {
 		return
 	}
 	for _, hit := range p.FindType[*ZoneLayerCharacterDamageAction]() {
-		if hit.Action.VictimID == entity.ID {
+		if hit.Action.VictimID == entity.ID() {
 			p.Cancel(hit.Entry)
 			return
 		}

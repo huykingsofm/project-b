@@ -24,7 +24,7 @@ An entity is an interface with `ID()`, `KindID()`, `Position()`, `Radius()` and 
 | Kind | Example data | Phase |
 |---|---|---|
 | Character (`CharacterEntity`) | `CharacterID`, stats, health, shield, cooldowns | 0 (the body exists) |
-| Dropped item (`ItemEntity`) | item type ID, quantity, who may pick it up first, expiry tick (`Expired`) | 0 |
+| Dropped item (`ItemEntity`) | item type ID, quantity, who may pick it up first (removed when its lifetime ends) | 0 |
 | Corpse | the `CharacterID` that died, a list of items, expiry tick, whether it can be revived | 3 |
 | Resource | type, amount left, refill tick, tool required | 3 |
 | Portal | destination zone and spawn point, level requirement, enabled or not | 3 |

@@ -28,20 +28,20 @@ After phase 2, the branches 3 to 5, 6, 7 and 8 do not depend on one another beyo
 
 ## Phase 0: Foundation: entities and items
 
-**Progress:** not started. The character body exists; none of the tasks below is done yet.
+**Progress:** done.
 
 Clean up what is unfinished and lay the foundation for entities before building further.
 
-- Update `README.md`, `docs/action/*.md` and the rules (R3, R4 and the opening of `plan/rule/index.md`) to match the scope of the plan.
+- Update `README.md`, `docs/action/*.md`, `docs/entity/*.md` and the rules (R3, R4 and the opening of `plan/rule/index.md`) to match the scope of the plan.
 - **An entity is an interface** (detail pending approval): `ID()`, `KindID()`, `Position()`, `Radius()`, `BoundingBox()` (the smallest rectangle that contains the entity, derived from the position and the radius, for the grid). Collision uses the radius. Every entity is a value type (R29); a change replaces the value in its container.
-- `CharacterEntity` and `ItemEntity` (a dropped item with an expiry: `Expired`). The body of a character exists today; move it to this interface.
+- `CharacterEntity` and `ItemEntity` (a dropped item, removed when its lifetime ends), and `ExitEntity` (an exit of the map, which the map gives to every zonelayer of its zone as an entity). The body of a character is moved to this interface.
 - A pickup action: the picker must be within a given radius and chooses the exact `EntityID` of the item (the client works out which). The item is removed from the zonelayer first, and only then is a message sent to the world to add it to the inventory (R28). (pending approval)
 - Events: item appeared, item disappeared (with an ID registered in `events.go`).
 - An R29 test for every state: changing the state after `Clone` does not change the copy.
 - Rules R28 (one engine owns a piece of data) and R29 (value or `Clone`) are written; keep them in step with `plan/rule/index.md`.
 - Business examples in the code (item, monster, sample stats) are only examples, to expose a design that does not fit early; a base game changes them later.
 
-**Acceptance:** `make ci` passes; the documents match the code; pickup tests (inside and outside the radius, an item already taken, an expired item, two players at once and only one gets it); the R29 test; the owner has confirmed every "pending approval" point of this phase.
+**Acceptance:** `make ci` passes; the documents match the code; pickup tests (inside and outside the radius, an item already taken, an item removed at the end of its lifetime, two players at once and only one gets it); the R29 test; the owner has confirmed every "pending approval" point of this phase.
 
 ## Phase 1: Durable engine: checkpoint and replay log
 
@@ -49,17 +49,21 @@ Clean up what is unfinished and lay the foundation for entities before building 
 
 - **The replay log is written to a file, append-only** (like Kafka): divided into segments, indexed by `Step`; not pushed to S3 yet. The format is agreed, see [proposed-designs.md](proposed-designs.md).
 - **Periodic checkpoint:** write the whole state of some engines so that a replay does not have to start from the beginning. The period is a config parameter, much rarer than the hash. Engines do not write at the same time: each engine has its own offset (like the sparse hash) to avoid CPU peaks. Writing happens after the tick ends (R28). (agreed)
+- **The checkpoint holds what the engine is waiting for, and not only the state:** the scheduler (what is set for a tick), the cron (when each runs next) and what the actions set for the next tick. Without them a restore loses every action that waits (a shield, a run of movement, the removal of an item), and the state alone shows no sign of it. Each action has a codec, found by its ID in a table (R8) with a test that fails when an action has none; the hash covers the scheduler too, so a restore that differs is found by the replay. (agreed)
+- **Every place that puts an item on the ground goes through `ZoneLayerItemEntityAddAction`,** the only place that sets the removal of an item, because a state method cannot schedule anything. (agreed)
 - Loading (option A): every engine loads its own latest checkpoint and replays its own input to the end of the log.
 - The replay runner reads the replay log, runs the cluster again in `Step` order and compares the hash at each checkpoint. No replay of a single engine.
 - Add and remove zonelayers while running; a zone creates a layer when someone arrives (on demand). (pending approval)
 - Change layer within the same zone (a person moves to another layer). (pending approval)
+- **`StableView` returns read-only interfaces:** `World()`, `Zone(id)` and `ZoneLayer(id)` return `ReadOnlyWorldState`, `ReadOnlyZoneState` and `ReadOnlyZoneLayerState` (the read methods of each state, none that changes it), not the state itself. An action then cannot change a state it does not own by mistake (R26, R28), and the compiler checks it instead of a review. The read-only interface of a scope is declared with its state.
 - Graceful stop: `Run` ends, drains the queue and returns the messages that remain.
 - Back-pressure: count the messages that are refused (`Full`) and lost (`Dropped`), with configured thresholds.
 - Plain engine metrics: players, capacity, tick time histogram (the engine does not know Prometheus). (pending approval)
 - A test that `Step` and `Run` give the same result for the same input.
 - A baseline benchmark for one full zonelayer and for many zonelayers in parallel.
+- **A benchmark for every mechanism and action that is built, recorded in `docs/benchmark/`** (a file for each group, always the latest numbers; the path of a move is the first, in `docs/benchmark/move.md`): the plan and the scheduler, each action, the state methods, the hash and the clone of each state, an engine tick with and without a crowd, the router and the replay log.
 
-**Acceptance:** a replay of the whole cluster from a checkpoint matches the hash; the checkpoints of the engines do not fall on the same tick (CPU peak measured); the metrics and benchmarks are recorded; a kill and a graceful stop do not lose a message that was received.
+**Acceptance:** a replay of the whole cluster from a checkpoint matches the hash, with actions waiting in the scheduler at the moment of the checkpoint (an item with an expiry, a shield, a run of movement that waits its turn); the checkpoints of the engines do not fall on the same tick (CPU peak measured); the metrics and benchmarks are recorded; a kill and a graceful stop do not lose a message that was received.
 
 ## Phase 2: Early playable slice
 
@@ -80,10 +84,17 @@ Goal: a client that works from end to end (client to server and back to client) 
 
 **Progress:** not started
 
+**Priority:** high; planned for the near future, before the later phases that depend on telling clients what changed. The choices behind it are in [decisions.md](decisions.md).
+
 - **Grid:** a spatial index and localizing the map: each entity belongs to one or more cells by its `BoundingBox`, lookup by area, and knowing which cells changed in the tick. (agreed, detailed design pending approval)
 - **Sight:** entering and leaving sight; who sees whom. (pending approval)
 - **Loading state:** a new entity stays hidden until it has loaded. (agreed, detail pending approval)
 - **`observe`:** project events into observations per viewer; group by cell once and reuse; a no-leak test (see [proposed-designs.md](proposed-designs.md)). (pending approval)
+- **Resolving audiences (high priority):** every event already declares who receives it (`Audience()`: everyone in the scope, a list of characters, a list of players, or whoever can see an area). This turns an audience into the characters that receive it, and then into player connections or NPCs. An NPC receives events like a player does and decides from them.
+- **Delivery to clients (high priority):** an event goes to channels, and the response of a channel is built once and then sent to everyone who listens to it. A public event (the world, a zone or a zonelayer) is built once for the whole scope and broadcast to every connection in it; an event for an area is built once per grid block and sent to the viewers of that block; only an event that is private to some characters or players, or to a group (a sect, a sect inside a zone), is built for those recipients alone. The event declares its audience and nothing else; the code that routes and sends is generic. The design is in [decisions.md](decisions.md).
+- **One event or two (high priority):** when different viewers must see different things of the same fact, emit two events with two audiences ("you picked up 3 swords" private to the owner, "someone picked something up" for the area), so every response stays shared and a secret never reaches the wrong channel.
+- **The cost of telling clients (high priority):** with N entities that move and V viewers in the same crowd, delivering each move to each viewer costs N times V every tick (22,500 deliveries for 150 and 150 in one layer). Building a response once per channel is the main saving; the other ways to reduce it (one move per entity per tick, a lower send rate for what is far, a cap of visible entities, known-sets of who sees whom) are listed in [decisions.md](decisions.md), with a benchmark of a crowded layer to choose by.
+- **A body is blocked by other bodies, for some of them and not for others (agreed, detail pending approval):** a move already stops at tiles that cannot be stood on (the body is a square of its radius, of any size). Bodies of entities can stop each other as well, and not every body does. Each body says whether it blocks and which others block it, so that, for example, some bosses cannot be walked through while players walk through each other (and through monsters that do not block). The rule is a table over the kinds and groups of body (R8), not a branch in the move; the lookup of the bodies in the way uses the grid, so it costs what is near the path and not the entities of the layer; and the move is benchmarked with a crowd (`docs/benchmark/move.md`).
 - Read the map from a file (Tiled, or another format the owner picks): map, spawns, destinations, exits. (pending approval)
 - More kinds of entity when needed: corpse, resource, portal, trap, projectile (see [proposed-designs.md](proposed-designs.md)). (pending approval)
 
@@ -159,7 +170,7 @@ The basics of the gateway and the protocol exist from phase 2; this phase comple
 
 **Progress:** not started
 
-- Monsters with a full AI state machine, spawn areas, drop tables. (pending approval)
+- Monsters with a full AI state machine, spawn areas, drop tables. The choices to make first are listed in [decisions.md](decisions.md). (pending approval)
 - Items, inventory, equipment.
 - Basic quests. (pending approval)
 - A semantic review (R4): code, names, config variables, and sample content marked as examples; then tag `base-v1`.

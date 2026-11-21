@@ -1,0 +1,46 @@
+# Item on the ground
+
+`entity.ItemEntity`. Implements `Entity`. Held in the state of a zonelayer. A stack of one kind of item; it leaves the ground when picked up or when its expiry ends.
+
+## Fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `EntityID` | `EntityID` | ID in the zonelayer |
+| `Pos` | `Vec` | position, in units |
+| `Rad` | `int32` | radius, in units |
+| `ItemID` | `ItemID` | the kind of item |
+| `Count` | `uint32` | how many lie together |
+| `Expiry` | `uint64` | ticks it lies on the ground before the removal; 0 never; starts again each time it is put on the ground |
+
+## Behavior
+
+- `BoundingBox`: the square of side `2*Rad` around `Pos`.
+- Hash: common part, then `ItemID`, `Count`, `Expiry`.
+
+## State methods (zonelayer)
+
+| Method | Effect | Events |
+|---|---|---|
+| `AddItemEntity(itemID, count, at, expiry)` | puts a stack on the ground with a new entity ID; returns the ID | `ItemAppeared` |
+| `RemoveItemEntity(id)` | takes the stack off the ground | `ItemDisappeared` |
+| `ItemEntityByID(id)` | the stack | |
+
+## Life of an item
+
+1. On the ground: [`ZoneLayerItemEntityAddAction`](../action/zonelayer.md#zonelayeritementityaddaction), which calls `AddItemEntity` and sets the removal; every place that puts an item on the ground goes through it.
+2. Picked up: [`ZoneLayerCharacterItemPickupAction`](../action/zonelayer.md#zonelayercharacteritempickupaction) removes it, then [`WorldCharacterItemAddAction`](../action/world.md#worldcharacteritemaddaction) puts it in the inventory.
+3. Back on the ground (inventory full, or the message was not delivered): [`ZoneLayerItemEntityAddAction`](../action/zonelayer.md#zonelayeritementityaddaction) with the same kind, count, position and expiry, a new entity ID, and the expiry starts again.
+4. Expiry ends: [`ZoneLayerItemEntityRemoveAction`](../action/zonelayer.md#zonelayeritementityremoveaction) takes it off the ground if it is still there.
+
+## Inventory (world)
+
+Not an entity: held by the world state (`state/world`), per character.
+
+| Config | Meaning |
+|---|---|
+| `world.inventory.slots` | slots per character |
+| `world.inventory.stack_limit` | items of one kind in a slot |
+
+- A slot is a stack of one kind.
+- `AddItemToCharacter` fills the slots that hold the kind first, then empty slots in order; returns what did not fit.

@@ -15,21 +15,21 @@ import (
 // back. A reader sees the latest copy that exists when it asks, which may be a few ticks
 // old; the engine that owns the data is the only one that knows it exactly.
 type Registry[K comparable, T any] struct {
-	slots sync.Map // K -> *atomic.Pointer[T]
+	registrySlots sync.Map // K -> *atomic.Pointer[T]
 }
 
 // Publish makes v the latest value of the key.
 func (r *Registry[K, T]) Publish(k K, v *T) {
-	s, ok := r.slots.Load(k)
+	s, ok := r.registrySlots.Load(k)
 	if !ok {
-		s, _ = r.slots.LoadOrStore(k, new(atomic.Pointer[T]))
+		s, _ = r.registrySlots.LoadOrStore(k, new(atomic.Pointer[T]))
 	}
 	s.(*atomic.Pointer[T]).Store(v)
 }
 
 // Get returns the latest value of the key, or nil if none was published.
 func (r *Registry[K, T]) Get(k K) *T {
-	s, ok := r.slots.Load(k)
+	s, ok := r.registrySlots.Load(k)
 	if !ok {
 		return nil
 	}
@@ -37,4 +37,4 @@ func (r *Registry[K, T]) Get(k K) *T {
 }
 
 // Remove forgets the key.
-func (r *Registry[K, T]) Remove(k K) { r.slots.Delete(k) }
+func (r *Registry[K, T]) Remove(k K) { r.registrySlots.Delete(k) }

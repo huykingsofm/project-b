@@ -1,6 +1,10 @@
 package event
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+)
 
 func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 	all := []Event{ChatMessageSent{}}
@@ -13,5 +17,11 @@ func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 			t.Fatalf("%T and %T have the same ID %d", e, other, e.ID())
 		}
 		seen[e.ID()] = e
+	}
+}
+
+func TestAZoneMessageGoesToEveryoneInTheZone(t *testing.T) {
+	if got := (ChatMessageSent{}).Audience(); got.Kind != state.EveryoneKind {
+		t.Fatalf("the audience is %+v, want everyone", got)
 	}
 }

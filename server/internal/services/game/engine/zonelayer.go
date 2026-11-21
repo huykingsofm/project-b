@@ -37,8 +37,8 @@ func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLa
 	}
 	e.reg.Common = action.Common{Me: me, Graph: env.Graph, Stable: e.view}
 	e.bounce.notice = func(who any, key string, args []any) {
-		if charID, ok := who.(state.CharacterID); ok {
-			e.st.NoticeToCharacter(charID, key, args...)
+		if characterID, ok := who.(state.CharacterID); ok {
+			e.st.NoticeToCharacter(characterID, key, args...)
 		}
 	}
 	return e

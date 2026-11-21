@@ -10,6 +10,7 @@ package zonelayer
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/shared/bimap"
@@ -23,7 +24,7 @@ type State struct {
 	ID         state.ZoneLayerID
 	ZoneID     state.ZoneID
 	Tick       uint64
-	Entities   orderedmap.Map[state.EntityID, Entity]
+	Entities   orderedmap.Map[state.EntityID, entity.Entity]
 	Characters orderedmap.Map[state.CharacterID, Character]
 	Chat       table.Table[ChatMessage]
 
@@ -64,28 +65,53 @@ func (s *State) TakeEvents() []event.Event { return s.events.Take() }
 // CharacterCount returns how many characters have a body in the zonelayer.
 func (s *State) CharacterCount() int { return s.Characters.Len() }
 
-// CharacterByID returns what the zonelayer knows of a character.
+// CharacterByID returns what the zonelayer knows of a character. The health it says is the health of
+// the body of the character, which is where it lives while the character is in the zonelayer.
 func (s *State) CharacterByID(characterID state.CharacterID) (Character, bool) {
-	return s.Characters.Get(characterID)
+	c, ok := s.Characters.Get(characterID)
+	if !ok {
+		return Character{}, false
+	}
+	if body, ok := s.CharacterEntityByCharacterID(characterID); ok {
+		c.Health, c.MaxHealth, c.Radius = body.Hp, body.MaxHp, body.Rad
+	}
+	return c, true
 }
 
 // EntityByID returns the entity with the ID.
-func (s *State) EntityByID(entityID state.EntityID) (Entity, bool) { return s.Entities.Get(entityID) }
+func (s *State) EntityByID(entityID state.EntityID) (entity.Entity, bool) {
+	return s.Entities.Get(entityID)
+}
 
-// EntityOfCharacter returns the body of a character.
-func (s *State) EntityOfCharacter(characterID state.CharacterID) (Entity, bool) {
+// ItemEntityByID returns the entity with the ID when it is an item.
+func (s *State) ItemEntityByID(entityID state.EntityID) (entity.ItemEntity, bool) {
+	item, ok := s.Entities.Get(entityID)
+	if !ok {
+		return entity.ItemEntity{}, false
+	}
+	e, ok := item.(entity.ItemEntity)
+	return e, ok
+}
+
+// CharacterEntityByCharacterID returns the body of a character.
+func (s *State) CharacterEntityByCharacterID(characterID state.CharacterID) (entity.CharacterEntity, bool) {
 	entityID, ok := s.bodies.GetByV1(characterID)
 	if !ok {
-		return Entity{}, false
+		return entity.CharacterEntity{}, false
 	}
-	return s.Entities.Get(entityID)
+	body, ok := s.Entities.Get(entityID)
+	if !ok {
+		return entity.CharacterEntity{}, false
+	}
+	e, ok := body.(entity.CharacterEntity)
+	return e, ok
 }
 
 // CooldownUntil returns the first tick at which the character is free of what the key K stands
 // for, or 0 when the key has no cooldown. A key is an empty struct type that an action defines, and it
-// is given as a type argument: s.CooldownUntil[MoveCooldownKey](charID).
-func (s *State) CooldownUntil[K comparable](charID state.CharacterID) uint64 {
-	c, ok := s.Characters.Get(charID)
+// is given as a type argument: s.CooldownUntil[MoveCooldownKey](characterID).
+func (s *State) CooldownUntil[K comparable](characterID state.CharacterID) uint64 {
+	c, ok := s.Characters.Get(characterID)
 	if !ok {
 		return 0
 	}
@@ -95,113 +121,114 @@ func (s *State) CooldownUntil[K comparable](charID state.CharacterID) uint64 {
 }
 
 // SetCooldown sets the first tick at which the character is free of what the key K stands for.
-func (s *State) SetCooldown[K comparable](charID state.CharacterID, until uint64) {
-	if c := s.Characters.Ptr(charID); c != nil {
+func (s *State) SetCooldown[K comparable](characterID state.CharacterID, until uint64) {
+	if c := s.Characters.Ptr(characterID); c != nil {
 		var key K
 		c.Cooldowns.Set(key, until)
 	}
 }
 
-// characterOfEntity returns the character that has the entity as its body.
-func (s *State) characterOfEntity(entityID state.EntityID) (Character, bool) {
-	characterID, ok := s.bodies.GetByV2(entityID)
-	if !ok {
-		return Character{}, false
-	}
-	return s.Characters.Get(characterID)
-}
-
-// AttachCharacter gives a character a body at a position, and returns the entity.
-func (s *State) AttachCharacter(c Character, at state.Vec) state.EntityID {
+// AddCharacterEntity gives a character a body at a position, and returns the entity.
+func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.nextEntityID++
-	e := Entity{ID: s.nextEntityID, Pos: at}
-	s.Entities.Set(e.ID, e)
-	s.Characters.Set(c.CharID, c)
-	s.bodies.Link(c.CharID, e.ID)
-	s.events.Add(event.CharacterEntered{EntityID: e.ID, CharID: c.CharID, Name: c.Name, Pos: at})
-	return e.ID
+	e := entity.CharacterEntity{EntityID: s.nextEntityID, Pos: at, Rad: c.Radius, Hp: c.Health, MaxHp: c.MaxHealth}
+	s.Entities.Set(e.EntityID, e)
+	c.Health, c.MaxHealth, c.Radius = 0, 0, 0 // from here on they are the body's
+	s.Characters.Set(c.CharacterID, c)
+	s.bodies.Link(c.CharacterID, e.EntityID)
+	s.events.Add(event.CharacterEntered{EntityID: e.EntityID, CharacterID: c.CharacterID, Name: c.Name, Pos: at, Radius: e.Rad})
+	return e.EntityID
 }
 
-// DetachCharacter takes a character and its body out of the zonelayer and returns the character, whole.
-func (s *State) DetachCharacter(characterID state.CharacterID) (Character, bool) {
-	c, ok := s.Characters.Get(characterID)
+// RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the character, whole.
+func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character, bool) {
+	c, ok := s.CharacterByID(characterID)
 	if !ok {
 		return Character{}, false
 	}
 	entityID, _ := s.bodies.GetByV1(characterID)
+	body, _ := s.Entities.Get(entityID)
 	s.Entities.Delete(entityID)
 	s.Characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
-	s.events.Add(event.CharacterLeft{EntityID: entityID})
+	s.events.Add(event.CharacterLeft{EntityID: entityID, At: body.Position(), Radius: body.Radius()})
 	return c, true
 }
 
-// MoveEntity moves an entity up to steps tiles in a direction on the given map and stops at the first
-// tile it cannot stand on. It reports whether the entity moved. The map is the one of the zone, which
-// the action reads from the state of the zone.
-func (s *State) MoveEntity(tiles *tilemap.TileMap, entityID state.EntityID, dir state.Dir, steps int32) bool {
-	e := s.Entities.Ptr(entityID)
-	if e == nil {
+// AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
+// ever), and returns its entity.
+func (s *State) AddItemEntity(itemID state.ItemID, count uint32, at state.Vec, expiry uint64) state.EntityID {
+	s.nextEntityID++
+	e := entity.ItemEntity{EntityID: s.nextEntityID, Pos: at, ItemID: itemID, Count: count, Expiry: expiry}
+	s.Entities.Set(e.EntityID, e)
+	s.events.Add(event.ItemAppeared{EntityID: e.EntityID, ItemID: itemID, Count: count, Pos: at})
+	return e.EntityID
+}
+
+// RemoveItemEntity takes an item off the ground and returns it.
+func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bool) {
+	item, ok := s.ItemEntityByID(entityID)
+	if !ok {
+		return entity.ItemEntity{}, false
+	}
+	s.Entities.Delete(entityID)
+	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Pos})
+	return item, true
+}
+
+// MoveEntity moves an entity up to distance units in a direction on the given map, as far as its body (its
+// radius) can go without touching a tile that cannot be stood on (tilemap.TileMap.Reach). It reports whether the entity moved. The map is the one of the zone, which the action reads from the
+// state of the zone.
+func (s *State) MoveEntity(tiles *tilemap.TileMap, entityID state.EntityID, dir state.Dir, distance int32) bool {
+	e, ok := s.Entities.Get(entityID)
+	if !ok {
 		return false
 	}
-	if c, ok := s.characterOfEntity(entityID); !ok || c.Health <= 0 {
-		return false
-	}
-	from, to := e.Pos, e.Pos
-	for range steps {
-		next := to.Add(dir.Vec())
-		if !tiles.Free(next) {
-			break
-		}
-		to = next
-	}
+	from := e.Position()
+	to := tiles.Reach(from, dir, distance, e.Radius())
 	if to == from {
 		return false
 	}
-	e.Pos = to
-	s.events.Add(event.EntityMoved{EntityID: entityID, From: from, To: to})
+	s.Entities.Set(entityID, e.MovedTo(to))
+	s.events.Add(event.EntityMoved{EntityID: entityID, From: from, To: to, Radius: e.Radius()})
 	return true
 }
 
-// DamageEntity takes health from the character that has the entity as its body, never below zero, and
-// reports whether it died.
+// DamageEntity takes health from an entity that can be damaged, never below zero, and reports whether it
+// died.
 func (s *State) DamageEntity(entityID state.EntityID, amount int32) bool {
-	e := s.Entities.Ptr(entityID)
-	if e == nil || amount <= 0 {
+	e, ok := s.Entities.Get(entityID)
+	if !ok || amount <= 0 {
 		return false
 	}
-	characterID, _ := s.bodies.GetByV2(entityID)
-	c := s.Characters.Ptr(characterID)
-	if c == nil || c.Health <= 0 {
+	d, ok := e.(entity.DamageableEntity)
+	if !ok || d.Health() <= 0 {
 		return false
 	}
-	amount = min(amount, c.Health)
-	c.Health -= amount
-	s.events.Add(event.EntityHealthChanged{EntityID: entityID, Change: -amount, Health: c.Health})
-	if c.Health > 0 {
+	after := d.OnDamage(amount)
+	s.Entities.Set(entityID, after)
+	s.events.Add(event.EntityHealthChanged{EntityID: entityID, Change: after.Health() - d.Health(), Health: after.Health(), At: e.Position(), Radius: e.Radius()})
+	if after.Health() > 0 {
 		return false
 	}
-	s.events.Add(event.EntityDied{EntityID: entityID})
+	s.events.Add(event.EntityDied{EntityID: entityID, At: e.Position(), Radius: e.Radius()})
 	return true
 }
 
-// HealAllEntities gives every living character some health, up to its most.
+// HealAllEntities gives every living entity that can be damaged some health, up to its most.
 func (s *State) HealAllEntities(amount int32) {
 	if amount <= 0 {
 		return
 	}
-	for _, characterID := range s.Characters.Keys() {
-		c := s.Characters.Ptr(characterID)
-		if c.Health <= 0 {
+	for _, entityID := range s.Entities.Keys() {
+		e, _ := s.Entities.Get(entityID)
+		d, ok := e.(entity.DamageableEntity)
+		if !ok || d.Health() <= 0 || d.Health() >= d.MaxHealth() {
 			continue
 		}
-		gain := min(amount, c.MaxHealth-c.Health)
-		if gain <= 0 {
-			continue
-		}
-		c.Health += gain
-		entityID, _ := s.bodies.GetByV1(characterID)
-		s.events.Add(event.EntityHealthChanged{EntityID: entityID, Change: gain, Health: c.Health})
+		after := d.OnHeal(amount)
+		s.Entities.Set(entityID, after)
+		s.events.Add(event.EntityHealthChanged{EntityID: entityID, Change: after.Health() - d.Health(), Health: after.Health(), At: e.Position(), Radius: e.Radius()})
 	}
 }
 
@@ -214,5 +241,5 @@ func (s *State) SendMessage(m ChatMessage) {
 
 // NoticeToCharacter tells a character something.
 func (s *State) NoticeToCharacter(characterID state.CharacterID, key string, args ...any) {
-	s.events.Add(event.CharacterNoticed{CharID: characterID, Key: key, Args: args})
+	s.events.Add(event.CharacterNoticed{CharacterID: characterID, Key: key, Args: args})
 }
