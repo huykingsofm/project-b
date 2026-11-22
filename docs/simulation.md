@@ -92,7 +92,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Plan
 
-- Priority, a running pointer, an index by ID, by type (`FindType`) and by author.
+- Priority, a running pointer, an index by ID and by author. `FindByID` walks the actions of an ID as a type, lazily and with no allocation; `Find` returns a slice.
 - A depth limit on chains of actions.
 - A scheduler (an action set for a tick) and a cron (an action repeated every N ticks).
 - Messages with `OnFail`.

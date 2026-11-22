@@ -2,7 +2,7 @@ package action
 
 import (
 	"fmt"
-	"reflect"
+	"iter"
 	"sort"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
@@ -10,12 +10,10 @@ import (
 )
 
 // PlanKey names a set of actions that a plan keeps an index of: the actions of one ID that one
-// actor performs, or, with a nil Actor, all the actions of one ID; or, with Type set and nothing
-// else, the actions of one Go type.
+// actor performs, or, with a nil Actor, all the actions of one ID.
 type PlanKey struct {
 	Actor any
 	ID    ID
-	Type  reflect.Type
 }
 
 // PlanEntry is an action in a plan, with what the plan knows of it.
@@ -89,8 +87,6 @@ func (p *Plan[A]) Append(a A) {
 	id := a.ID()
 	byID := PlanKey{ID: id}
 	p.buckets[byID] = append(p.buckets[byID], e)
-	byType := PlanKey{Type: reflect.TypeOf(a)}
-	p.buckets[byType] = append(p.buckets[byType], e)
 	if who, ok := any(a).(Acting); ok {
 		byActor := PlanKey{Actor: who.Actor(), ID: id}
 		p.buckets[byActor] = append(p.buckets[byActor], e)
@@ -139,27 +135,36 @@ func (p *Plan[A]) Find(k PlanKey) []*PlanEntry[A] {
 	return out
 }
 
-// Hit is an entry of a plan, with its action as the type that was asked for.
-type Hit[A Action, T any] struct {
-	Entry  *PlanEntry[A]
-	Action T
-}
-
-// FindType returns the entries that have not run and are not cancelled and whose action is a T, in
-// the order they were added to the plan. T is the Go type of the action as it was added (for an
-// action that is a pointer, the pointer type): p.FindType[*DamageAction](). It is the way an effect
-// finds the actions it changes without an ID value and without asserting a type itself.
-func (p *Plan[A]) FindType[T any]() []Hit[A, T] {
-	var out []Hit[A, T]
-	for _, e := range p.buckets[PlanKey{Type: reflect.TypeFor[T]()}] {
-		if e.ran || e.cancelled {
-			continue
-		}
-		if a, ok := any(e.action).(T); ok {
-			out = append(out, Hit[A, T]{Entry: e, Action: a})
+// FindByID returns the entries of the actions of one ID that have not run and are not cancelled, in
+// the order they were added to the plan, each with its action as a T: for _, damage := range
+// p.FindByID[*DamageAction](DamageActionID). It is how an effect finds the actions it changes
+// without asserting a type itself.
+//
+// It is lazy: an entry is looked at when the loop asks for it, so a loop that stops early does not
+// walk the rest, and it makes no slice, so a walk inside another walk costs nothing more. An entry
+// that was cancelled before the loop reached it is left out. Cancel in the loop is safe; do not
+// Append to the plan in it, because the walk goes on over the entries that were there when it
+// began. An entry whose action is not a T is a mistake of the caller: it is logged and left out.
+func (p *Plan[A]) FindByID[T any](id ID) iter.Seq2[*PlanEntry[A], T] {
+	return func(yield func(*PlanEntry[A], T) bool) {
+		for _, e := range p.buckets[PlanKey{ID: id}] {
+			if e.ran || e.cancelled {
+				continue
+			}
+			a, ok := any(e.action).(T)
+			if !ok {
+				logging.Error(
+					"plan: an action of the ID asked for is not of the type asked for",
+					"id", id, "action", fmt.Sprintf("%T", e.action),
+					"want", fmt.Sprintf("%T", a),
+				)
+				continue
+			}
+			if !yield(e, a) {
+				return
+			}
 		}
 	}
-	return out
 }
 
 // Cancel stops an entry that has not run from running.

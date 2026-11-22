@@ -38,9 +38,10 @@ func (a *ZoneLayerCharacterShieldGrantAction) ApplyZoneLayer(
 	if !ok {
 		return
 	}
-	for _, hit := range p.FindType[*ZoneLayerCharacterDamageAction]() {
-		if hit.Action.VictimID == entity.ID() {
-			p.Cancel(hit.Entry)
+	damages := p.FindByID[*ZoneLayerCharacterDamageAction](ZoneLayerCharacterDamageActionID)
+	for e, damage := range damages {
+		if damage.VictimID == entity.ID() {
+			p.Cancel(e)
 			return
 		}
 	}

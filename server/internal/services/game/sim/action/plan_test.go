@@ -93,34 +93,113 @@ func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.
 	}
 }
 
+// typedID is the ID of typedAction, and of impostorAction, which is the wrong type for it.
+const typedID ID = 60001
+
 type typedAction struct{ anonymousAction }
 
-func TestFindTypeReturnsTheActionsOfOneGoTypeThatHaveNotRunAndAreNotCancelled(t *testing.T) {
+func (a *typedAction) ID() ID { return typedID }
+
+// impostorAction has the ID of typedAction and is not one: a mistake of whoever made it.
+type impostorAction struct{ anonymousAction }
+
+func (a *impostorAction) ID() ID { return typedID }
+
+func typedNames(p *Plan[Action]) []string {
+	var out []string
+	for _, a := range p.FindByID[*typedAction](typedID) {
+		out = append(out, a.name)
+	}
+	return out
+}
+
+func TestFindByIDReturnsTheActionsOfOneIDThatHaveNotRunAndAreNotCancelled(t *testing.T) {
 	p := NewPlan[Action]()
 	p.Append(&anonymousAction{name: "a"})
-	first := &typedAction{anonymousAction{name: "t1"}}
+	p.Append(&typedAction{anonymousAction{name: "t1"}})
 	second := &typedAction{anonymousAction{name: "t2"}}
-	third := &typedAction{anonymousAction{name: "t3", priority: 10}}
-	p.Append(first)
 	p.Append(second)
-	p.Append(third)
+	p.Append(&typedAction{anonymousAction{name: "t3", priority: 10}})
 
-	hits := p.FindType[*typedAction]()
-	if len(hits) != 3 || hits[0].Action != first || hits[1].Action != second ||
-		hits[2].Action != third {
-		t.Fatalf(
-			"found %d entries, want the three typed actions in the order they were added",
-			len(hits),
-		)
+	if got := typedNames(p); !slices.Equal(got, []string{"t1", "t2", "t3"}) {
+		t.Fatalf("found %v, want the three typed actions in the order they were added", got)
 	}
-	if other := p.FindType[*anonymousAction](); len(other) != 1 {
-		t.Fatalf("found %d anonymous actions, want 1", len(other))
+	for e, a := range p.FindByID[*typedAction](typedID) {
+		if a == second {
+			p.Cancel(e)
+		}
 	}
-
-	p.Cancel(hits[1].Entry)
 	p.Next() // runs the first entry in the order of the plan, which is "a" or "t1"
 	p.Next()
-	if got := p.FindType[*typedAction](); len(got) != 1 || got[0].Action != third {
-		t.Fatalf("after one cancelled and two run, found %d, want only the third", len(got))
+	if got := typedNames(p); !slices.Equal(got, []string{"t3"}) {
+		t.Fatalf("after one cancelled and two run, found %v, want only t3", got)
+	}
+}
+
+func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsLeftOut(t *testing.T) {
+	p := NewPlan[Action]()
+	var entries []*PlanEntry[Action]
+	for _, name := range []string{"t1", "t2", "t3"} {
+		p.Append(&typedAction{anonymousAction{name: name}})
+	}
+	for e := range p.FindByID[*typedAction](typedID) {
+		entries = append(entries, e)
+	}
+	var seen []string
+	for e, a := range p.FindByID[*typedAction](typedID) {
+		seen = append(seen, a.name)
+		p.Cancel(entries[2]) // t3: not reached yet
+		_ = e
+	}
+	if !slices.Equal(seen, []string{"t1", "t2"}) {
+		t.Fatalf("walked %v, want t1 and t2: t3 was cancelled before the loop reached it", seen)
+	}
+	seen = nil
+	for _, a := range p.FindByID[*typedAction](typedID) {
+		seen = append(seen, a.name)
+		break
+	}
+	if !slices.Equal(seen, []string{"t1"}) {
+		t.Fatalf("a loop that stops walked %v", seen)
+	}
+}
+
+func TestAnActionOfTheIDButNotOfTheTypeIsLeftOutAndTheOthersAreFound(t *testing.T) {
+	p := NewPlan[Action]()
+	p.Append(&typedAction{anonymousAction{name: "t1"}})
+	p.Append(&impostorAction{anonymousAction{name: "impostor"}})
+	p.Append(&typedAction{anonymousAction{name: "t2"}})
+	if got := typedNames(p); !slices.Equal(got, []string{"t1", "t2"}) {
+		t.Fatalf("found %v, want the two of the right type", got)
+	}
+}
+
+func TestAWalkInsideAnotherWalkHasItsOwnPlace(t *testing.T) {
+	p := NewPlan[Action]()
+	for _, name := range []string{"t1", "t2"} {
+		p.Append(&typedAction{anonymousAction{name: name}})
+	}
+	pairs := 0
+	for range p.FindByID[*typedAction](typedID) {
+		for range p.FindByID[*typedAction](typedID) {
+			pairs++
+		}
+	}
+	if pairs != 4 {
+		t.Fatalf("%d pairs, want 4", pairs)
+	}
+}
+
+func TestAWalkOfThePlanMakesNothingToCollect(t *testing.T) {
+	p := NewPlan[Action]()
+	for range 20 {
+		p.Append(&typedAction{})
+	}
+	walk := func() {
+		for range p.FindByID[*typedAction](typedID) {
+		}
+	}
+	if allocs := testing.AllocsPerRun(100, walk); allocs != 0 {
+		t.Fatalf("a walk allocates %.0f times, want 0", allocs)
 	}
 }
