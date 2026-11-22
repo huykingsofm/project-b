@@ -16,16 +16,17 @@ func benchMessages() map[string]sim.Message {
 		return actions[id].(sim.Action[*zonelayerstate.State])
 	}
 	two := sim.NewActionMessage(
-		5, onfail.Drop{}, layer(ZoneLayerCharacterMoveActionID), layer(ZoneLayerChatSendActionID),
+		layerID, onfail.Drop{},
+		layer(ZoneLayerCharacterMoveActionID), layer(ZoneLayerChatSendActionID),
 	).Stamp(sim.Header{From: 2, Seq: 98765})
-	undo := sim.NewActionMessage(5, onfail.Drop{}, layer(ZoneLayerItemEntityAddActionID))
+	undo := sim.NewActionMessage(layerID, onfail.Drop{}, layer(ZoneLayerItemEntityAddActionID))
 	return map[string]sim.Message{
 		"2 actions": two,
 		"enter, a character": sim.NewActionMessage(
-			5, onfail.Drop{}, layer(ZoneLayerCharacterEnterActionID),
+			layerID, onfail.Drop{}, layer(ZoneLayerCharacterEnterActionID),
 		),
 		"pickup, with compensator": sim.NewActionMessage(
-			1, onfail.Compensate{With: undo},
+			worldID, onfail.Compensate{With: undo},
 			actions[WorldCharacterItemAddActionID].(sim.Action[*worldstate.State]),
 		),
 	}

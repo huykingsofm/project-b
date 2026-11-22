@@ -9,7 +9,8 @@ import (
 // A toy state with a few actions and commands, for the tests of the log: no game is needed to write
 // records and read them back.
 
-const toyType sim.StateType = 1
+// the toy state is of the type 0, so a plain number is the ID of a toy state
+const toyType sim.StateType = 0
 
 type toyState struct{ id sim.StateID }
 

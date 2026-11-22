@@ -19,7 +19,7 @@ type (
 		r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
 	) (OnFail, error)
 	messageDecoder func(
-		r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+		to StateID, r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
 	) (Message, error)
 )
 
@@ -260,15 +260,15 @@ func (c *Codecs) decodeMessage(
 			"%w: messages inside messages go deeper than %d", binarycodec.ErrBadValue, maxNesting,
 		)
 	}
-	t := StateType(r.Uvarint())
+	to := StateID(r.Uvarint())
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	decode, ok := c.messages[t]
+	decode, ok := c.messages[to.Type()]
 	if !ok {
-		return nil, fmt.Errorf("%w: state type %d", ErrUnknownCode, t)
+		return nil, fmt.Errorf("%w: state type %d", ErrUnknownCode, to.Type())
 	}
-	return decode(r, version, func(
+	return decode(to, r, version, func(
 		r *binarycodec.Reader, version binarycodec.Version,
 	) (Message, error) {
 		return c.decodeMessage(r, version, depth+1)
@@ -277,9 +277,8 @@ func (c *Codecs) decodeMessage(
 
 // decodeActionMessage reads the rest of a message for states of type S, after its type.
 func (c *Codecs) decodeActionMessage[S State](
-	r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+	to StateID, r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
 ) (Message, error) {
-	to := StateID(r.Uvarint())
 	header := DecodeHeader(r)
 	attempts := r.Uvarint()
 	onFail, err := c.decodeOnFail(r, version, nested)

@@ -8,7 +8,8 @@ import (
 
 // A toy state and action, for the tests of the mechanism: no game is needed to try an engine.
 
-const toyType sim.StateType = 1
+// the toy state is of the type 0, so a plain number is the ID of a toy state
+const toyType sim.StateType = 0
 
 type toyState struct {
 	id    sim.StateID

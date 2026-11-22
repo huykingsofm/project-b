@@ -20,8 +20,7 @@ In this order:
 | Part | Holds |
 |---|---|
 | version | the version of the data, `uvarint` (1) |
-| state type | the `StateType`, `uvarint`; the restore checks it against the type of state it was asked for |
-| state ID | the ID of the engine, `uvarint`; the restore checks it against the state |
+| state ID | the ID of the engine, `uvarint`; its high 8 bits are the type of the state, which the restore checks against the type it was asked for, and the ID against the state |
 | tick | the tick the engine is at |
 | state | the data of the state, by its `Encode` (below) |
 | scheduler | the last tick it gave out, and the actions set for later ticks, by tick and in order |

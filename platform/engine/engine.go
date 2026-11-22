@@ -39,7 +39,7 @@ type Engine[S sim.State] struct {
 // calls Step.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
-	env.ReplayLog.Describe(me, st.Type(), st.String())
+	env.ReplayLog.Describe(me, st.String())
 	e := &Engine[S]{
 		cell: newCell(
 			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,

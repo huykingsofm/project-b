@@ -61,7 +61,7 @@ func toyMessages() []Message {
 		NewActionMessage[*toyState](
 			5, testCompensate{With: NewActionMessage[*toyState](1, testCompensate{With: undo})},
 		),
-		NewActionMessage(9, testDrop{}, &otherAction{}),
+		NewActionMessage(NewStateID(otherType, 9), testDrop{}, &otherAction{}),
 	}
 }
 
@@ -106,8 +106,7 @@ func TestBytesThatAreCutOffOrWrongGiveAnErrorForAMessageAndNeverAPanic(t *testin
 func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) {
 	c := mustCodecs(t)
 	var w binarycodec.Writer
-	w.Uvarint(uint64(toyType)) // the message says it is for a toy state
-	w.Uvarint(1)               // to
+	w.Uvarint(1) // to: a toy state, by its type
 	w.Uvarint(0)
 	w.Uvarint(0) // the header: the sender and the number
 	w.Uvarint(0) // attempts
@@ -240,10 +239,11 @@ func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) 
 
 func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
 	var r Registry[*toyState]
-	r.Send[*otherState](9, testDrop{}, &otherAction{})
+	other := NewStateID(otherType, 9)
+	r.Send[*otherState](other, testDrop{}, &otherAction{})
 	r.Send[*toyState](5, testDrop{}, &addAction{N: 1})
 	sent := r.Take()
-	if len(sent) != 2 || sent[0].Dest() != 9 || sent[1].Dest() != 5 || r.Take() != nil {
+	if len(sent) != 2 || sent[0].Dest() != other || sent[1].Dest() != 5 || r.Take() != nil {
 		t.Fatalf("the outbox held %+v", sent)
 	}
 }

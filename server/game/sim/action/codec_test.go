@@ -123,6 +123,13 @@ func TestEveryActionOfThePackageIsRegisteredForItsOwnStateType(t *testing.T) {
 	}
 }
 
+// The IDs that the messages of these tests go to.
+var (
+	worldID = sim.NewStateID(state.WorldType, 1)
+	zoneID  = sim.NewStateID(state.ZoneType, 1)
+	layerID = sim.NewStateID(state.ZoneLayerType, 1)
+)
+
 // aMessageOfEveryKind returns messages that between them use every kind of OnFail, a message
 // inside a message, and each type of state.
 func aMessageOfEveryKind() []sim.Message {
@@ -134,32 +141,32 @@ func aMessageOfEveryKind() []sim.Message {
 		}
 	}
 	layer := func(onFail sim.OnFail) sim.Message {
-		return sim.NewActionMessage(5, onFail, layerActions()...).
+		return sim.NewActionMessage(layerID, onFail, layerActions()...).
 			Stamp(sim.Header{From: 2, Seq: 77}).Again()
 	}
 	undo := sim.NewActionMessage(
-		5, onfail.Drop{},
+		layerID, onfail.Drop{},
 		actions[ZoneLayerItemEntityAddActionID].(sim.Action[*zonelayerstate.State]),
 	)
 	return []sim.Message{
 		layer(onfail.Retry{}),
 		layer(onfail.Drop{}),
-		layer(onfail.Redirect{To: 6}),
-		layer(onfail.Escalate{To: 1}),
+		layer(onfail.Redirect{To: layerID + 1}),
+		layer(onfail.Escalate{To: zoneID}),
 		layer(onfail.Notify{Key: "item.gone", Args: []string{"sword", "3"}}),
 		layer(onfail.Notify{Key: "item.gone"}),
 		layer(onfail.Compensate{With: undo}),
 		layer(onfail.Compensate{With: sim.NewActionMessage[*zonestate.State](
-			1, onfail.Compensate{With: undo},
+			zoneID, onfail.Compensate{With: undo},
 		)}),
 		sim.NewActionMessage(
-			1, onfail.Drop{}, actions[ZoneChatSendActionID].(sim.Action[*zonestate.State]),
+			zoneID, onfail.Drop{}, actions[ZoneChatSendActionID].(sim.Action[*zonestate.State]),
 		),
 		sim.NewActionMessage(
-			1, onfail.Drop{},
+			worldID, onfail.Drop{},
 			actions[WorldChatPrivateSendActionID].(sim.Action[*worldstate.State]),
 		),
-		sim.NewActionMessage[*worldstate.State](1, onfail.Drop{}),
+		sim.NewActionMessage[*worldstate.State](worldID, onfail.Drop{}),
 	}
 }
 

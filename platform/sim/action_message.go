@@ -61,11 +61,10 @@ func (m *ActionMessage[S]) Redirected(to StateID) Message {
 	return &c
 }
 
-// Encode writes the message whole: the type of state it is for, where it goes, who sent it, how
-// many times it was tried, its OnFail and its actions.
+// Encode writes the message whole: where it goes (its ID says the type of state it is for), who
+// sent it, how many times it was tried, its OnFail and its actions.
 func (m *ActionMessage[S]) Encode(w *binarycodec.Writer) error {
 	start := len(w.B)
-	w.Uvarint(uint64(StateTypeOf[S]()))
 	w.Uvarint(uint64(m.To))
 	m.Header.Encode(w)
 	w.Uvarint(uint64(m.attempts))

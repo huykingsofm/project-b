@@ -41,9 +41,8 @@ func aWorldToCheckpoint(t testing.TB) *game.Cluster {
 	return c
 }
 
-// theLayer is the only zonelayer of aWorldToCheckpoint: the builder gives it the ID after the world
-// and the zone.
-const theLayer = testkit.Zone1 + 1
+// theLayer is the only zonelayer of aWorldToCheckpoint: the first of its type.
+var theLayer = testkit.Layer1
 
 // aWorldWithActionsThatWait has a character that runs and is shielded, and an item on the ground
 // that will be taken off: so the zonelayer waits for things at a later tick and has set things for

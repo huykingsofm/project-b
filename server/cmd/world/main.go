@@ -37,15 +37,15 @@ func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
 	}
 }
 
-// The IDs of the states of the world: unique among all of them. The builder gives the zonelayers
-// the IDs after the largest of these, in the order of their zones.
-const (
-	worldID  sim.StateID = 1
-	zone1ID  sim.StateID = 2
-	zone2ID  sim.StateID = 3
-	layer1ID sim.StateID = 4
-	layer2ID sim.StateID = 5
-	layer3ID sim.StateID = 6
+// The IDs of the states of the world. The builder gives the zonelayers the numbers 1, 2, 3 among
+// the states of their type, in the order of their zones.
+var (
+	worldID  = sim.NewStateID(state.WorldType, 1)
+	zone1ID  = sim.NewStateID(state.ZoneType, 1)
+	zone2ID  = sim.NewStateID(state.ZoneType, 2)
+	layer1ID = sim.NewStateID(state.ZoneLayerType, 1)
+	layer2ID = sim.NewStateID(state.ZoneLayerType, 2)
+	layer3ID = sim.NewStateID(state.ZoneLayerType, 3)
 )
 
 func main() {

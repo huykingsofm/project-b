@@ -84,9 +84,9 @@ type Message interface {
 	Stamp(Header) Message
 	Again() Message
 	Redirected(to StateID) Message
-	// Encode writes the message whole: the type of state it is for, where it goes, who sent it, how
-	// many times it was tried, its OnFail and its actions. Nothing of a message that cannot be
-	// written is left in w.
+	// Encode writes the message whole: where it goes (which says the type of state it is for), who
+	// sent it, how many times it was tried, its OnFail and its actions. Nothing of a message that
+	// cannot be written is left in w.
 	Encode(w *binarycodec.Writer) error
 }
 

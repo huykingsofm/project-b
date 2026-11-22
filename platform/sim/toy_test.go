@@ -6,7 +6,7 @@ import "github.com/huykingsofm/project-b/shared/binarycodec"
 // commands that the codecs and the plan can be tried on. Nothing of a real game is needed here.
 
 // toyType is the type of the toy state.
-const toyType StateType = 1
+const toyType StateType = 0 // so a plain number is the ID of a toy state
 
 // toyState is a state with an ID, a tick and a total.
 type toyState struct {
@@ -43,7 +43,7 @@ func decodeToyState(r *binarycodec.Reader, _ binarycodec.Version) (*toyState, er
 // otherState is a state of another type, for what must not be taken for a toyState.
 type otherState struct{ toyState }
 
-const otherType StateType = 2
+const otherType StateType = 1
 
 func (*otherState) Type() StateType { return otherType }
 func (*otherState) String() string  { return "other" }

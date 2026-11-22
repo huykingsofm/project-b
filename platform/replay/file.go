@@ -46,14 +46,8 @@ type FileLog struct {
 
 	mu      sync.Mutex // protects opening a log; the logs of the engines are then read without it
 	engines sync.Map   // sim.StateID -> *engineLog
-	kinds   sync.Map   // sim.StateID -> engineKind
+	names   sync.Map   // sim.StateID -> string
 	failure error      // protected by mu
-}
-
-// engineKind is what an engine told the log of its state: the type, and the name of the type.
-type engineKind struct {
-	stateType sim.StateType
-	name      string
 }
 
 // engineLog is the log of one engine.
@@ -70,23 +64,22 @@ func NewFileLog(dir string, opts FileLogOptions) *FileLog {
 }
 
 // engineDirName is the name of the directory of the log of an engine: the name of the type of its
-// state and its ID.
+// state and the number of the state among the states of its type. The full ID is in the meta of
+// the segments, which is what tells two states of different types with the same number apart.
 func engineDirName(name string, engine sim.StateID) string {
-	return fmt.Sprintf("%s-%d", name, engine)
+	return fmt.Sprintf("%s-%d", name, engine.Local())
 }
 
-// Describe tells the log which type of state an engine has, and what that type is called.
-func (f *FileLog) Describe(engine sim.StateID, stateType sim.StateType, name string) {
-	f.kinds.Store(engine, engineKind{stateType: stateType, name: name})
-}
+// Describe tells the log what the type of the state of an engine is called.
+func (f *FileLog) Describe(engine sim.StateID, name string) { f.names.Store(engine, name) }
 
-// kindOf is what the engine told the log of its state. An engine that told nothing is called
-// "engine", and has the type 0.
-func (f *FileLog) kindOf(engine sim.StateID) engineKind {
-	if v, ok := f.kinds.Load(engine); ok {
-		return v.(engineKind)
+// nameOf is what the engine told the log the type of its state is called. An engine that told
+// nothing is called "engine".
+func (f *FileLog) nameOf(engine sim.StateID) string {
+	if v, ok := f.names.Load(engine); ok {
+		return v.(string)
 	}
-	return engineKind{name: "engine"}
+	return "engine"
 }
 
 // Err is the first error that the log has had, or nil.
@@ -142,12 +135,11 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		l := v.(*engineLog)
 		return l, l.err
 	}
-	kind := f.kindOf(engine)
-	logDir := filepath.Join(f.dir, engineDirName(kind.name, engine))
+	logDir := filepath.Join(f.dir, engineDirName(f.nameOf(engine), engine))
 	w, err := segmentlog.Open(logDir, segmentlog.Options{
 		SegmentBytes: f.opts.SegmentBytes, SyncEvery: f.opts.SyncEvery, Backlog: f.opts.Backlog,
 		SegmentMeta: func(first []byte) []byte {
-			return segmentMeta(kind.stateType, engine, f.opts.Seed, first)
+			return segmentMeta(engine, f.opts.Seed, first)
 		},
 	})
 	l := &engineLog{w: w, err: err}
@@ -222,12 +214,11 @@ func (f *FileLog) Close() error {
 	return errors.Join(errs...)
 }
 
-// segmentMeta is the meta of a segment that starts with the payload first: the format, the type of
-// the state of the engine and its ID, the seed and the tick of that record.
-func segmentMeta(stateType sim.StateType, engine sim.StateID, seed uint64, first []byte) []byte {
+// segmentMeta is the meta of a segment that starts with the payload first: the format, the ID of
+// the engine, the seed and the tick of that record.
+func segmentMeta(engine sim.StateID, seed uint64, first []byte) []byte {
 	var w binarycodec.Writer
 	w.Uvarint(uint64(formatVersion))
-	w.Uvarint(uint64(stateType))
 	w.Uvarint(uint64(engine))
 	w.Fixed64(seed)
 	tick, _ := payloadTick(first)
@@ -238,7 +229,6 @@ func segmentMeta(stateType sim.StateType, engine sim.StateID, seed uint64, first
 // segmentInfo is what the meta of a segment says.
 type segmentInfo struct {
 	Version   binarycodec.Version // of the data of the records of the segment
-	Type      sim.StateType
 	Engine    sim.StateID
 	Seed      uint64
 	FirstTick uint64
@@ -254,7 +244,6 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 	}
 	info := segmentInfo{
 		Version:   version,
-		Type:      sim.StateType(r.Uvarint()),
 		Engine:    sim.StateID(r.Uvarint()),
 		Seed:      r.Fixed64(),
 		FirstTick: r.Uvarint(),

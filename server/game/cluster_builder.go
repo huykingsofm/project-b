@@ -8,15 +8,16 @@ import (
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 )
 
-// WorldParams are the parameters of the world to build. The ID of the world, of each zone and of
-// each zonelayer is unique among all the states: a zonelayer takes the next ID after the largest
-// one that was given.
+// WorldParams are the parameters of the world to build. The ID of the world is made with
+// sim.NewStateID(state.WorldType, n) and that of a zone with state.ZoneType; the builder gives the
+// zonelayers the numbers 1, 2, 3 among the states of their type.
 type WorldParams struct {
 	ID sim.StateID
 }
@@ -154,7 +155,9 @@ func (b *ClusterBuilder) check() error {
 	if b.queueSize <= 0 {
 		return fmt.Errorf("game: the queue size is %d, want more than 0", b.queueSize)
 	}
-	taken := map[sim.StateID]string{b.world.ID: "the world"}
+	if b.world.ID.Type() != state.WorldType {
+		return fmt.Errorf("game: the ID %d of the world is not of the type of a world", b.world.ID)
+	}
 	zones := map[sim.StateID]bool{}
 	for _, z := range b.zones {
 		if z.Tiles == nil {
@@ -163,11 +166,10 @@ func (b *ClusterBuilder) check() error {
 		if zones[z.ID] {
 			return fmt.Errorf("game: zone %d is added twice", z.ID)
 		}
-		if what, ok := taken[z.ID]; ok {
-			return fmt.Errorf("game: the ID %d is of %s and of a zone", z.ID, what)
+		if z.ID.Type() != state.ZoneType {
+			return fmt.Errorf("game: the ID %d of a zone is not of the type of a zone", z.ID)
 		}
 		zones[z.ID] = true
-		taken[z.ID] = "a zone"
 	}
 	withLayers := map[sim.StateID]bool{}
 	for _, l := range b.zoneLayers {
@@ -229,10 +231,7 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
 	}
-	nextID := b.world.ID
-	for _, z := range b.zones {
-		nextID = max(nextID, z.ID)
-	}
+	var nextLocal uint32 // the zonelayers count from 1 among the states of their type
 
 	worldState := worldstate.NewState(b.world.ID)
 	var zoneEngines []*engine.Engine[*zonestate.State]
@@ -242,10 +241,11 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 		zoneState := zonestate.NewState(zp.ID, b.world.ID, zp.Tiles, zp.Adjacent...)
 		lp := layers[zp.ID]
 		for range lp.Count {
-			nextID++
-			zoneState.AddZoneLayer(nextID, lp.Capacity)
-			worldState.AddZoneLayer(nextID)
-			le := engine.New(zonelayerstate.NewState(nextID, zp.ID, b.world.ID), env, b.seed)
+			nextLocal++
+			layerID := sim.NewStateID(state.ZoneLayerType, nextLocal)
+			zoneState.AddZoneLayer(layerID, lp.Capacity)
+			worldState.AddZoneLayer(layerID)
+			le := engine.New(zonelayerstate.NewState(layerID, zp.ID, b.world.ID), env, b.seed)
 			if err := EnsureRegen(le, lp.RegenEvery); err != nil {
 				return nil, err
 			}

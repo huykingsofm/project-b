@@ -44,7 +44,7 @@ func (v *verifyLog) expect(engine sim.StateID, got replay.Record) {
 func (v *verifyLog) Wants(replay.Kind) bool { return true }
 
 // Describe does nothing: a replay compares records and writes none.
-func (v *verifyLog) Describe(sim.StateID, sim.StateType, string) {}
+func (v *verifyLog) Describe(sim.StateID, string) {}
 
 // Append checks what the engine records against the next record of its log.
 func (v *verifyLog) Append(e sim.StateID, tick uint64, body replay.Body) {

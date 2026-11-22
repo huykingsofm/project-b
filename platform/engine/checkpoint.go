@@ -10,8 +10,9 @@ import (
 )
 
 // A checkpoint is what an engine needs to go on from the tick it was taken at, as bytes: the start
-// says which engine it is (the version of the data, the type of its state, its ID, the tick), then
-// its state, then what the engine waits for and what only the engine knows.
+// says which engine it is (the version of the data, its state ID, which has the type of the
+// state in it, the tick), then its state, then what the engine waits for and what only the engine
+// knows.
 //
 // It is taken between two ticks, by the goroutine of the engine or while the engine does not run.
 // The queues of the engine are not in it: what was not yet taken from them is in the replay log.
@@ -52,7 +53,6 @@ func checkpoint[S sim.State](
 ) ([]byte, error) {
 	var w binarycodec.Writer
 	w.Uvarint(1) // the version of the data
-	w.Uvarint(uint64(st.Type()))
 	w.Uvarint(uint64(c.me))
 	w.Uvarint(tick)
 	if err := st.Encode(&w); err != nil {
@@ -82,16 +82,15 @@ func readCheckpointStart(
 	if version != 1 {
 		return 0, 0, 0, fmt.Errorf("the checkpoint is of the data version %d", version)
 	}
-	stateType := sim.StateType(r.Uvarint())
 	id := sim.StateID(r.Uvarint())
 	tick := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return 0, 0, 0, err
 	}
-	if stateType != want {
+	if id.Type() != want {
 		return 0, 0, 0, fmt.Errorf(
 			"the checkpoint is of the engine %d, whose state is of the type %d, not %d",
-			id, stateType, want,
+			id, id.Type(), want,
 		)
 	}
 	return version, id, tick, nil

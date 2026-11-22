@@ -7,10 +7,24 @@ import (
 )
 
 // StateID names a state, whatever its type, and so names the engine that owns it and is the address
-// of a message. It is unique among all the states: two states of different types never have the
-// same ID. A thing that lives inside a state, such as an entity, takes an ID of its own that has
-// the ID of its state in it, so that it is unique as well (see EntityID in the game).
-type StateID uint64
+// of a message. Its 8 high bits are the StateType and its 24 low bits a number that is local to the
+// type, so the type of a state is known from its ID and two states of different types never have
+// the same ID. A thing that lives inside a state, such as an entity, takes an ID of its own that
+// has the ID of its state in it, so that it is unique as well and its type is known too (see
+// EntityID in the game).
+type StateID uint32
+
+// NewStateID makes the ID of the state of a type with a number that is local to the type, which
+// must be less than 2^24.
+func NewStateID(t StateType, local uint32) StateID {
+	return StateID(uint32(t)<<24 | local&(1<<24-1))
+}
+
+// Type is the type of the state that has the ID.
+func (id StateID) Type() StateType { return StateType(id >> 24) }
+
+// Local is the number of the state among the states of its type.
+func (id StateID) Local() uint32 { return uint32(id) & (1<<24 - 1) }
 
 // StateType names a kind of state, by a number that the game registers with the codecs: see
 // Codecs.RegisterState. A number is never changed or reused, because checkpoints and the replay log

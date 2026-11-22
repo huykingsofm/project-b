@@ -14,16 +14,15 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
 )
 
-// The IDs of the states of the world that WorldBuilder makes. They are unique among all the states:
-// the builder gives the zonelayers the IDs after the largest of the others, in the order of their
-// zones.
-const (
-	World  sim.StateID = 1
-	Zone1  sim.StateID = 2
-	Zone2  sim.StateID = 3
-	Layer1 sim.StateID = 4
-	Layer2 sim.StateID = 5
-	Layer3 sim.StateID = 6
+// The IDs of the states of the world that WorldBuilder makes. The builder gives the zonelayers the
+// numbers 1, 2, 3 among the states of their type, in the order of their zones.
+var (
+	World  = sim.NewStateID(state.WorldType, 1)
+	Zone1  = sim.NewStateID(state.ZoneType, 1)
+	Zone2  = sim.NewStateID(state.ZoneType, 2)
+	Layer1 = sim.NewStateID(state.ZoneLayerType, 1)
+	Layer2 = sim.NewStateID(state.ZoneLayerType, 2)
+	Layer3 = sim.NewStateID(state.ZoneLayerType, 3)
 )
 
 // EastExit is the ID of the exit on the east edge of Zone1, the first entity that the zone holds.

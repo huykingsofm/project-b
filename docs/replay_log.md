@@ -6,7 +6,7 @@
 
 | Part | Where |
 |---|---|
-| a log for each engine | `<dir>/<name>-<id>/`: the name of the type of its state (`State.String()`) and its state ID, for example `world-1`, `zone-2`, `zonelayer-4` |
+| a log for each engine | `<dir>/<name>-<n>/`: the name of the type of its state (`State.String()`) and the number of the state among the states of its type, for example `world-1`, `zone-2`, `zonelayer-1`; the meta of the segments holds the whole ID |
 | the segments of a log | `seg-<index>.log` ([segmentlog](segmentlog.md#files)) |
 | opened | by the first record of the engine; an engine that records nothing has no directory |
 
@@ -52,8 +52,7 @@ A message, in order:
 
 | Field | Written as |
 |---|---|
-| type of state | the `StateType` the message is for, `uvarint`: it says which actions the message carries |
-| destination | the state ID of the engine |
+| destination | the state ID of the engine; its type says which actions the message carries |
 | header | state ID of the sender, `Seq` |
 | attempts | `uvarint` |
 | `OnFail` | below |
@@ -78,8 +77,7 @@ An action is its ID, then its fields written by its `Encode`; its decoder is reg
 | Field | Value |
 |---|---|
 | data version | `uvarint`, 1: given to every `Decode` as a `binarycodec.Version` |
-| type of state | `StateType`, `uvarint` |
-| engine | state ID |
+| engine | state ID, whose type is the type of its state |
 | seed | 8 bytes |
 | first tick | tick of the first record of the segment |
 
@@ -92,7 +90,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 | What | Table | Numbers |
 |---|---|---|
-| state type | `server/game/sim/state/id.go` (the value of the constant) | 1 to 3 |
+| state type | `server/game/sim/state/id.go` (the value of the constant; the high 8 bits of a state ID) | 1 to 3 |
 | action ID | `server/game/sim/action/id.go` (the value of the constant) | 1 to 15 |
 | `OnFail` ID | `platform/sim/onfail/onfail.go` (the value of the constant) | 1 to 6 |
 | cooldown key | `server/game/sim/action/cooldown_key.go` (the value of the constant) | 1, 2 |

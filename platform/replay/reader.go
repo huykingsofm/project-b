@@ -91,7 +91,9 @@ func (l *FileLogReader) Err() error { return l.err }
 func (l *FileLogReader) Close() error { return l.r.Close() }
 
 // engineDirs returns the directories under dir that are the log of an engine: a name, a dash and
-// the ID of the engine, as the log names them.
+// the number of the state, as the log names them. The engine is the one that the meta of the
+// first segment says, which is what tells two engines of different types with the same number
+// apart. A directory with no segment is not the log of an engine.
 func engineDirs(dir string) (map[sim.StateID]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -103,14 +105,27 @@ func engineDirs(dir string) (map[sim.StateID]string, error) {
 		if !e.IsDir() || dash <= 0 {
 			continue
 		}
-		var id uint64
-		if n, err := fmt.Sscanf(e.Name()[dash+1:], "%d", &id); err != nil || n != 1 ||
-			e.Name() != engineDirName(e.Name()[:dash], sim.StateID(id)) {
+		info, ok := firstSegmentInfo(filepath.Join(dir, e.Name()))
+		if !ok || e.Name() != engineDirName(e.Name()[:dash], info.Engine) {
 			continue
 		}
-		out[sim.StateID(id)] = e.Name()
+		out[info.Engine] = e.Name()
 	}
 	return out, nil
+}
+
+// firstSegmentInfo is what the meta of the first segment of a log says.
+func firstSegmentInfo(logDir string) (segmentInfo, bool) {
+	r, err := segmentlog.OpenReader(logDir, func([]byte) bool { return true })
+	if err != nil {
+		return segmentInfo{}, false
+	}
+	defer r.Close()
+	if !r.Next() {
+		return segmentInfo{}, false
+	}
+	info, err := parseSegmentMeta(r.Meta())
+	return info, err == nil
 }
 
 // findEngineDir returns the directory of the log of an engine under dir. An engine that has no log

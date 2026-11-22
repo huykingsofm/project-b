@@ -12,7 +12,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - The platform imports nothing of the game (R1, R2). The game imports the platform, and `server/cmd` wires them.
 - The platform knows no world, zone or zonelayer: there is one engine, `Engine[S]`, for any type of state `S`, and a message, a command or an action of one type of state cannot reach an engine of another (the compiler checks it where the types are known, the codecs where they are not).
-- Every state has an ID of its own, a `sim.StateID`, unique among all states whatever their type; it is the address of a message and the key that another engine reads the published state by. `sim.StateType` says what kind of state it is.
+- Every state has an ID of its own, a `sim.StateID`, made of the type of the state (8 bits) and a number among the states of its type (24 bits), so it is unique among all states and says what type its state is; it is the address of a message and the key that another engine reads the published state by. `sim.StateType` says what kind of state it is.
 
 ## States of this game
 

@@ -22,7 +22,7 @@ func (j *MemLog) add(r Record) {
 func (j *MemLog) Wants(Kind) bool { return true }
 
 // Describe does nothing: a MemLog keeps records by engine ID.
-func (j *MemLog) Describe(sim.StateID, sim.StateType, string) {}
+func (j *MemLog) Describe(sim.StateID, string) {}
 
 // Append keeps a record.
 func (j *MemLog) Append(a sim.StateID, t uint64, body Body) {

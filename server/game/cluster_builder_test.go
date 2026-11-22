@@ -1,6 +1,7 @@
 package game_test
 
 import (
+	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"slices"
 	"testing"
 
@@ -10,12 +11,16 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
 )
 
+func worldID(n uint32) sim.StateID { return sim.NewStateID(state.WorldType, n) }
+func zoneID(n uint32) sim.StateID  { return sim.NewStateID(state.ZoneType, n) }
+func layerID(n uint32) sim.StateID { return sim.NewStateID(state.ZoneLayerType, n) }
+
 func smallMap(t testing.TB) *tilemap.TileMap {
 	return tilemaptest.New(t, 5, 5, tilemap.Tile{X: 1, Y: 1}, nil, nil)
 }
 
 func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {
-	c, err := game.NewBuilder().WithWorld(game.WorldParams{ID: 1}).Build()
+	c, err := game.NewBuilder().WithWorld(game.WorldParams{ID: worldID(1)}).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,9 +33,9 @@ func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {
 func TestANilEmitterOrReplayLogKeepsTheDefault(t *testing.T) {
 	c, err := game.NewBuilder().
 		WithReplayLog(nil).WithEmitter(nil).WithConfig(nil).
-		WithWorld(game.WorldParams{ID: 1}).
-		WithZone(game.ZoneParams{ID: 2, Tiles: smallMap(t)}).
-		WithZoneLayers(game.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 2}).
+		WithWorld(game.WorldParams{ID: worldID(1)}).
+		WithZone(game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)}).
+		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 2}).
 		Build()
 	if err != nil {
 		t.Fatal(err)
@@ -38,23 +43,29 @@ func TestANilEmitterOrReplayLogKeepsTheDefault(t *testing.T) {
 	c.Step()
 }
 
-func TestAWorldAndAZoneThatShareAnIDAreRefusedBecauseEveryStateHasAnIDOfItsOwn(t *testing.T) {
+func TestAnIDThatIsNotOfTheTypeOfItsStateIsRefused(t *testing.T) {
 	_, err := game.NewBuilder().
-		WithWorld(game.WorldParams{ID: 1}).
-		WithZone(game.ZoneParams{ID: 1, Tiles: smallMap(t)}).
+		WithWorld(game.WorldParams{ID: worldID(1)}).
+		WithZone(game.ZoneParams{ID: worldID(2), Tiles: smallMap(t)}).
 		Build()
 	if err == nil {
-		t.Fatal("a zone with the ID of the world was built")
+		t.Fatal("a zone with the ID of a world was built")
+	}
+	_, err = game.NewBuilder().WithWorld(game.WorldParams{ID: zoneID(1)}).Build()
+	if err == nil {
+		t.Fatal("a world with the ID of a zone was built")
 	}
 }
 
-func TestTheZoneLayersTakeTheIDsAfterTheLargestOneGivenAndEveryEngineKnowsTheWorld(t *testing.T) {
+func TestTheZoneLayersAreNumberedFromOneAndEveryEngineKnowsTheWorld(t *testing.T) {
 	c, err := game.NewBuilder().
-		WithWorld(game.WorldParams{ID: 1}).
-		WithZone(game.ZoneParams{ID: 5, Tiles: smallMap(t), Adjacent: []sim.StateID{3}}).
-		WithZone(game.ZoneParams{ID: 3, Tiles: smallMap(t)}).
-		WithZoneLayers(game.ZoneLayerParams{ZoneID: 5, Count: 2, Capacity: 1}).
-		WithZoneLayers(game.ZoneLayerParams{ZoneID: 3, Count: 1, Capacity: 1}).
+		WithWorld(game.WorldParams{ID: worldID(1)}).
+		WithZone(game.ZoneParams{
+			ID: zoneID(5), Tiles: smallMap(t), Adjacent: []sim.StateID{zoneID(3)},
+		}).
+		WithZone(game.ZoneParams{ID: zoneID(3), Tiles: smallMap(t)}).
+		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(5), Count: 2, Capacity: 1}).
+		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(3), Count: 1, Capacity: 1}).
 		Build()
 	if err != nil {
 		t.Fatal(err)
@@ -62,58 +73,59 @@ func TestTheZoneLayersTakeTheIDsAfterTheLargestOneGivenAndEveryEngineKnowsTheWor
 	var layers []sim.StateID
 	for _, l := range c.ZoneLayers() {
 		layers = append(layers, l.StateID())
-		if l.State().WorldID() != 1 {
+		if l.State().WorldID() != worldID(1) {
 			t.Fatalf("zonelayer %d does not know the world", l.StateID())
 		}
 	}
-	if !slices.Equal(layers, []sim.StateID{6, 7, 8}) {
+	if !slices.Equal(layers, []sim.StateID{layerID(1), layerID(2), layerID(3)}) {
 		t.Fatalf("zonelayers %v, want 6, 7 and 8", layers)
 	}
 	world := c.World.State()
-	if !slices.Equal(world.ZoneIDs(), []sim.StateID{5, 3}) ||
+	if !slices.Equal(world.ZoneIDs(), []sim.StateID{zoneID(5), zoneID(3)}) ||
 		!slices.Equal(world.ZoneLayerIDs(), layers) {
 		t.Fatalf(
 			"the world knows zones %v and zonelayers %v", world.ZoneIDs(), world.ZoneLayerIDs(),
 		)
 	}
-	z := c.Zone(5).State()
-	if z.WorldID() != 1 || !slices.Equal(z.AdjacentZones(), []sim.StateID{3}) ||
+	z := c.Zone(zoneID(5)).State()
+	if z.WorldID() != worldID(1) || !slices.Equal(z.AdjacentZones(), []sim.StateID{zoneID(3)}) ||
 		z.ZoneLayerCount() != 2 {
 		t.Fatalf(
 			"zone 5 knows world %d, adjacent %v, %d zonelayers",
 			z.WorldID(), z.AdjacentZones(), z.ZoneLayerCount(),
 		)
 	}
-	if c.ZoneLayer(6).State().ZoneID() != 5 || c.ZoneLayer(8).State().ZoneID() != 3 {
+	if c.ZoneLayer(layerID(1)).State().ZoneID() != zoneID(5) ||
+		c.ZoneLayer(layerID(3)).State().ZoneID() != zoneID(3) {
 		t.Fatal("a zonelayer does not know its zone")
 	}
 }
 
 func TestABuilderThatCannotMakeAClusterSaysWhy(t *testing.T) {
-	world := game.WorldParams{ID: 1}
+	world := game.WorldParams{ID: worldID(1)}
 	cases := map[string]*game.ClusterBuilder{
 		"no world": game.NewBuilder(),
 		"a queue of nothing": game.NewBuilder().WithWorld(
 			world,
 		).WithQueueSize(0),
 		"a zone without a map": game.NewBuilder().WithWorld(world).WithZone(
-			game.ZoneParams{ID: 2},
+			game.ZoneParams{ID: zoneID(2)},
 		),
 		"the same zone twice": game.NewBuilder().WithWorld(world).WithZone(
-			game.ZoneParams{ID: 2, Tiles: smallMap(t)},
-		).WithZone(game.ZoneParams{ID: 2, Tiles: smallMap(t)}),
+			game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)},
+		).WithZone(game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)}),
 		"zonelayers of a zone that was not added": game.NewBuilder().WithWorld(
 			world,
-		).WithZoneLayers(game.ZoneLayerParams{ZoneID: 9, Count: 1, Capacity: 1}),
+		).WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(9), Count: 1, Capacity: 1}),
 		"zonelayers set twice": game.NewBuilder().WithWorld(world).WithZone(
-			game.ZoneParams{ID: 2, Tiles: smallMap(t)},
+			game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)},
 		).
-			WithZoneLayers(game.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 1}).
-			WithZoneLayers(game.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 1}),
+			WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 1}).
+			WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 1}),
 		"zonelayers that hold nobody": game.NewBuilder().WithWorld(world).WithZone(
-			game.ZoneParams{ID: 2, Tiles: smallMap(t)},
+			game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)},
 		).
-			WithZoneLayers(game.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 0}),
+			WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 0}),
 	}
 	for name, b := range cases {
 		if c, err := b.Build(); err == nil || c != nil {
