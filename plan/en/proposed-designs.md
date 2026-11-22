@@ -15,7 +15,7 @@ Both are only ideas so far, with no code.
 **`effects`**
 - An effect is an ability, a technique, a piece of equipment or a talisman. Each effect is a Go type that implements the `Effect` interface, lives in one file and registers itself by ID, with its numbers as config variables (power can be tuned without a deploy).
 - An effect consists of **standing actions** that wait in the plan, watch the actions that stand after them, and change or cancel them, by scope: the owner acts, the owner is acted on, around the owner, in the zone, on the whole server.
-- `ZoneLayerCharacterShieldGrantAction` in project-b is the first example of this kind (it blocks the first damage). The plan mechanism (`FindType`, `Cancel`, depth) is its foundation.
+- `ZoneLayerCharacterShieldGrantAction` in project-b is the first example of this kind (it blocks the first damage). The plan mechanism (`FindByID`, `Cancel`, depth) is its foundation.
 
 ## Entities
 
