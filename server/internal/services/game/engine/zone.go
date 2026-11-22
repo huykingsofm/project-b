@@ -23,7 +23,7 @@ type ZoneEngine struct {
 	reg      action.ZoneRegistry
 	selfNext []action.ZoneAction
 	commands chan command.ZoneCommand
-	stable   *StableStateRegistry
+	stable   StableRegistry
 	emitter  ZoneEmitter
 	tick     uint64
 	rng      *rand.Rand

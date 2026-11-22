@@ -13,6 +13,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [replay_log.md](replay_log.md) | recording and reading the replay log in files | `engine/replay` |
 | [plan.md](plan.md) | filling a plan and finding actions in it | `sim/action` |
 | [codec.md](codec.md) | writing and reading a message with its actions | `sim/action` |
+| [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `engine/replay/runner` |
 
 ## Run
 
@@ -26,6 +27,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | the bitset | `server/internal/shared/bitset` |
 | the segment log | `server/internal/shared/segmentlog` |
 | the replay log | `server/internal/services/game/engine/replay` |
+| the replay runner | `server/internal/services/game/engine/replay/runner` |
 
 - Record the median of the runs.
 

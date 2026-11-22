@@ -131,7 +131,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 ## Not here yet
 
-- Checkpoints, the scheduler in a checkpoint, and the replay runner.
+- Checkpoints and the scheduler in a checkpoint. The replay from tick 0 is in [replay_runner](replay_runner.md).
 - A `Close` is needed to write what the last ticks recorded: until then they are in memory and on the way to disk.
 
 Benchmarks: [replay_log](benchmark/replay_log.md).

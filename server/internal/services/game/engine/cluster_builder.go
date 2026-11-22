@@ -189,6 +189,33 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		WorldEmitter: b.worldEmitter, ZoneEmitter: b.zoneEmitter,
 		ZoneLayerEmitter: b.zoneLayerEmitter,
 	}
+	return b.assemble(env), nil
+}
+
+// WorldID is the ID of the world that the builder describes. It is 0 until WithWorld is called.
+func (b *ClusterBuilder) WorldID() state.WorldID {
+	if b.world == nil {
+		return 0
+	}
+	return b.world.ID
+}
+
+// QueueSize is how many commands and messages the queue of an engine holds.
+func (b *ClusterBuilder) QueueSize() int { return b.queueSize }
+
+// BuildIn makes the engines of the world and connects them in the environment given instead of one
+// of its own: a replay gives the engines its own router, published states, configuration, replay
+// log and emitters. It returns an error when what the builder holds cannot make a cluster.
+func (b *ClusterBuilder) BuildIn(env *Env) (*Cluster, error) {
+	if err := b.check(); err != nil {
+		return nil, err
+	}
+	return b.assemble(env), nil
+}
+
+// assemble makes the engines of the world in the environment given and connects them: the same
+// engines whether the environment is the one of a cluster that runs or the one of a replay.
+func (b *ClusterBuilder) assemble(env *Env) *Cluster {
 	layers := map[state.ZoneID]ZoneLayerParams{}
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
@@ -216,5 +243,5 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		c.zones = append(c.zones, NewZoneEngine(zst, env, b.seed))
 		c.zonelayers = append(c.zonelayers, zonelayers...)
 	}
-	return c, nil
+	return c
 }

@@ -23,7 +23,7 @@ type WorldEngine struct {
 	reg      action.WorldRegistry
 	selfNext []action.WorldAction
 	commands chan command.WorldCommand
-	stable   *StableStateRegistry
+	stable   StableRegistry
 	emitter  WorldEmitter
 	tick     uint64
 	rng      *rand.Rand
