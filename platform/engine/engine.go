@@ -28,6 +28,7 @@ type Engine[S sim.State] struct {
 	sched    sim.Scheduler[S]
 	reg      sim.Registry[S]
 	selfNext []sim.Action[S]
+	start    []sim.Action[S] // what the plan of a tick starts with, kept for the next tick
 	commands chan sim.Command[S]
 	stable   StableStore
 	emitter  Emitter
@@ -112,8 +113,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.sched.At(tick, 
 // Step runs one tick of the engine:
 //
 //  1. read the configuration, once, and handle what came back undelivered;
-//  2. build the plan: what the engine set for itself, what was scheduled for this tick, the
-//     messages of other engines, the commands;
+//  2. build the plan, in one go: what the engine set for itself, what was scheduled for this
+//     tick, the messages of other engines, the commands;
 //  3. run the plan, one action after another, on the state;
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
@@ -130,10 +131,13 @@ func (e *Engine[S]) Step() {
 
 	plan := e.plans.Get(cfg)
 	defer e.plans.Put(plan)
-	e.planSelf(plan)
-	e.planScheduled(plan)
-	e.planMessages(plan)
-	e.planCommands(plan)
+	e.start = e.start[:0]
+	e.planSelf()
+	e.planScheduled()
+	e.planMessages()
+	e.planCommands()
+	plan.Build(e.start)
+	clear(e.start) // the plan holds the actions: the list does not keep them for the next tick
 
 	for {
 		entry, ok := plan.Next()
@@ -159,37 +163,28 @@ func (e *Engine[S]) Step() {
 	e.endTick(e.tick)
 }
 
-// planSelf puts in the plan what the engine set for itself in the last tick.
-func (e *Engine[S]) planSelf(plan *sim.Plan[S]) {
-	for _, a := range e.selfNext {
-		plan.Append(a)
-	}
+// planSelf adds to what the plan starts with what the engine set for itself in the last tick.
+func (e *Engine[S]) planSelf() {
+	e.start = append(e.start, e.selfNext...)
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick.
-func (e *Engine[S]) planScheduled(plan *sim.Plan[S]) {
-	for _, a := range e.sched.Due(e.tick) {
-		plan.Append(a)
-	}
+// planScheduled adds the actions that were scheduled for this tick.
+func (e *Engine[S]) planScheduled() {
+	e.start = append(e.start, e.sched.Due(e.tick)...)
 }
 
-// planMessages puts in the plan the actions of the messages that other engines sent, in the order
-// they arrived.
-func (e *Engine[S]) planMessages(plan *sim.Plan[S]) {
-	for _, a := range e.receivedActions[S](e.tick) {
-		plan.Append(a)
-	}
+// planMessages adds the actions of the messages that other engines sent, in the order they arrived.
+func (e *Engine[S]) planMessages() {
+	e.start = append(e.start, e.receivedActions[S](e.tick)...)
 }
 
 // planCommands takes the commands that clients sent since the last tick, writes them to the replay
-// log and puts their actions in the plan.
-func (e *Engine[S]) planCommands(plan *sim.Plan[S]) {
+// log and adds their actions.
+func (e *Engine[S]) planCommands() {
 	for _, c := range channels.Drain(e.commands) {
 		e.replayLog.Append(e.me, e.tick, replay.Command{Command: c})
-		for _, a := range c.Translate() {
-			plan.Append(a)
-		}
+		e.start = append(e.start, c.Translate()...)
 	}
 }
 

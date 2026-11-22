@@ -78,6 +78,53 @@ func BenchmarkPlanAppend(b *testing.B) {
 	}
 }
 
+// BenchmarkPlanAppendAndRun fills a plan with Append and takes every entry out: what an engine does
+// with the actions it starts a tick with, one by one.
+func BenchmarkPlanAppendAndRun(b *testing.B) {
+	cfg := config.Defaults()
+	for _, n := range planSizes {
+		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
+			actions := planActions(n)
+			p := NewPlan[*toyState]()
+			b.ReportAllocs()
+			for b.Loop() {
+				p.Reset(cfg)
+				for _, a := range actions {
+					p.Append(a)
+				}
+				for {
+					if _, ok := p.Next(); !ok {
+						break
+					}
+				}
+			}
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*n), "ns/action")
+		})
+	}
+}
+
+// BenchmarkPlanBuildAndRun does the same with Build, which orders the actions once.
+func BenchmarkPlanBuildAndRun(b *testing.B) {
+	cfg := config.Defaults()
+	for _, n := range planSizes {
+		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
+			actions := planActions(n)
+			p := NewPlan[*toyState]()
+			p.Reset(cfg)
+			b.ReportAllocs()
+			for b.Loop() {
+				p.Build(actions)
+				for {
+					if _, ok := p.Next(); !ok {
+						break
+					}
+				}
+			}
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*n), "ns/action")
+		})
+	}
+}
+
 // BenchmarkPlanFind looks the damage up by its ID with Find, which makes a slice.
 func BenchmarkPlanFind(b *testing.B) {
 	for _, n := range planSizes {

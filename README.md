@@ -26,8 +26,7 @@ plan/
   rule/                             the rules (index.md)
 shared/                             libraries of our own, each a package; import nothing of the project
   stablemap/                        Map: index + keys + vals, stable order of visit
-  stableset/                        Set on a stablemap
-  table/                            Table: a stablemap with columns of one or two keys (Index, Lookup)
+  table/                            Table: a stablemap with columns of one or two keys (Index, Lookup); PriorityQueue: elements taken by priority, with the same columns
   ring/                             Ring: the last rows of a log that only grows (the chat)
   registry/                         Registry: the latest published copy under a key
   codec/                            Registry: kinds told apart by a number, each with the function that reads it

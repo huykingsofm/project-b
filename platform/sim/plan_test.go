@@ -203,3 +203,74 @@ func TestAWalkOfThePlanMakesNothingToCollect(t *testing.T) {
 		t.Fatalf("a walk allocates %.0f times, want 0", allocs)
 	}
 }
+
+func TestBuildGivesTheOrderOfAnAppendOfEachActionAndTheEntriesAreAtDepthZero(t *testing.T) {
+	actions := func() []Action[*toyState] {
+		return []Action[*toyState]{
+			&anonymousAction{name: "c", priority: 0}, &anonymousAction{name: "a", priority: -10},
+			&anonymousAction{name: "d", priority: 0}, &anonymousAction{name: "e", priority: 50},
+			&anonymousAction{name: "b", priority: -10},
+		}
+	}
+	one := NewPlan[*toyState]()
+	for _, a := range actions() {
+		one.Append(a)
+	}
+	all := NewPlan[*toyState]()
+	all.Build(actions())
+	a := names(one, anonymousName)
+	b := names(all, anonymousName)
+	if !slices.Equal(a, b) || !slices.Equal(a, []string{"a", "b", "c", "d", "e"}) {
+		t.Fatalf("one by one %v, all at once %v", a, b)
+	}
+	built := NewPlan[*toyState]()
+	built.Build(actions())
+	for {
+		e, ok := built.Next()
+		if !ok {
+			break
+		}
+		if e.depth != 0 {
+			t.Fatalf("an entry of Build is at depth %d, want 0", e.depth)
+		}
+	}
+}
+
+func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesThem(t *testing.T) {
+	p := NewPlan[*toyState]()
+	p.Build([]Action[*toyState]{
+		&typedAction{anonymousAction{name: "t1", priority: 0}},
+		&typedAction{anonymousAction{name: "t2", priority: 10}},
+	})
+	e, _ := p.Next() // t1 runs
+	p.Append(&typedAction{anonymousAction{name: "early", priority: -100}})
+	if got := typedNames(p); !slices.Equal(got, []string{"t2", "early"}) {
+		t.Fatalf("found %v, want what is still to run, in the order they were added", got)
+	}
+	if next, _ := p.Next(); nameOf(next.Action()) != "early" || next.depth != e.depth+1 {
+		t.Fatalf(
+			"the next to run is %q at depth %d, want early, one deeper than t1",
+			nameOf(next.Action()), next.depth,
+		)
+	}
+}
+
+func TestCancelledListsTheEntriesCancelledInTheOrderTheyWereAndNotTheOnesThatRan(t *testing.T) {
+	p := NewPlan[*toyState]()
+	p.Build([]Action[*toyState]{
+		&typedAction{anonymousAction{name: "t1"}}, &typedAction{anonymousAction{name: "t2"}},
+		&typedAction{anonymousAction{name: "t3"}},
+	})
+	first, _ := p.Next()
+	p.Cancel(first) // it ran already: nothing to cancel
+	var entries []*PlanEntry[*toyState]
+	for e := range p.FindByID[*typedAction](typedID) {
+		entries = append(entries, e)
+	}
+	p.Cancel(entries[1])
+	p.Cancel(entries[0])
+	got := p.Cancelled()
+	if len(got) != 2 || nameOf(got[0].Action()) != "t3" || nameOf(got[1].Action()) != "t2" {
+		t.Fatalf("cancelled %v, want t3 then t2", got)
+	}
+}

@@ -6,7 +6,9 @@ import "github.com/huykingsofm/project-b/shared/binarycodec"
 // own with its method ID(). A number is never changed or reused, because the replay log writes it.
 type ActionID uint16
 
-// Acting is implemented by an action that has an author: the actor that performs it.
+// Acting is implemented by an action that has an author: the actor that performs it. The actor can
+// be compared with ==, because a plan keeps a column of its actions by it: an actor of a type that
+// cannot be compared (a slice, a map, a func) makes the plan panic.
 type Acting interface{ Actor() any }
 
 // Encoder is what an action has to be written: its fields, without its ID.

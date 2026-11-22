@@ -17,6 +17,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/bimap"
+	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 	"github.com/huykingsofm/project-b/shared/table"
@@ -25,15 +26,13 @@ import (
 // State is the state of a zonelayer.
 type State struct {
 	// Data.
-	id       sim.StateID
-	zoneID   sim.StateID
-	worldID  sim.StateID
-	tick     uint64
-	entities table.Table[state.EntityID, state.Entity]
-	// entitiesByKind finds the entities of a kind
-	entitiesByKind table.Handle[state.KindID]
-	characters     stablemap.Map[state.CharacterID, Character]
-	chat           ring.Ring[ChatMessage]
+	id         sim.StateID
+	zoneID     sim.StateID
+	worldID    sim.StateID
+	tick       uint64
+	entities   table.Table[state.EntityID, state.Entity]
+	characters stablemap.Map[state.CharacterID, Character]
+	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
 	bodies       bimap.BiMap[state.CharacterID, state.EntityID]
@@ -48,9 +47,12 @@ func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
 	}
-	s.entitiesByKind = s.entities.Index(func(e state.Entity) (state.KindID, bool) {
+	// the column of kinds finds the entities of a kind
+	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
 		return e.KindID(), true
-	})
+	}); err != nil {
+		logging.Error("zonelayer: the column of kinds was not declared", "err", err)
+	}
 	return s
 }
 
@@ -66,7 +68,7 @@ var _ ReadOnlyZoneLayerState = (*State)(nil)
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities: s.entities.Clone(), entitiesByKind: s.entitiesByKind,
+		entities:     s.entities.Clone(),
 		characters:   s.characters.Clone(),
 		chat:         s.chat.Clone(),
 		bodies:       s.bodies.Clone(),
@@ -338,7 +340,7 @@ func (s *State) EntityIDs() []state.EntityID { return s.entities.Keys() }
 // by walking every entity.
 func (s *State) EntityIDsOfKind(kind state.KindID) []state.EntityID {
 	var ids []state.EntityID
-	for id := range s.entities.Lookup(s.entitiesByKind, kind) {
+	for id := range s.entities.Lookup(kind) {
 		ids = append(ids, id)
 	}
 	return ids

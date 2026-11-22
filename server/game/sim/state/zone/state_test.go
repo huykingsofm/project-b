@@ -53,7 +53,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 
 // columnsOf names the field of the columns of a table, as the rules name a field to leave out.
 func columnsOf[K comparable, V any]() string {
-	return reflect.TypeFor[table.Table[K, V]]().String() + ".columns"
+	return reflect.TypeFor[table.Table[K, V]]().String() + ".cols"
 }
 
 func TestTheTypesOfTheZoneStateObeyTheRuleOfData(t *testing.T) {

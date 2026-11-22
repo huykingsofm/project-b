@@ -137,3 +137,12 @@ func (m *Map[K, V]) CloneFunc(copyValue func(V) V) Map[K, V] {
 	}
 	return c
 }
+
+// Clear takes every element out and keeps the memory, so a map that is filled and emptied again
+// and again, as the plan of a tick is, does not allocate each time.
+func (m *Map[K, V]) Clear() {
+	clear(m.index)
+	clear(m.keys)
+	clear(m.vals)
+	m.keys, m.vals = m.keys[:0], m.vals[:0]
+}

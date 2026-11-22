@@ -283,7 +283,7 @@ func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 		// the columns of a table are copied by its Clone, and Disjoint checks that on a real value
 		Skip: []string{
 			"zonelayer.State.events",
-			reflect.TypeFor[table.Table[state.EntityID, state.Entity]]().String() + ".columns",
+			reflect.TypeFor[table.Table[state.EntityID, state.Entity]]().String() + ".cols",
 		},
 	}
 	if err := aliasing.CheckCloneable(reflect.TypeFor[zonelayer.State](), rules); err != nil {

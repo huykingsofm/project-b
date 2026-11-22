@@ -218,3 +218,22 @@ func registerStates(t testing.TB, c *sim.Codecs) {
 		}
 	}
 }
+
+// A plan finds the actions of an actor by a column keyed by the actor, so what Actor returns can be
+// compared with ==.
+func TestTheActorOfEveryActionThatHasOneCanBeCompared(t *testing.T) {
+	n := 0
+	for id, a := range everyAction() {
+		who, ok := a.(sim.Acting)
+		if !ok {
+			continue
+		}
+		n++
+		if actor := who.Actor(); actor == nil || !reflect.TypeOf(actor).Comparable() {
+			t.Errorf("the actor of the action %d (%T) is a %T: it cannot be compared", id, a, actor)
+		}
+	}
+	if n == 0 {
+		t.Fatal("no action of the game has an actor: the test checks nothing")
+	}
+}

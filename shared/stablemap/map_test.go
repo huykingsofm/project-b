@@ -59,3 +59,17 @@ func TestMapCloneCopiesValuesThatHaveACloneWithTheirClone(t *testing.T) {
 		t.Fatalf("a change of the copy changed the map: %v", got.Items)
 	}
 }
+
+func TestClearEmptiesTheMapAndItGoesOnFromNothing(t *testing.T) {
+	var m stablemap.Map[int, string]
+	m.Set(1, "a")
+	m.Set(2, "b")
+	m.Clear()
+	if m.Len() != 0 || m.Has(1) || len(m.Keys()) != 0 {
+		t.Fatal("the map still holds something after Clear")
+	}
+	m.Set(3, "c")
+	if v, _ := m.Get(3); v != "c" || m.Len() != 1 {
+		t.Fatal("the map does not go on after Clear")
+	}
+}

@@ -1,10 +1,18 @@
 package table_test
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
 	"github.com/huykingsofm/project-b/shared/table"
+)
+
+// kind and owner are the key types of the columns of the tests: a column is found by the type of
+// its key, so each has a type of its own.
+type (
+	kind  string
+	owner int
 )
 
 type thing struct {
@@ -21,28 +29,36 @@ func keysOf[V any](seq func(func(int, V) bool)) []int {
 	return out
 }
 
-func newThings() (*table.Table[int, thing], table.Handle[string], table.Handle2[int, string]) {
-	var t table.Table[int, thing]
-	byKind := t.Index(func(v thing) (string, bool) { return v.kind, v.kind != "" })
-	byOwnerKind := t.Index2(func(v thing) (int, string, bool) { return v.owner, v.kind, true })
-	return &t, byKind, byOwnerKind
+func newThings(t testing.TB) *table.Table[int, thing] {
+	t.Helper()
+	var tb table.Table[int, thing]
+	byKind := func(v thing) (kind, bool) { return kind(v.kind), v.kind != "" }
+	if err := tb.Index(byKind); err != nil {
+		t.Fatal(err)
+	}
+	if err := tb.Index2(func(v thing) (owner, kind, bool) {
+		return owner(v.owner), kind(v.kind), true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return &tb
 }
 
 func TestAColumnFindsTheValuesByItsKeyAndFollowsSetAndDelete(t *testing.T) {
-	tb, byKind, _ := newThings()
+	tb := newThings(t)
 	tb.Set(1, thing{1, "item"})
 	tb.Set(2, thing{1, "body"})
 	tb.Set(3, thing{2, "item"})
 	tb.Set(4, thing{2, ""}) // not in the column: it has no kind
-	if got := keysOf[thing](tb.Lookup(byKind, "item")); !slices.Equal(got, []int{1, 3}) {
+	if got := keysOf[thing](tb.Lookup(kind("item"))); !slices.Equal(got, []int{1, 3}) {
 		t.Fatalf("items %v, want [1 3]", got)
 	}
 	tb.Set(1, thing{1, "body"}) // the value changes: the old key is let go
 	tb.Delete(3)
-	if got := keysOf[thing](tb.Lookup(byKind, "item")); len(got) != 0 {
+	if got := keysOf[thing](tb.Lookup(kind("item"))); len(got) != 0 {
 		t.Fatalf("items %v, want none", got)
 	}
-	if got := keysOf[thing](tb.Lookup(byKind, "body")); !slices.Equal(got, []int{1, 2}) {
+	if got := keysOf[thing](tb.Lookup(kind("body"))); !slices.Equal(got, []int{1, 2}) {
 		t.Fatalf("bodies %v, want [1 2]", got)
 	}
 	if tb.Delete(99) || tb.Len() != 3 {
@@ -51,34 +67,53 @@ func TestAColumnFindsTheValuesByItsKeyAndFollowsSetAndDelete(t *testing.T) {
 }
 
 func TestACompositeColumnFindsByTheFirstKeyAloneAndByBoth(t *testing.T) {
-	tb, _, byOwnerKind := newThings()
+	tb := newThings(t)
 	tb.Set(1, thing{1, "item"})
 	tb.Set(2, thing{1, "body"})
 	tb.Set(3, thing{2, "item"})
-	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 1)); !slices.Equal(got, []int{1, 2}) {
+	if got := keysOf[thing](tb.Lookup2First(owner(1))); !slices.Equal(got, []int{1, 2}) {
 		t.Fatalf("owner 1 has %v, want [1 2]", got)
 	}
-	if got := keysOf[thing](tb.Lookup2(byOwnerKind, 1, "item")); !slices.Equal(got, []int{1}) {
+	if got := keysOf[thing](tb.Lookup2(owner(1), kind("item"))); !slices.Equal(got, []int{1}) {
 		t.Fatalf("owner 1 items %v, want [1]", got)
 	}
 	tb.Delete(1)
 	tb.Delete(2)
-	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 1)); len(got) != 0 {
+	if got := keysOf[thing](tb.Lookup2First(owner(1))); len(got) != 0 {
 		t.Fatalf("owner 1 has %v after its values went, want none", got)
 	}
-	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 2)); !slices.Equal(got, []int{3}) {
+	if got := keysOf[thing](tb.Lookup2First(owner(2))); !slices.Equal(got, []int{3}) {
 		t.Fatalf("owner 2 has %v, want [3]", got)
 	}
 }
 
+func TestAKeyTypeIsOfOneColumnAndTheSecondDeclarationIsAnError(t *testing.T) {
+	tb := newThings(t)
+	err := tb.Index(func(v thing) (kind, bool) { return "x", true })
+	if !errors.Is(err, table.ErrColumnDeclared) {
+		t.Fatalf("a second column of the key type kind: %v", err)
+	}
+	err = tb.Index2(func(v thing) (owner, int, bool) { return 0, 0, true })
+	if !errors.Is(err, table.ErrColumnDeclared) {
+		t.Fatalf("a second column of two keys that starts with owner: %v", err)
+	}
+	tb.Set(1, thing{1, "item"})
+	if got := keysOf[thing](tb.Lookup(kind("item"))); !slices.Equal(got, []int{1}) {
+		t.Fatalf("the column that was refused changed the first: %v", got)
+	}
+}
+
 func TestAColumnDeclaredLateTakesWhatIsThereAndLookupAsLeavesOutOtherTypes(t *testing.T) {
+	type all bool
 	var tb table.Table[int, any]
 	tb.Set(1, 10)
 	tb.Set(2, "ten")
 	tb.Set(3, 30)
-	all := tb.Index(func(any) (bool, bool) { return true, true })
+	if err := tb.Index(func(any) (all, bool) { return true, true }); err != nil {
+		t.Fatal(err)
+	}
 	var ints []int
-	for _, n := range tb.LookupAs[bool, int](all, true) {
+	for _, n := range tb.LookupAs[all, int](true) {
 		ints = append(ints, n)
 	}
 	slices.Sort(ints)
@@ -87,30 +122,16 @@ func TestAColumnDeclaredLateTakesWhatIsThereAndLookupAsLeavesOutOtherTypes(t *te
 	}
 }
 
-func TestACloneSharesNothingAndItsColumnsAreTheSame(t *testing.T) {
-	tb, byKind, byOwnerKind := newThings()
-	tb.Set(1, thing{1, "item"})
-	c := tb.Clone()
-	tb.Set(2, thing{1, "item"})
-	c.Set(3, thing{1, "item"})
-	if got := keysOf[thing](tb.Lookup(byKind, "item")); !slices.Equal(got, []int{1, 2}) {
-		t.Fatalf("table %v, want [1 2]", got)
-	}
-	if got := keysOf[thing](c.Lookup(byKind, "item")); !slices.Equal(got, []int{1, 3}) {
-		t.Fatalf("clone %v, want [1 3]", got)
-	}
-	if got := keysOf[thing](c.Lookup2(byOwnerKind, 1, "item")); !slices.Equal(got, []int{1, 3}) {
-		t.Fatalf("clone, two keys %v, want [1 3]", got)
-	}
-}
-
 func TestLookup2AsLeavesOutTheValuesThatAreNotOfTheType(t *testing.T) {
+	type pair bool
 	var tb table.Table[int, any]
 	tb.Set(1, 10)
 	tb.Set(2, "ten")
-	h := tb.Index2(func(any) (bool, bool, bool) { return true, true, true })
+	if err := tb.Index2(func(any) (pair, bool, bool) { return true, true, true }); err != nil {
+		t.Fatal(err)
+	}
 	n := 0
-	for range tb.Lookup2As[bool, bool, int](h, true, true) {
+	for range tb.Lookup2As[pair, bool, int](true, true) {
 		n++
 	}
 	if n != 1 {
@@ -118,22 +139,50 @@ func TestLookup2AsLeavesOutTheValuesThatAreNotOfTheType(t *testing.T) {
 	}
 }
 
-func TestAHandleOfAnotherTableOrOfAnotherKindOfColumnFindsNothing(t *testing.T) {
-	tb, byKind, _ := newThings()
+func TestACloneSharesNothingAndItsColumnsAreTheSame(t *testing.T) {
+	tb := newThings(t)
 	tb.Set(1, thing{1, "item"})
-	var other table.Table[int, thing]
-	if n := len(keysOf[thing](other.Lookup(byKind, "item"))); n != 0 {
-		t.Fatalf("a handle that is not of the table found %d values", n)
+	c := tb.Clone()
+	tb.Set(2, thing{1, "item"})
+	c.Set(3, thing{1, "item"})
+	if got := keysOf[thing](tb.Lookup(kind("item"))); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("table %v, want [1 2]", got)
 	}
-	wrong := table.Handle2[int, string]{} // position 0 is a column of one key
-	if n := len(keysOf[thing](tb.Lookup2First(wrong, 1))); n != 0 {
-		t.Fatalf("a handle of another kind of column found %d values", n)
+	if got := keysOf[thing](c.Lookup(kind("item"))); !slices.Equal(got, []int{1, 3}) {
+		t.Fatalf("clone %v, want [1 3]", got)
+	}
+	if got := keysOf[thing](c.Lookup2(owner(1), kind("item"))); !slices.Equal(got, []int{1, 3}) {
+		t.Fatalf("clone, two keys %v, want [1 3]", got)
+	}
+}
+
+func TestAKeyTypeThatIsOfNoColumnFindsNothing(t *testing.T) {
+	tb := newThings(t)
+	tb.Set(1, thing{1, "item"})
+	if n := len(keysOf[thing](tb.Lookup("item"))); n != 0 { // a string, and no column has it
+		t.Fatalf("a key type of no column found %d values", n)
+	}
+	if n := len(keysOf[thing](tb.Lookup2First(int64(1)))); n != 0 {
+		t.Fatalf("a first key type of no column found %d values", n)
+	}
+}
+
+func TestResetTakesTheValuesOutAndKeepsTheColumns(t *testing.T) {
+	tb := newThings(t)
+	tb.Set(1, thing{1, "item"})
+	tb.Reset()
+	if tb.Len() != 0 || len(keysOf[thing](tb.Lookup(kind("item")))) != 0 {
+		t.Fatal("Reset left something")
+	}
+	tb.Set(2, thing{1, "item"})
+	if got := keysOf[thing](tb.Lookup(kind("item"))); !slices.Equal(got, []int{2}) {
+		t.Fatalf("the columns do not go on after Reset: %v", got)
 	}
 }
 
 func TestTheOrderOfWhatIsFoundIsTheSameForTheSameCalls(t *testing.T) {
 	run := func() []int {
-		tb, byKind, _ := newThings()
+		tb := newThings(t)
 		for i := range 20 {
 			tb.Set(i, thing{i % 3, "item"})
 		}
@@ -141,7 +190,7 @@ func TestTheOrderOfWhatIsFoundIsTheSameForTheSameCalls(t *testing.T) {
 			tb.Delete(i)
 		}
 		var out []int
-		for k := range tb.Lookup(byKind, "item") {
+		for k := range tb.Lookup(kind("item")) {
 			out = append(out, k)
 		}
 		return out
@@ -152,7 +201,7 @@ func TestTheOrderOfWhatIsFoundIsTheSameForTheSameCalls(t *testing.T) {
 }
 
 func BenchmarkCloneWithColumns(b *testing.B) {
-	tb, _, _ := newThings()
+	tb := newThings(b)
 	for i := range 1000 {
 		tb.Set(i, thing{i % 10, "item"})
 	}

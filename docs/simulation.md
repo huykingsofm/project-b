@@ -108,7 +108,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Plan
 
-- Priority, a running pointer, an index by ID and by author. `FindByID` walks the actions of an ID as a type, lazily and with no allocation; `Find` returns a slice.
+- The plan is a `table.PriorityQueue` of its entries: priority (smaller first), then arrival; a running pointer; a column by ID and a column by author. An engine makes it in one go with `Build` from the actions a tick starts with, and an action that runs adds what it makes with `Append`, which is ordered among the entries still to run and never before the one that runs. `FindByID` walks the actions of an ID as a type, lazily and with no allocation, and only those that have not run and were not cancelled; `Find` returns a slice.
 - A depth limit on chains of actions.
 - A scheduler (an action set for a tick). What repeats is an action that sets itself again; the scheduler finds and cancels what waits by a key (the ID of the action and its actor), and an action cancels through its registry (`CancelWaiting`), which takes effect when the tick is over.
 - Messages with `OnFail`.
@@ -118,8 +118,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | Package | What it is |
 |---|---|
 | `shared/stablemap` | map with a stable order of visit: the same for the same calls, though not the order of insertion once a key is deleted (R20) |
-| `shared/stableset` | a set with the same stable order |
-| `shared/table` | a stablemap with columns: values found by one key, or by two (the first alone or both), kept up to date by `Set` and `Delete`; `Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First` |
+| `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]`: elements taken by priority and then by arrival, which remembers what was taken and cancelled, with the same columns on what is still to be taken (`Add`, `BuildFrom`, `Next`, `Cancel`, `All`, `Pending`) |
 | `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
 | `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; refuses a number or a Go type that two kinds share |
