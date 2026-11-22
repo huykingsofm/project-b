@@ -37,7 +37,7 @@ func (v *StableStateView) begin(tick uint64) {
 }
 
 // World returns the copy of the world that this tick read first.
-func (v *StableStateView) World() *worldstate.State {
+func (v *StableStateView) World() worldstate.ReadOnlyWorldState {
 	if !v.worldRead {
 		v.world, v.worldRead = v.registry.latestWorld(), true
 		var copyTick uint64
@@ -46,11 +46,22 @@ func (v *StableStateView) World() *worldstate.State {
 		}
 		v.replayLog.StableRead(v.me, v.tick, action.WorldAddress(v.registry.worldID), copyTick)
 	}
+	if v.world == nil {
+		return nil // not a nil pointer inside an interface
+	}
 	return v.world
 }
 
 // Zone returns the copy of the zone that this tick read first.
-func (v *StableStateView) Zone(zoneID state.ZoneID) *zonestate.State {
+func (v *StableStateView) Zone(zoneID state.ZoneID) zonestate.ReadOnlyZoneState {
+	z := v.zone(zoneID)
+	if z == nil {
+		return nil // not a nil pointer inside an interface
+	}
+	return z
+}
+
+func (v *StableStateView) zone(zoneID state.ZoneID) *zonestate.State {
 	if z, ok := v.zones[zoneID]; ok {
 		return z
 	}
@@ -65,7 +76,17 @@ func (v *StableStateView) Zone(zoneID state.ZoneID) *zonestate.State {
 }
 
 // ZoneLayer returns the copy of the zonelayer that this tick read first.
-func (v *StableStateView) ZoneLayer(zoneLayerID state.ZoneLayerID) *zonelayerstate.State {
+func (v *StableStateView) ZoneLayer(
+	zoneLayerID state.ZoneLayerID,
+) zonelayerstate.ReadOnlyZoneLayerState {
+	l := v.zoneLayer(zoneLayerID)
+	if l == nil {
+		return nil // not a nil pointer inside an interface
+	}
+	return l
+}
+
+func (v *StableStateView) zoneLayer(zoneLayerID state.ZoneLayerID) *zonelayerstate.State {
 	if l, ok := v.zonelayers[zoneLayerID]; ok {
 		return l
 	}

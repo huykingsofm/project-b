@@ -132,6 +132,18 @@ func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) 
 }
 
 // SpawnPosition is where characters appear: the middle of the spawn tile, which is never a wall.
+// ReadOnlyTileMap is the read methods of a TileMap, which is what an action may use of the map of a
+// zone it reads from the stable view. The map never changes after it is made, and this says so.
+type ReadOnlyTileMap interface {
+	SpawnPosition() state.Vec
+	Free(v state.Vec) bool
+	FreeForBody(position state.Vec, radius int32) bool
+	Reach(from state.Vec, dir state.Dir, distance int32, radius int32) state.Vec
+	Exits() []entity.ExitEntity
+}
+
+var _ ReadOnlyTileMap = (*TileMap)(nil)
+
 func (m *TileMap) SpawnPosition() state.Vec { return m.spawn }
 
 func (m *TileMap) inside(t Tile) bool {

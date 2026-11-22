@@ -35,8 +35,8 @@ func (a *ZoneLayerCharacterEnterAction) ApplyZoneLayer(
 		return
 	}
 	at := a.At
-	if !zone.Tiles.FreeForBody(at, a.Character.Radius) {
-		at = zone.Tiles.SpawnPosition()
+	if !zone.TileMap().FreeForBody(at, a.Character.Radius) {
+		at = zone.TileMap().SpawnPosition()
 	}
 	s.AddCharacterEntity(a.Character, at)
 }

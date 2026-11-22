@@ -49,7 +49,7 @@ func (a *ZoneLayerCharacterExitToAction) ApplyZoneLayer(
 	if there == nil {
 		return
 	}
-	for zoneLayerID, zoneLayerSlot := range there.ZoneLayers.All() {
+	for zoneLayerID, zoneLayerSlot := range there.ZoneLayerSlots() {
 		held := 0
 		if layer := r.Stable.ZoneLayer(zoneLayerID); layer != nil {
 			held = layer.CharacterCount()

@@ -12,6 +12,8 @@
 package zone
 
 import (
+	"iter"
+
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone/event"
@@ -89,6 +91,24 @@ func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool
 	}
 	exit, ok := e.(entity.ExitEntity)
 	return exit, ok
+}
+
+// ReadOnlyZoneState is the read methods of the state of a zone: what an action may use of a copy
+// that another engine published, which it must never change (R26, R28).
+type ReadOnlyZoneState interface {
+	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
+	TileMap() tilemap.ReadOnlyTileMap
+	ZoneLayerSlots() iter.Seq2[state.ZoneLayerID, ZoneLayerSlot]
+}
+
+var _ ReadOnlyZoneState = (*State)(nil)
+
+// TileMap returns the map of the zone.
+func (s *State) TileMap() tilemap.ReadOnlyTileMap { return s.Tiles }
+
+// ZoneLayerSlots returns the zonelayers of the zone, in order, with the room each has.
+func (s *State) ZoneLayerSlots() iter.Seq2[state.ZoneLayerID, ZoneLayerSlot] {
+	return s.ZoneLayers.All()
 }
 
 // SetTick sets the tick that the state is at.

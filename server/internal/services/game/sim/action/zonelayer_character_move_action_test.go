@@ -14,9 +14,16 @@ import (
 // testStable is a StableView that holds the state of one zone.
 type testStable struct{ zone *zonestate.State }
 
-func (t testStable) World() *worldstate.State                          { return nil }
-func (t testStable) Zone(zoneID state.ZoneID) *zonestate.State         { return t.zone }
-func (t testStable) ZoneLayer(state.ZoneLayerID) *zonelayerstate.State { return nil }
+func (t testStable) World() worldstate.ReadOnlyWorldState { return nil }
+func (t testStable) Zone(zoneID state.ZoneID) zonestate.ReadOnlyZoneState {
+	if t.zone == nil {
+		return nil
+	}
+	return t.zone
+}
+func (t testStable) ZoneLayer(state.ZoneLayerID) zonelayerstate.ReadOnlyZoneLayerState {
+	return nil
+}
 
 func newMoveTestWorld(
 	t *testing.T, zonePublished bool,
