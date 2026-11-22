@@ -2,8 +2,8 @@ package entity
 
 import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 
-// ExitEntity is an exit of a map: an area that leads to a place in another zone. Every zonelayer of a
-// zone has the exits of the map as entities.
+// ExitEntity is an exit of a map: an area that leads to a place in another zone. Every zonelayer of
+// a zone has the exits of the map as entities.
 type ExitEntity struct {
 	EntityID state.EntityID
 	Area     state.Rect // the tiles of the exit, both ends included
@@ -16,7 +16,10 @@ func (e ExitEntity) KindID() KindID     { return ExitKindID }
 
 // Position is the middle of the area, rounded towards its Min.
 func (e ExitEntity) Position() state.Vec {
-	return state.Vec{X: e.Area.Min.X + (e.Area.Max.X-e.Area.Min.X)/2, Y: e.Area.Min.Y + (e.Area.Max.Y-e.Area.Min.Y)/2}
+	return state.Vec{
+		X: e.Area.Min.X + (e.Area.Max.X-e.Area.Min.X)/2,
+		Y: e.Area.Min.Y + (e.Area.Max.Y-e.Area.Min.Y)/2,
+	}
 }
 
 // Radius is how far the area reaches from its position, the longer way.

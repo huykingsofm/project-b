@@ -29,7 +29,8 @@ type Record struct {
 	Actions []action.ID
 	Command command.Command
 	Source  action.Address // for a KindStableRead, the engine whose copy was read
-	Value   uint64         // the version of a configuration, a hash, or the tick of a copy that was read
+	// the version of a configuration, a hash, or the tick of a copy that was read
+	Value uint64
 }
 
 // payloadTick is the tick of the record that a payload holds.
@@ -40,8 +41,8 @@ func payloadTick(payload []byte) (uint64, error) {
 	return tick, r.Err()
 }
 
-// encodeRecord writes a record: its kind, its tick and then what its kind has. The engine is not in it: it is
-// the engine of the log the record is written to.
+// encodeRecord writes a record: its kind, its tick and then what its kind has. The engine is not in
+// it: it is the engine of the log the record is written to.
 func encodeRecord(w *binarycodec.Writer, r Record) error {
 	w.Uint8(uint8(r.Kind))
 	w.Uvarint(r.Tick)
@@ -68,7 +69,9 @@ func encodeRecord(w *binarycodec.Writer, r Record) error {
 }
 
 // decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
-func decodeRecord(engine action.Address, version binarycodec.Version, payload []byte) (Record, error) {
+func decodeRecord(
+	engine action.Address, version binarycodec.Version, payload []byte,
+) (Record, error) {
 	r := binarycodec.NewReader(payload)
 	rec := Record{Kind: Kind(r.Uint8()), Engine: engine, Tick: r.Uvarint()}
 	switch rec.Kind {
@@ -100,7 +103,9 @@ func decodeRecord(engine action.Address, version binarycodec.Version, payload []
 		rec.Value = r.Uvarint()
 	default:
 		if r.Err() == nil {
-			return Record{}, fmt.Errorf("the record kind %d is not one the replay log writes", rec.Kind)
+			return Record{}, fmt.Errorf(
+				"the record kind %d is not one the replay log writes", rec.Kind,
+			)
 		}
 	}
 	if err := r.Err(); err != nil {

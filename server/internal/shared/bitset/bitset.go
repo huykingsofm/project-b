@@ -9,8 +9,8 @@ import (
 // ErrNegativeLength is returned by New for a length below zero.
 var ErrNegativeLength = errors.New("bitset: the length cannot be negative")
 
-// Array is K bits, all clear when it is made, numbered from 0 to K-1. A bit outside that range reads as
-// clear and cannot be changed, so a wrong index never panics.
+// Array is K bits, all clear when it is made, numbered from 0 to K-1. A bit outside that range
+// reads as clear and cannot be changed, so a wrong index never panics.
 type Array struct {
 	words []uint64
 	k     int
@@ -62,9 +62,9 @@ func (a *Array) Count() int {
 	return n
 }
 
-// AnyInRange reports whether any of the n bits from bit lo is set. The part of the range outside the array
-// is clear, so it is not looked at. It reads one word for each 64 bits of the range, and a range inside
-// one word takes a single read.
+// AnyInRange reports whether any of the n bits from bit lo is set. The part of the range outside
+// the array is clear, so it is not looked at. It reads one word for each 64 bits of the range, and
+// a range inside one word takes a single read.
 func (a *Array) AnyInRange(lo, n int) bool {
 	if n <= 0 || lo >= a.k {
 		return false

@@ -6,8 +6,8 @@
 //
 //	go run ./server/cmd/world
 //
-// With -replay-dir it also writes the replay log of every engine to files under that directory, and reads
-// them back at the end to say what each engine recorded:
+// With -replay-dir it also writes the replay log of every engine to files under that directory, and
+// reads them back at the end to say what each engine recorded:
 //
 //	go run ./server/cmd/world -replay-dir /tmp/replay
 package main
@@ -53,7 +53,9 @@ func (printer) EmitZoneLayer(from action.Address, tick uint64, events []zonelaye
 }
 
 func main() {
-	replayDir := flag.String("replay-dir", "", "write the replay log of every engine under this directory")
+	replayDir := flag.String(
+		"replay-dir", "", "write the replay log of every engine under this directory",
+	)
 	flag.Parse()
 
 	closeLogs, err := logging.Init(logging.NewWriterConsumer(os.Stderr),
@@ -70,8 +72,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	exitEast := tilemap.ExitDefinition{Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 2}}
-	exitWest := tilemap.ExitDefinition{Min: tilemap.Tile{X: 0, Y: 0}, Max: tilemap.Tile{X: 0, Y: 4}, ToZoneID: 1, Arrival: tilemap.Tile{X: 8, Y: 2}}
+	exitEast := tilemap.ExitDefinition{
+		Min:      tilemap.Tile{X: 9, Y: 0},
+		Max:      tilemap.Tile{X: 9, Y: 4},
+		ToZoneID: 2,
+		Arrival:  tilemap.Tile{X: 1, Y: 2},
+	}
+	exitWest := tilemap.ExitDefinition{
+		Min:      tilemap.Tile{X: 0, Y: 0},
+		Max:      tilemap.Tile{X: 0, Y: 4},
+		ToZoneID: 1,
+		Arrival:  tilemap.Tile{X: 8, Y: 2},
+	}
 	spawn := tilemap.Tile{X: 1, Y: 2}
 	walls := []tilemap.Tile{{X: 5, Y: 0}, {X: 5, Y: 1}}
 
@@ -88,7 +100,12 @@ func main() {
 	var replayLog replay.Log = replay.NopLog{}
 	var replayFile *replay.FileLog
 	if *replayDir != "" {
-		replayFile = replay.NewFileLog(*replayDir, replay.FileLogOptions{Seed: seed, SegmentBytes: 1 << 20, SyncEvery: time.Second, Backlog: 64})
+		replayFile = replay.NewFileLog(
+			*replayDir,
+			replay.FileLogOptions{
+				Seed: seed, SegmentBytes: 1 << 20, SyncEvery: time.Second, Backlog: 64,
+			},
+		)
 		replayLog = replayFile
 	}
 
@@ -126,29 +143,63 @@ func main() {
 		}
 		cluster.Zone(1).Send(command.ZoneCharacterEnterCommand{Character: character})
 	}
-	step("two characters enter zone 1: the zone places them in zonelayer 1, the zonelayer accepts them, the zone records them", 4)
+	step(
+		"two characters enter zone 1: the zone places them in zonelayer 1, the zonelayer accepts "+
+			"them, the zone records them",
+		4,
+	)
 
 	cluster.ZoneLayer(1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "hello zonelayer"})
 	cluster.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
 	cluster.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
-	step("chat: a zonelayer message stays in the zonelayer, a zone message goes to every zonelayer of the zone, a private message is the world's alone", 4)
+	step(
+		"chat: a zonelayer message stays in the zonelayer, a zone message goes to every zonelayer "+
+			"of the zone, a private message is the world's alone",
+		4,
+	)
 
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100})
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
+	)
 	step("a shield is granted to Binh: it stands in the plan from now on", 2)
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
-	step("An attacks Binh: the attack adds a damage to the plan, the shield runs before it and blocks it", 3)
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
+	)
+	step(
+		"An attacks Binh: the attack adds a damage to the plan, the shield runs before it and "+
+			"blocks it",
+		3,
+	)
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
+	)
 	step("a second attack after the cooldown: the shield is gone, health drops", 10)
 
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5})
-	step("two runs of movement: the second waits its turn in the cooldown and starts when the first is done", 10)
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3},
+	)
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
+	)
+	step(
+		"two runs of movement: the second waits its turn in the cooldown and starts when the "+
+			"first is done",
+		10,
+	)
 
-	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
-	step("An takes the east exit: the exit is optimistic, so An moves at once to a zonelayer of zone 2 that has room, without waiting for it to answer", 4)
+	cluster.ZoneLayer(1).Send(
+		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1},
+	)
+	step(
+		"An takes the east exit: the exit is optimistic, so An moves at once to a zonelayer of "+
+			"zone 2 that has room, without waiting for it to answer",
+		4,
+	)
 
 	fmt.Printf("\ncharacters in zonelayer 1: %d, zonelayer 2: %d, zonelayer 3 (zone 2): %d\n",
-		cluster.ZoneLayer(1).State().CharacterCount(), cluster.ZoneLayer(2).State().CharacterCount(), cluster.ZoneLayer(3).State().CharacterCount())
+		cluster.ZoneLayer(1).State().CharacterCount(), cluster.ZoneLayer(
+			2,
+		).State().CharacterCount(), cluster.ZoneLayer(3).State().CharacterCount())
 
 	if replayFile != nil {
 		if err := replayFile.Close(); err != nil {
@@ -174,8 +225,11 @@ func main() {
 			if readErr != nil {
 				fail("the replay log is damaged", readErr)
 			}
-			fmt.Printf("  %-9s %d: %d inbound, %d commands, %d config, %d hashes, %d stable reads, up to tick %d\n",
-				e.Scope, e.ID, counts[replay.KindInbound], counts[replay.KindCommand], counts[replay.KindConfig], counts[replay.KindHash], counts[replay.KindStableRead], last)
+			fmt.Printf("  %-9s %d: %d inbound, %d commands, %d config, %d hashes, %d stable "+
+				"reads, up to tick %d\n",
+				e.Scope, e.ID, counts[replay.KindInbound], counts[replay.KindCommand],
+				counts[replay.KindConfig], counts[replay.KindHash],
+				counts[replay.KindStableRead], last)
 		}
 	}
 }

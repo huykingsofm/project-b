@@ -1,5 +1,5 @@
-// Package bimap holds a map that links the values of one type to the values of another, one to one, and
-// can be read from either side. It imports nothing of the project.
+// Package bimap holds a map that links the values of one type to the values of another, one to one,
+// and can be read from either side. It imports nothing of the project.
 package bimap
 
 import (
@@ -8,23 +8,23 @@ import (
 	"slices"
 )
 
-// BiMap links each V1 to one V2 and each V2 to one V1. The two sides are the same in every way except
-// which type is which.
+// BiMap links each V1 to one V2 and each V2 to one V1. The two sides are the same in every way
+// except which type is which.
 //
-// Every method that takes or gives one side has a twin for the other (GetByV1 and GetByV2, UnlinkByV1
-// and UnlinkByV2, AllV1 and AllV2).
+// Every method that takes or gives one side has a twin for the other (GetByV1 and GetByV2,
+// UnlinkByV1 and UnlinkByV2, AllV1 and AllV2).
 //
-// A link is one position in two slices, vals1 and vals2, and each side has an index from its value to
-// that position. A link is stored once, so a Clone copies two slices and two small indexes. Link and
-// Unlink change both sides at once, and there is no other way to change it, so the sides cannot
+// A link is one position in two slices, vals1 and vals2, and each side has an index from its value
+// to that position. A link is stored once, so a Clone copies two slices and two small indexes. Link
+// and Unlink change both sides at once, and there is no other way to change it, so the sides cannot
 // disagree.
 //
-// The links are visited in the order they were made, except that removing one moves the last link into
-// its place (as orderedmap.Map does, so a removal costs O(1)). The order is a function of the sequence
-// of Link and Unlink calls and of nothing else.
+// The links are visited in the order they were made, except that removing one moves the last link
+// into its place (as orderedmap.Map does, so a removal costs O(1)). The order is a function of the
+// sequence of Link and Unlink calls and of nothing else.
 //
-// The zero BiMap is empty and ready to use. It is not safe for concurrent use: the goroutine that owns
-// it is the only one that touches it. What another goroutine reads is a Clone of it.
+// The zero BiMap is empty and ready to use. It is not safe for concurrent use: the goroutine that
+// owns it is the only one that touches it. What another goroutine reads is a Clone of it.
 type BiMap[V1, V2 comparable] struct {
 	index1 map[V1]int
 	index2 map[V2]int
@@ -35,8 +35,8 @@ type BiMap[V1, V2 comparable] struct {
 // Len returns how many links there are.
 func (b *BiMap[V1, V2]) Len() int { return len(b.vals1) }
 
-// Link links v1 to v2. The links are one to one, so a link that either of them already had is replaced:
-// v1 leaves the V2 it had, and v2 leaves the V1 it had.
+// Link links v1 to v2. The links are one to one, so a link that either of them already had is
+// replaced: v1 leaves the V2 it had, and v2 leaves the V1 it had.
 func (b *BiMap[V1, V2]) Link(v1 V1, v2 V2) {
 	if b.index1 == nil {
 		b.index1, b.index2 = map[V1]int{}, map[V2]int{}
@@ -135,8 +135,8 @@ func (b *BiMap[V1, V2]) AllV2() iter.Seq2[V2, V1] {
 	}
 }
 
-// Clone returns a copy that shares nothing with the map. The values are identifiers, comparable values that are
-// never changed in place, so they are copied by assignment.
+// Clone returns a copy that shares nothing with the map. The values are identifiers, comparable
+// values that are never changed in place, so they are copied by assignment.
 func (b *BiMap[V1, V2]) Clone() BiMap[V1, V2] {
 	return BiMap[V1, V2]{
 		index1: maps.Clone(b.index1), index2: maps.Clone(b.index2),

@@ -30,7 +30,9 @@ func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 		}
 		got = append(got, e.Action().name)
 		if e.Action().name == "first" {
-			p.Append(&anonymousAction{name: "early", priority: -100}) // cannot run before what already ran
+			p.Append(
+				&anonymousAction{name: "early", priority: -100},
+			) // cannot run before what already ran
 		}
 	}
 	if !slices.Equal(got, []string{"first", "early", "last"}) {
@@ -56,7 +58,9 @@ func TestFindByIDAndByActorAndCancel(t *testing.T) {
 		t.Fatalf("by engine found %v", byTwo)
 	}
 	p.Cancel(byTwo[0])
-	if got := names(p, func(a *authoredAction) string { return a.name }); !slices.Equal(got, []string{"by-1", "by-2-again"}) {
+	if got := names(p, func(a *authoredAction) string { return a.name }); !slices.Equal(
+		got, []string{"by-1", "by-2-again"},
+	) {
 		t.Fatalf("after cancel = %v", got)
 	}
 	if c := p.Cancelled(); len(c) != 1 || c[0].Action().name != "by-2" {
@@ -102,8 +106,12 @@ func TestFindTypeReturnsTheActionsOfOneGoTypeThatHaveNotRunAndAreNotCancelled(t 
 	p.Append(third)
 
 	hits := p.FindType[*typedAction]()
-	if len(hits) != 3 || hits[0].Action != first || hits[1].Action != second || hits[2].Action != third {
-		t.Fatalf("found %d entries, want the three typed actions in the order they were added", len(hits))
+	if len(hits) != 3 || hits[0].Action != first || hits[1].Action != second ||
+		hits[2].Action != third {
+		t.Fatalf(
+			"found %d entries, want the three typed actions in the order they were added",
+			len(hits),
+		)
 	}
 	if other := p.FindType[*anonymousAction](); len(other) != 1 {
 		t.Fatalf("found %d anonymous actions, want 1", len(other))

@@ -16,22 +16,23 @@ type segmentScanner struct {
 	payload []byte
 	buf     []byte
 	commit  bool // the entry that next read is a commit, not a record
-	// committedEnd is where the last commit that was read ends, or the end of the header when there was none:
-	// what is before it is whole batches. sinceCommit is the records read since that commit, and
-	// committedRecords the records in the batches that were committed.
+	// committedEnd is where the last commit that was read ends, or the end of the header when there
+	// was none: what is before it is whole batches. sinceCommit is the records read since that
+	// commit, and committedRecords the records in the batches that were committed.
 	committedEnd     int64
 	sinceCommit      int
 	committedRecords int64
 }
 
-// errTorn says that the end of the segment is a record that was not finished or does not match its crc;
-// at the end of the last segment that is what a crash leaves.
+// errTorn says that the end of the segment is a record that was not finished or does not match its
+// crc; at the end of the last segment that is what a crash leaves.
 var errTorn = fmt.Errorf("%w: a record is cut off or does not match its crc", ErrCorrupt)
 
-// errHeaderCut says that the file ends inside the header, or holds only zeros where the header should be: a
-// segment that never got a header, which is what a crash leaves of a file that was just made (a file system can
-// keep the size of the file and zeros for the data that was not written). Any other header that is not right,
-// another format or a crc that does not match, is not cut, and what is in the file is not touched.
+// errHeaderCut says that the file ends inside the header, or holds only zeros where the header
+// should be: a segment that never got a header, which is what a crash leaves of a file that was
+// just made (a file system can keep the size of the file and zeros for the data that was not
+// written). Any other header that is not right, another format or a crc that does not match, is not
+// cut, and what is in the file is not touched.
 var errHeaderCut = fmt.Errorf("%w: the header is cut off", ErrCorrupt)
 
 func newSegmentScanner(r io.Reader) (*segmentScanner, error) {
@@ -64,9 +65,9 @@ func newSegmentScanner(r io.Reader) (*segmentScanner, error) {
 	return s, nil
 }
 
-// next reads the next entry, a record or a commit (s.commit says which). It returns io.EOF at the end of the
-// segment, and errTorn when the end is an entry that is not whole, or a commit that does not match the records
-// before it.
+// next reads the next entry, a record or a commit (s.commit says which). It returns io.EOF at the
+// end of the segment, and errTorn when the end is an entry that is not whole, or a commit that does
+// not match the records before it.
 func (s *segmentScanner) next() error {
 	s.commit = false
 	var head [frameHead]byte
@@ -82,7 +83,8 @@ func (s *segmentScanner) next() error {
 			return errTorn
 		}
 		n := binary.LittleEndian.Uint32(count[:])
-		if crc32.Checksum(count[:], castagnoli) != binary.LittleEndian.Uint32(head[4:]) || int(n) != s.sinceCommit {
+		if crc32.Checksum(count[:], castagnoli) != binary.LittleEndian.Uint32(head[4:]) ||
+			int(n) != s.sinceCommit {
 			return errTorn
 		}
 		s.offset += commitSize

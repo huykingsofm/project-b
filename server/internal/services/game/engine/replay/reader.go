@@ -19,9 +19,9 @@ type FileLogReader struct {
 	err       error
 }
 
-// ReadFileLog reads the log that a FileLog wrote under dir for an engine, from fromTick: it starts in
-// the segment that holds that tick, using the meta of the segments, and gives only the records of that tick and
-// later ones.
+// ReadFileLog reads the log that a FileLog wrote under dir for an engine, from fromTick: it starts
+// in the segment that holds that tick, using the meta of the segments, and gives only the records
+// of that tick and later ones.
 func ReadFileLog(dir string, engine action.Address, fromTick uint64) (*FileLogReader, error) {
 	start := func(meta []byte) bool {
 		info, err := parseSegmentMeta(meta)
@@ -34,8 +34,8 @@ func ReadFileLog(dir string, engine action.Address, fromTick uint64) (*FileLogRe
 	return &FileLogReader{engine: engine, r: r, fromTick: fromTick}, nil
 }
 
-// Next moves to the next record and reports whether there is one. It reports false at the end of the log, and
-// when there is an error, which Err returns.
+// Next moves to the next record and reports whether there is one. It reports false at the end of
+// the log, and when there is an error, which Err returns.
 func (l *FileLogReader) Next() bool {
 	for l.err == nil && l.r.Next() {
 		if index := l.r.SegmentIndex(); !l.haveInfo || index != l.infoIndex {
@@ -45,7 +45,9 @@ func (l *FileLogReader) Next() bool {
 				return false
 			}
 			if info.Engine != l.engine {
-				l.err = fmt.Errorf("segment %d is the log of %v, not of %v", index, info.Engine, l.engine)
+				l.err = fmt.Errorf(
+					"segment %d is the log of %v, not of %v", index, info.Engine, l.engine,
+				)
 				return false
 			}
 			l.info, l.infoIndex, l.haveInfo = info, index, true

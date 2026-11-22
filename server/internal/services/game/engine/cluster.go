@@ -55,10 +55,10 @@ func (c *Cluster) Zone(zoneID state.ZoneID) *ZoneEngine {
 }
 
 // Step runs one tick of every engine, one after the other: the zonelayers, then the zones, then the
-// world. A message that an engine sends is in the In channel of the receiver at once, so a zone reads
-// in this step what the zonelayers sent in it, and a zonelayer reads in the next step what a zone sent. It
-// is the way to run the engines with a fixed order, as a test or an example needs; Run lets each
-// engine go at its own pace.
+// world. A message that an engine sends is in the In channel of the receiver at once, so a zone
+// reads in this step what the zonelayers sent in it, and a zonelayer reads in the next step what a
+// zone sent. It is the way to run the engines with a fixed order, as a test or an example needs;
+// Run lets each engine go at its own pace.
 func (c *Cluster) Step() {
 	for _, l := range c.zonelayers {
 		l.Step()

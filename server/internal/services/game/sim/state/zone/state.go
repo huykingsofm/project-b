@@ -2,12 +2,13 @@
 // rules as the state of a zonelayer: data and nothing else, changed only through its own methods,
 // with events of its own.
 //
-// The zone also holds entities that belong to it and not to one of its zonelayers, such as the exits of
-// its map: they stand in every zonelayer of the zone at once. The ID of an entity is unique in the scope
-// that holds it, so an ID of the zone and an ID of one of its zonelayers can be the same number.
+// The zone also holds entities that belong to it and not to one of its zonelayers, such as the
+// exits of its map: they stand in every zonelayer of the zone at once. The ID of an entity is
+// unique in the scope that holds it, so an ID of the zone and an ID of one of its zonelayers can be
+// the same number.
 //
-// The zone does not keep count of who is in its zonelayers. An action that needs a count reads it from
-// what the zonelayers published.
+// The zone does not keep count of who is in its zonelayers. An action that needs a count reads it
+// from what the zonelayers published.
 package zone
 
 import (
@@ -66,9 +67,18 @@ func NewState(zoneID state.ZoneID, tiles *tilemap.TileMap) *State {
 	return s
 }
 
-// Clone returns a copy of the data, with an empty event. The copy shares the map, which never changes.
+// Clone returns a copy of the data, with an empty event. The copy shares the map, which never
+// changes.
 func (s *State) Clone() *State {
-	return &State{ID: s.ID, Tick: s.Tick, Tiles: s.Tiles, Entities: s.Entities.Clone(), ZoneLayers: s.ZoneLayers.Clone(), Chat: s.Chat.Clone(), nextEntityID: s.nextEntityID}
+	return &State{
+		ID:           s.ID,
+		Tick:         s.Tick,
+		Tiles:        s.Tiles,
+		Entities:     s.Entities.Clone(),
+		ZoneLayers:   s.ZoneLayers.Clone(),
+		Chat:         s.Chat.Clone(),
+		nextEntityID: s.nextEntityID,
+	}
 }
 
 // ExitEntityByID returns the entity with the ID when it is an exit.

@@ -32,7 +32,9 @@ func NewWorldEngine(st *worldstate.State, env *Env, seed uint64) *WorldEngine {
 	me := action.WorldAddress(st.ID)
 	e := &WorldEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
-		commands: make(chan command.WorldCommand, env.QueueSize), stable: env.Stable, emitter: env.WorldEmitter, rng: newRand(seed, me),
+		commands: make(
+			chan command.WorldCommand, env.QueueSize,
+		), stable: env.Stable, emitter: env.WorldEmitter, rng: newRand(seed, me),
 	}
 	e.reg.Common = action.Common{Me: me, Graph: env.Graph, Stable: e.view}
 	return e
@@ -61,7 +63,8 @@ func (e *WorldEngine) Send(c command.WorldCommand) bool {
 // State returns the state of the world. Only the goroutine that runs the world may use it.
 func (e *WorldEngine) State() *worldstate.State { return e.st }
 
-// Step runs one tick of the world, in the same seven steps as a zonelayer (see ZoneLayerEngine.Step).
+// Step runs one tick of the world, in the same seven steps as a zonelayer (see
+// ZoneLayerEngine.Step).
 func (e *WorldEngine) Step() {
 	e.tick++
 	cfg := e.snapshot(e.tick)
@@ -108,7 +111,8 @@ func (e *WorldEngine) planSelf(plan *action.Plan[action.WorldAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
+// are due.
 func (e *WorldEngine) planScheduled(plan *action.Plan[action.WorldAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -123,8 +127,8 @@ func (e *WorldEngine) planMessages(plan *action.Plan[action.WorldAction]) {
 	}
 }
 
-// planCommands takes the commands that clients sent since the last tick, writes them to the replay log
-// and puts their actions in the plan.
+// planCommands takes the commands that clients sent since the last tick, writes them to the replay
+// log and puts their actions in the plan.
 func (e *WorldEngine) planCommands(plan *action.Plan[action.WorldAction]) {
 	for _, c := range channels.Drain(e.commands) {
 		e.replayLog.WorldCommand(e.me, e.tick, c)

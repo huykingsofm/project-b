@@ -168,7 +168,9 @@ func TestAFailingConsumerDoesNotStopTheLog(t *testing.T) {
 
 func TestManyGoroutinesLogWhileTheLogFlushes(t *testing.T) {
 	r := &recorder{}
-	closeLogs, err := logging.Init(r, logging.WithFlushEvery(time.Millisecond), logging.WithCapacity(1<<16))
+	closeLogs, err := logging.Init(
+		r, logging.WithFlushEvery(time.Millisecond), logging.WithCapacity(1<<16),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,14 +235,32 @@ func TestEveryLineHasTimeLevelAndMessageThenTheFieldsInOrder(t *testing.T) {
 func TestTheTimeIsUTCWithMicroseconds(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 11, 21, 10, 0, 0, 123456789, time.FixedZone("x", 7*3600))
-	_ = logging.NewWriterConsumer(&buf).Consume([]logging.Entry{{Time: at, Level: logging.LevelInfo, Message: "m"}})
+	_ = logging.NewWriterConsumer(&buf).Consume(
+		[]logging.Entry{{Time: at, Level: logging.LevelInfo, Message: "m"}},
+	)
 	if want := "time=2026-11-21T03:00:00.123456Z level=info msg=m\n"; buf.String() != want {
 		t.Fatalf("got %q, want %q", buf.String(), want)
 	}
 }
 
 func TestValuesThatCouldBreakALineAreQuoted(t *testing.T) {
-	got := encode(t, entry(logging.LevelInfo, "two words", "empty", "", "eq", "a=b", "quote", `say "hi"`, "nl", "a\nb", "nothing", nil))
+	got := encode(
+		t,
+		entry(
+			logging.LevelInfo,
+			"two words",
+			"empty",
+			"",
+			"eq",
+			"a=b",
+			"quote",
+			`say "hi"`,
+			"nl",
+			"a\nb",
+			"nothing",
+			nil,
+		),
+	)
 	want := `level=info msg="two words" empty="" eq="a=b" quote="say \"hi\"" nl="a\nb" nothing=null`
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("got %q, want %q", got, want)
@@ -260,7 +280,9 @@ type failingWriter struct{}
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
 
 func TestTheWriterConsumerReturnsTheErrorOfTheWriter(t *testing.T) {
-	if err := logging.NewWriterConsumer(failingWriter{}).Consume([]logging.Entry{entry(logging.LevelInfo, "a")}); err == nil {
+	if err := logging.NewWriterConsumer(failingWriter{}).Consume(
+		[]logging.Entry{entry(logging.LevelInfo, "a")},
+	); err == nil {
 		t.Fatal("the error of the writer was lost")
 	}
 }
@@ -270,7 +292,9 @@ type discardConsumer struct{}
 func (discardConsumer) Consume([]logging.Entry) error { return nil }
 
 func BenchmarkGlobalCall(b *testing.B) {
-	closeLogs, _ := logging.Init(discardConsumer{}, logging.WithCapacity(b.N+1), logging.WithFlushEvery(time.Hour))
+	closeLogs, _ := logging.Init(
+		discardConsumer{}, logging.WithCapacity(b.N+1), logging.WithFlushEvery(time.Hour),
+	)
 	defer closeLogs()
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -280,7 +304,9 @@ func BenchmarkGlobalCall(b *testing.B) {
 }
 
 func BenchmarkWithLoggerCall(b *testing.B) {
-	closeLogs, _ := logging.Init(discardConsumer{}, logging.WithCapacity(b.N+1), logging.WithFlushEvery(time.Hour))
+	closeLogs, _ := logging.Init(
+		discardConsumer{}, logging.WithCapacity(b.N+1), logging.WithFlushEvery(time.Hour),
+	)
 	defer closeLogs()
 	l := logging.With("zone", 1)
 	b.ReportAllocs()

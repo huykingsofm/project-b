@@ -7,8 +7,12 @@ import (
 )
 
 var (
-	worldCharacterItemAddActionInventorySlotLimit = config.NewVar("world.inventory.slots", 20, config.Range(1, 1000))
-	worldCharacterItemAddActionStackLimit         = config.NewVar("world.inventory.stack_limit", 99, config.Range(1, 100000))
+	worldCharacterItemAddActionInventorySlotLimit = config.NewVar(
+		"world.inventory.slots", 20, config.Range(1, 1000),
+	)
+	worldCharacterItemAddActionStackLimit = config.NewVar(
+		"world.inventory.stack_limit", 99, config.Range(1, 100000),
+	)
 )
 
 // WorldCharacterItemAddAction puts items in the inventory of a character. It is a message from a
@@ -33,11 +37,19 @@ func (a *WorldCharacterItemAddAction) Priority() int16 { return PriorityResolve 
 func (a *WorldCharacterItemAddAction) Actor() any      { return a.CharacterID }
 
 // ApplyWorld adds the items and sends back the ones that did not fit.
-func (a *WorldCharacterItemAddAction) ApplyWorld(c *Context, s *worldstate.State, r *WorldRegistry, _ *Plan[WorldAction]) {
+func (a *WorldCharacterItemAddAction) ApplyWorld(
+	c *Context, s *worldstate.State, r *WorldRegistry, _ *Plan[WorldAction],
+) {
 	left := s.AddItemToCharacter(a.CharacterID, a.ItemID, a.Count,
-		worldCharacterItemAddActionInventorySlotLimit.Get(c.Cfg), uint32(worldCharacterItemAddActionStackLimit.Get(c.Cfg)))
+		worldCharacterItemAddActionInventorySlotLimit.Get(c.Cfg), uint32(
+			worldCharacterItemAddActionStackLimit.Get(c.Cfg),
+		))
 	if left == 0 {
 		return
 	}
-	r.ToZoneLayer(a.FromZoneLayerID, OnFailDrop, &ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry})
+	r.ToZoneLayer(
+		a.FromZoneLayerID,
+		OnFailDrop,
+		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
+	)
 }

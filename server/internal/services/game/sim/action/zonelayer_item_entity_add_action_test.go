@@ -9,7 +9,9 @@ import (
 func TestAddingAnItemSetsItsRemovalAtTheEndOfItsExpiry(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	const expiry = 25
-	(&ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: state.Vec{X: 2500, Y: 2500}, Expiry: expiry}).
+	(&ZoneLayerItemEntityAddAction{
+		ItemID: 8, Count: 5, At: state.Vec{X: 2500, Y: 2500}, Expiry: expiry,
+	}).
 		ApplyZoneLayer(&Context{Tick: 30}, st, reg, NewPlan[ZoneLayerAction]())
 
 	_, later := reg.TakeSelf()
@@ -27,7 +29,9 @@ func TestAddingAnItemSetsItsRemovalAtTheEndOfItsExpiry(t *testing.T) {
 
 func TestTheRemovalTakesTheItemOffTheGround(t *testing.T) {
 	st, reg, item := newPickupTestLayer(t)
-	(&ZoneLayerItemEntityRemoveAction{EntityID: item}).ApplyZoneLayer(&Context{Tick: 99}, st, reg, NewPlan[ZoneLayerAction]())
+	(&ZoneLayerItemEntityRemoveAction{EntityID: item}).ApplyZoneLayer(
+		&Context{Tick: 99}, st, reg, NewPlan[ZoneLayerAction](),
+	)
 	if _, ok := st.ItemEntityByID(item); ok {
 		t.Fatal("the item is still on the ground")
 	}
@@ -37,10 +41,14 @@ func TestTheRemovalOfAnItemThatWasPickedUpDoesNothing(t *testing.T) {
 	st, reg, item := newPickupTestLayer(t)
 	pickup(1, item, 10, st, reg)
 	// The stack comes back with a new entity; the old removal must not take it.
-	(&ZoneLayerItemEntityAddAction{ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}, Expiry: 25}).
+	(&ZoneLayerItemEntityAddAction{
+		ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}, Expiry: 25,
+	}).
 		ApplyZoneLayer(&Context{Tick: 11}, st, reg, NewPlan[ZoneLayerAction]())
 	before := st.Entities.Len()
-	(&ZoneLayerItemEntityRemoveAction{EntityID: item}).ApplyZoneLayer(&Context{Tick: 99}, st, reg, NewPlan[ZoneLayerAction]())
+	(&ZoneLayerItemEntityRemoveAction{EntityID: item}).ApplyZoneLayer(
+		&Context{Tick: 99}, st, reg, NewPlan[ZoneLayerAction](),
+	)
 	if st.Entities.Len() != before {
 		t.Fatal("the removal of a picked up item took another item")
 	}

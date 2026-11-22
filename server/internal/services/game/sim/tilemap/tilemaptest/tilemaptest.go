@@ -8,7 +8,14 @@ import (
 )
 
 // New is tilemap.New that fails the test when the map is not well formed.
-func New(t testing.TB, width, height int32, spawn tilemap.Tile, walls []tilemap.Tile, exits []tilemap.ExitDefinition) *tilemap.TileMap {
+func New(
+	t testing.TB,
+	width,
+	height int32,
+	spawn tilemap.Tile,
+	walls []tilemap.Tile,
+	exits []tilemap.ExitDefinition,
+) *tilemap.TileMap {
 	t.Helper()
 	m, err := tilemap.New(width, height, spawn, walls, exits)
 	if err != nil {

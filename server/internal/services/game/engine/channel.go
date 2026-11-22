@@ -8,9 +8,9 @@ type ReturnedMessage struct {
 	Reason  action.Reason
 }
 
-// IncomingChannel is the receiving end of the two channels of an engine: In for the messages that other
-// engines send it, and Back for the messages of its own that came back undelivered. Only the engine
-// itself holds it, and it can only read.
+// IncomingChannel is the receiving end of the two channels of an engine: In for the messages that
+// other engines send it, and Back for the messages of its own that came back undelivered. Only the
+// engine itself holds it, and it can only read.
 type IncomingChannel struct {
 	In   <-chan action.Message
 	Back <-chan ReturnedMessage
@@ -29,7 +29,9 @@ type OutgoingChannel struct {
 func NewChannel(address action.Address, size int) (IncomingChannel, OutgoingChannel) {
 	in := make(chan action.Message, size)
 	back := make(chan ReturnedMessage, size)
-	return IncomingChannel{In: in, Back: back}, OutgoingChannel{address: address, in: in, back: back}
+	return IncomingChannel{In: in, Back: back}, OutgoingChannel{
+		address: address, in: in, back: back,
+	}
 }
 
 // Address returns the address of the engine that the channel leads to.

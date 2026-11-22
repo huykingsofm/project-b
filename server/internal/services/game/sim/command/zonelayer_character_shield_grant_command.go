@@ -6,20 +6,26 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-// ZoneLayerCharacterShieldGrantCommand gives a character a shield. A skill or an item sends it in a game; here
-// it is the command that stands for them.
+// ZoneLayerCharacterShieldGrantCommand gives a character a shield. A skill or an item sends it in a
+// game; here it is the command that stands for them.
 type ZoneLayerCharacterShieldGrantCommand struct {
 	CharacterID state.CharacterID
 	Duration    uint64
 }
 
-func (ZoneLayerCharacterShieldGrantCommand) ID() ID { return ZoneLayerCharacterShieldGrantCommandID }
+func (ZoneLayerCharacterShieldGrantCommand) ID() ID {
+	return ZoneLayerCharacterShieldGrantCommandID
+}
 
 // Clone returns the command itself: it holds only values.
 func (c ZoneLayerCharacterShieldGrantCommand) Clone() ZoneLayerCommand { return c }
 
 func (c ZoneLayerCharacterShieldGrantCommand) TranslateZoneLayer() []action.ZoneLayerAction {
-	return []action.ZoneLayerAction{&action.ZoneLayerCharacterShieldGrantAction{CharacterID: c.CharacterID, Duration: c.Duration}}
+	return []action.ZoneLayerAction{
+		&action.ZoneLayerCharacterShieldGrantAction{
+			CharacterID: c.CharacterID, Duration: c.Duration,
+		},
+	}
 }
 
 // Encode writes the fields of the command, not its ID: package command writes the ID first.
@@ -30,7 +36,11 @@ func (c ZoneLayerCharacterShieldGrantCommand) Encode(w *binarycodec.Writer) erro
 }
 
 // decodeZoneLayerCharacterShieldGrantCommand reads what Encode wrote.
-func decodeZoneLayerCharacterShieldGrantCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
-	c := ZoneLayerCharacterShieldGrantCommand{CharacterID: state.CharacterID(r.Uvarint()), Duration: r.Uvarint()}
+func decodeZoneLayerCharacterShieldGrantCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
+	c := ZoneLayerCharacterShieldGrantCommand{
+		CharacterID: state.CharacterID(r.Uvarint()), Duration: r.Uvarint(),
+	}
 	return c, r.Err()
 }

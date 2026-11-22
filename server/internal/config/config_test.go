@@ -21,7 +21,8 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count.Get(d) != 3 || ratio.Get(d) != 0.5 || on.Get(d) || name.Get(d) != "x" || len(keys.Get(d)) != 0 {
+	if count.Get(d) != 3 || ratio.Get(d) != 0.5 || on.Get(d) || name.Get(d) != "x" ||
+		len(keys.Get(d)) != 0 {
 		t.Fatal("a variable without an override is not at its default")
 	}
 
@@ -31,8 +32,16 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 	if err != nil || len(unknown) != 0 {
 		t.Fatalf("build: %v, unknown %v", err, unknown)
 	}
-	if count.Get(s) != 7 || ratio.Get(s) != 0.25 || !on.Get(s) || name.Get(s) != "abc" || !slices.Equal(keys.Get(s), []string{"a", "b"}) {
-		t.Fatalf("values = %v %v %v %v %v", count.Get(s), ratio.Get(s), on.Get(s), name.Get(s), keys.Get(s))
+	if count.Get(s) != 7 || ratio.Get(s) != 0.25 || !on.Get(s) || name.Get(s) != "abc" ||
+		!slices.Equal(keys.Get(s), []string{"a", "b"}) {
+		t.Fatalf(
+			"values = %v %v %v %v %v",
+			count.Get(s),
+			ratio.Get(s),
+			on.Get(s),
+			name.Get(s),
+			keys.Get(s),
+		)
 	}
 	if s.Version() != 1 {
 		t.Fatalf("version = %d", s.Version())
@@ -48,7 +57,12 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 	for _, text := range []string{`"seven"`, "11", "3 4", "", "2.5"} {
 		snap, _, err := r.build(1, map[string]string{"count": text, "other": "5"})
 		if err == nil || snap != nil || !strings.Contains(err.Error(), "count") {
-			t.Errorf("override %q: snapshot %v, error %v; want no snapshot and an error naming count", text, snap, err)
+			t.Errorf(
+				"override %q: snapshot %v, error %v; want no snapshot and an error naming count",
+				text,
+				snap,
+				err,
+			)
 		}
 	}
 
@@ -77,7 +91,12 @@ func TestUnknownNamesAreReturnedInOrderAndIgnored(t *testing.T) {
 
 func TestAnOptionCanReplaceHowTheTextIsRead(t *testing.T) {
 	r := newRegistry()
-	name := declare(r, "name", "x", []Option[string]{Parse(func(text string) (string, error) { return text, nil })})
+	name := declare(
+		r,
+		"name",
+		"x",
+		[]Option[string]{Parse(func(text string) (string, error) { return text, nil })},
+	)
 	s, _, err := r.build(1, map[string]string{"name": "plain text"})
 	if err != nil || name.Get(s) != "plain text" {
 		t.Fatalf("name = %q, %v", name.Get(s), err)
@@ -95,11 +114,15 @@ func TestADefaultThatBreaksALimitAndALateDeclarationPanic(t *testing.T) {
 		f()
 	}
 	r := newRegistry()
-	mustPanic("a default outside its range", func() { declare(r, "a", 99, []Option[int]{Range(1, 10)}) })
+	mustPanic(
+		"a default outside its range", func() { declare(r, "a", 99, []Option[int]{Range(1, 10)}) },
+	)
 	declare(r, "b", 1, []Option[int](nil))
 	mustPanic("a name declared twice", func() { declare(r, "b", 1, []Option[int](nil)) })
 	r.build(0, nil)
-	mustPanic("a declaration after the first snapshot", func() { declare(r, "c", 1, []Option[int](nil)) })
+	mustPanic(
+		"a declaration after the first snapshot", func() { declare(r, "c", 1, []Option[int](nil)) },
+	)
 }
 
 func TestGetOnANilSnapshotGivesTheDefault(t *testing.T) {

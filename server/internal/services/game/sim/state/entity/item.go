@@ -2,8 +2,8 @@ package entity
 
 import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 
-// ItemEntity is an item lying on the ground of a zonelayer. It can be picked up for as long as it is in
-// the state; what removes it when its time is up is ZoneLayerItemEntityRemoveAction.
+// ItemEntity is an item lying on the ground of a zonelayer. It can be picked up for as long as it
+// is in the state; what removes it when its time is up is ZoneLayerItemEntityRemoveAction.
 type ItemEntity struct {
 	EntityID state.EntityID
 	Pos      state.Vec
@@ -12,8 +12,9 @@ type ItemEntity struct {
 	ItemID state.ItemID
 	// Count is how many items of that kind lie together.
 	Count uint32
-	// Expiry is how many ticks the item lies on the ground before ZoneLayerItemEntityRemoveAction takes it
-	// off; 0 means it is never taken off. It starts again each time the item is put on the ground.
+	// Expiry is how many ticks the item lies on the ground before ZoneLayerItemEntityRemoveAction
+	// takes it off; 0 means it is never taken off. It starts again each time the item is put on the
+	// ground.
 	Expiry uint64
 }
 

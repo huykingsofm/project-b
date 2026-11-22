@@ -9,12 +9,12 @@ import (
 )
 
 // sizes are powers of two so that a sequential index wraps with a mask: 64 Ki bits fit the L1 cache
-// either way, 1 Mi bits fit the L2 cache as bits and not as bytes, 16 Mi bits (a map of 4096 by 4096
-// tiles) fit no cache as bytes.
+// either way, 1 Mi bits fit the L2 cache as bits and not as bytes, 16 Mi bits (a map of 4096 by
+// 4096 tiles) fit no cache as bytes.
 var sizes = []int{1 << 16, 1 << 20, 1 << 24}
 
-// indexes is a table of random indexes below size, read in a loop so that the cost of picking one is
-// the same for both kinds.
+// indexes is a table of random indexes below size, read in a loop so that the cost of picking one
+// is the same for both kinds.
 func indexes(size int) []int {
 	r := rand.New(rand.NewPCG(1, 2))
 	idx := make([]int, 1<<12)
@@ -110,8 +110,8 @@ func BenchmarkSetRandom(b *testing.B) {
 	}
 }
 
-// masks is the table of the 64 single-bit masks, for the benchmark of looking the mask up instead of
-// shifting for it.
+// masks is the table of the 64 single-bit masks, for the benchmark of looking the mask up instead
+// of shifting for it.
 var masks = func() (m [64]uint64) {
 	for i := range m {
 		m[i] = 1 << i
@@ -183,8 +183,8 @@ func BenchmarkGetMaskTable(b *testing.B) {
 	}
 }
 
-// BenchmarkAnyInRange looks for a set bit in a range with none, which is the case that has to look at the
-// whole range: one AnyInRange against a Get of each bit, and the same on a []bool.
+// BenchmarkAnyInRange looks for a set bit in a range with none, which is the case that has to look
+// at the whole range: one AnyInRange against a Get of each bit, and the same on a []bool.
 func BenchmarkAnyInRange(b *testing.B) {
 	const size = 1 << 20
 	a, err := bitset.New(size)

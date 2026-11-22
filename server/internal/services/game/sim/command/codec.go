@@ -13,23 +13,23 @@ var ErrNoCodec = errors.New("command: no codec for it")
 // ErrUnknownCode is returned when bytes name a command that has no decoder,
 var ErrUnknownCode = errors.New("command: the number is not one of a command")
 
-// decoders is the table of the functions that read a command, by its ID: the one list of the commands besides the
-// register of the IDs. Each is in the file of its command, next to the Encode that it reads. A test fails when an
-// ID of the register has no decoder.
+// decoders is the table of the functions that read a command, by its ID: the one list of the
+// commands besides the register of the IDs. Each is in the file of its command, next to the Encode
+// that it reads. A test fails when an ID of the register has no decoder.
 var decoders = map[ID]func(r *binarycodec.Reader, version binarycodec.Version) (Command, error){
 	WorldChatPrivateSendCommandID:                  decodeWorldChatPrivateSendCommand,
 	ZoneCharacterEnterCommandID:                    decodeZoneCharacterEnterCommand,
 	ZoneChatSendCommandID:                          decodeZoneChatSendCommand,
 	ZoneLayerCharacterMoveCommandID:                decodeZoneLayerCharacterMoveCommand,
-	ZoneLayerCharacterNormalAttackTriggerCommandID: decodeZoneLayerCharacterNormalAttackTriggerCommand,
+	ZoneLayerCharacterNormalAttackTriggerCommandID: decodeZoneLayerCharacterNormalAttackTriggerCommand, //nolint:lll // two long names of one entry, which gofmt keeps on one line
 	ZoneLayerChatSendCommandID:                     decodeZoneLayerChatSendCommand,
 	ZoneLayerCharacterExitToCommandID:              decodeZoneLayerCharacterExitToCommand,
 	ZoneLayerCharacterItemPickupCommandID:          decodeZoneLayerCharacterItemPickupCommand,
 	ZoneLayerCharacterShieldGrantCommandID:         decodeZoneLayerCharacterShieldGrantCommand,
 }
 
-// Encode writes a command: its ID and then its fields. It returns ErrNoCodec, and writes nothing that can be
-// read, for a command whose ID has no decoder: what is written must be readable.
+// Encode writes a command: its ID and then its fields. It returns ErrNoCodec, and writes nothing
+// that can be read, for a command whose ID has no decoder: what is written must be readable.
 func Encode(w *binarycodec.Writer, c Command) error {
 	if c == nil {
 		return fmt.Errorf("%w: nil", ErrNoCodec)
@@ -46,8 +46,9 @@ func Encode(w *binarycodec.Writer, c Command) error {
 	return nil
 }
 
-// Decode reads what Encode wrote, of the data version given. It returns the command as a value, or an error that wraps ErrUnknownCode (or
-// zonelayer.ErrUnknownCooldownKey), or an error of the bytes (binarycodec.ErrShort).
+// Decode reads what Encode wrote, of the data version given. It returns the command as a value, or
+// an error that wraps ErrUnknownCode (or zonelayer.ErrUnknownCooldownKey), or an error of the bytes
+// (binarycodec.ErrShort).
 func Decode(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {

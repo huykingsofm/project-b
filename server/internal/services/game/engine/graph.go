@@ -34,8 +34,8 @@ func (g *graphData) clone() *graphData {
 	return n
 }
 
-// WorldGraph is how the world is laid out: one world, its zones, which zones lead to which,
-// and the zonelayers of each zone. It is read by every engine and changed when a zone or a zonelayer is
+// WorldGraph is how the world is laid out: one world, its zones, which zones lead to which, and the
+// zonelayers of each zone. It is read by every engine and changed when a zone or a zonelayer is
 // added or removed, which is rare, so it is replaced as a whole and read without a lock.
 type WorldGraph struct {
 	worldID state.WorldID
@@ -48,7 +48,13 @@ var _ action.Graph = (*WorldGraph)(nil)
 // NewWorldGraph makes the graph of an empty world.
 func NewWorldGraph(worldID state.WorldID) *WorldGraph {
 	g := &WorldGraph{worldID: worldID}
-	g.p.Store(&graphData{adj: map[state.ZoneID][]state.ZoneID{}, zonelayers: map[state.ZoneID][]state.ZoneLayerID{}, zoneOf: map[state.ZoneLayerID]state.ZoneID{}})
+	g.p.Store(
+		&graphData{
+			adj:        map[state.ZoneID][]state.ZoneID{},
+			zonelayers: map[state.ZoneID][]state.ZoneLayerID{},
+			zoneOf:     map[state.ZoneLayerID]state.ZoneID{},
+		},
+	)
 	return g
 }
 
@@ -82,7 +88,10 @@ func (g *WorldGraph) AddZoneLayer(zoneID state.ZoneID, zoneLayerID state.ZoneLay
 func (g *WorldGraph) RemoveZoneLayer(removedZoneLayerID state.ZoneLayerID) {
 	g.change(func(d *graphData) {
 		zoneID := d.zoneOf[removedZoneLayerID]
-		d.zonelayers[zoneID] = slices.DeleteFunc(d.zonelayers[zoneID], func(zoneLayerID state.ZoneLayerID) bool { return zoneLayerID == removedZoneLayerID })
+		d.zonelayers[zoneID] = slices.DeleteFunc(
+			d.zonelayers[zoneID],
+			func(zoneLayerID state.ZoneLayerID) bool { return zoneLayerID == removedZoneLayerID },
+		)
 		delete(d.zoneOf, removedZoneLayerID)
 	})
 }

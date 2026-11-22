@@ -18,7 +18,9 @@ func (t testStable) World() *worldstate.State                          { return 
 func (t testStable) Zone(zoneID state.ZoneID) *zonestate.State         { return t.zone }
 func (t testStable) ZoneLayer(state.ZoneLayerID) *zonelayerstate.State { return nil }
 
-func newMoveTestWorld(t *testing.T, zonePublished bool) (*zonelayerstate.State, *ZoneLayerRegistry) {
+func newMoveTestWorld(
+	t *testing.T, zonePublished bool,
+) (*zonelayerstate.State, *ZoneLayerRegistry) {
 	st := zonelayerstate.NewState(1, 1)
 	st.AddCharacterEntity(newCharacter(1, "a", 100, 1000, 0), state.Vec{X: 1500, Y: 2500})
 	reg := &ZoneLayerRegistry{}
@@ -94,7 +96,12 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 
 		end, _ := st.CharacterEntityByCharacterID(1)
 		if got := end.Pos.X - start.Pos.X; got != 2*speed {
-			t.Errorf("with a speed of %d the character went %d units in 2 ticks, want %d", speed, got, 2*speed)
+			t.Errorf(
+				"with a speed of %d the character went %d units in 2 ticks, want %d",
+				speed,
+				got,
+				2*speed,
+			)
 		}
 	}
 }
@@ -104,14 +111,18 @@ func TestACharacterWithNoSpeedDoesNotMove(t *testing.T) {
 	ch, _ := st.RemoveCharacterEntity(1)
 	ch.Speed = 0
 	st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
-	(&ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).ApplyZoneLayer(&Context{Tick: 10}, st, reg, NewPlan[ZoneLayerAction]())
+	(&ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).ApplyZoneLayer(
+		&Context{Tick: 10}, st, reg, NewPlan[ZoneLayerAction](),
+	)
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Pos != (state.Vec{X: 1500, Y: 2500}) {
 		t.Fatalf("a character with no speed moved to %+v", e.Pos)
 	}
 }
 
 // newCharacter is a character of the values of a test, which are never invalid.
-func newCharacter(characterID state.CharacterID, name string, maxHealth, speed, radius int32) zonelayerstate.Character {
+func newCharacter(
+	characterID state.CharacterID, name string, maxHealth, speed, radius int32,
+) zonelayerstate.Character {
 	c, err := zonelayerstate.NewCharacter(characterID, name, maxHealth, speed, radius)
 	if err != nil {
 		panic(err)

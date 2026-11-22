@@ -10,14 +10,14 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/registry"
 )
 
-// StableStateRegistry is the registry of the states that the engines published: the latest copy of the state of
-// the world, of each zone and of each zonelayer.
+// StableStateRegistry is the registry of the states that the engines published: the latest copy of
+// the state of the world, of each zone and of each zonelayer.
 //
 // An engine publishes at the end of every tick a Clone of its state, and never changes that copy
-// again. The other engines read the latest copy they find, with no lock and no wait, and keep it for
-// as long as they need it; nothing has to be given back. What they read may be a few ticks old, and
-// it is nil for an engine that published nothing yet or was removed. Only the engine that owns a piece
-// of data knows exactly what it is.
+// again. The other engines read the latest copy they find, with no lock and no wait, and keep it
+// for as long as they need it; nothing has to be given back. What they read may be a few ticks old,
+// and it is nil for an engine that published nothing yet or was removed. Only the engine that owns
+// a piece of data knows exactly what it is.
 type StableStateRegistry struct {
 	world      registry.Registry[state.WorldID, worldstate.State]
 	zones      registry.Registry[state.ZoneID, zonestate.State]

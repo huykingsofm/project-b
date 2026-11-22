@@ -100,7 +100,8 @@ func TestAnyInRangeAgreesWithLookingAtEveryBitOfTheRange(t *testing.T) {
 			bools[j] = true
 		}
 		for range 400 {
-			lo, length := r.IntN(k+80)-40, r.IntN(200)-5 // starts and ends outside the array, and lengths that are not positive
+			// starts and ends outside the array, and lengths that are not positive
+			lo, length := r.IntN(k+80)-40, r.IntN(200)-5
 			want := false
 			for i := lo; i < lo+length; i++ {
 				if i >= 0 && i < k && bools[i] {
@@ -120,7 +121,9 @@ func TestAnyInRangeAtTheEdgesOfWords(t *testing.T) {
 	for _, c := range []struct {
 		lo, n int
 		want  bool
-	}{{0, 63, false}, {0, 64, true}, {63, 1, true}, {64, 128, false}, {62, 2, true}, {63, 1 << 62, true}, {-1 << 62, 1 << 62, false}, {1 << 62, 1 << 62, false}} {
+	}{{0, 63, false}, {0, 64, true}, {63, 1, true}, {64, 128, false}, {62, 2, true}, {
+		63, 1 << 62, true,
+	}, {-1 << 62, 1 << 62, false}, {1 << 62, 1 << 62, false}} {
 		if got := a.AnyInRange(c.lo, c.n); got != c.want {
 			t.Errorf("AnyInRange(%d, %d) = %v, want %v", c.lo, c.n, got, c.want)
 		}

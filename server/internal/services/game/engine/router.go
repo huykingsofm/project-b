@@ -25,8 +25,8 @@ type routerData struct {
 }
 
 // Router carries the messages between the engines. It holds the outgoing channel of every engine,
-// finds the one of an address and puts the message in it without waiting. Reading it takes no lock: the table of channels is
-// replaced as a whole when an engine is added or retired, which is rare.
+// finds the one of an address and puts the message in it without waiting. Reading it takes no lock:
+// the table of channels is replaced as a whole when an engine is added or retired, which is rare.
 type Router struct {
 	mu       sync.Mutex
 	data     atomic.Pointer[routerData]
@@ -37,7 +37,11 @@ type Router struct {
 // NewRouter makes an empty router.
 func NewRouter() *Router {
 	rt := &Router{}
-	rt.data.Store(&routerData{chans: map[action.Address]OutgoingChannel{}, retired: map[action.Address]bool{}})
+	rt.data.Store(
+		&routerData{
+			chans: map[action.Address]OutgoingChannel{}, retired: map[action.Address]bool{},
+		},
+	)
 	return rt
 }
 
@@ -45,7 +49,10 @@ func (rt *Router) update(f func(*routerData)) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	old := rt.data.Load()
-	next := &routerData{chans: make(map[action.Address]OutgoingChannel, len(old.chans)+1), retired: make(map[action.Address]bool, len(old.retired)+1)}
+	next := &routerData{
+		chans:   make(map[action.Address]OutgoingChannel, len(old.chans)+1),
+		retired: make(map[action.Address]bool, len(old.retired)+1),
+	}
 	maps.Copy(next.chans, old.chans)
 	maps.Copy(next.retired, old.retired)
 	f(next)
@@ -97,12 +104,28 @@ func (rt *Router) Return(l action.Message, r action.Reason) {
 	ch, ok := rt.data.Load().chans[from]
 	if !ok {
 		rt.dropped.Add(1)
-		logging.Warn("returned message lost: its sender is gone", "from", from, "dest", l.Dest(), "reason", r)
+		logging.Warn(
+			"returned message lost: its sender is gone",
+			"from",
+			from,
+			"dest",
+			l.Dest(),
+			"reason",
+			r,
+		)
 		return
 	}
 	if !ch.SendBack(ReturnedMessage{Message: l, Reason: r}) {
 		rt.dropped.Add(1)
-		logging.Warn("returned message lost: the back channel of its sender is full", "from", from, "dest", l.Dest(), "reason", r)
+		logging.Warn(
+			"returned message lost: the back channel of its sender is full",
+			"from",
+			from,
+			"dest",
+			l.Dest(),
+			"reason",
+			r,
+		)
 	}
 }
 

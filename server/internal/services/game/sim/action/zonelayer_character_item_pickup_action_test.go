@@ -12,8 +12,8 @@ type testGraph struct{ Graph }
 
 func (testGraph) World() state.WorldID { return 1 }
 
-// newPickupTestLayer makes a zonelayer with characters 1 and 2 standing in the middle of tiles (1,2) and
-// (9,2) in a map 10 by 5, and an item lying in the middle of tile (2,2) It returns the
+// newPickupTestLayer makes a zonelayer with characters 1 and 2 standing in the middle of tiles
+// (1,2) and (9,2) in a map 10 by 5, and an item lying in the middle of tile (2,2) It returns the
 // layer, its registry and the entity of the item.
 func newPickupTestLayer(t *testing.T) (*zonelayerstate.State, *ZoneLayerRegistry, state.EntityID) {
 	st, reg := newMoveTestWorld(t, true)
@@ -22,7 +22,13 @@ func newPickupTestLayer(t *testing.T) (*zonelayerstate.State, *ZoneLayerRegistry
 	return st, reg, st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 }
 
-func pickup(characterID state.CharacterID, item state.EntityID, tick uint64, st *zonelayerstate.State, reg *ZoneLayerRegistry) {
+func pickup(
+	characterID state.CharacterID,
+	item state.EntityID,
+	tick uint64,
+	st *zonelayerstate.State,
+	reg *ZoneLayerRegistry,
+) {
 	a := &ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
 	a.ApplyZoneLayer(&Context{Tick: tick}, st, reg, NewPlan[ZoneLayerAction]())
 }
@@ -70,7 +76,8 @@ func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	big := newCharacter(5, "boss", 1000, 1000, 1500)
 	st.AddCharacterEntity(big, state.Vec{X: 5500, Y: 4500})
-	// The edge of the body is at 4000 on x, and the reach, 2000 units, is from there; the centre is 3500 from the item.
+	// The edge of the body is at 4000 on x, and the reach, 2000 units, is from there; the centre is
+	// 3500 from the item.
 	near := st.AddItemEntity(7, 1, state.Vec{X: 2000, Y: 4500}, 0)
 	pickup(5, near, 10, st, reg)
 	if _, ok := st.ItemEntityByID(near); ok {
@@ -99,7 +106,9 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 	if !ok {
 		t.Fatalf("the message does not carry a WorldCharacterItemAddAction: %+v", messages[0])
 	}
-	want := WorldCharacterItemAddAction{CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID, At: at, Expiry: 40}
+	want := WorldCharacterItemAddAction{
+		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID, At: at, Expiry: 40,
+	}
 	if *add != want {
 		t.Fatalf("the message is %+v, want %+v", *add, want)
 	}
@@ -116,11 +125,13 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 	if back.Kind != DecisionCompensate {
 		t.Fatalf("a failed delivery decides %v, want to compensate", back.Kind)
 	}
-	put, ok := back.With.(*ScopedMessage[ZoneLayerAction]).Actions[0].(*ZoneLayerItemEntityAddAction)
+	scoped := back.With.(*ScopedMessage[ZoneLayerAction])
+	put, ok := scoped.Actions[0].(*ZoneLayerItemEntityAddAction)
 	if !ok {
 		t.Fatalf("the compensation does not carry a ZoneLayerItemEntityAddAction: %+v", back.With)
 	}
-	if want := (ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}); *put != want {
+	want := ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}
+	if *put != want {
 		t.Fatalf("the compensation is %+v, want %+v", *put, want)
 	}
 	put.ApplyZoneLayer(&Context{Tick: 12}, st, reg, NewPlan[ZoneLayerAction]())
