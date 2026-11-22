@@ -84,7 +84,21 @@ func EncodeMessage(w *binarycodec.Writer, m message.Message) error {
 	if m == nil {
 		return fmt.Errorf("%w: nil message", message.ErrNoCodec)
 	}
+	if nesting(m) > 8 { // what DecodeMessage reads: what is written must be readable
+		return fmt.Errorf(
+			"%w: messages inside messages go deeper than 8", binarycodec.ErrBadValue,
+		)
+	}
 	return m.Encode(w)
+}
+
+// nesting is how many messages are inside one another through the OnFail of the messages: 0 for a
+// message that holds none.
+func nesting(m message.Message) int {
+	if c, ok := m.OnFail().(onfail.Compensate); ok && c.With != nil {
+		return 1 + nesting(c.With)
+	}
+	return 0
 }
 
 // DecodeMessage reads what EncodeMessage wrote, of the data version given.

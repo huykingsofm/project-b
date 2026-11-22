@@ -5,16 +5,28 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 )
 
+// tickWindow is what the log of an engine holds for the tick the engine is about to run, or runs:
+// its records, and the copies that the reads among them find.
+type tickWindow struct {
+	tick    uint64
+	records []replay.Record
+	needs   []replayNeed
+}
+
 // verifyLog is the replay log of a replay: it checks that the engine records, in the same order,
 // exactly what it recorded the first time. A hash is worked out and compared.
 type verifyLog struct {
-	want map[message.Address][]replay.Record
-	pos  map[message.Address]int
-	div  *divergences
+	windows map[message.Address]*tickWindow
+	pos     map[message.Address]int // how many records of the window the engine has made
+	div     *divergences
 }
 
 func (v *verifyLog) expect(engine message.Address, got replay.Record) {
-	records, i := v.want[engine], v.pos[engine]
+	var records []replay.Record
+	if w := v.windows[engine]; w != nil {
+		records = w.records
+	}
+	i := v.pos[engine]
 	v.pos[engine]++
 	if i >= len(records) {
 		v.div.add(engine,
@@ -37,11 +49,14 @@ func (v *verifyLog) Append(e message.Address, tick uint64, body replay.Body) {
 }
 
 // EndTick checks that the engine made every record that the log has for the tick.
-func (v *verifyLog) EndTick(e message.Address, tick uint64) {
-	records, i := v.want[e], v.pos[e]
-	if i < len(records) && records[i].Tick <= tick {
+func (v *verifyLog) EndTick(e message.Address, _ uint64) {
+	w := v.windows[e]
+	if w == nil {
+		return
+	}
+	if i := v.pos[e]; i < len(w.records) {
 		v.div.add(e, "tick %d: the log has a %T that the replay did not make",
-			records[i].Tick, records[i].Body)
-		v.pos[e] = len(records)
+			w.records[i].Tick, w.records[i].Body)
+		v.pos[e] = len(w.records)
 	}
 }

@@ -8,7 +8,7 @@ Package `engine/replay/runner`. Runs the engines of a cluster again from tick 0 
 |---|---|
 | entry | `runner.Run(builder, logs, options)` |
 | the builder | describes the cluster that was recorded: the same world, zones, maps, zonelayers and seed; what it sets for the replay log, the emitters and the configuration is not used |
-| the logs | `runner.Logs`: the records of each engine, in order; `runner.ReadLogs(dir)` reads the files of a `replay.FileLog`, and a memory log is grouped by engine |
+| the logs | `runner.Logs`: for each engine, a `runner.Source` that gives its records in order, one at a time; `runner.FileLogs(dir)` reads the files of a `replay.FileLog`, and `runner.MemoryLogs` holds records in memory |
 | the result | `runner.Result`: the cluster (each engine at its last tick), the last tick of each engine, and the divergences |
 | an error | the replay cannot run: a wrong builder, a record that cannot be given to its engine, a log of an engine that is not in the cluster, engines that wait for each other for ever |
 | a divergence | the first difference of an engine between the run and its log; not an error |
@@ -16,19 +16,22 @@ Package `engine/replay/runner`. Runs the engines of a cluster again from tick 0 
 - The engines are the real ones, with the same `Step`. The adapters on `Env` are what changes.
 - The engines run one after another on the goroutine of the caller. An engine runs its next tick when the copies that tick read exist.
 - An engine runs up to the last tick of its log, or of a read of it by another engine. A tick after the last record, with no record, is not run.
+- Each log is read twice, a tick at a time and never whole: one pass indexes it, one runs it. What is kept follows the ticks that are loaded and the reads still to come, not the length of the log.
 
 ## Files
 
 | File | Holds |
 |---|---|
 | `runner.go` | `Run`, `Options`, `Result` |
-| `logs.go` | `Logs`, `ReadLogs` |
+| `logs.go` | `Source`, `Logs`, `Seeded`, `MemoryLogs`, `FileLogs` |
+| `index.go` | the pass over each log before the run: the last tick of each engine, how many reads each copy has, which messages came back, a hash of each message as it was taken, the size of the queues, the seed |
+| `cursor.go` | the records of one engine, a tick at a time |
 | `engine.go` | `Engine`, what the runner needs of an engine; an adapter for each scope that gives it a command through the `Send` of the engine; the list of the engines of a cluster |
-| `run.go` | the run: indexing the logs, the order of the engines, the inputs of a tick |
+| `run.go` | the run: the order of the engines, the records of a tick, the inputs of a tick |
 | `router.go` | `replayRouter` and the key of a message |
-| `stable.go` | `replayStable` and the key of a read |
+| `stable.go` | `replayStable`, which lets a copy go as soon as its last read is made, and the key of a read |
 | `config.go` | `replayConfig` |
-| `verify.go` | `verifyLog` |
+| `verify.go` | `verifyLog` and the window of the tick that is run |
 | `divergence.go` | the first difference of each engine |
 
 ## Tests
@@ -72,7 +75,8 @@ Before an engine runs a tick, the records of that tick are given to it, in the o
 ## What it checks
 
 - Every record that the engine makes goes through `verifyLog`: the same kind, tick and content, in the same order. A hash is worked out and compared. A record in the log that the engine does not make, and one the engine makes that the log does not have, are divergences.
-- A message that an engine sends is compared with the one that its receiver recorded as taken, by the bytes it is written as. A difference means the sender is not what it was.
+- A message that an engine sends is compared with the one that its receiver recorded as taken, by a hash of the bytes it is written as. A difference means the sender is not what it was.
+- The files of a log hold the seed of the run (`runner.Seeded`); a builder with another seed is refused. A memory log has none, and the seed of its builder is trusted.
 - Only the first divergence of each engine is reported.
 
 ## Limits

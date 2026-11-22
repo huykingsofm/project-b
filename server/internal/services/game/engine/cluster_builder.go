@@ -79,6 +79,9 @@ func (b *ClusterBuilder) WithSeed(seed uint64) *ClusterBuilder {
 	return b
 }
 
+// Seed is the seed that the random numbers of the engines come from.
+func (b *ClusterBuilder) Seed() uint64 { return b.seed }
+
 // WithQueueSize sets how many commands and messages the queue of an engine holds.
 func (b *ClusterBuilder) WithQueueSize(size int) *ClusterBuilder {
 	b.queueSize = size

@@ -69,7 +69,7 @@ An action is its ID, then its fields written by its `Encode`; its decoder is in 
 | `onfail.Notify` | key string, count, each argument string |
 
 - A test fails when an action ID, an `OnFail` ID or a scope has no decoder.
-- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`.
+- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`; and `ErrBadValue`, and writes nothing, for messages nested more than 8 deep, which is the most that can be read back.
 
 ## Meta of a segment
 

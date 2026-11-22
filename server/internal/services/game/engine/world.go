@@ -176,10 +176,13 @@ func RestoreWorldEngine(data []byte, env *Env, seed uint64) (*WorldEngine, error
 	if message.WorldAddress(st.ID) != address {
 		return nil, fmt.Errorf("%v: the state is of the world %d", address, st.ID)
 	}
-	e := NewWorldEngine(st, env, seed)
-	e.tick = tick
-	if e.selfNext, err = readCheckpointRest(r, version, &e.cell, &e.sched); err != nil {
+	rest, err := readCheckpointRest[action.WorldAction](r, version)
+	if err != nil {
 		return nil, fmt.Errorf("%v: %w", address, err)
 	}
+	e := NewWorldEngine(st, env, seed)
+	e.tick = tick
+	e.sched, e.selfNext = rest.sched, rest.self
+	e.cell.restore(rest.cell)
 	return e, nil
 }

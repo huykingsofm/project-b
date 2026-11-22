@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
@@ -201,6 +202,46 @@ func TestACheckpointThatIsCutOrOfAnotherScopeIsAnErrorAndNeverAPanic(t *testing.
 	}
 	if _, err := RestoreZoneEngine(data, c.Env, 0, nil); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as a zone")
+	}
+}
+
+// aFreshEnv is an environment with a router, a registry and a configuration of its own, in which
+// no engine has been made.
+func aFreshEnv(c *Cluster) *Env {
+	return &Env{
+		Router: NewRouter(), Cfg: config.NewStore(), ReplayLog: replay.NopLog{},
+		Stable: NewStableStateRegistry(1), Graph: c.Env.Graph, QueueSize: 16,
+		WorldEmitter: NopEmitter{}, ZoneEmitter: NopEmitter{}, ZoneLayerEmitter: NopEmitter{},
+	}
+}
+
+// A checkpoint that is bad makes no engine, and so registers none in the router: a message to it
+// bounces as an engine that is not built, and does not wait in a queue that nothing reads.
+func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
+	c := aWorldWithActionsThatWait(t)
+	data, err := c.ZoneLayer(1).Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	say := action.MessageToZoneLayer(
+		1, onfail.Drop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "x"},
+	)
+	for n := range data { // every proper prefix, which is bad after the state or before it
+		env := aFreshEnv(c)
+		if _, err := RestoreZoneLayerEngine(data[:n], env, 0); err == nil {
+			t.Fatalf("%d of %d bytes were restored", n, len(data))
+		}
+		if reason, ok := env.Router.Deliver(say); ok || reason != message.NotBuilt {
+			t.Fatalf("a checkpoint cut at %d of %d bytes registered an engine: %v, %v",
+				n, len(data), reason, ok)
+		}
+	}
+	env := aFreshEnv(c)
+	if _, err := RestoreZoneLayerEngine(data, env, 0); err != nil {
+		t.Fatal(err)
+	}
+	if reason, ok := env.Router.Deliver(say); !ok {
+		t.Fatalf("a good checkpoint made no engine that a message reaches: %v", reason)
 	}
 }
 

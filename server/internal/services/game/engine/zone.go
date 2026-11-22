@@ -176,10 +176,13 @@ func RestoreZoneEngine(
 	if message.ZoneAddress(st.ID) != address {
 		return nil, fmt.Errorf("%v: the state is of the zone %d", address, st.ID)
 	}
-	e := NewZoneEngine(st, env, seed)
-	e.tick = tick
-	if e.selfNext, err = readCheckpointRest(r, version, &e.cell, &e.sched); err != nil {
+	rest, err := readCheckpointRest[action.ZoneAction](r, version)
+	if err != nil {
 		return nil, fmt.Errorf("%v: %w", address, err)
 	}
+	e := NewZoneEngine(st, env, seed)
+	e.tick = tick
+	e.sched, e.selfNext = rest.sched, rest.self
+	e.cell.restore(rest.cell)
 	return e, nil
 }

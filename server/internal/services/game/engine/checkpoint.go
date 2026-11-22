@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"slices"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -101,25 +102,44 @@ func readCheckpointStart(
 	return version, address, tick, nil
 }
 
-// readCheckpointRest reads what follows the state of an engine, and gives the engine what it
-// waits for, what it set for itself and what only it knows. It returns what it set for itself.
+// restored is what follows the state of an engine in a checkpoint, read and checked but not yet
+// given to an engine: nothing of an engine is made, and so nothing is registered in a router, until
+// all of the checkpoint has been read.
+type restored[A action.Action] struct {
+	sched action.Scheduler[A]
+	self  []A
+	cell  restoredCell
+}
+
+// restoredCell is what a checkpoint says of what every engine knows besides its state.
+type restoredCell struct {
+	pcg            *rand.PCG
+	seq            uint64
+	cfgVersionSeen uint64
+	lastSeq        map[message.Address]uint64
+	pending        []message.Message
+}
+
+// readCheckpointRest reads what follows the state of an engine: what it waits for, what it set for
+// itself, and what only it knows.
 func readCheckpointRest[A action.Action](
-	r *binarycodec.Reader, version binarycodec.Version, c *cell, sched *action.Scheduler[A],
-) ([]A, error) {
-	if err := action.DecodeScheduler(r, version, sched); err != nil {
+	r *binarycodec.Reader, version binarycodec.Version,
+) (*restored[A], error) {
+	var rest restored[A]
+	if err := action.DecodeScheduler(r, version, &rest.sched); err != nil {
 		return nil, fmt.Errorf("the scheduler: %w", err)
 	}
-	self, err := action.DecodeActions[A](r, version)
-	if err != nil {
+	var err error
+	if rest.self, err = action.DecodeActions[A](r, version); err != nil {
 		return nil, fmt.Errorf("what it set for itself: %w", err)
 	}
-	if err := c.decode(r, version); err != nil {
+	if rest.cell, err = decodeCell(r, version); err != nil {
 		return nil, err
 	}
 	if r.Left() != 0 {
 		return nil, fmt.Errorf("%d bytes are left after the checkpoint", r.Left())
 	}
-	return self, nil
+	return &rest, nil
 }
 
 // encode writes what every engine knows besides its state: the place of its random numbers, the
@@ -157,39 +177,48 @@ func (c *cell) encode(w *binarycodec.Writer) error {
 	return nil
 }
 
-// decode reads what encode wrote.
-func (c *cell) decode(r *binarycodec.Reader, version binarycodec.Version) error {
-	if err := c.pcg.UnmarshalBinary([]byte(r.String())); err != nil {
-		return fmt.Errorf("its random numbers: %w", err)
+// decodeCell reads what encode wrote.
+func decodeCell(r *binarycodec.Reader, version binarycodec.Version) (restoredCell, error) {
+	rc := restoredCell{pcg: rand.NewPCG(0, 0)}
+	if err := rc.pcg.UnmarshalBinary([]byte(r.String())); err != nil {
+		return restoredCell{}, fmt.Errorf("its random numbers: %w", err)
 	}
-	c.seq = r.Uvarint()
-	c.cfgVersionSeen = r.Uvarint()
+	rc.seq = r.Uvarint()
+	rc.cfgVersionSeen = r.Uvarint()
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
-		return err
+		return restoredCell{}, err
 	}
 	if n > uint64(r.Left()) { // a sender takes at least one byte
-		return fmt.Errorf("%w: %d senders", binarycodec.ErrShort, n)
+		return restoredCell{}, fmt.Errorf("%w: %d senders", binarycodec.ErrShort, n)
 	}
-	c.lastSeq = make(map[message.Address]uint64, n)
+	rc.lastSeq = make(map[message.Address]uint64, n)
 	for range n {
 		sender := message.DecodeAddress(r, version)
-		c.lastSeq[sender] = r.Uvarint()
+		rc.lastSeq[sender] = r.Uvarint()
 	}
 	n = r.Uvarint()
 	if err := r.Err(); err != nil {
-		return err
+		return restoredCell{}, err
 	}
 	if n > uint64(r.Left()) { // a message takes at least one byte
-		return fmt.Errorf("%w: %d messages", binarycodec.ErrShort, n)
+		return restoredCell{}, fmt.Errorf("%w: %d messages", binarycodec.ErrShort, n)
 	}
-	c.bounce.pending = nil
 	for range n {
 		m, err := action.DecodeMessage(r, version)
 		if err != nil {
-			return fmt.Errorf("a message it holds to send again: %w", err)
+			return restoredCell{}, fmt.Errorf("a message it holds to send again: %w", err)
 		}
-		c.bounce.pending = append(c.bounce.pending, m)
+		rc.pending = append(rc.pending, m)
 	}
-	return r.Err()
+	return rc, r.Err()
+}
+
+// restore gives the cell what a checkpoint says. It cannot fail: all of it was read and checked
+// before the engine was made.
+func (c *cell) restore(rc restoredCell) {
+	*c.pcg = *rc.pcg
+	c.seq, c.cfgVersionSeen = rc.seq, rc.cfgVersionSeen
+	c.lastSeq = rc.lastSeq
+	c.bounce.pending = rc.pending
 }

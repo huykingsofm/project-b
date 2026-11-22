@@ -175,17 +175,35 @@ func TestAMessageWithAnActionOfAnotherScopeOrTooDeepIsRefused(t *testing.T) {
 		t.Fatalf("an action of another scope: %v, want message.ErrUnknownCode", err)
 	}
 
-	deep := MessageToZone(1, onfail.Drop{})
-	for range 9 {
-		deep = MessageToZone(1, onfail.Compensate{With: deep})
+	nested := func(n int) message.Message {
+		m := MessageToZone(1, onfail.Drop{})
+		for range n {
+			m = MessageToZone(1, onfail.Compensate{With: m})
+		}
+		return m
 	}
-	var d binarycodec.Writer
-	if err := EncodeMessage(&d, deep); err != nil {
+	// 8 messages inside one another is the most that can be read back, and it is written
+	var fits binarycodec.Writer
+	if err := EncodeMessage(&fits, nested(8)); err != nil {
 		t.Fatal(err)
 	}
-	_, err = DecodeMessage(binarycodec.NewReader(d.B), 1)
+	if _, err := DecodeMessage(binarycodec.NewReader(fits.B), 1); err != nil {
+		t.Fatalf("messages nested 8 deep: %v", err)
+	}
+	// 9 is refused when it is written, and nothing of it is left: what is written is readable
+	var d binarycodec.Writer
+	err = EncodeMessage(&d, nested(9))
+	if !errors.Is(err, binarycodec.ErrBadValue) || len(d.B) != 0 {
+		t.Fatalf("messages nested 9 deep were written: %v, %d bytes", err, len(d.B))
+	}
+	// and bytes of 9 are refused when they are read (Encode of the message does not look at depth)
+	var raw binarycodec.Writer
+	if err := nested(9).Encode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	_, err = DecodeMessage(binarycodec.NewReader(raw.B), 1)
 	if !errors.Is(err, binarycodec.ErrBadValue) {
-		t.Fatalf("messages nested 9 deep: %v, want ErrBadValue", err)
+		t.Fatalf("bytes of messages nested 9 deep: %v, want ErrBadValue", err)
 	}
 }
 
