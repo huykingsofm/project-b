@@ -19,17 +19,17 @@ func EncodeActions[S State](w *binarycodec.Writer, actions []Action[S]) error {
 	return nil
 }
 
-// HashActions adds a list of actions to the hash: each as the bytes it is written as, which say
+// Actions adds a list of actions to the hash: each as the bytes it is written as, which say
 // everything it holds, the parts that only it knows included. An action that cannot be written adds
 // its type, so the hash still tells it from another.
-func HashActions[S State](h *Hasher, actions []Action[S]) {
+func (h *Hasher) Actions[S State](actions []Action[S]) {
 	var w binarycodec.Writer
-	hashActions(h, actions, &w)
+	h.actionsWith(actions, &w)
 }
 
-// hashActions is HashActions with the bytes to write each action to, which a caller that hashes
+// actionsWith is Actions with the bytes to write each action to, which a caller that hashes
 // many lists makes once.
-func hashActions[S State](h *Hasher, actions []Action[S], w *binarycodec.Writer) {
+func (h *Hasher) actionsWith[S State](actions []Action[S], w *binarycodec.Writer) {
 	h.U64(uint64(len(actions)))
 	for _, a := range actions {
 		w.B = w.B[:0]
@@ -41,10 +41,10 @@ func hashActions[S State](h *Hasher, actions []Action[S], w *binarycodec.Writer)
 	}
 }
 
-// EncodeScheduler writes what the scheduler waits for: the last tick it gave out, and the actions
+// Encode writes what the scheduler waits for: the last tick it gave out, and the actions
 // set for a later tick, by tick and in the order they were set. An action that sets itself again
 // is among them, so what the engine does again and again is written with the rest.
-func EncodeScheduler[S State](w *binarycodec.Writer, s *Scheduler[S]) error {
+func (s *Scheduler[S]) Encode(w *binarycodec.Writer) error {
 	w.Uvarint(s.last)
 	ticks := make([]uint64, 0, len(s.at))
 	for tick, actions := range s.at {
@@ -63,10 +63,10 @@ func EncodeScheduler[S State](w *binarycodec.Writer, s *Scheduler[S]) error {
 	return nil
 }
 
-// DecodeScheduler reads what EncodeScheduler wrote, of the data version given, and makes it what
+// Decode reads what Encode wrote, of the data version given, and makes it what
 // the scheduler waits for.
-func DecodeScheduler[S State](
-	c *Codecs, r *binarycodec.Reader, version binarycodec.Version, s *Scheduler[S],
+func (s *Scheduler[S]) Decode(
+	c *Codecs, r *binarycodec.Reader, version binarycodec.Version,
 ) error {
 	last := r.Uvarint()
 	n := r.Uvarint()
@@ -79,7 +79,7 @@ func DecodeScheduler[S State](
 	at := make(map[uint64][]Action[S], n)
 	for range n {
 		tick := r.Uvarint()
-		actions, err := DecodeActions[S](c, r, version)
+		actions, err := c.DecodeActions[S](r, version)
 		if err != nil {
 			return err
 		}
@@ -92,9 +92,9 @@ func DecodeScheduler[S State](
 	return nil
 }
 
-// HashScheduler adds what the scheduler waits for to the hash: the last tick, and the actions of
+// Hash adds what the scheduler waits for to the hash: the last tick, and the actions of
 // each tick that has any, in the order of the ticks.
-func HashScheduler[S State](h *Hasher, s *Scheduler[S]) {
+func (s *Scheduler[S]) Hash(h *Hasher) {
 	h.U64(s.last)
 	ticks := make([]uint64, 0, len(s.at))
 	for tick, actions := range s.at {
@@ -106,6 +106,6 @@ func HashScheduler[S State](h *Hasher, s *Scheduler[S]) {
 	var w binarycodec.Writer
 	for _, tick := range ticks {
 		h.U64(tick)
-		hashActions(h, s.at[tick], &w)
+		h.actionsWith(s.at[tick], &w)
 	}
 }

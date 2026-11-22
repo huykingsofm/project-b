@@ -99,7 +99,7 @@ func TestACancelTakesAwayWhatWaitedAndWhatWasSetBeforeItAndNotWhatWasSetAfter(t 
 	}
 	cancels := []Cancel{{Key: key, Next: 1, Later: 1}} // the cancel came after the first of each
 
-	kept := SettleSelf(&s, next, later, cancels)
+	kept := s.Settle(next, later, cancels)
 	var names []string
 	for _, a := range kept {
 		names = append(names, nameOf(a))
@@ -125,7 +125,7 @@ func TestACancelMadeByAnActionTakesEffectOnWhatWasSetBeforeIt(t *testing.T) {
 	reg.ToSelf(&addAction{N: 5}) // set after: it stays
 	next, later := reg.TakeSelf()
 	var s Scheduler[*toyState]
-	kept := SettleSelf(&s, next, later, reg.TakeCancels())
+	kept := s.Settle(next, later, reg.TakeCancels())
 	if len(kept) != 1 || kept[0].(*addAction).N != 5 {
 		t.Fatalf("kept %+v, want only the action set after the cancel", kept)
 	}

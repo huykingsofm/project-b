@@ -24,7 +24,7 @@ type Sender struct {
 	Reuses    bool        // the Sender goes on using the value it sent, and changes it
 }
 
-func Via[C sim.BaseCommand](s Sender, c C) C {
+func (s Sender) Via[C sim.BaseCommand](c C) C {
 	if !s.RoundTrip {
 		return c
 	}
@@ -46,13 +46,13 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)
 	an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
-	c.Zone(Zone1).Send(Via(s, command.ZoneCharacterEnterCommand{Character: an}))
+	c.Zone(Zone1).Send(s.Via(command.ZoneCharacterEnterCommand{Character: an}))
 	if s.Reuses {
 		an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
 	}
 	Steps(c, 4)
 	c.Zone(Zone1).Send(
-		Via(s, command.ZoneCharacterEnterCommand{Character: NewCharacter(2, "Binh", 100, 1000, 0)}),
+		s.Via(command.ZoneCharacterEnterCommand{Character: NewCharacter(2, "Binh", 100, 1000, 0)}),
 	)
 	Steps(c, 4)
 	// The item reaches the ground the way a message puts it there, which the log records; a change
@@ -68,15 +68,15 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	}
 
 	l := c.ZoneLayer(Layer1)
-	c.World.Send(Via(s, command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"}))
-	c.Zone(Zone1).Send(Via(s, command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"}))
-	l.Send(Via(s, command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"}))
-	l.Send(Via(s, command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100}))
+	c.World.Send(s.Via(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"}))
+	c.Zone(Zone1).Send(s.Via(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"}))
+	l.Send(s.Via(command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"}))
+	l.Send(s.Via(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100}))
 	l.Send(
-		Via(s, command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2}),
+		s.Via(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2}),
 	)
 	l.Send(
-		Via(s, command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
+		s.Via(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
 	)
 	Steps(c, 6)
 	if _, err := cfg.Apply(
@@ -84,8 +84,8 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	); err != nil { // a new version of the config: the engines record that they read it
 		t.Fatal(err)
 	}
-	l.Send(Via(s, command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
+	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
 	Steps(c, 14)
-	l.Send(Via(s, command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))
+	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))
 	Steps(c, 60) // the zone it went to records a hash too
 }

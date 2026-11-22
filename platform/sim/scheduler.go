@@ -78,7 +78,7 @@ func (s *Scheduler[S]) Cancel(key ActionKey) int {
 
 // FindWaiting returns the action that the key names among what the engine set for the next tick
 // and what waits in the scheduler. What was set for the next tick is looked at first.
-func FindWaiting[S State](s *Scheduler[S], next []Action[S], key ActionKey) (Action[S], bool) {
+func (s *Scheduler[S]) FindWaiting(next []Action[S], key ActionKey) (Action[S], bool) {
 	for _, a := range next {
 		if key.Names(a) {
 			return a, true
@@ -97,11 +97,11 @@ type Cancel struct {
 	Next, Later int
 }
 
-// SettleSelf does, at the end of a tick, what the actions of the tick set for the engine: the
+// Settle does, at the end of a tick, what the actions of the tick set for the engine: the
 // cancels first, in the order they were made, and then the actions for a later tick go into the
 // scheduler. It returns the actions set for the next tick that were not cancelled.
-func SettleSelf[S State](
-	s *Scheduler[S], next []Action[S], later []Timed[S], cancels []Cancel,
+func (s *Scheduler[S]) Settle(
+	next []Action[S], later []Timed[S], cancels []Cancel,
 ) []Action[S] {
 	nextGone, laterGone := make([]bool, len(next)), make([]bool, len(later))
 	for _, c := range cancels {

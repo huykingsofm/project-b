@@ -285,7 +285,7 @@ func (c *Codecs) decodeActionMessage[S State](
 	if err != nil {
 		return nil, err
 	}
-	actions, err := DecodeActions[S](c, r, version)
+	actions, err := c.DecodeActions[S](r, version)
 	if err != nil {
 		return nil, err
 	}
@@ -319,8 +319,8 @@ func (c *Codecs) DecodeOnFail(
 
 // DecodeActions reads a list of actions of the states of type S, as EncodeActions wrote it. An
 // action that is not an Action[S] is an error.
-func DecodeActions[S State](
-	c *Codecs, r *binarycodec.Reader, version binarycodec.Version,
+func (c *Codecs) DecodeActions[S State](
+	r *binarycodec.Reader, version binarycodec.Version,
 ) ([]Action[S], error) {
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {

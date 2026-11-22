@@ -102,7 +102,7 @@ func (e *Engine[S]) TypeName() string { return e.st.String() }
 // what waits for a later one. It is called between two ticks, by the goroutine of the engine or
 // while the engine does not run.
 func (e *Engine[S]) Waiting(key sim.ActionKey) (sim.Action[S], bool) {
-	return sim.FindWaiting(&e.sched, e.selfNext, key)
+	return e.sched.FindWaiting(e.selfNext, key)
 }
 
 // ScheduleAt sets an action to run at a tick of the engine. It is called between two ticks, by the
@@ -148,7 +148,7 @@ func (e *Engine[S]) Step() {
 		}
 	}
 	next, later := e.reg.TakeSelf()
-	e.selfNext = sim.SettleSelf(&e.sched, next, later, e.reg.TakeCancels())
+	e.selfNext = e.sched.Settle(next, later, e.reg.TakeCancels())
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.Emit(e.me, e.tick, events)
@@ -209,13 +209,13 @@ func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) {
 // Hash is the hash of the engine: its state, what it waits for, and what only the engine knows (see
 // engineHash). A replay compares it with the one the log holds.
 func (e *Engine[S]) Hash() uint64 {
-	return engineHash(&e.cell, e.st.Hash(), &e.sched, e.selfNext)
+	return e.cell.engineHash(e.st.Hash(), &e.sched, e.selfNext)
 }
 
 // Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
 // by the goroutine of the engine or while the engine does not run.
 func (e *Engine[S]) Checkpoint() ([]byte, error) {
-	return checkpoint(&e.cell, e.tick, e.st, &e.sched, e.selfNext)
+	return e.cell.checkpoint(e.tick, e.st, &e.sched, e.selfNext)
 }
 
 // Restore makes the engine of a state from a checkpoint, in the environment given, at the tick of
@@ -238,7 +238,7 @@ func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error
 	if st.ID() != id {
 		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.ID())
 	}
-	rest, err := readCheckpointRest[S](env.Codecs, r, version)
+	rest, err := env.readCheckpointRest[S](r, version)
 	if err != nil {
 		return nil, fmt.Errorf("%d: %w", id, err)
 	}

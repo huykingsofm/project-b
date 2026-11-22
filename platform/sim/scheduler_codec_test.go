@@ -19,7 +19,7 @@ func aSchedulerThatWaits() *Scheduler[*toyState] {
 
 func hashOf(s *Scheduler[*toyState]) uint64 {
 	h := NewHasher()
-	HashScheduler(&h, s)
+	s.Hash(&h)
 	return h.Sum()
 }
 
@@ -27,19 +27,19 @@ func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	c := mustCodecs(t)
 	s := aSchedulerThatWaits()
 	var w binarycodec.Writer
-	if err := EncodeScheduler(&w, s); err != nil {
+	if err := s.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
 	var got Scheduler[*toyState]
 	r := binarycodec.NewReader(w.B)
-	if err := DecodeScheduler(c, r, 1, &got); err != nil || r.Left() != 0 {
+	if err := got.Decode(c, r, 1); err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
 	if hashOf(&got) != hashOf(s) || got.Pending() != 4 {
 		t.Fatalf("what it waits for differs: %d actions, want 4", got.Pending())
 	}
 	var again binarycodec.Writer
-	if err := EncodeScheduler(&again, &got); err != nil || !bytes.Equal(again.B, w.B) {
+	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {
 		t.Fatalf("it is written differently: %v", err)
 	}
 	// it goes on as the original does: the same actions at the same ticks
@@ -51,7 +51,7 @@ func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	}
 	for n := range w.B { // every proper prefix
 		var cut Scheduler[*toyState]
-		if err := DecodeScheduler(c, binarycodec.NewReader(w.B[:n]), 1, &cut); err == nil {
+		if err := cut.Decode(c, binarycodec.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}

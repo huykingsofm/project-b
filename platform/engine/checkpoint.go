@@ -25,13 +25,13 @@ import (
 // and the last it took from each sender, the version of the configuration it read, and the
 // messages it holds to send again). A restore that differs from the engine it came from in any of
 // them has another hash, and a replay finds it.
-func engineHash[S sim.State](
-	c *cell, stateHash uint64, sched *sim.Scheduler[S], self []sim.Action[S],
+func (c *cell) engineHash[S sim.State](
+	stateHash uint64, sched *sim.Scheduler[S], self []sim.Action[S],
 ) uint64 {
 	h := sim.NewHasher()
 	h.U64(stateHash)
-	sim.HashScheduler(&h, sched)
-	sim.HashActions(&h, self)
+	sched.Hash(&h)
+	h.Actions(self)
 	c.hashInto(&h)
 	return h.Sum()
 }
@@ -48,8 +48,8 @@ func (c *cell) hashInto(h *sim.Hasher) {
 }
 
 // checkpoint writes the checkpoint of an engine, given its state.
-func checkpoint[S sim.State](
-	c *cell, tick uint64, st S, sched *sim.Scheduler[S], self []sim.Action[S],
+func (c *cell) checkpoint[S sim.State](
+	tick uint64, st S, sched *sim.Scheduler[S], self []sim.Action[S],
 ) ([]byte, error) {
 	var w binarycodec.Writer
 	w.Uvarint(1) // the version of the data
@@ -58,7 +58,7 @@ func checkpoint[S sim.State](
 	if err := st.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: the state: %w", c.me, err)
 	}
-	if err := sim.EncodeScheduler(&w, sched); err != nil {
+	if err := sched.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: the scheduler: %w", c.me, err)
 	}
 	if err := sim.EncodeActions(&w, self); err != nil {
@@ -116,18 +116,18 @@ type restoredCell struct {
 
 // readCheckpointRest reads what follows the state of an engine: what it waits for, what it set for
 // itself, and what only it knows.
-func readCheckpointRest[S sim.State](
-	c *sim.Codecs, r *binarycodec.Reader, version binarycodec.Version,
+func (env *Env) readCheckpointRest[S sim.State](
+	r *binarycodec.Reader, version binarycodec.Version,
 ) (*restored[S], error) {
 	var rest restored[S]
-	if err := sim.DecodeScheduler(c, r, version, &rest.sched); err != nil {
+	if err := rest.sched.Decode(env.Codecs, r, version); err != nil {
 		return nil, fmt.Errorf("the scheduler: %w", err)
 	}
 	var err error
-	if rest.self, err = sim.DecodeActions[S](c, r, version); err != nil {
+	if rest.self, err = env.Codecs.DecodeActions[S](r, version); err != nil {
 		return nil, fmt.Errorf("what it set for itself: %w", err)
 	}
-	if rest.cell, err = decodeCell(c, r, version); err != nil {
+	if rest.cell, err = decodeCell(env.Codecs, r, version); err != nil {
 		return nil, err
 	}
 	if r.Left() != 0 {
