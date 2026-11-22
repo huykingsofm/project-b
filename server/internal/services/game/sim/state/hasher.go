@@ -20,7 +20,12 @@ func (h *Hasher) U64(v uint64) {
 
 // String writes a text, eight bytes at a time, with its length so that two texts in a row cannot
 // run together.
-func (h *Hasher) String(s string) {
+func (h *Hasher) String(s string) { hashBytes(h, s) }
+
+// Bytes writes bytes, as String writes a text.
+func (h *Hasher) Bytes(b []byte) { hashBytes(h, b) }
+
+func hashBytes[T string | []byte](h *Hasher, s T) {
 	h.U64(uint64(len(s)))
 	for len(s) >= 8 {
 		h.U64(uint64(s[0]) | uint64(s[1])<<8 | uint64(s[2])<<16 | uint64(s[3])<<24 |

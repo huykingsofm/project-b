@@ -37,6 +37,8 @@ type cell struct {
 	view           *StableStateView // what the engine reads of the other engines, kept for the tick
 	seq            uint64
 	lastSeq        map[message.Address]uint64 // the last Seq taken from each sender
+	pcg            *rand.PCG                  // the random numbers of the engine and where they are
+	rng            *rand.Rand
 	bounce         bouncer
 }
 
@@ -47,23 +49,21 @@ func newCell(
 	rpl replay.Log,
 	stable StableRegistry,
 	queue int,
+	seed uint64,
 ) cell {
 	in, out := NewChannel(me, queue)
 	router.Register(out)
+	// The seed of the cluster and the address of the engine decide the random numbers, so the same
+	// inputs give the same run.
+	pcg := rand.NewPCG(seed, uint64(me.Scope)<<32|uint64(me.ID))
 	return cell{
 		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
-		lastSeq: map[message.Address]uint64{},
+		lastSeq: map[message.Address]uint64{}, pcg: pcg, rng: rand.New(pcg),
 	}
 }
 
 // address is the address of the engine.
 func (c *cell) Address() message.Address { return c.me }
-
-// newRand makes the random numbers of an engine: the seed of the cluster and the address of the
-// engine decide them, so the same inputs give the same run.
-func newRand(seed uint64, me message.Address) *rand.Rand {
-	return rand.New(rand.NewPCG(seed, uint64(me.Scope)<<32|uint64(me.ID)))
-}
 
 // snapshot takes the configuration once for the whole tick, and records the version when the
 // engine reads a new one.

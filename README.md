@@ -37,7 +37,7 @@ server/
         state/                      what the scopes share: IDs, Vec (units), Rect, Dir
           entity/                   the entities of a zonelayer: character, item, exit
           world/ zone/ zonelayer/       the state of each scope, and below each an event/ package of its own
-        action/                     every action (<scope>_<words, general to specific>_action.go), Plan, Scheduler, Cron, Context, messages, registries
+        action/                     every action (<scope>_<words, general to specific>_action.go), Plan, Scheduler, Context, messages, registries
         tilemap/                    the map of a zone: tiles, walls, spawn, and the exits as entities (the zone state holds it and makes them entities)
         command/                    what comes from outside; translates into actions
       engine/                        what runs the actions: engines, router, stable, graph, replay log

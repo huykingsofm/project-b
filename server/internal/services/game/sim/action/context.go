@@ -9,7 +9,8 @@ import (
 // The priorities of the actions, in the order they run: a smaller number runs first. They are
 // bands, so a new kind of action says in which band it runs and the rest follows:
 //
-//   - system: what an engine does whatever anyone asked for (cron, reading what others published);
+//   - system: what an engine does whatever anyone asked for (healing over time, reading what
+//     others published);
 //   - intent: what an engine asked for, before anything is worked out (a move, an attack);
 //   - modifier: standing actions that change the actions behind them (a shield changes the damage
 //     that is about to land);

@@ -3,7 +3,10 @@
 // (R29): a change builds a new value and replaces the old one in its container.
 package entity
 
-import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+)
 
 // KindID names a kind of entity, so that a client or an encoder can tell the kinds apart by number.
 // The numbers count up from 1 and 0 is no kind. A new kind is added at the end of the list, and a
@@ -34,6 +37,9 @@ type Entity interface {
 	MovedTo(pos state.Vec) Entity
 	// Hash adds what the entity is made of to the hash of the state.
 	Hash(h *state.Hasher)
+	// Encode writes what the entity is made of, not its kind: the Encode of this package writes the
+	// kind first.
+	Encode(w *binarycodec.Writer)
 }
 
 // DamageableEntity is an entity that has health and can lose and regain it. An entity says that it

@@ -82,8 +82,9 @@ type Timed[A Action] struct {
 // self is what an engine sends to itself. It is a list of its own: nothing goes through a channel,
 // and the engine reads it when the next tick begins.
 type self[A Action] struct {
-	next  []A
-	later []Timed[A]
+	next    []A
+	later   []Timed[A]
+	cancels []Cancel
 }
 
 func (b *self[A]) toSelf(a A) { b.next = append(b.next, a) }
@@ -102,6 +103,18 @@ func (b *self[A]) take() ([]A, []Timed[A]) {
 	return next, later
 }
 
+// cancelWaiting records a cancel of what the key names, with how much was set so far in this tick:
+// what is set after it is not cancelled.
+func (b *self[A]) cancelWaiting(key ActionKey) {
+	b.cancels = append(b.cancels, Cancel{Key: key, Next: len(b.next), Later: len(b.later)})
+}
+
+func (b *self[A]) takeCancels() []Cancel {
+	cancels := b.cancels
+	b.cancels = nil
+	return cancels
+}
+
 // ZoneLayerRegistry is what an action of a zonelayer is given besides the state: what it wants done
 // outside the state of its zonelayer.
 type ZoneLayerRegistry struct {
@@ -116,6 +129,17 @@ func (r *ZoneLayerRegistry) ToSelf(a ZoneLayerAction) { r.toSelf(a) }
 // a wait for a cooldown for example, is set for exactly that tick and not tried again at every tick
 // in between.
 func (r *ZoneLayerRegistry) ToSelfAt(tick uint64, a ZoneLayerAction) { r.toSelfAt(r.Tick, tick, a) }
+
+// CancelWaiting ends sooner what waits in the zonelayer: the actions the key names that wait for
+// a later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
+func (r *ZoneLayerRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
+
+// TakeCancels returns what the zonelayer cancelled in this tick.
+func (r *ZoneLayerRegistry) TakeCancels() []Cancel { return r.takeCancels() }
 
 // TakeSelf returns what the zonelayer set for itself in this tick.
 func (r *ZoneLayerRegistry) TakeSelf() ([]ZoneLayerAction, []Timed[ZoneLayerAction]) {
@@ -134,6 +158,17 @@ func (r *ZoneRegistry) ToSelf(a ZoneAction) { r.toSelf(a) }
 // ToSelfAt sets an action to run at a tick of the zone.
 func (r *ZoneRegistry) ToSelfAt(tick uint64, a ZoneAction) { r.toSelfAt(r.Tick, tick, a) }
 
+// CancelWaiting ends sooner what waits in the zone: the actions the key names that wait for a
+// later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
+func (r *ZoneRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
+
+// TakeCancels returns what the zone cancelled in this tick.
+func (r *ZoneRegistry) TakeCancels() []Cancel { return r.takeCancels() }
+
 // TakeSelf returns what the zone set for itself in this tick.
 func (r *ZoneRegistry) TakeSelf() ([]ZoneAction, []Timed[ZoneAction]) { return r.take() }
 
@@ -148,6 +183,17 @@ func (r *WorldRegistry) ToSelf(a WorldAction) { r.toSelf(a) }
 
 // ToSelfAt sets an action to run at a tick of the world.
 func (r *WorldRegistry) ToSelfAt(tick uint64, a WorldAction) { r.toSelfAt(r.Tick, tick, a) }
+
+// CancelWaiting ends sooner what waits in the world: the actions the key names that wait for a
+// later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
+func (r *WorldRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
+
+// TakeCancels returns what the world cancelled in this tick.
+func (r *WorldRegistry) TakeCancels() []Cancel { return r.takeCancels() }
 
 // TakeSelf returns what the world set for itself in this tick.
 func (r *WorldRegistry) TakeSelf() ([]WorldAction, []Timed[WorldAction]) { return r.take() }

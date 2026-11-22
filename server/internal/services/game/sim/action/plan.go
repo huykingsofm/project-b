@@ -9,13 +9,6 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
-// PlanKey names a set of actions that a plan keeps an index of: the actions of one ID that one
-// actor performs, or, with a nil Actor, all the actions of one ID.
-type PlanKey struct {
-	Actor any
-	ID    ID
-}
-
 // PlanEntry is an action in a plan, with what the plan knows of it.
 type PlanEntry[A Action] struct {
 	action    A
@@ -41,13 +34,13 @@ type Plan[A Action] struct {
 	current   *PlanEntry[A]    // the entry that runs, nil before the first
 	cfg       *config.Snapshot // the configuration of the tick, which says how deep a chain may go
 	tooDeep   []*PlanEntry[A]
-	buckets   map[PlanKey][]*PlanEntry[A]
+	buckets   map[ActionKey][]*PlanEntry[A]
 	cancelled []*PlanEntry[A]
 }
 
 // NewPlan returns an empty plan, with the default configuration until Reset gives it one.
 func NewPlan[A Action]() *Plan[A] {
-	return &Plan[A]{buckets: map[PlanKey][]*PlanEntry[A]{}, cfg: config.Defaults()}
+	return &Plan[A]{buckets: map[ActionKey][]*PlanEntry[A]{}, cfg: config.Defaults()}
 }
 
 // Reset empties the plan, puts the cursor before the first entry, and keeps the configuration of
@@ -85,10 +78,10 @@ func (p *Plan[A]) Append(a A) {
 	p.entries[at] = e
 
 	id := a.ID()
-	byID := PlanKey{ID: id}
+	byID := ActionKey{ID: id}
 	p.buckets[byID] = append(p.buckets[byID], e)
 	if who, ok := any(a).(Acting); ok {
-		byActor := PlanKey{Actor: who.Actor(), ID: id}
+		byActor := ActionKey{Actor: who.Actor(), ID: id}
 		p.buckets[byActor] = append(p.buckets[byActor], e)
 	}
 }
@@ -125,7 +118,7 @@ func (p *Plan[A]) Next() (*PlanEntry[A], bool) {
 
 // Find returns the entries under the key that have not run and are not cancelled, in the order
 // they were added to the plan.
-func (p *Plan[A]) Find(k PlanKey) []*PlanEntry[A] {
+func (p *Plan[A]) Find(k ActionKey) []*PlanEntry[A] {
 	var out []*PlanEntry[A]
 	for _, e := range p.buckets[k] {
 		if !e.ran && !e.cancelled {
@@ -147,7 +140,7 @@ func (p *Plan[A]) Find(k PlanKey) []*PlanEntry[A] {
 // began. An entry whose action is not a T is a mistake of the caller: it is logged and left out.
 func (p *Plan[A]) FindByID[T any](id ID) iter.Seq2[*PlanEntry[A], T] {
 	return func(yield func(*PlanEntry[A], T) bool) {
-		for _, e := range p.buckets[PlanKey{ID: id}] {
+		for _, e := range p.buckets[ActionKey{ID: id}] {
 			if e.ran || e.cancelled {
 				continue
 			}

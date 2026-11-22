@@ -50,10 +50,10 @@ func TestFindByIDAndByActorAndCancel(t *testing.T) {
 		t.Fatal("unexpected first action")
 	}
 
-	if got := p.Find(PlanKey{ID: testID}); len(got) != 3 {
+	if got := p.Find(ActionKey{ID: testID}); len(got) != 3 {
 		t.Fatalf("by ID found %d, want 3", len(got))
 	}
-	byTwo := p.Find(PlanKey{Actor: 2, ID: testID})
+	byTwo := p.Find(ActionKey{Actor: 2, ID: testID})
 	if len(byTwo) != 2 || byTwo[0].Action().name != "by-2" {
 		t.Fatalf("by engine found %v", byTwo)
 	}

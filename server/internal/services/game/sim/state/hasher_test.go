@@ -36,3 +36,12 @@ func TestTwoTextsInARowDoNotRunTogether(t *testing.T) {
 		t.Fatal("a difference in the tail of a long text was lost")
 	}
 }
+
+func TestBytesAreHashedAsTheTextOfTheSameBytes(t *testing.T) {
+	for _, text := range []string{"", "a", "eight by", "more than eight bytes"} {
+		asText := sum(func(h *Hasher) { h.String(text) })
+		if asText != sum(func(h *Hasher) { h.Bytes([]byte(text)) }) {
+			t.Errorf("%q: the bytes hash differently from the text", text)
+		}
+	}
+}

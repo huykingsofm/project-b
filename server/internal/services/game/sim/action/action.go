@@ -29,7 +29,7 @@ type ID uint16
 type Acting interface{ Actor() any }
 
 // Action is what the actions of every scope have in common: an ID and a priority. A plan, a
-// message, a scheduler and a cron hold actions by it.
+// message, a scheduler hold actions by it.
 type Action interface {
 	ID() ID
 	Priority() int16

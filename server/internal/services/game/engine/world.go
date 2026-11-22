@@ -2,10 +2,11 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
-	"math/rand/v2"
 	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -26,25 +27,21 @@ type WorldEngine struct {
 	stable   StableRegistry
 	emitter  WorldEmitter
 	tick     uint64
-	rng      *rand.Rand
 }
 
 // NewWorldEngine makes the engine of the world.
 func NewWorldEngine(st *worldstate.State, env *Env, seed uint64) *WorldEngine {
 	me := message.WorldAddress(st.ID)
 	e := &WorldEngine{
-		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
+		cell: newCell(
+			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
+		), st: st,
 		commands: make(
 			chan command.WorldCommand, env.QueueSize,
-		), stable: env.Stable, emitter: env.WorldEmitter, rng: newRand(seed, me),
+		), stable: env.Stable, emitter: env.WorldEmitter,
 	}
 	e.reg.Common = action.Common{Me: me, Graph: env.Graph, Stable: e.view}
 	return e
-}
-
-// AddCron makes actions run every every ticks.
-func (e *WorldEngine) AddCron(every uint64, actions ...action.WorldAction) {
-	e.sched.AddCron(every, actions...)
 }
 
 // Send gives the world a command, without waiting. It reports false when the queue is full.
@@ -91,16 +88,13 @@ func (e *WorldEngine) Step() {
 		entry.Action().ApplyWorld(ctx, e.st, &e.reg, plan)
 	}
 	next, later := e.reg.TakeSelf()
-	e.selfNext = next
-	for _, t := range later {
-		e.sched.At(t.At, t.Action)
-	}
+	e.selfNext = action.SettleSelf(&e.sched, next, later, e.reg.TakeCancels())
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.EmitWorld(e.me, e.tick, events)
 	}
 	e.stable.PublishWorld(e.st.Clone())
-	e.recordHash(cfg, e.tick, e.st.Hash)
+	e.recordHash(cfg, e.tick, e.hash)
 	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
 }
@@ -113,8 +107,7 @@ func (e *WorldEngine) planSelf(plan *action.Plan[action.WorldAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
-// are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick.
 func (e *WorldEngine) planScheduled(plan *action.Plan[action.WorldAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -151,4 +144,42 @@ func (e *WorldEngine) Run(ctx context.Context, ticks <-chan time.Time) {
 			e.Step()
 		}
 	}
+}
+
+// hash is the hash of the engine: its state and what it waits for.
+func (e *WorldEngine) hash() uint64 {
+	return engineHash(&e.cell, e.st.Hash(), &e.sched, e.selfNext)
+}
+
+// Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
+// by the goroutine of the engine or while the engine does not run.
+func (e *WorldEngine) Checkpoint() ([]byte, error) {
+	encodeState := func(w *binarycodec.Writer) error {
+		e.st.Encode(w)
+		return nil
+	}
+	return checkpoint(&e.cell, e.tick, encodeState, &e.sched, e.selfNext)
+}
+
+// RestoreWorldEngine makes the engine of the world from a checkpoint, in the environment given, at
+// the tick of the checkpoint.
+func RestoreWorldEngine(data []byte, env *Env, seed uint64) (*WorldEngine, error) {
+	r := binarycodec.NewReader(data)
+	version, address, tick, err := readCheckpointStart(r, message.ScopeWorld)
+	if err != nil {
+		return nil, err
+	}
+	st, err := worldstate.DecodeState(r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%v: the state: %w", address, err)
+	}
+	if message.WorldAddress(st.ID) != address {
+		return nil, fmt.Errorf("%v: the state is of the world %d", address, st.ID)
+	}
+	e := NewWorldEngine(st, env, seed)
+	e.tick = tick
+	if e.selfNext, err = readCheckpointRest(r, version, &e.cell, &e.sched); err != nil {
+		return nil, fmt.Errorf("%v: %w", address, err)
+	}
+	return e, nil
 }
