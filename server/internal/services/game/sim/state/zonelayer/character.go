@@ -36,6 +36,13 @@ type Character struct {
 	Cooldowns orderedmap.Map[CooldownKey, uint64]
 }
 
+// Clone returns a copy of the character that shares nothing with it: its cooldowns are copied, because they hold a
+// map and slices that assignment does not copy.
+func (c Character) Clone() Character {
+	c.Cooldowns = c.Cooldowns.Clone()
+	return c
+}
+
 // NewCharacter makes a character that has just been made, with all its health, the speed, in units
 // a tick, that it moves at, and the radius of its body, in units. It returns an error, and no character,
 // when a value cannot be (a negative radius): what is outside the gateway is not trusted, and the caller

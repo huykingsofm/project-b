@@ -38,3 +38,24 @@ func TestMapCloneSharesNothing(t *testing.T) {
 		t.Fatalf("the clone changed with the original: %v, len %d", v, c.Len())
 	}
 }
+
+// slots is a value that holds a slice, and so has a Clone method.
+type slots struct{ Items []int }
+
+func (s slots) Clone() slots { return slots{Items: slices.Clone(s.Items)} }
+
+func TestMapCloneCopiesValuesThatHaveACloneWithTheirClone(t *testing.T) {
+	var m orderedmap.Map[string, slots]
+	m.Set("a", slots{Items: []int{1, 2}})
+	c := m.Clone()
+	v, _ := c.Get("a")
+	v.Items[0] = 99
+	if got, _ := m.Get("a"); got.Items[0] != 1 {
+		t.Fatalf("a change of the copy changed the map: %v", got.Items)
+	}
+	p := c.Ptr("a")
+	p.Items = append(p.Items, 3)
+	if got, _ := m.Get("a"); len(got.Items) != 2 {
+		t.Fatalf("a change of the copy changed the map: %v", got.Items)
+	}
+}

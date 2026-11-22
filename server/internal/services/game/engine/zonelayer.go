@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
 
@@ -51,6 +52,11 @@ func (e *ZoneLayerEngine) AddCron(every uint64, actions ...action.ZoneLayerActio
 
 // Send gives the zonelayer a command, without waiting. It reports false when the queue is full.
 func (e *ZoneLayerEngine) Send(c command.ZoneLayerCommand) bool {
+	if c == nil {
+		logging.Error("a nil command was sent and is not taken", "engine", "zonelayer")
+		return false
+	}
+	c = c.Clone() // the caller keeps its command and may change it: the engine keeps a copy
 	select {
 	case e.commands <- c:
 		return true

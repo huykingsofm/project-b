@@ -2,13 +2,16 @@ package zonelayer_test
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/entity"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
@@ -221,5 +224,43 @@ func newCharacter(characterID state.CharacterID, name string, maxHealth, speed, 
 func TestACharacterWithANegativeRadiusIsAnErrorNotACharacter(t *testing.T) {
 	if _, err := zonelayer.NewCharacter(1, "a", 10, 1000, -1); err == nil {
 		t.Fatal("a negative radius was accepted")
+	}
+}
+
+// R29: a character that enters is copied, so the state shares nothing with what the caller sent and still holds.
+func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
+	st := newState()
+	c := newCharacter(1, "a", 10, 1000, 0)
+	c.Cooldowns.Set(cooldownKey, 5)
+	st.AddCharacterEntity(c, state.Vec{X: 1500, Y: 1500})
+	stored, _ := st.Characters.Get(1)
+	if err := aliasing.Disjoint(c, stored); err != nil {
+		t.Fatal(err)
+	}
+	st.SetCooldown(1, cooldownKey, 99)
+	if got, _ := c.Cooldowns.Get(cooldownKey); got != 5 || c.Cooldowns.Len() != 1 {
+		t.Fatalf("the state changed the character that was sent: %d, %d cooldowns", got, c.Cooldowns.Len())
+	}
+}
+
+// R29: a character that leaves is the one the state held, now outside it; what it gives up is not shared with a
+// copy that was published.
+func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
+	st := newState()
+	c := newCharacter(1, "a", 10, 1000, 0)
+	c.Cooldowns.Set(cooldownKey, 5)
+	st.AddCharacterEntity(c, state.Vec{X: 1500, Y: 1500})
+	st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
+	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "hi"})
+	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
+	// an Entity is implemented only by value types
+	rules := aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity]()}, Skip: []string{"zonelayer.State.events"}}
+	if err := aliasing.CheckCloneable(reflect.TypeFor[zonelayer.State](), rules); err != nil {
+		t.Fatal(err)
 	}
 }

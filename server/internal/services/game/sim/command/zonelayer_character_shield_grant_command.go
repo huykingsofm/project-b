@@ -15,6 +15,9 @@ type ZoneLayerCharacterShieldGrantCommand struct {
 
 func (ZoneLayerCharacterShieldGrantCommand) ID() ID { return ZoneLayerCharacterShieldGrantCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneLayerCharacterShieldGrantCommand) Clone() ZoneLayerCommand { return c }
+
 func (c ZoneLayerCharacterShieldGrantCommand) TranslateZoneLayer() []action.ZoneLayerAction {
 	return []action.ZoneLayerAction{&action.ZoneLayerCharacterShieldGrantAction{CharacterID: c.CharacterID, Duration: c.Duration}}
 }

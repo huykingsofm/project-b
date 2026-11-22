@@ -16,6 +16,9 @@ func (ZoneLayerCharacterNormalAttackTriggerCommand) ID() ID {
 	return ZoneLayerCharacterNormalAttackTriggerCommandID
 }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneLayerCharacterNormalAttackTriggerCommand) Clone() ZoneLayerCommand { return c }
+
 func (c ZoneLayerCharacterNormalAttackTriggerCommand) TranslateZoneLayer() []action.ZoneLayerAction {
 	return []action.ZoneLayerAction{&action.ZoneLayerCharacterNormalAttackTriggerAction{CharacterID: c.CharacterID, TargetID: c.TargetID}}
 }

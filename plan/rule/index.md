@@ -132,7 +132,7 @@ A piece of data belongs to exactly one engine and only that engine changes it; o
 
 ### [R29. Every piece of data in the simulation is a value or can be cloned (hard)](r29-clone-or-value.md)
 
-A type held in a state is either a value type (no pointer, slice, map, channel or function) or has a `Clone` method that the `Clone` of the state calls. An interface held in a state is implemented only by value types, and a change replaces the value. Nothing is shared with a published copy.
+A type held in a state is either a value type (no pointer, slice, map, channel or function) or has a `Clone` method that the `Clone` of the state calls; the containers copy their elements with `Clone` when they have it. Nothing in a state is shared with another state, an engine, a published copy or whoever gave it: a state method copies what it is given, an engine copies a command when it takes it, and commands, actions and events hold only values and types with `Clone`. Tests find any memory that is still shared.
 
 ### [R30. Documents of the code are reference, written as structure (hard)](r30-docs-are-reference.md)
 

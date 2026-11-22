@@ -14,6 +14,9 @@ type ZoneLayerCharacterExitToCommand struct {
 
 func (ZoneLayerCharacterExitToCommand) ID() ID { return ZoneLayerCharacterExitToCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneLayerCharacterExitToCommand) Clone() ZoneLayerCommand { return c }
+
 func (c ZoneLayerCharacterExitToCommand) TranslateZoneLayer() []action.ZoneLayerAction {
 	return []action.ZoneLayerAction{&action.ZoneLayerCharacterExitToAction{CharacterID: c.CharacterID, ExitEntityID: c.ExitEntityID}}
 }

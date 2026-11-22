@@ -14,6 +14,9 @@ type ZoneLayerCharacterItemPickupCommand struct {
 
 func (ZoneLayerCharacterItemPickupCommand) ID() ID { return ZoneLayerCharacterItemPickupCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneLayerCharacterItemPickupCommand) Clone() ZoneLayerCommand { return c }
+
 func (c ZoneLayerCharacterItemPickupCommand) TranslateZoneLayer() []action.ZoneLayerAction {
 	return []action.ZoneLayerAction{&action.ZoneLayerCharacterItemPickupAction{CharacterID: c.CharacterID, ItemEntityID: c.ItemEntityID}}
 }

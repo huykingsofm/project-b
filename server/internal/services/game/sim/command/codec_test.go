@@ -15,6 +15,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 // characterWithCooldowns is a character that has been playing: it has cooldowns, in an order that is not the
@@ -231,5 +232,56 @@ func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
 	// A number that changes breaks every log that was written: add commands at the end, never renumber.
 	if WorldChatPrivateSendCommandID != 1 || ZoneCharacterEnterCommandID != 2 || ZoneLayerCharacterMoveCommandID != 4 || ZoneLayerCharacterShieldGrantCommandID != 9 {
 		t.Fatal("the ID of a command changed")
+	}
+}
+
+// Commands come from outside, with the goroutine that sends one still holding what it sent, so what a command holds is
+// a value or has Clone, and the state that takes it copies it (R29).
+func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
+	rules := aliasing.Rules{Boundary: true}
+	for _, c := range examples {
+		if err := aliasing.CheckCloneable(reflect.TypeOf(c), rules); err != nil {
+			t.Errorf("%T: %v", c, err)
+		}
+	}
+}
+
+// cloneOf calls the Clone of the scope that the command is addressed to.
+func cloneOf(t *testing.T, c Command) Command {
+	t.Helper()
+	switch c := c.(type) {
+	case ZoneLayerCommand:
+		return c.Clone()
+	case ZoneCommand:
+		return c.Clone()
+	case WorldCommand:
+		return c.Clone()
+	}
+	t.Fatalf("%T is a command of no scope", c)
+	return nil
+}
+
+func TestTheCloneOfEveryCommandIsTheSameCommandAndSharesNothingWithIt(t *testing.T) {
+	for _, c := range examples {
+		got := cloneOf(t, c)
+		if reflect.TypeOf(got) != reflect.TypeOf(c) {
+			t.Errorf("%T cloned into a %T", c, got)
+		}
+		if !reflect.DeepEqual(got, c) {
+			t.Errorf("%T: the clone is %+v, want %+v", c, got, c)
+		}
+		if err := aliasing.Disjoint(c, got); err != nil {
+			t.Errorf("%T shares memory with its clone: %v", c, err)
+		}
+	}
+}
+
+func TestTheCloneOfACommandThatHoldsCooldownsIsNotChangedByItsSender(t *testing.T) {
+	sent := ZoneCharacterEnterCommand{Character: characterWithCooldowns()}
+	kept := sent.Clone().(ZoneCharacterEnterCommand)
+	key := action.ZoneLayerCharacterMoveActionCooldownKey
+	sent.Character.Cooldowns.Set(key, 999)
+	if until, _ := kept.Character.Cooldowns.Get(key); until == 999 {
+		t.Fatal("the sender changed the clone")
 	}
 }

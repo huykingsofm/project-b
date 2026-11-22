@@ -2,14 +2,16 @@
 // array, never the order of a Go map, so that two runs fed the same inputs visit the same
 // elements in the same order.
 //
-// It is a library of its own that happens to be written here: it imports nothing of this
-// project and knows nothing of what it is used for.
+// It is a library of its own that happens to be written here: it imports only the package clone
+// and knows nothing of what it is used for.
 package orderedmap
 
 import (
 	"iter"
 	"maps"
 	"slices"
+
+	"github.com/huykingsofm/project-b/server/internal/shared/clone"
 )
 
 // Map is an ordered map made of three parts:
@@ -112,14 +114,16 @@ func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	}
 }
 
-// Clone returns a copy that shares nothing with the map. The values are copied as they
-// are, so it is right for values that hold no slice, map or pointer that is changed in
-// place; use CloneFunc for the others.
+// Clone returns a copy that shares nothing with the map. The values are copied with their Clone method when
+// the type of the values has one (see package clone), and by assignment otherwise, so the type of the values
+// must be a value (no pointer, slice, map, channel or function in it) or have Clone. The keys are copied by
+// assignment: a key is an identifier, a value that is never changed in place.
 func (m *Map[K, V]) Clone() Map[K, V] {
-	return Map[K, V]{index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: slices.Clone(m.vals)}
+	return Map[K, V]{index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: clone.Slice(m.vals)}
 }
 
-// CloneFunc is Clone with a function that copies each value.
+// CloneFunc is Clone with a function that copies each value, for a type of values that has no Clone method of
+// its own.
 func (m *Map[K, V]) CloneFunc(copyValue func(V) V) Map[K, V] {
 	c := Map[K, V]{index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: make([]V, len(m.vals))}
 	for i, v := range m.vals {
