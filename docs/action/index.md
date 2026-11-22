@@ -54,7 +54,7 @@ What must happen outside a scope goes in its registry and happens after the plan
 | `ToZoneLayer`, `ToZone`, `ToWorld` | a message to that scope |
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick |
-| `CancelWaiting` | cancels the actions a key names (an ID and, if given, an actor) that wait in the scheduler or were set for the next tick before this call; it takes effect when the tick is over |
+| `CancelWaiting` | ends sooner the actions a key names (an ID and, if given, an actor) that wait in the scheduler or were set for the next tick, and what this tick set before the call; it takes effect when the tick is over |
 
 ## Failed delivery
 
@@ -78,6 +78,15 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 - `message.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `message.Bouncer`.
 - `onfail.Retry` and `onfail.Redirect` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
 - A message with no `OnFail` is dropped, and logged.
+
+### What an action that repeats and a cancel each decide
+
+| Question | Answer |
+|---|---|
+| Who ends an action that sets itself again? | the action: when its actor is no longer in the state it does nothing and does not set itself again |
+| What does `CancelWaiting` add? | it spares the ticks between: what waits for a later tick, or was set for the next one, is taken away at once |
+| Does it reach an action in the plan of this tick? | no: `Plan.Cancel` does, and it takes effect at once |
+| Does it reach what an action in the plan sets after the call? | no: whether it does depends on the order in the plan (priority, then arrival), which is why the action decides for itself |
 
 ## Reading other scopes
 

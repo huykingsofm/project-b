@@ -130,10 +130,12 @@ func (r *ZoneLayerRegistry) ToSelf(a ZoneLayerAction) { r.toSelf(a) }
 // in between.
 func (r *ZoneLayerRegistry) ToSelfAt(tick uint64, a ZoneLayerAction) { r.toSelfAt(r.Tick, tick, a) }
 
-// CancelWaiting says that the actions the key names, and that wait in the zonelayer (set for a
-// later tick, or for the next one), are not to run: an action that must stop an action that
-// sets itself again, a passive skill of a character that left for example, cancels it. It
-// takes effect when the tick is over, on what was set before it.
+// CancelWaiting ends sooner what waits in the zonelayer: the actions the key names that wait for
+// a later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
 func (r *ZoneLayerRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the zonelayer cancelled in this tick.
@@ -156,10 +158,12 @@ func (r *ZoneRegistry) ToSelf(a ZoneAction) { r.toSelf(a) }
 // ToSelfAt sets an action to run at a tick of the zone.
 func (r *ZoneRegistry) ToSelfAt(tick uint64, a ZoneAction) { r.toSelfAt(r.Tick, tick, a) }
 
-// CancelWaiting says that the actions the key names, and that wait in the zone (set for a later
-// tick, or for the next one), are not to run: an action that must stop an action that sets itself
-// again, a passive skill of a character that left for example, cancels it. It takes effect when the
-// tick is over, on what was set before it.
+// CancelWaiting ends sooner what waits in the zone: the actions the key names that wait for a
+// later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
 func (r *ZoneRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the zone cancelled in this tick.
@@ -180,10 +184,12 @@ func (r *WorldRegistry) ToSelf(a WorldAction) { r.toSelf(a) }
 // ToSelfAt sets an action to run at a tick of the world.
 func (r *WorldRegistry) ToSelfAt(tick uint64, a WorldAction) { r.toSelfAt(r.Tick, tick, a) }
 
-// CancelWaiting says that the actions the key names, and that wait in the world (set for a later
-// tick, or for the next one), are not to run: an action that must stop an action that sets itself
-// again, a passive skill of a character that left for example, cancels it. It takes effect when the
-// tick is over, on what was set before it.
+// CancelWaiting ends sooner what waits in the world: the actions the key names that wait for a
+// later tick, or for the next one, and what this tick set before the call. It takes effect when
+// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
+// does), nor what such an action sets again after the call, so it is not what stops an action
+// that sets itself again: that action decides for itself, from the state, whether it still does
+// anything and whether it sets itself again, and a cancel only spares the ticks in between.
 func (r *WorldRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the world cancelled in this tick.
