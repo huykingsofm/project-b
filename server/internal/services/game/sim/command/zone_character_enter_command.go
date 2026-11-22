@@ -13,6 +13,12 @@ type ZoneCharacterEnterCommand struct {
 
 func (ZoneCharacterEnterCommand) ID() ID { return ZoneCharacterEnterCommandID }
 
+// Clone returns a copy of the command that shares nothing with it: the character holds cooldowns.
+func (c ZoneCharacterEnterCommand) Clone() ZoneCommand {
+	c.Character = c.Character.Clone()
+	return c
+}
+
 func (c ZoneCharacterEnterCommand) TranslateZone() []action.ZoneAction {
 	return []action.ZoneAction{&action.ZoneCharacterEnterAction{Character: c.Character}}
 }

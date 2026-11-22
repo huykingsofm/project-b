@@ -14,19 +14,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
-
-// snapshot copies what a command shares with the state of the engine. A replay.MemLog keeps a command as the value
-// it was given, and the cooldowns of the character in ZoneCharacterEnterCommand share their memory with the state it
-// enters: when the engine later sets a cooldown, the command in the memory log changes. A replay.FileLog writes
-// the command when it is recorded, so it holds what was sent.
-func snapshot(c command.ZoneCommand) command.ZoneCommand {
-	if enter, ok := c.(command.ZoneCharacterEnterCommand); ok {
-		enter.Character.Cooldowns = enter.Character.Cooldowns.Clone()
-		return enter
-	}
-	return c
-}
 
 // teeReplayLog gives every record to two replay logs.
 type teeReplayLog struct{ a, b replay.Log }
@@ -40,7 +29,7 @@ func (t teeReplayLog) WorldCommand(e action.Address, tick uint64, c command.Worl
 	t.b.WorldCommand(e, tick, c)
 }
 func (t teeReplayLog) ZoneCommand(e action.Address, tick uint64, c command.ZoneCommand) {
-	t.a.ZoneCommand(e, tick, snapshot(c))
+	t.a.ZoneCommand(e, tick, c)
 	t.b.ZoneCommand(e, tick, c)
 }
 func (t teeReplayLog) ZoneLayerCommand(e action.Address, tick uint64, c command.ZoneLayerCommand) {
@@ -151,36 +140,102 @@ func compareWithFiles(t *testing.T, dir string, mem *replay.MemLog) {
 	}
 }
 
-func TestTheFilesOfAWholeClusterRunHoldWhatTheMemoryLogHolds(t *testing.T) {
-	dir := t.TempDir()
-	c, mem, file, cfg := newTeeWorld(t, dir)
+// sender gives the commands of a scenario to the engines as they are, or after they were written to bytes and
+// read back: a copy that shares nothing with what the caller made, as a command that came from a client does.
+type sender struct {
+	t         *testing.T
+	roundTrip bool
+	reuses    bool // the sender goes on using the value it sent, and changes it
+}
 
+func via[C command.Command](s sender, c C) C {
+	if !s.roundTrip {
+		return c
+	}
+	var w binarycodec.Writer
+	if err := command.Encode(&w, c); err != nil {
+		s.t.Fatal(err)
+	}
+	got, err := command.Decode(binarycodec.NewReader(w.B), 1)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return got.(C)
+}
+
+// runScenario runs a cluster through chat in each scope, a shield, an attack, a pickup, a run of movement, a new
+// version of the config, a character that enters with cooldowns and one that crosses to another zone, long
+// enough for every engine to record a hash.
+func runScenario(t *testing.T, c *engine.Cluster, cfg *config.Store, s sender) {
+	t.Helper()
 	an := newCharacter(1, "An", 100, 1000, 0)
 	an.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
-	enterCharacter(t, c, 1, an)
-	enter(t, c, 1, 2, "Binh")
+	c.Zone(1).Send(via(s, command.ZoneCharacterEnterCommand{Character: an}))
+	if s.reuses {
+		an.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
+	}
+	steps(c, 4)
+	c.Zone(1).Send(via(s, command.ZoneCharacterEnterCommand{Character: newCharacter(2, "Binh", 100, 1000, 0)}))
+	steps(c, 4)
 	itemID := c.ZoneLayer(1).State().AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
 	l := c.ZoneLayer(1)
-	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
-	c.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
-	l.Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"})
-	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100})
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
-	l.Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID})
+	c.World.Send(via(s, command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"}))
+	c.Zone(1).Send(via(s, command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"}))
+	l.Send(via(s, command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"}))
+	l.Send(via(s, command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100}))
+	l.Send(via(s, command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2}))
+	l.Send(via(s, command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}))
 	steps(c, 6)
 	if _, err := cfg.Apply(map[string]string{"zonelayer.normal_attack.cooldown_ticks": "5"}); err != nil { // a new version of the config: the engines record that they read it
 		t.Fatal(err)
 	}
-	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
+	l.Send(via(s, command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
 	steps(c, 14)
-	l.Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
-	steps(c, 60) // long enough for every engine to record a hash, in the zone it went to too
+	l.Send(via(s, command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1}))
+	steps(c, 60) // the zone it went to records a hash too
+}
 
+func TestTheFilesOfAWholeClusterRunHoldWhatTheMemoryLogHolds(t *testing.T) {
+	dir := t.TempDir()
+	c, mem, file, cfg := newTeeWorld(t, dir)
+	runScenario(t, c, cfg, sender{t: t})
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
 	compareWithFiles(t, dir, mem)
+}
+
+// The engines must not depend on memory they share with the sender of a command. The sender here goes on using the
+// character it sent and changes its cooldowns; the same run with every command written to bytes and read back, which
+// shares nothing with the sender, must give the same hash at every tick that records one and the same state at the
+// end. (The memory log keeps a command as the sender gave it, so its command records are not compared.)
+func TestACommandThatIsCopiedGivesTheSameRunAsOneThatIsNot(t *testing.T) {
+	run := func(roundTrip bool) ([]replay.Record, []uint64) {
+		c, _, mem, cfg := newWorld(t, 7, 10)
+		runScenario(t, c, cfg, sender{t: t, roundTrip: roundTrip, reuses: true})
+		var hashes []replay.Record
+		for _, r := range mem.Records {
+			if r.Kind == replay.KindHash {
+				hashes = append(hashes, r)
+			}
+		}
+		return hashes, []uint64{
+			c.World.State().Hash(), c.Zone(1).State().Hash(), c.Zone(2).State().Hash(),
+			c.ZoneLayer(1).State().Hash(), c.ZoneLayer(2).State().Hash(), c.ZoneLayer(3).State().Hash(),
+		}
+	}
+	directHashes, directFinal := run(false)
+	copiedHashes, copiedFinal := run(true)
+	if len(directHashes) == 0 {
+		t.Fatal("the scenario recorded no hash")
+	}
+	if !reflect.DeepEqual(directHashes, copiedHashes) {
+		t.Fatalf("the hashes recorded differ:\n direct %v\n copied %v", directHashes, copiedHashes)
+	}
+	if !reflect.DeepEqual(directFinal, copiedFinal) {
+		t.Fatalf("the state at the end differs: %v and %v", directFinal, copiedFinal)
+	}
 }
 
 func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t *testing.T) {

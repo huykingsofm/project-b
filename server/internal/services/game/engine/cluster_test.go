@@ -536,3 +536,11 @@ func newCharacter(characterID state.CharacterID, name string, maxHealth, speed, 
 	}
 	return c
 }
+
+func TestAnEngineDoesNotTakeANilCommand(t *testing.T) {
+	c, _, _, _ := newWorld(t, 1, 0)
+	if c.World.Send(nil) || c.Zone(1).Send(nil) || c.ZoneLayer(1).Send(nil) {
+		t.Fatal("an engine took a nil command")
+	}
+	steps(c, 3) // and nothing in a tick breaks on it
+}

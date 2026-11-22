@@ -28,16 +28,25 @@ type Command interface {
 type ZoneLayerCommand interface {
 	Command
 	TranslateZoneLayer() []action.ZoneLayerAction
+	// Clone returns a copy that shares nothing with the command. A command that holds only
+	// values returns itself.
+	Clone() ZoneLayerCommand
 }
 
 // ZoneCommand is a command addressed to a zone.
 type ZoneCommand interface {
 	Command
 	TranslateZone() []action.ZoneAction
+	// Clone returns a copy that shares nothing with the command. A command that holds only
+	// values returns itself.
+	Clone() ZoneCommand
 }
 
 // WorldCommand is a command addressed to the world.
 type WorldCommand interface {
 	Command
 	TranslateWorld() []action.WorldAction
+	// Clone returns a copy that shares nothing with the command. A command that holds only
+	// values returns itself.
+	Clone() WorldCommand
 }

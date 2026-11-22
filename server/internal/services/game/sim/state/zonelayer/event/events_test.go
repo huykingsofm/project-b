@@ -1,14 +1,19 @@
 package event
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
+// allEvents has an event of every kind of the package, for the tests that look at all of them.
+var allEvents = []Event{CharacterEntered{}, CharacterLeft{}, CharacterNoticed{}, ChatMessageSent{}, EntityDied{}, EntityHealthChanged{}, EntityMoved{}, ItemAppeared{}, ItemDisappeared{}}
+
 func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
-	all := []Event{CharacterEntered{}, CharacterLeft{}, CharacterNoticed{}, ChatMessageSent{}, EntityDied{}, EntityHealthChanged{}, EntityMoved{}, ItemAppeared{}, ItemDisappeared{}}
+	all := allEvents
 	seen := map[ID]Event{}
 	for _, e := range all {
 		if e.ID() == 0 {
@@ -52,6 +57,17 @@ func TestEveryEventSaysWhoReceivesItAndWhatIsPrivateIsNotPublic(t *testing.T) {
 		got := c.event.Audience()
 		if got.Kind == 0 || got.Kind != c.want.Kind || got.Area != c.want.Area || !slices.Equal(got.Characters, c.want.Characters) {
 			t.Errorf("%T has the audience %+v, want %+v", c.event, got, c.want)
+		}
+	}
+}
+
+// Events leave the engine to the emitter, which reads them on another goroutine, so they are values (R29).
+func TestEveryEventIsAValue(t *testing.T) {
+	for _, e := range allEvents {
+		// CharacterNoticed holds the arguments of a text; the state copies them when it makes the event
+		rules := aliasing.Rules{Boundary: true, Skip: []string{"event.CharacterNoticed.Args"}}
+		if err := aliasing.CheckCloneable(reflect.TypeOf(e), rules); err != nil {
+			t.Errorf("%T: %v", e, err)
 		}
 	}
 }

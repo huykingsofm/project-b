@@ -15,6 +15,9 @@ type ZoneLayerCharacterMoveCommand struct {
 
 func (ZoneLayerCharacterMoveCommand) ID() ID { return ZoneLayerCharacterMoveCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneLayerCharacterMoveCommand) Clone() ZoneLayerCommand { return c }
+
 func (c ZoneLayerCharacterMoveCommand) TranslateZoneLayer() []action.ZoneLayerAction {
 	return []action.ZoneLayerAction{&action.ZoneLayerCharacterMoveAction{CharacterID: c.CharacterID, Dir: c.Dir, Ticks: c.Ticks}}
 }

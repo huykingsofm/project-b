@@ -14,6 +14,9 @@ type ZoneChatSendCommand struct {
 
 func (ZoneChatSendCommand) ID() ID { return ZoneChatSendCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c ZoneChatSendCommand) Clone() ZoneCommand { return c }
+
 func (c ZoneChatSendCommand) TranslateZone() []action.ZoneAction {
 	return []action.ZoneAction{&action.ZoneChatSendAction{FromID: c.FromID, Text: c.Text}}
 }

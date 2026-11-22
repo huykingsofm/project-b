@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
 
@@ -44,6 +45,11 @@ func (e *ZoneEngine) AddCron(every uint64, actions ...action.ZoneAction) {
 
 // Send gives the zone a command, without waiting. It reports false when the queue is full.
 func (e *ZoneEngine) Send(c command.ZoneCommand) bool {
+	if c == nil {
+		logging.Error("a nil command was sent and is not taken", "engine", "zone")
+		return false
+	}
+	c = c.Clone() // the caller keeps its command and may change it: the engine keeps a copy
 	select {
 	case e.commands <- c:
 		return true

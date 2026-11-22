@@ -15,6 +15,9 @@ type WorldChatPrivateSendCommand struct {
 
 func (WorldChatPrivateSendCommand) ID() ID { return WorldChatPrivateSendCommandID }
 
+// Clone returns the command itself: it holds only values.
+func (c WorldChatPrivateSendCommand) Clone() WorldCommand { return c }
+
 func (c WorldChatPrivateSendCommand) TranslateWorld() []action.WorldAction {
 	return []action.WorldAction{&action.WorldChatPrivateSendAction{FromID: c.FromID, ToID: c.ToID, Text: c.Text}}
 }
