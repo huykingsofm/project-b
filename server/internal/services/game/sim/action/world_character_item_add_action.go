@@ -11,9 +11,6 @@ var (
 	worldCharacterItemAddActionStackLimit         = config.NewVar("world.inventory.stack_limit", 99, config.Range(1, 100000))
 )
 
-// WorldCharacterItemAddActionID is the ID of WorldCharacterItemAddAction.
-type WorldCharacterItemAddActionID struct{}
-
 // WorldCharacterItemAddAction puts items in the inventory of a character. It is a message from a
 // zonelayer: the items of a character belong to the world, and the zonelayer that gives them up has
 // already taken them off its ground (R28).
@@ -31,7 +28,7 @@ type WorldCharacterItemAddAction struct {
 	Expiry          uint64
 }
 
-func (a *WorldCharacterItemAddAction) ID() ID          { return WorldCharacterItemAddActionID{} }
+func (a *WorldCharacterItemAddAction) ID() ID          { return WorldCharacterItemAddActionID }
 func (a *WorldCharacterItemAddAction) Priority() int16 { return PriorityResolve }
 func (a *WorldCharacterItemAddAction) Actor() any      { return a.CharacterID }
 

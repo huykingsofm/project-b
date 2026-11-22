@@ -5,15 +5,12 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerCharacterShieldActionID is the ID of ZoneLayerCharacterShieldAction.
-type ZoneLayerCharacterShieldActionID struct{}
-
-// ZoneLayerCharacterShieldAction is a standing action: it stands in the plan at every tick, by setting itself
+// ZoneLayerCharacterShieldGrantAction is a standing action: it stands in the plan at every tick, by setting itself
 // for the next tick, until its time is up or it has blocked a damage. In each tick it runs in the modifier
 // band, before the damage lands, finds the damage in the plan through the plan's index by ID, and
 // cancels the first damage that is aimed at the entity of its character. It is the pattern that
 // every effect that changes an action it was not written for follows.
-type ZoneLayerCharacterShieldAction struct {
+type ZoneLayerCharacterShieldGrantAction struct {
 	CharacterID state.CharacterID
 	Duration    uint64 // for how many ticks it stands, counted from the first tick it runs
 
@@ -21,12 +18,12 @@ type ZoneLayerCharacterShieldAction struct {
 	until   uint64
 }
 
-func (a *ZoneLayerCharacterShieldAction) ID() ID          { return ZoneLayerCharacterShieldActionID{} }
-func (a *ZoneLayerCharacterShieldAction) Priority() int16 { return PriorityModifier }
-func (a *ZoneLayerCharacterShieldAction) Actor() any      { return a.CharacterID }
+func (a *ZoneLayerCharacterShieldGrantAction) ID() ID          { return ZoneLayerCharacterShieldGrantActionID }
+func (a *ZoneLayerCharacterShieldGrantAction) Priority() int16 { return PriorityModifier }
+func (a *ZoneLayerCharacterShieldGrantAction) Actor() any      { return a.CharacterID }
 
 // ApplyZoneLayer blocks the first damage that is aimed at the character, or stands again next tick.
-func (a *ZoneLayerCharacterShieldAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, p *Plan[ZoneLayerAction]) {
+func (a *ZoneLayerCharacterShieldGrantAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, p *Plan[ZoneLayerAction]) {
 	if !a.started {
 		a.started, a.until = true, c.Tick+a.Duration
 	}

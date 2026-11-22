@@ -9,10 +9,22 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [move.md](move.md) | the path of a move: `TileMap.Reach` and `State.MoveEntity` | `sim/tilemap`, `sim/state/zonelayer` |
 | [logging.md](logging.md) | a log call and the encoding of a batch | `shared/logging` |
 | [bitset.md](bitset.md) | `bitset.Array` against `[]bool` | `shared/bitset` |
+| [segmentlog.md](segmentlog.md) | appending to and reading the segment log | `shared/segmentlog` |
+| [replay_log.md](replay_log.md) | recording and reading the replay log in files | `engine/replay` |
 
 ## Run
 
-- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 <packages>`, from `server/internal/services/game/sim` (`server/internal/shared/logging` for logging, `server/internal/shared/bitset` for the bitset).
+- Command: `go test -run xxx -bench <pattern> -benchmem -count 3 ./...`
+- Directory to run it in:
+
+| Benchmarks of | Directory |
+|---|---|
+| the simulation | `server/internal/services/game/sim` |
+| logging | `server/internal/shared/logging` |
+| the bitset | `server/internal/shared/bitset` |
+| the segment log | `server/internal/shared/segmentlog` |
+| the replay log | `server/internal/services/game/engine/replay` |
+
 - Record the median of the runs.
 
 ## Record

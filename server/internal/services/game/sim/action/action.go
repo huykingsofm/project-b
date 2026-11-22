@@ -9,9 +9,8 @@
 //   - the file is named <scope>_<name>_action.go: zonelayer_character_move_action.go;
 //   - it implements the interface of its scope: ZoneLayerAction, ZoneAction or WorldAction.
 //
-// The ID of an action is a type that the action's own file defines for it (a struct{}), so two
-// IDs are never the same by accident and there is no list of them to keep. The same goes for a
-// cooldown key.
+// The ID of an action is a number of the register in id.go, and a cooldown key a number of the register
+// in cooldown_key.go; a number is never changed or reused, because the replay log writes it.
 package action
 
 import (
@@ -20,9 +19,9 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ID names a kind of action. Its value is a value of a struct{} type that the file of the action
-// defines for it.
-type ID any
+// ID names a kind of action, by a number: see id.go for the register. An action returns its own with its
+// method ID().
+type ID uint16
 
 // Acting is implemented by an action that has an author: the actor that performs it. The author
 // is a character for an action of a zonelayer or a zone and a player for a private message.

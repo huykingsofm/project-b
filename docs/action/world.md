@@ -6,7 +6,7 @@ State: [`state/world`](../../server/internal/services/game/sim/state/world): pri
 
 - Kind: intent
 - Priority: `PriorityResolve`
-- Command: `ChatPrivateWorldCommand{FromID, ToID, Text}`
+- Command: `WorldChatPrivateSendCommand{FromID, ToID, Text}`
 - Fields: `FromID`, `ToID` (`PlayerID`), `Text`
 - Steps:
   1. `SendPrivateMessage`: kept in the table of private messages (last 1000, found by sender and receiver); the events get the message with its tick.

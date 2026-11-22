@@ -5,9 +5,6 @@ import (
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 )
 
-// WorldChatPrivateSendActionID is the ID of WorldChatPrivateSendAction.
-type WorldChatPrivateSendActionID struct{}
-
 // WorldChatPrivateSendAction is a private message from one player to another. It is between players,
 // not between characters (a character is not always played by a player), and it is the world that
 // manages it: it records it and tells the clients, and no zone or zonelayer takes part.
@@ -17,7 +14,7 @@ type WorldChatPrivateSendAction struct {
 	Text   string
 }
 
-func (a *WorldChatPrivateSendAction) ID() ID          { return WorldChatPrivateSendActionID{} }
+func (a *WorldChatPrivateSendAction) ID() ID          { return WorldChatPrivateSendActionID }
 func (a *WorldChatPrivateSendAction) Priority() int16 { return PriorityResolve }
 func (a *WorldChatPrivateSendAction) Actor() any      { return a.FromID }
 

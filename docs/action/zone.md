@@ -8,7 +8,7 @@ Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAct
 
 - Kind: intent
 - Priority: `PriorityIntent`
-- Command: `EnterWorldZoneCommand{Character}` (the whole character, made or loaded outside the core)
+- Command: `ZoneCharacterEnterCommand{Character}` (the whole character, made or loaded outside the core)
 - Fields: `Character`
 - Reads: published state of each zonelayer of the zone, for its count (a zonelayer that published nothing counts as empty); not waited for
 - Steps:
@@ -20,7 +20,7 @@ Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAct
 
 - Kind: intent
 - Priority: `PriorityResolve`
-- Command: `ChatZoneCommand{FromID, Text}`
+- Command: `ZoneChatSendCommand{FromID, Text}`
 - Fields: `FromID`, `Text`
 - Steps:
   1. `SendMessage`: last 100 kept; the events get it.

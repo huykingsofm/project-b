@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"slices"
 	"sync"
 	"testing"
@@ -72,12 +73,12 @@ func (r *recorder) CountZoneLayer[T any]() int { return countChanges[T](r, r.zon
 // world: zone 1 (zonelayers 1 and 2, two characters each) and zone 2 (zonelayer 3, one character), each
 // map 10 by 5 tiles, with an exit on the east edge of zone 1 to zone 2 and one on the west edge of zone
 // 2 back to zone 1.
-func newWorld(t *testing.T, seed uint64, regenEvery uint64) (*engine.Cluster, *recorder, *engine.MemReplayLog, *config.Store) {
+func newWorld(t *testing.T, seed uint64, regenEvery uint64) (*engine.Cluster, *recorder, *replay.MemLog, *config.Store) {
 	t.Helper()
 	exit1 := tilemap.ExitDefinition{Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 2}}
 	exit2 := tilemap.ExitDefinition{Min: tilemap.Tile{X: 0, Y: 0}, Max: tilemap.Tile{X: 0, Y: 4}, ToZoneID: 1, Arrival: tilemap.Tile{X: 8, Y: 2}}
 	spawn := tilemap.Tile{X: 1, Y: 2}
-	rec, replayLog, cfg := &recorder{}, &engine.MemReplayLog{}, config.NewStore()
+	rec, replayLog, cfg := &recorder{}, &replay.MemLog{}, config.NewStore()
 	c, err := engine.NewBuilder().
 		WithConfig(cfg).
 		WithSeed(seed).
@@ -111,7 +112,7 @@ func enter(t *testing.T, c *engine.Cluster, zoneID state.ZoneID, characterID sta
 // enterCharacter puts a character, as it is, in the world through a zone.
 func enterCharacter(t *testing.T, c *engine.Cluster, zoneID state.ZoneID, character zonelayerstate.Character) {
 	t.Helper()
-	if !c.Zone(zoneID).Send(command.EnterWorldZoneCommand{Character: character}) {
+	if !c.Zone(zoneID).Send(command.ZoneCharacterEnterCommand{Character: character}) {
 		t.Fatal("zone queue full")
 	}
 	steps(c, 4)
@@ -121,7 +122,7 @@ func enterCharacter(t *testing.T, c *engine.Cluster, zoneID state.ZoneID, charac
 func walkToTheEastExit(t *testing.T, c *engine.Cluster, characterID state.CharacterID) {
 	t.Helper()
 	enter(t, c, 1, characterID, "An")
-	c.ZoneLayer(1).Send(command.MoveZoneLayerCommand{CharacterID: characterID, Dir: state.East, Ticks: 8})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: characterID, Dir: state.East, Ticks: 8})
 	steps(c, 12)
 }
 
@@ -153,15 +154,15 @@ func TestRunsOfMovementAreAppliedInOrderThroughTheCooldown(t *testing.T) {
 	l := c.ZoneLayer(1)
 	start, _ := l.State().CharacterEntityByCharacterID(1)
 
-	l.Send(command.MoveZoneLayerCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
-	l.Send(command.MoveZoneLayerCommand{CharacterID: 1, Dir: state.South, Ticks: 2}) // arrives while the first runs: it waits its turn
+	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
+	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.South, Ticks: 2}) // arrives while the first runs: it waits its turn
 	steps(c, 8)
 
 	end, _ := l.State().CharacterEntityByCharacterID(1)
 	if want := (state.Vec{X: start.Pos.X + 3000, Y: start.Pos.Y + 2000}); end.Pos != want {
 		t.Fatalf("position = %+v, want %+v", end.Pos, want)
 	}
-	if until := l.State().CooldownUntil[action.ZoneLayerCharacterMoveActionCooldownKey](1); until == 0 {
+	if until := l.State().CooldownUntil(1, action.ZoneLayerCharacterMoveActionCooldownKey); until == 0 {
 		t.Fatal("the movement left no cooldown")
 	}
 }
@@ -170,7 +171,7 @@ func TestChatInEachScope(t *testing.T) {
 	c, rec, _, _ := newWorld(t, 1, 0)
 	enter(t, c, 1, 1, "An")
 
-	c.ZoneLayer(1).Send(command.ChatZoneLayerCommand{FromID: 1, Text: "zonelayer"})
+	c.ZoneLayer(1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "zonelayer"})
 	steps(c, 3)
 	if n := rec.CountZoneLayer[zonelayerevent.ChatMessageSent](); n != 1 {
 		t.Fatalf("a zonelayer message was heard by %d zonelayers, want 1", n)
@@ -179,7 +180,7 @@ func TestChatInEachScope(t *testing.T) {
 		t.Fatalf("a zonelayer message reached the zone %d times", n)
 	}
 
-	c.Zone(1).Send(command.ChatZoneCommand{FromID: 1, Text: "zone"})
+	c.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "zone"})
 	steps(c, 3)
 	if n := rec.CountZone[zoneevent.ChatMessageSent](); n != 1 {
 		t.Fatalf("the zone recorded %d messages, want 1", n)
@@ -188,7 +189,7 @@ func TestChatInEachScope(t *testing.T) {
 		t.Fatalf("zonelayer messages heard = %d, want 3", n)
 	}
 
-	c.World.Send(command.ChatPrivateWorldCommand{FromID: 10, ToID: 20, Text: "private"})
+	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "private"})
 	steps(c, 3)
 	if n := rec.CountWorld[worldevent.PrivateChatMessageSent](); n != 1 {
 		t.Fatalf("the world recorded %d private messages, want 1", n)
@@ -208,14 +209,14 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 		return ch.Health
 	}
 
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	steps(c, 3)
 	if health(2) != 99 {
 		t.Fatalf("health after a hit = %d, want 99", health(2))
 	}
 
 	// The attack is on its cooldown: the second one does nothing.
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	steps(c, 2)
 	if health(2) != 99 {
 		t.Fatalf("an attack in the cooldown did something: health %d", health(2))
@@ -223,22 +224,22 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 
 	// After the cooldown the attack lands again.
 	steps(c, 6)
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	steps(c, 3)
 	if health(2) != 98 {
 		t.Fatalf("the attack after the cooldown did not land: health %d, want 98", health(2))
 	}
 
 	// A shield stands in the plan, runs before the damage lands, and blocks the first one only.
-	l.Send(command.GrantShieldZoneLayerCommand{CharacterID: 2, Duration: 1000})
+	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 1000})
 	steps(c, 8)
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	steps(c, 3)
 	if health(2) != 98 {
 		t.Fatalf("a shield did not block a hit: health %d", health(2))
 	}
 	steps(c, 8)
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	steps(c, 3)
 	if health(2) != 97 {
 		t.Fatalf("the shield blocked a second hit: health %d, want 97", health(2))
@@ -249,7 +250,7 @@ func TestAttackOnATargetThatIsNotThereDoesNothing(t *testing.T) {
 	c, _, _, _ := newWorld(t, 1, 0)
 	enter(t, c, 1, 1, "An")
 	l := c.ZoneLayer(1)
-	l.Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 9})
+	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 9})
 	steps(c, 3)
 	if ch, _ := l.State().CharacterByID(1); ch.Health != 100 {
 		t.Fatalf("an attack on nobody changed health to %d", ch.Health)
@@ -261,7 +262,7 @@ func TestAKilledCharacterStaysDead(t *testing.T) {
 	enter(t, c, 1, 1, "An")
 	enterCharacter(t, c, 1, newCharacter(2, "Binh", 2, 1000, 0))
 	for range 3 {
-		c.ZoneLayer(1).Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+		c.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 		steps(c, 8)
 	}
 	if ch, _ := c.ZoneLayer(1).State().CharacterByID(2); ch.Health != 0 {
@@ -285,7 +286,7 @@ func TestACronHealsEveryCharacterEveryPeriod(t *testing.T) {
 func TestAnExitMovesTheCharacterAtOnceToAZoneLayerOfTheOtherZone(t *testing.T) {
 	c, _, _, _ := newWorld(t, 1, 0)
 	walkToTheEastExit(t, c, 1)
-	c.ZoneLayer(1).Send(command.UseExitZoneLayerCommand{CharacterID: 1, ExitEntityID: 1})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	steps(c, 4)
 
 	if _, ok := c.ZoneLayer(1).State().CharacterByID(1); ok {
@@ -301,7 +302,7 @@ func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
 	c, _, _, _ := newWorld(t, 1, 0)
 	enter(t, c, 2, 9, "Full") // zone 2 takes one character, so it is now full
 	walkToTheEastExit(t, c, 1)
-	c.ZoneLayer(1).Send(command.UseExitZoneLayerCommand{CharacterID: 1, ExitEntityID: 1})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	steps(c, 6)
 
 	if _, ok := c.ZoneLayer(1).State().CharacterByID(1); !ok {
@@ -324,7 +325,7 @@ func TestAnExitToAZoneThatIsNotBuiltDoesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	walkToTheEastExit(t, c, 1)
-	c.ZoneLayer(1).Send(command.UseExitZoneLayerCommand{CharacterID: 1, ExitEntityID: 1})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	steps(c, 6)
 
 	if _, ok := c.ZoneLayer(1).State().CharacterByID(1); !ok {
@@ -340,7 +341,7 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 	c.Env.Router.Retire(action.ZoneLayerAddress(3))
 	before, _ := c.ZoneLayer(1).State().CharacterEntityByCharacterID(1)
 
-	c.ZoneLayer(1).Send(command.UseExitZoneLayerCommand{CharacterID: 1, ExitEntityID: 1})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	steps(c, 10)
 
 	after, ok := c.ZoneLayer(1).State().CharacterEntityByCharacterID(1)
@@ -360,7 +361,7 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 	steps(c, 22)
 	ticks := map[action.Address][]uint64{}
 	for _, r := range j.Records {
-		if r.Kind == engine.RecordHash {
+		if r.Kind == replay.KindHash {
 			ticks[r.Engine] = append(ticks[r.Engine], r.Tick)
 		}
 	}
@@ -382,18 +383,18 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 }
 
 func TestTheSameInputsGiveTheSameReplayLog(t *testing.T) {
-	run := func() []engine.Record {
+	run := func() []replay.Record {
 		c, _, j, _ := newWorld(t, 7, 0)
 		enter(t, c, 1, 1, "An")
 		enter(t, c, 1, 2, "Binh")
-		c.ZoneLayer(1).Send(command.MoveZoneLayerCommand{CharacterID: 1, Dir: state.East, Ticks: 5})
-		c.ZoneLayer(1).Send(command.NormalAttackZoneLayerCommand{CharacterID: 2, TargetID: 1})
-		c.Zone(1).Send(command.ChatZoneCommand{FromID: 1, Text: "hello"})
+		c.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5})
+		c.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 2, TargetID: 1})
+		c.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
 		steps(c, 15)
 		return j.Records
 	}
 	a, b := run(), run()
-	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y engine.Record) bool {
+	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y replay.Record) bool {
 		return x.Kind == y.Kind && x.Engine == y.Engine && x.Tick == y.Tick && x.Value == y.Value && x.Header == y.Header
 	}) {
 		t.Fatal("two runs of the same inputs recorded different replay logs")
@@ -406,13 +407,13 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 	done := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(done) }()
 
-	c.Zone(1).Send(command.EnterWorldZoneCommand{Character: newCharacter(1, "An", 100, 1000, 0)})
-	c.Zone(2).Send(command.EnterWorldZoneCommand{Character: newCharacter(2, "Binh", 100, 1000, 0)})
+	c.Zone(1).Send(command.ZoneCharacterEnterCommand{Character: newCharacter(1, "An", 100, 1000, 0)})
+	c.Zone(2).Send(command.ZoneCharacterEnterCommand{Character: newCharacter(2, "Binh", 100, 1000, 0)})
 
 	// Read only what the engines published: their own states belong to their goroutines.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		view := c.Env.Stable.View(action.ZoneAddress(1), engine.NopReplayLog{}) // a new view each time: it keeps what it reads
+		view := c.Env.Stable.View(action.ZoneAddress(1), replay.NopLog{}) // a new view each time: it keeps what it reads
 		first, other := view.ZoneLayer(1), view.ZoneLayer(3)
 		if first != nil && other != nil && first.CharacterCount() == 1 && other.CharacterCount() == 1 {
 			break
@@ -431,7 +432,7 @@ func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testi
 	enter(t, c, 1, 1, "An")
 	itemID := c.ZoneLayer(1).State().AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
-	c.ZoneLayer(1).Send(command.PickupItemZoneLayerCommand{CharacterID: 1, ItemEntityID: itemID})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID})
 	steps(c, 4)
 
 	if _, ok := c.ZoneLayer(1).State().EntityByID(itemID); ok {
@@ -454,8 +455,8 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 	enter(t, c, 1, 2, "Binh")
 	itemID := c.ZoneLayer(1).State().AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
-	c.ZoneLayer(1).Send(command.PickupItemZoneLayerCommand{CharacterID: 1, ItemEntityID: itemID})
-	c.ZoneLayer(1).Send(command.PickupItemZoneLayerCommand{CharacterID: 2, ItemEntityID: itemID})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: itemID})
 	steps(c, 4)
 
 	got := itemsHeld(c.World.State(), 1, 7) + itemsHeld(c.World.State(), 2, 7)
@@ -471,7 +472,7 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 	at := state.Vec{X: 2500, Y: 2500}
 	itemID := c.ZoneLayer(1).State().AddItemEntity(7, 3, at, 0)
 
-	c.ZoneLayer(1).Send(command.PickupItemZoneLayerCommand{CharacterID: 1, ItemEntityID: itemID})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID})
 	steps(c, 6)
 
 	if got := itemsHeld(c.World.State(), 1, 7); got != 0 {
@@ -506,7 +507,7 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 	enter(t, c, 1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	itemID := c.ZoneLayer(1).State().AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20)
-	c.ZoneLayer(1).Send(command.PickupItemZoneLayerCommand{CharacterID: 1, ItemEntityID: itemID})
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID})
 	steps(c, 6)
 
 	layer := c.ZoneLayer(1).State()

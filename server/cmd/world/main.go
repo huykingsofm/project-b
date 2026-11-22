@@ -105,27 +105,27 @@ func main() {
 			logging.Error("character does not enter", "name", c.name, "err", err)
 			continue
 		}
-		cluster.Zone(1).Send(command.EnterWorldZoneCommand{Character: character})
+		cluster.Zone(1).Send(command.ZoneCharacterEnterCommand{Character: character})
 	}
 	step("two characters enter zone 1: the zone places them in zonelayer 1, the zonelayer accepts them, the zone records them", 4)
 
-	cluster.ZoneLayer(1).Send(command.ChatZoneLayerCommand{FromID: 1, Text: "hello zonelayer"})
-	cluster.Zone(1).Send(command.ChatZoneCommand{FromID: 1, Text: "hello zone"})
-	cluster.World.Send(command.ChatPrivateWorldCommand{FromID: 10, ToID: 20, Text: "psst"})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "hello zonelayer"})
+	cluster.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
+	cluster.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
 	step("chat: a zonelayer message stays in the zonelayer, a zone message goes to every zonelayer of the zone, a private message is the world's alone", 4)
 
-	cluster.ZoneLayer(1).Send(command.GrantShieldZoneLayerCommand{CharacterID: 2, Duration: 100})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100})
 	step("a shield is granted to Binh: it stands in the plan from now on", 2)
-	cluster.ZoneLayer(1).Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	step("An attacks Binh: the attack adds a damage to the plan, the shield runs before it and blocks it", 3)
-	cluster.ZoneLayer(1).Send(command.NormalAttackZoneLayerCommand{CharacterID: 1, TargetID: 2})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	step("a second attack after the cooldown: the shield is gone, health drops", 10)
 
-	cluster.ZoneLayer(1).Send(command.MoveZoneLayerCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
-	cluster.ZoneLayer(1).Send(command.MoveZoneLayerCommand{CharacterID: 1, Dir: state.East, Ticks: 5})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5})
 	step("two runs of movement: the second waits its turn in the cooldown and starts when the first is done", 10)
 
-	cluster.ZoneLayer(1).Send(command.UseExitZoneLayerCommand{CharacterID: 1, ExitEntityID: 1})
+	cluster.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	step("An takes the east exit: the exit is optimistic, so An moves at once to a zonelayer of zone 2 that has room, without waiting for it to answer", 4)
 
 	fmt.Printf("\ncharacters in zonelayer 1: %d, zonelayer 2: %d, zonelayer 3 (zone 2): %d\n",

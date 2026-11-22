@@ -5,9 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerCharacterExitToActionID is the ID of ZoneLayerCharacterExitToAction.
-type ZoneLayerCharacterExitToActionID struct{}
-
 // ZoneLayerCharacterExitToAction is a character taking the exit it stands in, to a zonelayer of the zone
 // the exit leads to. The exit is optimistic: the character moves at once, when the zonelayer it is going
 // to has room, and does not wait for that zonelayer to answer.
@@ -24,7 +21,7 @@ type ZoneLayerCharacterExitToAction struct {
 	ExitEntityID state.EntityID
 }
 
-func (a *ZoneLayerCharacterExitToAction) ID() ID          { return ZoneLayerCharacterExitToActionID{} }
+func (a *ZoneLayerCharacterExitToAction) ID() ID          { return ZoneLayerCharacterExitToActionID }
 func (a *ZoneLayerCharacterExitToAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterExitToAction) Actor() any      { return a.CharacterID }
 

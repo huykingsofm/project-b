@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"math/rand/v2"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
@@ -24,13 +25,13 @@ type cell struct {
 	in             IncomingChannel // what the engine itself reads; the router holds the other end
 	cfg            *config.Store
 	cfgVersionSeen uint64
-	replayLog      ReplayLog
+	replayLog      replay.Log
 	view           *StableStateView // what the engine reads of the other engines, kept for the tick
 	seq            uint64
 	bounce         bouncer
 }
 
-func newCell(me action.Address, router *Router, cfg *config.Store, rpl ReplayLog, stable *StableStateRegistry, queue int) cell {
+func newCell(me action.Address, router *Router, cfg *config.Store, rpl replay.Log, stable *StableStateRegistry, queue int) cell {
 	in, out := NewChannel(me, queue)
 	router.Register(out)
 	return cell{me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl)}
@@ -64,6 +65,9 @@ func (c *cell) recordHash(cfg *config.Snapshot, tick uint64, hash func() uint64)
 		c.replayLog.Hash(c.me, tick, hash)
 	}
 }
+
+// endTick tells the replay log that the engine has recorded all it will for the tick.
+func (c *cell) endTick(tick uint64) { c.replayLog.EndTick(c.me, tick) }
 
 // settle takes what came back undelivered since the last tick and decides what each means.
 func (c *cell) settle(cfg *config.Snapshot) {

@@ -5,13 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerCharacterMoveActionID is the ID of ZoneLayerCharacterMoveAction.
-type ZoneLayerCharacterMoveActionID struct{}
-
-// ZoneLayerCharacterMoveActionCooldownKey is the key of the cooldown that ZoneLayerCharacterMoveAction sets: the first
-// tick at which the character is not moving any more. Another action may read it.
-type ZoneLayerCharacterMoveActionCooldownKey struct{}
-
 // ZoneLayerCharacterMoveAction is a run of movement: a character holds a direction for a number of ticks. It
 // moves one step in each of them, by setting itself for the next tick until the ticks are used up.
 //
@@ -32,7 +25,7 @@ type ZoneLayerCharacterMoveAction struct {
 	reserved bool
 }
 
-func (a *ZoneLayerCharacterMoveAction) ID() ID          { return ZoneLayerCharacterMoveActionID{} }
+func (a *ZoneLayerCharacterMoveAction) ID() ID          { return ZoneLayerCharacterMoveActionID }
 func (a *ZoneLayerCharacterMoveAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterMoveAction) Actor() any      { return a.CharacterID }
 
@@ -47,8 +40,8 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(c *Context, s *zonelayerst
 		return
 	}
 	if !a.reserved {
-		start := max(c.Tick, s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID))
-		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID, start+uint64(a.Ticks))
+		start := max(c.Tick, s.CooldownUntil(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey))
+		s.SetCooldown(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey, start+uint64(a.Ticks))
 		a.reserved = true
 		if start > c.Tick {
 			r.ToSelfAt(start, a)
@@ -69,7 +62,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(c *Context, s *zonelayerst
 
 // ApplyZoneLayerCancel frees the character of the movement that this run had reserved.
 func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayerCancel(c *Context, s *zonelayerstate.State, _ *ZoneLayerRegistry) {
-	if a.reserved && s.CooldownUntil[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID) > c.Tick {
-		s.SetCooldown[ZoneLayerCharacterMoveActionCooldownKey](a.CharacterID, c.Tick)
+	if a.reserved && s.CooldownUntil(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey) > c.Tick {
+		s.SetCooldown(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey, c.Tick)
 	}
 }

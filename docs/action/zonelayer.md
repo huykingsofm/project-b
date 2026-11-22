@@ -8,7 +8,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 
 - Kind: intent, cancellable
 - Priority: `PriorityIntent`
-- Command: `MoveZoneLayerCommand{CharacterID, Dir, Ticks}`
+- Command: `ZoneLayerCharacterMoveCommand{CharacterID, Dir, Ticks}`
 - Fields: `CharacterID`, `Dir`, `Ticks` (ticks left to move); private: whether the run has taken its place in the cooldown
 - Reads: map, from the published zone; if missing, sets itself for the next tick
 - Cooldown: `ZoneLayerCharacterMoveActionCooldownKey`, the first tick at which the character is not moving
@@ -22,14 +22,14 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - On cancel: `ApplyZoneLayerCancel`: if the run had taken its place and the cooldown is still ahead, the cooldown becomes this tick.
 - Example: tick 10, `{East, 3}` then `{South, 2}`. Run 1: cooldown 13, moves at 10, 11, 12. Run 2: start 13, cooldown 15, moves at 13, 14. Ends three steps east and two south; the runs never overlap.
 
-### ZoneLayerCharacterNormalAttackAction
+### ZoneLayerCharacterNormalAttackTriggerAction
 
 - Kind: intent
 - Priority: `PriorityIntent`
-- Command: `NormalAttackZoneLayerCommand{CharacterID, TargetID}`
+- Command: `ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID, TargetID}`
 - Fields: `CharacterID`, `TargetID` (a character of the zonelayer)
 - Config: `zonelayer.normal_attack.cooldown_ticks`
-- Cooldown: `ZoneLayerCharacterNormalAttackActionCooldownKey`, set to this tick + the config
+- Cooldown: `ZoneLayerCharacterNormalAttackTriggerActionCooldownKey`, set to this tick + the config
 - When busy: does nothing
 - Steps:
   1. Nothing if the character is not in the zonelayer or has no health.
@@ -44,17 +44,17 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - Kind: made
 - Priority: `PriorityResolve`
 - Fields: `SourceID`, `VictimID` (entities), `Amount`
-- Created by: [`ZoneLayerCharacterNormalAttackAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`PlanKey{ID: ZoneLayerCharacterDamageActionID{}}`)
+- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`PlanKey{ID: ZoneLayerCharacterDamageActionID{}}`)
 - Steps:
   1. Nothing if `Amount` <= 0.
   2. `DamageEntity` on the victim (a [`DamageableEntity`](../entity/entity.md#damageableentity-interface)).
 - Example: damage 1 on 100 health leaves 99; if a shield cancelled it earlier in the tick, it never runs.
 
-### ZoneLayerCharacterShieldAction
+### ZoneLayerCharacterShieldGrantAction
 
 - Kind: intent, standing
 - Priority: `PriorityModifier` (runs before the damage)
-- Command: `GrantShieldZoneLayerCommand{CharacterID, Duration}`
+- Command: `ZoneLayerCharacterShieldGrantCommand{CharacterID, Duration}`
 - Fields: `CharacterID`, `Duration` (ticks); private: start, end
 - Standing: `ToSelf` every tick until its time is up or it blocked a damage; not stored in the state
 - Steps:
@@ -95,7 +95,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 
 - Kind: intent
 - Priority: `PriorityIntent`
-- Command: `UseExitZoneLayerCommand{CharacterID, ExitEntityID}`
+- Command: `ZoneLayerCharacterExitToCommand{CharacterID, ExitEntityID}`
 - Fields: `CharacterID`, `ExitEntityID` (exit entity of the zone)
 - Reads (published, may be a few ticks old):
   - the zone: the exit entity by ID
@@ -118,7 +118,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 
 - Kind: intent
 - Priority: `PriorityIntent`
-- Command: `PickupItemZoneLayerCommand{CharacterID, ItemEntityID}`
+- Command: `ZoneLayerCharacterItemPickupCommand{CharacterID, ItemEntityID}`
 - Fields: `CharacterID`, `ItemEntityID`
 - Config: `zonelayer.pickup.radius` (units)
 - On failure: `OnFailCompensate`: the stack returns to the ground as it was (same kind, count, place and expiry; new entity ID; the expiry starts again) through [`ZoneLayerItemEntityAddAction`](#zonelayeritementityaddaction)
@@ -158,7 +158,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 
 - Kind: intent, message
 - Priority: `PriorityResolve`
-- Command: `ChatZoneLayerCommand{FromID, Text}`
+- Command: `ZoneLayerChatSendCommand{FromID, Text}`
 - Fields: `FromID`, `Text`
 - Sent by: [`ZoneChatSendAction`](zone.md#zonechatsendaction), once per zonelayer; dropped if not delivered
 - Steps:

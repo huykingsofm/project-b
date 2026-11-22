@@ -8,9 +8,6 @@ import (
 
 var zoneLayerCharacterItemPickupActionRadius = config.NewVar("zonelayer.pickup.radius", 2000, config.Range(0, 32000))
 
-// ZoneLayerCharacterItemPickupActionID is the ID of ZoneLayerCharacterItemPickupAction.
-type ZoneLayerCharacterItemPickupActionID struct{}
-
 // ZoneLayerCharacterItemPickupAction is a character picking up an item that lies on the ground of its
 // zonelayer. The character chooses the exact entity of the item (the client works out which one it
 // means), and must be within the pickup radius, in units, of the item: no part of its body farther than that from the item.
@@ -24,7 +21,7 @@ type ZoneLayerCharacterItemPickupAction struct {
 	ItemEntityID state.EntityID
 }
 
-func (a *ZoneLayerCharacterItemPickupAction) ID() ID          { return ZoneLayerCharacterItemPickupActionID{} }
+func (a *ZoneLayerCharacterItemPickupAction) ID() ID          { return ZoneLayerCharacterItemPickupActionID }
 func (a *ZoneLayerCharacterItemPickupAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterItemPickupAction) Actor() any      { return a.CharacterID }
 

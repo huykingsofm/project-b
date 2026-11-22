@@ -1,11 +1,16 @@
 package zonelayer
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 	"github.com/huykingsofm/project-b/server/internal/shared/orderedmap"
 )
+
+// CooldownKey names what a cooldown is for. The register of the keys, with their numbers, is in package action.
+type CooldownKey uint16
 
 // Character is a character that has a body in a zonelayer, and everything the zonelayer knows of it,
 // its health included. It travels whole from one zonelayer to another: RemoveCharacterEntity returns it and
@@ -27,10 +32,8 @@ type Character struct {
 	Speed int32
 
 	// Cooldowns says, for each key, the first tick at which the character is free of what the
-	// key stands for. A key is a value of any comparable type. Each action defines a key of its
-	// own, as a type of its own (a struct{}), so two actions never share a key by accident, and
-	// an action can read the key of another action when it needs to.
-	Cooldowns orderedmap.Map[any, uint64]
+	// key stands for. A key is a number of the register of the cooldown keys (see package action).
+	Cooldowns orderedmap.Map[CooldownKey, uint64]
 }
 
 // NewCharacter makes a character that has just been made, with all its health, the speed, in units
@@ -42,4 +45,48 @@ func NewCharacter(characterID state.CharacterID, name string, maxHealth int32, s
 		return Character{}, fmt.Errorf("zonelayer: the radius of a body is not negative, got %d", radius)
 	}
 	return Character{CharacterID: characterID, Name: name, Health: maxHealth, MaxHealth: maxHealth, Speed: speed, Radius: radius}, nil
+}
+
+// ErrUnknownCooldownKey is returned when bytes name a cooldown key that is too large to be the number of a key.
+var ErrUnknownCooldownKey = errors.New("zonelayer: the number is not one of a cooldown key")
+
+// Encode writes a character: its fields and its cooldowns, each as the number of its key and the tick
+// it ends at, in the order they were set.
+func (c Character) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(c.CharacterID))
+	w.String(c.Name)
+	w.Varint(int64(c.Health))
+	w.Varint(int64(c.MaxHealth))
+	w.Varint(int64(c.Radius))
+	w.Varint(int64(c.Speed))
+	w.Uvarint(uint64(c.Cooldowns.Len()))
+	for key, until := range c.Cooldowns.All() {
+		w.Uvarint(uint64(key))
+		w.Uvarint(until)
+	}
+}
+
+// DecodeCharacter reads what Character.Encode wrote, of the data version given. It returns an error of the bytes (binarycodec.ErrShort),
+// or one that wraps ErrUnknownCooldownKey.
+func DecodeCharacter(r *binarycodec.Reader, version binarycodec.Version) (Character, error) {
+	c := Character{
+		CharacterID: state.CharacterID(r.Uvarint()),
+		Name:        r.String(),
+		Health:      int32(r.Varint()),
+		MaxHealth:   int32(r.Varint()),
+		Radius:      int32(r.Varint()),
+		Speed:       int32(r.Varint()),
+	}
+	n := r.Uvarint()
+	for i := uint64(0); i < n && r.Err() == nil; i++ {
+		code, until := r.Uvarint(), r.Uvarint()
+		if r.Err() != nil {
+			break
+		}
+		if code > 0xffff {
+			return Character{}, fmt.Errorf("%w: %d", ErrUnknownCooldownKey, code)
+		}
+		c.Cooldowns.Set(CooldownKey(code), until)
+	}
+	return c, r.Err()
 }

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
@@ -17,7 +18,7 @@ import (
 // lock.
 type StableStateView struct {
 	registry   *StableStateRegistry
-	replayLog  ReplayLog
+	replayLog  replay.Log
 	me         action.Address
 	tick       uint64
 	world      *worldstate.State

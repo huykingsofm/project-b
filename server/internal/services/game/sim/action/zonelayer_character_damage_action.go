@@ -5,9 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerCharacterDamageActionID is the ID of ZoneLayerCharacterDamageAction.
-type ZoneLayerCharacterDamageActionID struct{}
-
 // ZoneLayerCharacterDamageAction takes health from an entity. It is in the plan after the action that caused it
 // and after the effects that may change it, and an effect that runs before it may lower it or
 // cancel it.
@@ -16,7 +13,7 @@ type ZoneLayerCharacterDamageAction struct {
 	Amount             int32
 }
 
-func (a *ZoneLayerCharacterDamageAction) ID() ID          { return ZoneLayerCharacterDamageActionID{} }
+func (a *ZoneLayerCharacterDamageAction) ID() ID          { return ZoneLayerCharacterDamageActionID }
 func (a *ZoneLayerCharacterDamageAction) Priority() int16 { return PriorityResolve }
 
 // ApplyZoneLayer hurts the victim.

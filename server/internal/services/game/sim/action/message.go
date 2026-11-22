@@ -1,6 +1,9 @@
 package action
 
-import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+)
 
 // Scope is a kind of engine: the world, a zone or a zonelayer. (Level would clash with the level of a
 // character.)
@@ -12,6 +15,19 @@ const (
 	ScopeZone
 	ScopeZoneLayer
 )
+
+// String is the name of the scope, as the replay log names a directory.
+func (s Scope) String() string {
+	switch s {
+	case ScopeWorld:
+		return "world"
+	case ScopeZone:
+		return "zone"
+	case ScopeZoneLayer:
+		return "zonelayer"
+	}
+	return "unknown"
+}
 
 // Address says which engine a message is for: its scope, and its ID (the world ID, the zone ID or
 // the zonelayer ID).
@@ -221,4 +237,27 @@ func MessageToZone(zoneID state.ZoneID, onFail OnFail, actions ...ZoneAction) Me
 // MessageToWorld makes a message for a world.
 func MessageToWorld(worldID state.WorldID, onFail OnFail, actions ...WorldAction) Message {
 	return newScopedMessage(WorldAddress(worldID), onFail, actions)
+}
+
+// Encode writes an address: its scope and its ID.
+func (a Address) Encode(w *binarycodec.Writer) {
+	w.Uint8(uint8(a.Scope))
+	w.Uvarint(uint64(a.ID))
+}
+
+// DecodeAddress reads what Address.Encode wrote, of the data version given. A reader that has failed gives the zero
+// address.
+func DecodeAddress(r *binarycodec.Reader, version binarycodec.Version) Address {
+	return Address{Scope: Scope(r.Uint8()), ID: uint32(r.Uvarint())}
+}
+
+// Encode writes a header: who sent the message and which message of the sender it was.
+func (h Header) Encode(w *binarycodec.Writer) {
+	h.From.Encode(w)
+	w.Uvarint(h.Seq)
+}
+
+// DecodeHeader reads what Header.Encode wrote, of the data version given.
+func DecodeHeader(r *binarycodec.Reader, version binarycodec.Version) Header {
+	return Header{From: DecodeAddress(r, version), Seq: r.Uvarint()}
 }

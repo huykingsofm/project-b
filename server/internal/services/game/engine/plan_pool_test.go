@@ -7,11 +7,11 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 )
 
-type poolTestID struct{}
+const poolTestID action.ID = 60001
 
 type poolTestAction struct{}
 
-func (*poolTestAction) ID() action.ID   { return poolTestID{} }
+func (*poolTestAction) ID() action.ID   { return poolTestID }
 func (*poolTestAction) Priority() int16 { return 0 }
 
 func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAPlanThatWasPutBackHoldsNoAction(t *testing.T) {
 	p.Append(&poolTestAction{})
 	p.Append(&poolTestAction{})
 	pool.Put(p)
-	if p.Len() != 0 || len(p.Find(action.PlanKey{ID: poolTestID{}})) != 0 {
+	if p.Len() != 0 || len(p.Find(action.PlanKey{ID: poolTestID})) != 0 {
 		t.Fatal("a plan that was put back still holds an action")
 	}
 }

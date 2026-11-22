@@ -5,9 +5,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerChatSendActionID is the ID of ZoneLayerChatSendAction.
-type ZoneLayerChatSendActionID struct{}
-
 // ZoneLayerChatSendAction is a message said in a zonelayer. A character says it to the zonelayer it is in, and a
 // zone gives it to each of its zonelayers (ZoneChatSendAction).
 type ZoneLayerChatSendAction struct {
@@ -15,7 +12,7 @@ type ZoneLayerChatSendAction struct {
 	Text   string
 }
 
-func (a *ZoneLayerChatSendAction) ID() ID          { return ZoneLayerChatSendActionID{} }
+func (a *ZoneLayerChatSendAction) ID() ID          { return ZoneLayerChatSendActionID }
 func (a *ZoneLayerChatSendAction) Priority() int16 { return PriorityResolve }
 func (a *ZoneLayerChatSendAction) Actor() any      { return a.FromID }
 

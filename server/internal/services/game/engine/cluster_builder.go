@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -41,7 +42,7 @@ type ClusterBuilder struct {
 	cfg              *config.Store
 	seed             uint64
 	queueSize        int
-	replayLog        ReplayLog
+	replayLog        replay.Log
 	worldEmitter     WorldEmitter
 	zoneEmitter      ZoneEmitter
 	zoneLayerEmitter ZoneLayerEmitter
@@ -57,7 +58,7 @@ func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:              config.NewStore(),
 		queueSize:        256,
-		replayLog:        NopReplayLog{},
+		replayLog:        replay.NopLog{},
 		worldEmitter:     NopEmitter{},
 		zoneEmitter:      NopEmitter{},
 		zoneLayerEmitter: NopEmitter{},
@@ -85,7 +86,7 @@ func (b *ClusterBuilder) WithQueueSize(size int) *ClusterBuilder {
 }
 
 // WithReplayLog sets where the engines write what a replay needs. A nil log keeps the default.
-func (b *ClusterBuilder) WithReplayLog(log ReplayLog) *ClusterBuilder {
+func (b *ClusterBuilder) WithReplayLog(log replay.Log) *ClusterBuilder {
 	if log != nil {
 		b.replayLog = log
 	}
