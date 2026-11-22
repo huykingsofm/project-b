@@ -1,17 +1,19 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 )
 
 func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuses(t *testing.T) {
-	in, out := NewChannel(action.ZoneAddress(1), 1)
-	if out.Address() != action.ZoneAddress(1) {
+	in, out := NewChannel(message.ZoneAddress(1), 1)
+	if out.Address() != message.ZoneAddress(1) {
 		t.Fatalf("address = %v", out.Address())
 	}
-	m := action.MessageToZone(1, action.OnFailDrop{}, nil...)
+	m := action.MessageToZone(1, onfail.Drop{}, nil...)
 	if !out.Send(m) {
 		t.Fatal("the first message was refused")
 	}
@@ -22,7 +24,7 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 		t.Fatal("the incoming channel did not give what was sent")
 	}
 
-	r := ReturnedMessage{Message: m, Reason: action.Full}
+	r := ReturnedMessage{Message: m, Reason: message.Full}
 	if !out.SendBack(r) {
 		t.Fatal("the returned message was refused")
 	}

@@ -3,6 +3,7 @@ package replay
 import (
 	"bytes"
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
@@ -37,7 +38,7 @@ type Body interface {
 
 // Record is one entry of a log: who recorded it, at which tick, and what.
 type Record struct {
-	Engine action.Address
+	Engine message.Address
 	Tick   uint64
 	Body   Body
 }
@@ -51,7 +52,7 @@ func (r Record) Kind() Kind {
 }
 
 // Inbound is a message that the engine took, whole.
-type Inbound struct{ Message action.Message }
+type Inbound struct{ Message message.Message }
 
 func (Inbound) Kind() Kind { return KindInbound }
 
@@ -126,7 +127,7 @@ func decodeHash(r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
 // StableRead says which copy of the state of another engine the engine read first at the tick: the
 // tick the copy was taken at, or 0 when there was none.
 type StableRead struct {
-	Source   action.Address
+	Source   message.Address
 	CopyTick uint64
 }
 
@@ -141,14 +142,14 @@ func (b StableRead) Encode(w *binarycodec.Writer) error {
 func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
 
 func decodeStableRead(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
-	return StableRead{Source: action.DecodeAddress(r, version), CopyTick: r.Uvarint()}, r.Err()
+	return StableRead{Source: message.DecodeAddress(r, version), CopyTick: r.Uvarint()}, r.Err()
 }
 
 // Returned says that a message the engine sent came back undelivered, and why: the header of the
 // message, and the reason.
 type Returned struct {
-	Header action.Header
-	Reason action.Reason
+	Header message.Header
+	Reason message.Reason
 }
 
 func (Returned) Kind() Kind { return KindReturned }
@@ -162,13 +163,13 @@ func (b Returned) Encode(w *binarycodec.Writer) error {
 func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok && b == o }
 
 func decodeReturned(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
-	header := action.DecodeHeader(r, version)
-	return Returned{Header: header, Reason: action.Reason(r.Uint8())}, r.Err()
+	header := message.DecodeHeader(r, version)
+	return Returned{Header: header, Reason: message.Reason(r.Uint8())}, r.Err()
 }
 
 // SameMessage reports whether two messages are the same one, by what they are written as: that is
 // what the log holds, and it does not tell a nil list from an empty one.
-func SameMessage(a, b action.Message) bool {
+func SameMessage(a, b message.Message) bool {
 	var x, y binarycodec.Writer
 	if action.EncodeMessage(&x, a) != nil || action.EncodeMessage(&y, b) != nil {
 		return false
@@ -208,7 +209,7 @@ func encodeRecord(w *binarycodec.Writer, r Record) error {
 
 // decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
 func decodeRecord(
-	engine action.Address, version binarycodec.Version, payload []byte,
+	engine message.Address, version binarycodec.Version, payload []byte,
 ) (Record, error) {
 	r := binarycodec.NewReader(payload)
 	kind, tick := Kind(r.Uint8()), r.Uvarint()

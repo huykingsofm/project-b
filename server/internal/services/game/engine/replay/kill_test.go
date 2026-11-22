@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bufio"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"math/rand/v2"
 	"os"
 	"os/exec"
@@ -10,16 +11,14 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 )
 
-var killEngines = []action.Address{
-	action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneAddress(1),
+var killEngines = []message.Address{
+	message.ZoneLayerAddress(1), message.ZoneLayerAddress(2), message.ZoneAddress(1),
 }
 
 // lastTick is the tick of the last record of an engine's log, or 0 when it has none.
-func lastTick(t testing.TB, dir string, engine action.Address) uint64 {
+func lastTick(t testing.TB, dir string, engine message.Address) uint64 {
 	t.Helper()
 	r, err := ReadFileLog(dir, engine, 0)
 	if err != nil {

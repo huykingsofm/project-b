@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"math/rand/v2"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
@@ -21,7 +22,7 @@ var replayLogHashEvery = config.NewVar("replay_log.hash_every_ticks", 20, config
 // router it sends through, the configuration it reads, the replay log it writes, and the
 // bouncer that runs what a message says a failed delivery means.
 type cell struct {
-	me             action.Address
+	me             message.Address
 	router         *Router
 	in             IncomingChannel // what the engine itself reads; the router holds the other end
 	cfg            *config.Store
@@ -29,12 +30,12 @@ type cell struct {
 	replayLog      replay.Log
 	view           *StableStateView // what the engine reads of the other engines, kept for the tick
 	seq            uint64
-	lastSeq        map[action.Address]uint64 // the last Seq taken from each sender
+	lastSeq        map[message.Address]uint64 // the last Seq taken from each sender
 	bounce         bouncer
 }
 
 func newCell(
-	me action.Address,
+	me message.Address,
 	router *Router,
 	cfg *config.Store,
 	rpl replay.Log,
@@ -45,13 +46,13 @@ func newCell(
 	router.Register(out)
 	return cell{
 		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
-		lastSeq: map[action.Address]uint64{},
+		lastSeq: map[message.Address]uint64{},
 	}
 }
 
 // newRand makes the random numbers of an engine: the seed of the cluster and the address of the
 // engine decide them, so the same inputs give the same run.
-func newRand(seed uint64, me action.Address) *rand.Rand {
+func newRand(seed uint64, me message.Address) *rand.Rand {
 	return rand.New(rand.NewPCG(seed, uint64(me.Scope)<<32|uint64(me.ID)))
 }
 
@@ -94,8 +95,8 @@ func (c *cell) settle(cfg *config.Snapshot, tick uint64) {
 
 // received takes the messages that other engines sent since the last tick, in the order they
 // arrived, and writes each to the replay log.
-func (c *cell) received(tick uint64) []action.Message {
-	var messages []action.Message
+func (c *cell) received(tick uint64) []message.Message {
+	var messages []message.Message
 	for _, m := range channels.Drain(c.in.In) {
 		if c.seenBefore(m.Head()) {
 			continue
@@ -111,7 +112,7 @@ func (c *cell) received(tick uint64) []action.Message {
 // queue of an engine keeps their order, so a number that is not larger than the last taken is a
 // second copy of a message (a message that was sent again after a restart), and it is dropped. A
 // message that was not numbered (Seq 0) is never a copy.
-func (c *cell) seenBefore(h action.Header) bool {
+func (c *cell) seenBefore(h message.Header) bool {
 	if h.Seq == 0 {
 		return false
 	}
@@ -141,10 +142,10 @@ func (c *cell) receivedActions[A action.Action](tick uint64) []A {
 // necessary, then what the actions of this tick put in the outbox. A message that cannot be
 // delivered is handled at once, and the replay log records that it came back, at the tick of
 // the send.
-func (c *cell) flush(cfg *config.Snapshot, tick uint64, outbox []action.Message) {
+func (c *cell) flush(cfg *config.Snapshot, tick uint64, outbox []message.Message) {
 	for _, m := range append(c.bounce.take(), outbox...) {
 		c.seq++
-		m = m.Stamp(action.Header{From: c.me, Seq: c.seq})
+		m = m.Stamp(message.Header{From: c.me, Seq: c.seq})
 		if reason, ok := c.router.Deliver(m); !ok {
 			c.replayLog.Append(c.me, tick, replay.Returned{Header: m.Head(), Reason: reason})
 			c.bounce.handle(cfg, m, reason)
@@ -157,6 +158,6 @@ func (c *cell) retire() {
 	c.router.Retire(c.me)
 	c.bounce.stopping = true
 	for _, m := range channels.Drain(c.in.In) {
-		c.router.Return(m, action.Retired)
+		c.router.Return(m, message.Retired)
 	}
 }

@@ -15,12 +15,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"os"
 	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world/event"
@@ -34,21 +34,21 @@ import (
 // printer is the output of the engines: it shows each change with the scope that made it.
 type printer struct{}
 
-func show[C any](scope string, from action.Address, tick uint64, events []C) {
+func show[C any](scope string, from message.Address, tick uint64, events []C) {
 	for _, c := range events {
 		fmt.Printf("    %-5s %d  t=%-3d %T %+v\n", scope, from.ID, tick, c, c)
 	}
 }
 
-func (printer) EmitWorld(from action.Address, tick uint64, events []worldevent.Event) {
+func (printer) EmitWorld(from message.Address, tick uint64, events []worldevent.Event) {
 	show("world", from, tick, events)
 }
 
-func (printer) EmitZone(from action.Address, tick uint64, events []zoneevent.Event) {
+func (printer) EmitZone(from message.Address, tick uint64, events []zoneevent.Event) {
 	show("zone", from, tick, events)
 }
 
-func (printer) EmitZoneLayer(from action.Address, tick uint64, events []zonelayerevent.Event) {
+func (printer) EmitZoneLayer(from message.Address, tick uint64, events []zonelayerevent.Event) {
 	show("zonelayer", from, tick, events)
 }
 
@@ -205,9 +205,9 @@ func main() {
 		if err := replayFile.Close(); err != nil {
 			fail("the replay log could not be written", err)
 		}
-		engines := []action.Address{
-			action.WorldAddress(1), action.ZoneAddress(1), action.ZoneAddress(2),
-			action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneLayerAddress(3),
+		engines := []message.Address{
+			message.WorldAddress(1), message.ZoneAddress(1), message.ZoneAddress(2),
+			message.ZoneLayerAddress(1), message.ZoneLayerAddress(2), message.ZoneLayerAddress(3),
 		}
 		fmt.Printf("\nthe replay log under %s, read back:\n", *replayDir)
 		for _, e := range engines {

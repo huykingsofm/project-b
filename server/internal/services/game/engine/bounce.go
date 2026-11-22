@@ -3,25 +3,26 @@ package engine
 import (
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 // bouncer is what a message that could not be delivered asks of the engine that sent it: the
 // message says itself what a failed delivery means (its OnFail), and runs on the bouncer through
-// the interface action.Bouncer. What it makes is kept to be sent at the next flush.
+// the interface message.Bouncer. What it makes is kept to be sent at the next flush.
 type bouncer struct {
-	pending  []action.Message
+	pending  []message.Message
 	notice   func(actor any, key string, args []any)
 	stopping bool
 	dropped  uint64
 	cfg      *config.Snapshot // of the tick: how many attempts a message may have
 }
 
-var _ action.Bouncer = (*bouncer)(nil)
+var _ message.Bouncer = (*bouncer)(nil)
 
 // handle runs what the message says to do about the failure. A message with no OnFail is dropped
 // and logged.
-func (b *bouncer) handle(cfg *config.Snapshot, m action.Message, r action.Reason) {
+func (b *bouncer) handle(cfg *config.Snapshot, m message.Message, r message.Reason) {
 	b.cfg = cfg
 	onFail := m.OnFail()
 	if onFail == nil {
@@ -36,7 +37,7 @@ func (b *bouncer) handle(cfg *config.Snapshot, m action.Message, r action.Reason
 }
 
 // Resend keeps a message to be sent at the next flush.
-func (b *bouncer) Resend(m action.Message) { b.pending = append(b.pending, m) }
+func (b *bouncer) Resend(m message.Message) { b.pending = append(b.pending, m) }
 
 // Tell tells an actor something. An actor that is nil, or an engine that has no one to tell, tells
 // nothing.
@@ -61,7 +62,7 @@ func (b *bouncer) Stopping() bool { return b.stopping }
 func (b *bouncer) MaxAttempts() int { return action.MaxAttempts.Get(b.cfg) }
 
 // take returns the messages that are to be sent again, and forgets them.
-func (b *bouncer) take() []action.Message {
+func (b *bouncer) take() []message.Message {
 	out := b.pending
 	b.pending = nil
 	return out

@@ -3,6 +3,8 @@ package engine_test
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"slices"
 	"sync"
 	"testing"
@@ -35,19 +37,19 @@ type recorder struct {
 	zonelayer []zonelayerevent.Event
 }
 
-func (r *recorder) EmitWorld(_ action.Address, _ uint64, c []worldevent.Event) {
+func (r *recorder) EmitWorld(_ message.Address, _ uint64, c []worldevent.Event) {
 	r.mu.Lock()
 	r.world = append(r.world, c...)
 	r.mu.Unlock()
 }
 
-func (r *recorder) EmitZone(_ action.Address, _ uint64, c []zoneevent.Event) {
+func (r *recorder) EmitZone(_ message.Address, _ uint64, c []zoneevent.Event) {
 	r.mu.Lock()
 	r.zone = append(r.zone, c...)
 	r.mu.Unlock()
 }
 
-func (r *recorder) EmitZoneLayer(_ action.Address, _ uint64, c []zonelayerevent.Event) {
+func (r *recorder) EmitZoneLayer(_ message.Address, _ uint64, c []zonelayerevent.Event) {
 	r.mu.Lock()
 	r.zonelayer = append(r.zonelayer, c...)
 	r.mu.Unlock()
@@ -396,7 +398,7 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 	walkToTheEastExit(t, c, 1)
 	// The zonelayer that the exit will choose goes away after it published how many characters it
 	// holds, so the exit sees room and the message to it cannot be delivered.
-	c.Env.Router.Retire(action.ZoneLayerAddress(3))
+	c.Env.Router.Retire(message.ZoneLayerAddress(3))
 	before, _ := c.ZoneLayer(1).State().CharacterEntityByCharacterID(1)
 
 	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
@@ -418,7 +420,7 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 ) {
 	c, _, j, _ := newWorld(t, 1, 0)
 	walkToTheEastExit(t, c, 1)
-	c.Env.Router.Retire(action.ZoneLayerAddress(3))
+	c.Env.Router.Retire(message.ZoneLayerAddress(3))
 
 	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
 	steps(c, 10)
@@ -434,15 +436,16 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	}
 	got := returned[0]
 	body := got.Body.(replay.Returned)
-	if got.Engine != action.ZoneLayerAddress(1) || body.Header.From != action.ZoneLayerAddress(1) ||
-		body.Header.Seq == 0 || body.Reason != action.Retired {
+	layer := message.ZoneLayerAddress(1)
+	if got.Engine != layer || body.Header.From != layer ||
+		body.Header.Seq == 0 || body.Reason != message.Retired {
 		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as Retired", got)
 	}
 	var settledAt uint64
 	for _, r := range j.Records {
 		inbound, ok := r.Body.(replay.Inbound)
-		if ok && r.Engine == action.ZoneLayerAddress(1) &&
-			inbound.Message.Head().From == action.ZoneLayerAddress(1) && r.Tick > got.Tick {
+		if ok && r.Engine == message.ZoneLayerAddress(1) &&
+			inbound.Message.Head().From == message.ZoneLayerAddress(1) && r.Tick > got.Tick {
 			settledAt = r.Tick // the compensation, which is sent to itself, is taken after
 		}
 	}
@@ -453,12 +456,12 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 
 func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *testing.T) {
 	c, _, j, _ := newWorld(t, 1, 0)
-	layer := action.ZoneLayerAddress(1)
-	say := func(seq uint64) action.Message {
+	layer := message.ZoneLayerAddress(1)
+	say := func(seq uint64) message.Message {
 		m := action.MessageToZoneLayer(
-			1, action.OnFailDrop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
+			1, onfail.Drop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
 		)
-		return m.Stamp(action.Header{From: action.ZoneAddress(1), Seq: seq})
+		return m.Stamp(message.Header{From: message.ZoneAddress(1), Seq: seq})
 	}
 	for _, seq := range []uint64{5, 5, 4, 6} { // a copy, a number that went back, and a new one
 		if _, ok := c.Env.Router.Deliver(say(seq)); !ok {
@@ -493,7 +496,7 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 		t.Fatal(err)
 	}
 	steps(c, 22)
-	ticks := map[action.Address][]uint64{}
+	ticks := map[message.Address][]uint64{}
 	for _, r := range j.Records {
 		if r.Kind() == replay.KindHash {
 			ticks[r.Engine] = append(ticks[r.Engine], r.Tick)
@@ -556,7 +559,7 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		// a new view each time: it keeps what it reads
-		view := c.Env.Stable.View(action.ZoneAddress(1), replay.NopLog{})
+		view := c.Env.Stable.View(message.ZoneAddress(1), replay.NopLog{})
 		first, other := view.ZoneLayer(1), view.ZoneLayer(3)
 		if first != nil && other != nil && first.CharacterCount() == 1 &&
 			other.CharacterCount() == 1 {

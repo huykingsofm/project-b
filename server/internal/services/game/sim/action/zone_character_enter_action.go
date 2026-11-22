@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
@@ -38,7 +39,7 @@ func (a *ZoneCharacterEnterAction) ApplyZone(
 		}
 		r.ToZoneLayer(
 			zoneLayerID,
-			OnFailDrop{},
+			onfail.Drop{},
 			&ZoneLayerCharacterEnterAction{
 				Character: a.Character, At: zoneCharacterEnterActionArrival,
 			},

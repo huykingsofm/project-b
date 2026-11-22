@@ -11,17 +11,17 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"maps"
 	"sync"
 	"sync/atomic"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
 type routerData struct {
-	chans   map[action.Address]OutgoingChannel
-	retired map[action.Address]bool
+	chans   map[message.Address]OutgoingChannel
+	retired map[message.Address]bool
 }
 
 // Router carries the messages between the engines. It holds the outgoing channel of every engine,
@@ -39,7 +39,7 @@ func NewRouter() *Router {
 	rt := &Router{}
 	rt.data.Store(
 		&routerData{
-			chans: map[action.Address]OutgoingChannel{}, retired: map[action.Address]bool{},
+			chans: map[message.Address]OutgoingChannel{}, retired: map[message.Address]bool{},
 		},
 	)
 	return rt
@@ -50,8 +50,8 @@ func (rt *Router) update(f func(*routerData)) {
 	defer rt.mu.Unlock()
 	old := rt.data.Load()
 	next := &routerData{
-		chans:   make(map[action.Address]OutgoingChannel, len(old.chans)+1),
-		retired: make(map[action.Address]bool, len(old.retired)+1),
+		chans:   make(map[message.Address]OutgoingChannel, len(old.chans)+1),
+		retired: make(map[message.Address]bool, len(old.retired)+1),
 	}
 	maps.Copy(next.chans, old.chans)
 	maps.Copy(next.retired, old.retired)
@@ -68,7 +68,7 @@ func (rt *Router) Register(o OutgoingChannel) {
 }
 
 // Retire makes an address unreachable for good: a message to it bounces as Retired.
-func (rt *Router) Retire(a action.Address) {
+func (rt *Router) Retire(a message.Address) {
 	rt.update(func(n *routerData) {
 		delete(n.chans, a)
 		n.retired[a] = true
@@ -79,27 +79,27 @@ func (rt *Router) Retire(a action.Address) {
 func (rt *Router) Stop() { rt.stopping.Store(true) }
 
 // Deliver puts a message in the channel of its address. When it cannot, it says why.
-func (rt *Router) Deliver(l action.Message) (action.Reason, bool) {
+func (rt *Router) Deliver(l message.Message) (message.Reason, bool) {
 	if rt.stopping.Load() {
-		return action.Stopping, false
+		return message.Stopping, false
 	}
 	data := rt.data.Load()
 	ch, ok := data.chans[l.Dest()]
 	if !ok {
 		if data.retired[l.Dest()] {
-			return action.Retired, false
+			return message.Retired, false
 		}
-		return action.NotBuilt, false
+		return message.NotBuilt, false
 	}
 	if !ch.Send(l) {
-		return action.Full, false
+		return message.Full, false
 	}
 	return 0, true
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that
 // is gone or full loses it, and it is counted.
-func (rt *Router) Return(l action.Message, r action.Reason) {
+func (rt *Router) Return(l message.Message, r message.Reason) {
 	from := l.Head().From
 	ch, ok := rt.data.Load().chans[from]
 	if !ok {

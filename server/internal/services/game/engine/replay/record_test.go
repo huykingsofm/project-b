@@ -1,9 +1,9 @@
 package replay
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"testing"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 )
@@ -27,14 +27,14 @@ func TestEveryKindOfTheRegisterHasADecoderAndABodyThatReturnsIt(t *testing.T) {
 
 func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 	move := command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3}
-	other := action.ZoneAddress(2)
+	other := message.ZoneAddress(2)
 	same := [][2]Body{
 		{Inbound{Message: benchMessage(7)}, Inbound{Message: benchMessage(7)}},
 		{Command{Command: move}, Command{Command: move}},
 		{ConfigRead{Version: 1}, ConfigRead{Version: 1}},
 		{Hash{Value: 9}, Hash{Value: 9}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 4}},
-		{Returned{Reason: action.Full}, Returned{Reason: action.Full}},
+		{Returned{Reason: message.Full}, Returned{Reason: message.Full}},
 	}
 	for _, p := range same {
 		if !p[0].Same(p[1]) {
@@ -47,7 +47,7 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		{ConfigRead{Version: 1}, ConfigRead{Version: 2}},
 		{Hash{Value: 9}, Hash{Value: 10}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 5}},
-		{Returned{Reason: action.Full}, Returned{Reason: action.Retired}},
+		{Returned{Reason: message.Full}, Returned{Reason: message.Retired}},
 		{ConfigRead{Version: 9}, Hash{Value: 9}}, // the same number in another kind
 	}
 	for _, p := range different {

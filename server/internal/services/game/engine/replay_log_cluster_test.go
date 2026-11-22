@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"reflect"
 	"testing"
 	"time"
@@ -21,19 +22,19 @@ import (
 type teeReplayLog struct{ a, b replay.Log }
 
 func (t teeReplayLog) Wants(k replay.Kind) bool { return t.a.Wants(k) || t.b.Wants(k) }
-func (t teeReplayLog) Append(e action.Address, tick uint64, body replay.Body) {
+func (t teeReplayLog) Append(e message.Address, tick uint64, body replay.Body) {
 	t.a.Append(e, tick, body)
 	t.b.Append(e, tick, body)
 }
-func (t teeReplayLog) EndTick(e action.Address, tick uint64) {
+func (t teeReplayLog) EndTick(e message.Address, tick uint64) {
 	t.a.EndTick(e, tick)
 	t.b.EndTick(e, tick)
 }
 
-var clusterEngines = []action.Address{
-	action.WorldAddress(1),
-	action.ZoneAddress(1), action.ZoneAddress(2),
-	action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneLayerAddress(3),
+var clusterEngines = []message.Address{
+	message.WorldAddress(1),
+	message.ZoneAddress(1), message.ZoneAddress(2),
+	message.ZoneLayerAddress(1), message.ZoneLayerAddress(2), message.ZoneLayerAddress(3),
 }
 
 // newTeeWorld is newWorld with a replay log that writes the records both in memory and to files.
@@ -88,7 +89,7 @@ func newTeeWorld(
 }
 
 // recordsOf returns the records of the memory log that belong to an engine, in order.
-func recordsOf(mem *replay.MemLog, e action.Address) []replay.Record {
+func recordsOf(mem *replay.MemLog, e message.Address) []replay.Record {
 	var out []replay.Record
 	for _, r := range mem.Records {
 		if r.Engine != e {
@@ -280,8 +281,8 @@ func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range []action.Address{
-		action.WorldAddress(1), action.ZoneAddress(1), action.ZoneLayerAddress(1),
+	for _, e := range []message.Address{
+		message.WorldAddress(1), message.ZoneAddress(1), message.ZoneLayerAddress(1),
 	} {
 		want := recordsOf(mem, e)
 		r, err := replay.ReadFileLog(dir, e, 0)

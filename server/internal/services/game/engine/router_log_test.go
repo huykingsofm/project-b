@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"sync"
 	"testing"
 	"time"
@@ -28,10 +30,10 @@ func TestReturnLogsAWarningWhenTheSenderIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := NewRouter()
-	m := action.MessageToZone(1, action.OnFailDrop{}).Stamp(
-		action.Header{From: action.ZoneAddress(9)},
+	m := action.MessageToZone(1, onfail.Drop{}).Stamp(
+		message.Header{From: message.ZoneAddress(9)},
 	)
-	rt.Return(m, action.Retired)
+	rt.Return(m, message.Retired)
 	closeLogs()
 
 	if rt.Dropped() != 1 {

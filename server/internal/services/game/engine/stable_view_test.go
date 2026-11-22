@@ -2,9 +2,9 @@ package engine
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"testing"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
@@ -18,7 +18,7 @@ func publishedAt(stable *StableStateRegistry, tick uint64) *zonelayerstate.State
 func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 	stable := NewStableStateRegistry(1)
 	replayLog := &replay.MemLog{}
-	view := stable.View(action.ZoneAddress(1), replayLog)
+	view := stable.View(message.ZoneAddress(1), replayLog)
 
 	first := publishedAt(stable, 3)
 	view.begin(10)
@@ -39,7 +39,7 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 	stable := NewStableStateRegistry(1)
 	replayLog := &replay.MemLog{}
-	view := stable.View(action.ZoneAddress(1), replayLog)
+	view := stable.View(message.ZoneAddress(1), replayLog)
 	publishedAt(stable, 3)
 
 	view.begin(10)
@@ -55,16 +55,16 @@ func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 			got = append(got, r)
 		}
 	}
-	read := func(tick uint64, source action.Address, copyTick uint64) replay.Record {
+	read := func(tick uint64, source message.Address, copyTick uint64) replay.Record {
 		return replay.Record{
-			Engine: action.ZoneAddress(1), Tick: tick,
+			Engine: message.ZoneAddress(1), Tick: tick,
 			Body: replay.StableRead{Source: source, CopyTick: copyTick},
 		}
 	}
 	want := []replay.Record{
-		read(10, action.ZoneLayerAddress(7), 3),
-		read(10, action.ZoneLayerAddress(8), 0),
-		read(11, action.ZoneLayerAddress(7), 3),
+		read(10, message.ZoneLayerAddress(7), 3),
+		read(10, message.ZoneLayerAddress(8), 0),
+		read(11, message.ZoneLayerAddress(7), 3),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("%d records, want %d: %+v", len(got), len(want), got)

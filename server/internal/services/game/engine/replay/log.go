@@ -5,7 +5,9 @@
 // commands, but no engine: the engines import it.
 package replay
 
-import "github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+)
 
 // Log is where an engine writes what a replay needs. A replay runs an engine again from the
 // inputs that were recorded, and compares the hash of its state after each tick with the one taken
@@ -31,15 +33,15 @@ type Log interface {
 	// which copy of another engine it read first (StableRead). Whether a queue was full or an
 	// engine gone depends on the time, so a replay cannot work out a Returned; the message itself
 	// is made again by the replay of the sender.
-	Append(engine action.Address, tick uint64, body Body)
+	Append(engine message.Address, tick uint64, body Body)
 	// EndTick says that the engine has recorded all it will record for the tick. A log that writes
 	// to a file hands what it has kept for the tick to the goroutine that writes it.
-	EndTick(engine action.Address, tick uint64)
+	EndTick(engine message.Address, tick uint64)
 }
 
 // NopLog records nothing.
 type NopLog struct{}
 
-func (NopLog) Wants(Kind) bool                     { return false }
-func (NopLog) Append(action.Address, uint64, Body) {}
-func (NopLog) EndTick(action.Address, uint64)      {}
+func (NopLog) Wants(Kind) bool                      { return false }
+func (NopLog) Append(message.Address, uint64, Body) {}
+func (NopLog) EndTick(message.Address, uint64)      {}

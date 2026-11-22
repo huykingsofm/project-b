@@ -2,6 +2,7 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/config"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
@@ -56,9 +57,9 @@ func (a *ZoneLayerCharacterItemPickupAction) ApplyZoneLayer(
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
 	selfID := s.ID
-	r.ToWorld(OnFailCompensate{With: MessageToZoneLayer(
+	r.ToWorld(onfail.Compensate{With: MessageToZoneLayer(
 		selfID,
-		OnFailDrop{},
+		onfail.Drop{},
 		&ZoneLayerItemEntityAddAction{
 			ItemID: item.ItemID, Count: item.Count, At: item.Pos, Expiry: item.Expiry,
 		},

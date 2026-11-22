@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
@@ -30,7 +31,7 @@ type WorldEngine struct {
 
 // NewWorldEngine makes the engine of the world.
 func NewWorldEngine(st *worldstate.State, env *Env, seed uint64) *WorldEngine {
-	me := action.WorldAddress(st.ID)
+	me := message.WorldAddress(st.ID)
 	e := &WorldEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
 		commands: make(

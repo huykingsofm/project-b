@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
@@ -25,7 +26,7 @@ func (a *ZoneChatSendAction) ApplyZone(
 	s.SendMessage(zonestate.ChatMessage{FromID: a.FromID, Text: a.Text, Tick: c.Tick})
 	for _, zoneLayerID := range s.ZoneLayers.Keys() {
 		r.ToZoneLayer(
-			zoneLayerID, OnFailDrop{}, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
+			zoneLayerID, onfail.Drop{}, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
 		)
 	}
 }

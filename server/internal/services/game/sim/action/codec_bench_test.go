@@ -1,27 +1,29 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-func benchMessages() map[string]Message {
+func benchMessages() map[string]message.Message {
 	actions := everyAction()
-	two := MessageToZoneLayer(5, OnFailDrop{},
+	two := MessageToZoneLayer(5, onfail.Drop{},
 		actions[ZoneLayerCharacterMoveActionID].(ZoneLayerAction),
 		actions[ZoneLayerChatSendActionID].(ZoneLayerAction),
-	).Stamp(Header{From: ZoneAddress(2), Seq: 98765})
+	).Stamp(message.Header{From: message.ZoneAddress(2), Seq: 98765})
 	undo := MessageToZoneLayer(
-		5, OnFailDrop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
+		5, onfail.Drop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
 	)
-	return map[string]Message{
+	return map[string]message.Message{
 		"2 actions": two,
 		"enter, a character": MessageToZoneLayer(
-			5, OnFailDrop{}, actions[ZoneLayerCharacterEnterActionID].(ZoneLayerAction),
+			5, onfail.Drop{}, actions[ZoneLayerCharacterEnterActionID].(ZoneLayerAction),
 		),
 		"pickup, with compensator": MessageToWorld(
-			1, OnFailCompensate{With: undo}, actions[WorldCharacterItemAddActionID].(WorldAction),
+			1, onfail.Compensate{With: undo}, actions[WorldCharacterItemAddActionID].(WorldAction),
 		),
 	}
 }

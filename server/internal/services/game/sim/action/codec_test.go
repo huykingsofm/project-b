@@ -2,6 +2,8 @@ package action
 
 import (
 	"errors"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"reflect"
 	"testing"
 
@@ -81,13 +83,9 @@ func TestEveryActionOfTheRegisterHasACodecAndComesBackAsItWas(t *testing.T) {
 	}
 }
 
-func TestEveryKindOfOnFailAndEveryScopeHasACodec(t *testing.T) {
-	for id := OnFailID(1); id <= OnFailDropID; id++ { // the last ID of the register
-		if _, ok := onFailDecoders[id]; !ok {
-			t.Errorf("the OnFail with the ID %d has no decoder", id)
-		}
-	}
-	for _, s := range []Scope{ScopeWorld, ScopeZone, ScopeZoneLayer} {
+func TestEveryScopeHasAMessageDecoder(t *testing.T) {
+	scopes := []message.Scope{message.ScopeWorld, message.ScopeZone, message.ScopeZoneLayer}
+	for _, s := range scopes {
 		if _, ok := messageDecoders[s]; !ok {
 			t.Errorf("the scope %v has no message decoder", s)
 		}
@@ -96,29 +94,29 @@ func TestEveryKindOfOnFailAndEveryScopeHasACodec(t *testing.T) {
 
 // aMessageOfEveryKind returns messages that between them use every kind of OnFail, a message
 // inside a message, and each scope.
-func aMessageOfEveryKind() []Message {
+func aMessageOfEveryKind() []message.Message {
 	actions := everyAction()
-	layer := func(onFail OnFail) Message {
+	layer := func(onFail message.OnFail) message.Message {
 		return MessageToZoneLayer(5, onFail,
 			actions[ZoneLayerCharacterMoveActionID].(ZoneLayerAction),
 			actions[ZoneLayerChatSendActionID].(ZoneLayerAction),
-		).Stamp(Header{From: ZoneAddress(2), Seq: 77}).Again()
+		).Stamp(message.Header{From: message.ZoneAddress(2), Seq: 77}).Again()
 	}
 	undo := MessageToZoneLayer(
-		5, OnFailDrop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
+		5, onfail.Drop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
 	)
-	return []Message{
-		layer(OnFailRetry{}),
-		layer(OnFailDrop{}),
-		layer(OnFailRedirect{To: ZoneLayerAddress(6)}),
-		layer(OnFailEscalate{To: ZoneAddress(1)}),
-		layer(OnFailNotify{Key: "item.gone", Args: []string{"sword", "3"}}),
-		layer(OnFailNotify{Key: "item.gone"}),
-		layer(OnFailCompensate{With: undo}),
-		layer(OnFailCompensate{With: MessageToZone(1, OnFailCompensate{With: undo})}),
-		MessageToZone(1, OnFailDrop{}, actions[ZoneChatSendActionID].(ZoneAction)),
-		MessageToWorld(1, OnFailDrop{}, actions[WorldChatPrivateSendActionID].(WorldAction)),
-		MessageToWorld(1, OnFailDrop{}),
+	return []message.Message{
+		layer(onfail.Retry{}),
+		layer(onfail.Drop{}),
+		layer(onfail.Redirect{To: message.ZoneLayerAddress(6)}),
+		layer(onfail.Escalate{To: message.ZoneAddress(1)}),
+		layer(onfail.Notify{Key: "item.gone", Args: []string{"sword", "3"}}),
+		layer(onfail.Notify{Key: "item.gone"}),
+		layer(onfail.Compensate{With: undo}),
+		layer(onfail.Compensate{With: MessageToZone(1, onfail.Compensate{With: undo})}),
+		MessageToZone(1, onfail.Drop{}, actions[ZoneChatSendActionID].(ZoneAction)),
+		MessageToWorld(1, onfail.Drop{}, actions[WorldChatPrivateSendActionID].(WorldAction)),
+		MessageToWorld(1, onfail.Drop{}),
 	}
 }
 
@@ -160,31 +158,32 @@ func TestBytesThatAreCutOffOrWrongGiveAnErrorForAMessageAndNeverAPanic(t *testin
 
 func TestAMessageWithAnActionOfAnotherScopeOrTooDeepIsRefused(t *testing.T) {
 	var w binarycodec.Writer
-	w.Uint8(uint8(ScopeWorld)) // the address says world
+	w.Uint8(uint8(message.ScopeWorld)) // the address says world
 	w.Uvarint(1)
 	w.Uint8(0)
 	w.Uvarint(0)
 	w.Uvarint(0) // the header: the sender and the number
 	w.Uvarint(0) // attempts
-	w.Uvarint(uint64(OnFailDropID))
+	w.Uvarint(uint64(onfail.DropID))
 	w.Uvarint(1)
 	zoneAction := &ZoneChatSendAction{FromID: 1, Text: "x"}
 	if err := EncodeAction(&w, zoneAction); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeMessage(binarycodec.NewReader(w.B), 1); !errors.Is(err, ErrUnknownCode) {
-		t.Fatalf("an action of another scope: %v, want ErrUnknownCode", err)
+	_, err := DecodeMessage(binarycodec.NewReader(w.B), 1)
+	if !errors.Is(err, message.ErrUnknownCode) {
+		t.Fatalf("an action of another scope: %v, want message.ErrUnknownCode", err)
 	}
 
-	deep := MessageToZone(1, OnFailDrop{})
+	deep := MessageToZone(1, onfail.Drop{})
 	for range 9 {
-		deep = MessageToZone(1, OnFailCompensate{With: deep})
+		deep = MessageToZone(1, onfail.Compensate{With: deep})
 	}
 	var d binarycodec.Writer
 	if err := EncodeMessage(&d, deep); err != nil {
 		t.Fatal(err)
 	}
-	_, err := DecodeMessage(binarycodec.NewReader(d.B), 1)
+	_, err = DecodeMessage(binarycodec.NewReader(d.B), 1)
 	if !errors.Is(err, binarycodec.ErrBadValue) {
 		t.Fatalf("messages nested 9 deep: %v, want ErrBadValue", err)
 	}
@@ -202,16 +201,17 @@ func (noCodecAction) ApplyZoneLayer(
 
 func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testing.T) {
 	var w binarycodec.Writer
-	if err := EncodeAction(&w, noCodecAction{}); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
+	err := EncodeAction(&w, noCodecAction{})
+	if !errors.Is(err, message.ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
 	}
 	m := MessageToZoneLayer(
-		1, OnFailDrop{}, &ZoneLayerCharacterRegenAction{}, noCodecAction{},
+		1, onfail.Drop{}, &ZoneLayerCharacterRegenAction{}, noCodecAction{},
 	)
-	if err := EncodeMessage(&w, m); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
+	if err := EncodeMessage(&w, m); !errors.Is(err, message.ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a message with such an action: %v, %d bytes written", err, len(w.B))
 	}
-	if err := EncodeMessage(&w, MessageToZone(1, nil)); !errors.Is(err, ErrNoCodec) {
-		t.Fatalf("a message with no OnFail: %v, want ErrNoCodec", err)
+	if err := EncodeMessage(&w, MessageToZone(1, nil)); !errors.Is(err, message.ErrNoCodec) {
+		t.Fatalf("a message with no OnFail: %v, want message.ErrNoCodec", err)
 	}
 }

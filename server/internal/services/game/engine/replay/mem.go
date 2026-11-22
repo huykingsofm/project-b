@@ -1,9 +1,8 @@
 package replay
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"sync"
-
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 )
 
 // MemLog keeps the records in memory.
@@ -21,9 +20,9 @@ func (j *MemLog) add(r Record) {
 // Wants reports true for every kind: a MemLog keeps what it is given.
 func (j *MemLog) Wants(Kind) bool { return true }
 
-func (j *MemLog) Append(a action.Address, t uint64, body Body) {
+func (j *MemLog) Append(a message.Address, t uint64, body Body) {
 	j.add(Record{Engine: a, Tick: t, Body: body})
 }
 
 // EndTick does nothing: a MemLog has already kept every record.
-func (j *MemLog) EndTick(action.Address, uint64) {}
+func (j *MemLog) EndTick(message.Address, uint64) {}

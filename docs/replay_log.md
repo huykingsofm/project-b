@@ -63,10 +63,10 @@ An action is its ID, then its fields written by its `Encode`; its decoder is in 
 
 | Kind | Body |
 |---|---|
-| `OnFailRetry`, `OnFailDrop` | nothing |
-| `OnFailRedirect`, `OnFailEscalate` | an address |
-| `OnFailCompensate` | a message, written as above, at most 8 deep |
-| `OnFailNotify` | key string, count, each argument string |
+| `onfail.Retry`, `onfail.Drop` | nothing |
+| `onfail.Redirect`, `onfail.Escalate` | an address |
+| `onfail.Compensate` | a message, written as above, at most 8 deep |
+| `onfail.Notify` | key string, count, each argument string |
 
 - A test fails when an action ID, an `OnFail` ID or a scope has no decoder.
 - `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`.
@@ -90,7 +90,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 | What | Table | Numbers |
 |---|---|---|
 | action ID | `action/id.go` (the value of the constant) | 1 to 15 |
-| `OnFail` ID | `action/on_fail.go` (the value of the constant) | 1 to 6 |
+| `OnFail` ID | `action/onfail/onfail.go` (the value of the constant) | 1 to 6 |
 | cooldown key | `action/cooldown_key.go` (the value of the constant) | 1, 2 |
 | command ID | `command/id.go` (the value of the constant) | 1 to 9 |
 

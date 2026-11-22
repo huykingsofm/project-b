@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
@@ -62,8 +63,8 @@ func (a *ZoneLayerCharacterExitToAction) ApplyZoneLayer(
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
 		selfID, back := s.ID, body.Pos
-		r.ToZoneLayer(zoneLayerID, OnFailCompensate{With: MessageToZoneLayer(
-			selfID, OnFailDrop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
+		r.ToZoneLayer(zoneLayerID, onfail.Compensate{With: MessageToZoneLayer(
+			selfID, onfail.Drop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
 		)}, &ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival})
 		return
 	}

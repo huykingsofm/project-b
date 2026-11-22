@@ -101,7 +101,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
   - the zone: the exit entity by ID
   - the zone the exit leads to: its zonelayers and capacity
   - each of those zonelayers: how many characters it holds
-- On failure: `OnFailCompensate`: a [`ZoneLayerCharacterEnterAction`](#zonelayercharacterenteraction) with the same character comes back to this zonelayer at the position it left
+- On failure: `onfail.Compensate`: a [`ZoneLayerCharacterEnterAction`](#zonelayercharacterenteraction) with the same character comes back to this zonelayer at the position it left
 - Steps:
   1. Nothing if the character is not in the zonelayer or has no health.
   2. Nothing if the zone is not published, the exit entity does not exist, or the character is not inside its `Area`.
@@ -121,7 +121,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - Command: `ZoneLayerCharacterItemPickupCommand{CharacterID, ItemEntityID}`
 - Fields: `CharacterID`, `ItemEntityID`
 - Config: `zonelayer.pickup.radius` (units)
-- On failure: `OnFailCompensate`: the stack returns to the ground as it was (same kind, count, place and expiry; new entity ID; the expiry starts again) through [`ZoneLayerItemEntityAddAction`](#zonelayeritementityaddaction)
+- On failure: `onfail.Compensate`: the stack returns to the ground as it was (same kind, count, place and expiry; new entity ID; the expiry starts again) through [`ZoneLayerItemEntityAddAction`](#zonelayeritementityaddaction)
 - Steps:
   1. Nothing if the character is not in the zonelayer or has no health.
   2. Nothing if no item entity has that ID.

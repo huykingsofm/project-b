@@ -2,14 +2,14 @@ package replay
 
 import (
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
 )
 
 // FileLogReader reads the records of the log of one engine, in the order they were written.
 type FileLogReader struct {
-	engine    action.Address
+	engine    message.Address
 	r         *segmentlog.Reader
 	fromTick  uint64
 	rec       Record
@@ -22,7 +22,7 @@ type FileLogReader struct {
 // ReadFileLog reads the log that a FileLog wrote under dir for an engine, from fromTick: it starts
 // in the segment that holds that tick, using the meta of the segments, and gives only the records
 // of that tick and later ones.
-func ReadFileLog(dir string, engine action.Address, fromTick uint64) (*FileLogReader, error) {
+func ReadFileLog(dir string, engine message.Address, fromTick uint64) (*FileLogReader, error) {
 	start := func(meta []byte) bool {
 		info, err := parseSegmentMeta(meta)
 		return err == nil && info.FirstTick <= fromTick

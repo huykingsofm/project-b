@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	worldevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world/event"
 	zoneevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone/event"
 	zonelayerevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
@@ -15,17 +15,17 @@ import (
 
 // WorldEmitter is the emitter of the world engine.
 type WorldEmitter interface {
-	EmitWorld(from action.Address, tick uint64, events []worldevent.Event)
+	EmitWorld(from message.Address, tick uint64, events []worldevent.Event)
 }
 
 // ZoneEmitter is the emitter of the zone engines.
 type ZoneEmitter interface {
-	EmitZone(from action.Address, tick uint64, events []zoneevent.Event)
+	EmitZone(from message.Address, tick uint64, events []zoneevent.Event)
 }
 
 // ZoneLayerEmitter is the emitter of the zonelayer engines.
 type ZoneLayerEmitter interface {
-	EmitZoneLayer(from action.Address, tick uint64, events []zonelayerevent.Event)
+	EmitZoneLayer(from message.Address, tick uint64, events []zonelayerevent.Event)
 }
 
 // Emitter is the three emitters in one value, for a caller that serves all the scopes with it.
@@ -39,6 +39,6 @@ type Emitter interface {
 // another.
 type NopEmitter struct{}
 
-func (NopEmitter) EmitWorld(action.Address, uint64, []worldevent.Event)         {}
-func (NopEmitter) EmitZone(action.Address, uint64, []zoneevent.Event)           {}
-func (NopEmitter) EmitZoneLayer(action.Address, uint64, []zonelayerevent.Event) {}
+func (NopEmitter) EmitWorld(message.Address, uint64, []worldevent.Event)         {}
+func (NopEmitter) EmitZone(message.Address, uint64, []zoneevent.Event)           {}
+func (NopEmitter) EmitZoneLayer(message.Address, uint64, []zonelayerevent.Event) {}

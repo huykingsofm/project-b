@@ -59,7 +59,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 ## Delivery of messages
 
 - A message decides what a failed delivery means with its `OnFail`: [action/index](action/index.md#failed-delivery).
-- The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`engine/bounce.go`), through `action.Bouncer`.
+- The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`engine/bounce.go`), through `message.Bouncer`.
 - A message and its `OnFail` are written by one codec (`action/codec.go`): [replay_log](replay_log.md#messages-and-actions).
 
 ## Chat

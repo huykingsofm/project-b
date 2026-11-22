@@ -2,6 +2,7 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/config"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
@@ -50,7 +51,7 @@ func (a *WorldCharacterItemAddAction) ApplyWorld(
 	}
 	r.ToZoneLayer(
 		a.FromZoneLayerID,
-		OnFailDrop{},
+		onfail.Drop{},
 		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
 	)
 }

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
@@ -30,7 +31,7 @@ type ZoneEngine struct {
 
 // NewZoneEngine makes the engine of a zone.
 func NewZoneEngine(st *zonestate.State, env *Env, seed uint64) *ZoneEngine {
-	me := action.ZoneAddress(st.ID)
+	me := message.ZoneAddress(st.ID)
 	e := &ZoneEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
 		commands: make(

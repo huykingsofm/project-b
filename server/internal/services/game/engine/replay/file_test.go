@@ -2,6 +2,8 @@ package replay
 
 import (
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,7 +21,7 @@ var testFileLogOptions = FileLogOptions{
 	Seed: 42, SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
 }
 
-func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Record, error) {
+func readLog(t *testing.T, dir string, engine message.Address, from uint64) ([]Record, error) {
 	t.Helper()
 	r, err := ReadFileLog(dir, engine, from)
 	if err != nil {
@@ -35,15 +37,15 @@ func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Re
 
 // recordsOfEveryKind writes a record of every kind for an engine at a tick, and returns what it
 // wrote.
-func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
-	from := action.ZoneLayerAddress(3)
+func recordsOfEveryKind(log Log, engine message.Address, tick uint64) []Record {
+	from := message.ZoneLayerAddress(3)
 	inbound := action.MessageToZoneLayer(
-		3, action.OnFailCompensate{With: action.MessageToZoneLayer(
-			1, action.OnFailDrop{}, &action.ZoneLayerCharacterRegenAction{},
+		3, onfail.Compensate{With: action.MessageToZoneLayer(
+			1, onfail.Drop{}, &action.ZoneLayerCharacterRegenAction{},
 		)},
 		&action.ZoneLayerCharacterMoveAction{CharacterID: 7, Dir: state.East, Ticks: 3},
 		&action.ZoneLayerChatSendAction{FromID: 7, Text: "xin chào"},
-	).Stamp(action.Header{From: from, Seq: tick * 10})
+	).Stamp(message.Header{From: from, Seq: tick * 10})
 	ch := zonelayerstate.Character{
 		CharacterID: 7, Name: "Binh", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
 	}
@@ -55,12 +57,12 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	log.Append(engine, tick, ConfigRead{Version: 5})
 	log.Append(engine, tick, Inbound{Message: inbound})
 	log.Append(engine, tick, Returned{
-		Header: action.Header{From: from, Seq: tick*10 + 1}, Reason: action.Full,
+		Header: message.Header{From: from, Seq: tick*10 + 1}, Reason: message.Full,
 	})
 	log.Append(engine, tick, Command{Command: chat})
 	log.Append(engine, tick, Command{Command: enter})
 	log.Append(engine, tick, Command{Command: move})
-	log.Append(engine, tick, StableRead{Source: action.ZoneAddress(2), CopyTick: tick - 1})
+	log.Append(engine, tick, StableRead{Source: message.ZoneAddress(2), CopyTick: tick - 1})
 	log.Append(engine, tick, Hash{Value: 0xdeadbeefcafef00d + tick})
 	log.EndTick(engine, tick)
 	return []Record{
@@ -70,7 +72,7 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 			Engine: engine,
 			Tick:   tick,
 			Body: Returned{
-				Header: action.Header{From: from, Seq: tick*10 + 1}, Reason: action.Full,
+				Header: message.Header{From: from, Seq: tick*10 + 1}, Reason: message.Full,
 			},
 		},
 		{Engine: engine, Tick: tick, Body: Command{Command: chat}},
@@ -79,7 +81,7 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 		{
 			Engine: engine,
 			Tick:   tick,
-			Body:   StableRead{Source: action.ZoneAddress(2), CopyTick: tick - 1},
+			Body:   StableRead{Source: message.ZoneAddress(2), CopyTick: tick - 1},
 		},
 		{Engine: engine, Tick: tick, Body: Hash{Value: 0xdeadbeefcafef00d + tick}},
 	}
@@ -88,7 +90,7 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 func TestEveryKindOfRecordComesBackAsItWasWritten(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	var want []Record
 	for tick := uint64(1); tick <= 5; tick++ {
 		want = append(want, recordsOfEveryKind(log, engine, tick)...)
@@ -122,11 +124,11 @@ func firstDifference(got, want []Record) string {
 func TestAnEngineWritesOnlyToItsOwnLogAndTheMetaSaysWhichAndTheSeed(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	a, b := action.ZoneLayerAddress(1), action.WorldAddress(1)
+	a, b := message.ZoneLayerAddress(1), message.WorldAddress(1)
 	recordsOfEveryKind(log, a, 1)
 	recordsOfEveryKind(log, b, 1)
 	log.Close()
-	for _, e := range []action.Address{a, b} {
+	for _, e := range []message.Address{a, b} {
 		got, err := readLog(t, dir, e, 0)
 		if err != nil || len(got) != 8 {
 			t.Fatalf("%v: %d records, error %v", e, len(got), err)
@@ -154,7 +156,7 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 	o := testFileLogOptions
 	o.SegmentBytes = 1 // a segment for each tick
 	log := NewFileLog(dir, o)
-	engine := action.ZoneAddress(1)
+	engine := message.ZoneAddress(1)
 	for tick := uint64(1); tick <= 20; tick++ {
 		recordsOfEveryKind(log, engine, tick)
 	}
@@ -180,7 +182,7 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 func TestACrashThatCutsTheEndOfTheFileLeavesTheRecordsBeforeIt(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	for tick := uint64(1); tick <= 3; tick++ {
 		recordsOfEveryKind(log, engine, tick)
 	}
@@ -200,7 +202,7 @@ func TestACrashThatCutsTheEndOfTheFileLeavesTheRecordsBeforeIt(t *testing.T) {
 func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritten(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	log.Append(engine, 1, ConfigRead{Version: 1})
 	log.Append(engine, 1, Command{}) // no command: it cannot be written
 	log.Append(engine, 1, ConfigRead{Version: 2})
@@ -221,7 +223,7 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 func TestAnEndOfTickBeforeAnyRecordCreatesNothing(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	log.EndTick(action.WorldAddress(1), 1)
+	log.EndTick(message.WorldAddress(1), 1)
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -233,16 +235,16 @@ func TestAnEndOfTickBeforeAnyRecordCreatesNothing(t *testing.T) {
 func TestTheLogOfAnotherEngineIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
-	recordsOfEveryKind(log, action.ZoneAddress(1), 1)
+	recordsOfEveryKind(log, message.ZoneAddress(1), 1)
 	log.Close()
-	os.Rename(engineDir(dir, action.ZoneAddress(1)), engineDir(dir, action.ZoneAddress(2)))
-	if _, err := readLog(t, dir, action.ZoneAddress(2), 0); err == nil {
+	os.Rename(engineDir(dir, message.ZoneAddress(1)), engineDir(dir, message.ZoneAddress(2)))
+	if _, err := readLog(t, dir, message.ZoneAddress(2), 0); err == nil {
 		t.Fatal("the log of zone 1 was read as the log of zone 2")
 	}
 }
 
 func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	for _, p := range [][]byte{
 		nil,
 		{},
@@ -262,7 +264,7 @@ func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 
 func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachRecord(t *testing.T) {
 	dir := t.TempDir()
-	engine := action.WorldAddress(1)
+	engine := message.WorldAddress(1)
 	os.WriteFile(
 		engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644,
 	)

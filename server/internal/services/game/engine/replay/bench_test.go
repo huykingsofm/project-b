@@ -2,6 +2,8 @@ package replay
 
 import (
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -14,12 +16,12 @@ import (
 )
 
 // benchMessage is a message for a zonelayer with two actions, as the engines send them.
-func benchMessage(seq uint64) action.Message {
+func benchMessage(seq uint64) message.Message {
 	return action.MessageToZoneLayer(
-		3, action.OnFailDrop{},
+		3, onfail.Drop{},
 		&action.ZoneLayerCharacterMoveAction{CharacterID: 7, Dir: state.East, Ticks: 3},
 		&action.ZoneLayerChatSendAction{FromID: 7, Text: "xin chào mọi người"},
-	).Stamp(action.Header{From: action.ZoneAddress(1), Seq: seq})
+	).Stamp(message.Header{From: message.ZoneAddress(1), Seq: seq})
 }
 
 var benchRecords = map[string]Record{
@@ -43,7 +45,7 @@ var benchRecords = map[string]Record{
 	"hash":        {Tick: 123456, Body: Hash{Value: 0xdeadbeefcafef00d}},
 	"config read": {Tick: 123456, Body: ConfigRead{Version: 5}},
 	"stable read": {
-		Tick: 123456, Body: StableRead{Source: action.ZoneAddress(2), CopyTick: 123455},
+		Tick: 123456, Body: StableRead{Source: message.ZoneAddress(2), CopyTick: 123455},
 	},
 }
 
@@ -65,7 +67,7 @@ func BenchmarkEncodeRecord(b *testing.B) {
 }
 
 func BenchmarkDecodeRecord(b *testing.B) {
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	for name, rec := range benchRecords {
 		var w binarycodec.Writer
 		if err := encodeRecord(&w, rec); err != nil {
@@ -86,15 +88,15 @@ func BenchmarkDecodeRecord(b *testing.B) {
 // and the rest inbound messages, as a busy zonelayer does.
 type tickRecorder struct {
 	log     *FileLog
-	engine  action.Address
+	engine  message.Address
 	records int
 	// already an interface value, as a command is when an engine records it
 	move command.ZoneLayerCommand
 	// made once: what is measured is the log, not making a message
-	message action.Message
+	message message.Message
 }
 
-func newTickRecorder(log *FileLog, engine action.Address, records int) *tickRecorder {
+func newTickRecorder(log *FileLog, engine message.Address, records int) *tickRecorder {
 	return &tickRecorder{
 		log: log, engine: engine, records: records,
 		move:    command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3},
@@ -110,7 +112,7 @@ func (r *tickRecorder) tick(tick uint64) {
 	for range 5 {
 		r.log.Append(r.engine, tick, Command{Command: r.move})
 	}
-	r.log.Append(r.engine, tick, StableRead{Source: action.ZoneAddress(1), CopyTick: tick - 1})
+	r.log.Append(r.engine, tick, StableRead{Source: message.ZoneAddress(1), CopyTick: tick - 1})
 	r.log.Append(r.engine, tick, Hash{Value: 42})
 	r.log.EndTick(r.engine, tick)
 }
@@ -124,7 +126,7 @@ func benchFile(b *testing.B) *FileLog {
 
 // stalls is how many times a Commit of the log of an engine had to wait for the goroutine that
 // writes.
-func stalls(log *FileLog, engine action.Address) uint64 {
+func stalls(log *FileLog, engine message.Address) uint64 {
 	v, ok := log.engines.Load(engine)
 	if !ok {
 		return 0
@@ -149,7 +151,7 @@ func percentiles(b *testing.B, durs []time.Duration) {
 // tick can cost, and not what an engine pays at 50 ticks a second.
 func BenchmarkFileTickHot(b *testing.B) {
 	log := benchFile(b)
-	r := newTickRecorder(log, action.ZoneLayerAddress(1), 20)
+	r := newTickRecorder(log, message.ZoneLayerAddress(1), 20)
 	b.ReportAllocs()
 	for tick := uint64(1); tick <= uint64(b.N); tick++ {
 		r.tick(tick)
@@ -176,7 +178,7 @@ func BenchmarkFileTickPaced(b *testing.B) {
 	for _, records := range []int{20, 100, 1000} {
 		b.Run(fmt.Sprintf("records=%d", records), func(b *testing.B) {
 			log := benchFile(b)
-			engine := action.ZoneLayerAddress(1)
+			engine := message.ZoneLayerAddress(1)
 			r := newTickRecorder(log, engine, records)
 			durs := make([]time.Duration, 0, pacedTicks)
 			var total time.Duration
@@ -204,7 +206,7 @@ func BenchmarkFileTickPaced(b *testing.B) {
 // (the sync runs on the goroutine that writes).
 func BenchmarkFileTickSaturated(b *testing.B) {
 	log := benchFile(b)
-	engine := action.ZoneLayerAddress(1)
+	engine := message.ZoneLayerAddress(1)
 	r := newTickRecorder(log, engine, 100)
 	durs := make([]time.Duration, 0, b.N)
 	b.ReportAllocs()
@@ -231,7 +233,7 @@ func BenchmarkFileTickManyEngines(b *testing.B) {
 	var next atomic.Uint32
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
-		r := newTickRecorder(log, action.ZoneLayerAddress(state.ZoneLayerID(next.Add(1))), 100)
+		r := newTickRecorder(log, message.ZoneLayerAddress(state.ZoneLayerID(next.Add(1))), 100)
 		for tick := uint64(1); pb.Next(); tick++ {
 			r.tick(tick)
 		}
@@ -239,7 +241,7 @@ func BenchmarkFileTickManyEngines(b *testing.B) {
 	b.StopTimer()
 	var total uint64
 	for id := uint32(1); id <= next.Load(); id++ {
-		total += stalls(log, action.ZoneLayerAddress(state.ZoneLayerID(id)))
+		total += stalls(log, message.ZoneLayerAddress(state.ZoneLayerID(id)))
 	}
 	b.ReportMetric(float64(total), "stalls")
 	if err := log.Close(); err != nil {
