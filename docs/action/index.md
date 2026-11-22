@@ -55,7 +55,7 @@ What must happen outside a scope goes in its registry and happens after the plan
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick |
 
-A message names what a failed delivery means: `OnFailDrop`, `OnFailRetry`, `OnFailCompensate`.
+A message names what a failed delivery means, as data: `OnFailDrop()`, `OnFailRetry()`, `OnFailRedirect(address)`, `OnFailEscalate(address)`, `OnFailNotify(key, args...)` and `OnFailCompensate(message)`, where the message is the one that undoes what the first set going (where it goes, its actions and its own `OnFail`).
 
 ## Reading other scopes
 

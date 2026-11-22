@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerCharacterEnterAction puts a character in the zonelayer: gives it a body at a position.
@@ -39,4 +40,22 @@ func (a *ZoneLayerCharacterEnterAction) ApplyZoneLayer(
 		at = zone.TileMap().SpawnPosition()
 	}
 	s.AddCharacterEntity(a.Character, at)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterEnterAction) Encode(w *binarycodec.Writer) {
+	a.Character.Encode(w)
+	a.At.Encode(w)
+}
+
+// decodeZoneLayerCharacterEnterAction reads what Encode wrote.
+func decodeZoneLayerCharacterEnterAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	c, err := zonelayerstate.DecodeCharacter(r, version)
+	if err != nil {
+		return nil, err
+	}
+	a := &ZoneLayerCharacterEnterAction{Character: c, At: state.DecodeVec(r, version)}
+	return a, r.Err()
 }

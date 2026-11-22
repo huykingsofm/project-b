@@ -121,7 +121,7 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 	pickup(1, stack, 10, st, reg)
 	message := reg.Take()[0]
 
-	back := message.Bounce(Retired)
+	back := message.OnFail()
 	if back.Kind != DecisionCompensate {
 		t.Fatalf("a failed delivery decides %v, want to compensate", back.Kind)
 	}

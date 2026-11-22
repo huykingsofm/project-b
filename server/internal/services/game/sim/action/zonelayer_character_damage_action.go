@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerCharacterDamageAction takes health from an entity. It is in the plan after the action
@@ -26,4 +27,23 @@ func (a *ZoneLayerCharacterDamageAction) ApplyZoneLayer(
 		return
 	}
 	s.DamageEntity(a.VictimID, a.Amount)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterDamageAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.SourceID))
+	w.Uvarint(uint64(a.VictimID))
+	w.Varint(int64(a.Amount))
+}
+
+// decodeZoneLayerCharacterDamageAction reads what Encode wrote.
+func decodeZoneLayerCharacterDamageAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterDamageAction{
+		SourceID: state.EntityID(r.Uvarint()),
+		VictimID: state.EntityID(r.Uvarint()),
+		Amount:   int32(r.Varint()),
+	}
+	return a, r.Err()
 }

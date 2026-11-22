@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneChatSendAction is a message said in a zone. The zone records it and, for now, gives it to
@@ -24,7 +25,19 @@ func (a *ZoneChatSendAction) ApplyZone(
 	s.SendMessage(zonestate.ChatMessage{FromID: a.FromID, Text: a.Text, Tick: c.Tick})
 	for _, zoneLayerID := range s.ZoneLayers.Keys() {
 		r.ToZoneLayer(
-			zoneLayerID, OnFailDrop, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
+			zoneLayerID, OnFailDrop(), &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
 		)
 	}
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneChatSendAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.FromID))
+	w.String(a.Text)
+}
+
+// decodeZoneChatSendAction reads what Encode wrote.
+func decodeZoneChatSendAction(r *binarycodec.Reader, version binarycodec.Version) (Action, error) {
+	a := &ZoneChatSendAction{FromID: state.CharacterID(r.Uvarint()), Text: r.String()}
+	return a, r.Err()
 }

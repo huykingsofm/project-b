@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
@@ -88,7 +89,7 @@ func (e *ZoneLayerEngine) Step() {
 	e.st.SetTick(e.tick)
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
-	e.settle(cfg)
+	e.settle(cfg, e.tick)
 
 	plan := zoneLayerPlans.Get(cfg)
 	defer zoneLayerPlans.Put(plan)
@@ -120,7 +121,7 @@ func (e *ZoneLayerEngine) Step() {
 	}
 	e.stable.PublishZoneLayer(e.st.Clone())
 	e.recordHash(cfg, e.tick, e.st.Hash)
-	e.flush(cfg, e.reg.Take())
+	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
 }
 
@@ -152,7 +153,7 @@ func (e *ZoneLayerEngine) planMessages(plan *action.Plan[action.ZoneLayerAction]
 // log and puts their actions in the plan.
 func (e *ZoneLayerEngine) planCommands(plan *action.Plan[action.ZoneLayerAction]) {
 	for _, c := range channels.Drain(e.commands) {
-		e.replayLog.ZoneLayerCommand(e.me, e.tick, c)
+		e.replayLog.Append(e.me, e.tick, replay.Command{Command: c})
 		for _, a := range c.TranslateZoneLayer() {
 			plan.Append(a)
 		}

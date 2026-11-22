@@ -106,45 +106,38 @@ const (
 	DecisionDrop
 )
 
-// Decision is what a message says to do when it could not be delivered. It is made by the
-// OnFail functions below.
-type Decision struct {
+// OnFail is the part of a message that says what a failed delivery means: the kind of decision and
+// what that kind needs. It is data and not a function, so that a message can be written to a file
+// whole (see codec.go). Every send names one: the zero OnFail has no kind, and the bouncer drops it
+// and logs it.
+type OnFail struct {
 	Kind DecisionKind
-	To   Address
-	With Message
-	Key  string
-	Args []any
+	To   Address  // for DecisionRedirect and DecisionEscalate
+	With Message  // for DecisionCompensate: the message that undoes the first
+	Key  string   // for DecisionNotify: the text key
+	Args []string // for DecisionNotify: the arguments of the text
 }
-
-// OnFail is the part of a message that says what a failed delivery means: from the reason it gives
-// the decision. Every send names one, so a send that makes no choice does not compile.
-type OnFail func(Reason) Decision
 
 // OnFailRetry sends the message again.
-func OnFailRetry(Reason) Decision { return Decision{Kind: DecisionRetry} }
+func OnFailRetry() OnFail { return OnFail{Kind: DecisionRetry} }
 
 // OnFailDrop forgets the message.
-func OnFailDrop(Reason) Decision { return Decision{Kind: DecisionDrop} }
+func OnFailDrop() OnFail { return OnFail{Kind: DecisionDrop} }
 
-// OnFailRedirect sends the message to the engine that the function chooses from the reason.
-func OnFailRedirect(to func(Reason) Address) OnFail {
-	return func(r Reason) Decision { return Decision{Kind: DecisionRedirect, To: to(r)} }
-}
+// OnFailRedirect sends the message to another engine of the same scope.
+func OnFailRedirect(to Address) OnFail { return OnFail{Kind: DecisionRedirect, To: to} }
 
-// OnFailCompensate sends the message that undo makes from the reason.
-func OnFailCompensate(undo func(Reason) Message) OnFail {
-	return func(r Reason) Decision { return Decision{Kind: DecisionCompensate, With: undo(r)} }
-}
+// OnFailCompensate sends the message that undoes what the first one set going: where it goes, its
+// actions and its own OnFail. The chain ends at a kind that holds no message.
+func OnFailCompensate(undo Message) OnFail { return OnFail{Kind: DecisionCompensate, With: undo} }
 
 // OnFailNotify tells the actor that the message is about, with a text key.
-func OnFailNotify(key string, args ...any) OnFail {
-	return func(Reason) Decision { return Decision{Kind: DecisionNotify, Key: key, Args: args} }
+func OnFailNotify(key string, args ...string) OnFail {
+	return OnFail{Kind: DecisionNotify, Key: key, Args: args}
 }
 
 // OnFailEscalate gives the message to the engine at the address.
-func OnFailEscalate(to Address) OnFail {
-	return func(Reason) Decision { return Decision{Kind: DecisionEscalate, To: to} }
-}
+func OnFailEscalate(to Address) OnFail { return OnFail{Kind: DecisionEscalate, To: to} }
 
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bounce table handle messages and do not know which kind of action
@@ -156,7 +149,9 @@ type Message interface {
 	// one): the one that is told when the message could not be delivered and the decision is to
 	// notify. It is nil when no action of the message has an author.
 	Subject() any
-	Bounce(Reason) Decision
+	OnFail() OnFail
+	// encodeBody writes what EncodeMessage writes after the address.
+	encodeBody(w *binarycodec.Writer) error
 	Attempts() int
 	ActionIDs() []ID
 	// Stamp, Again and Redirected return copies.
@@ -187,12 +182,12 @@ func newScopedMessage[A Action](to Address, onFail OnFail, actions []A) *ScopedM
 	return m
 }
 
-// Dest, Head, Subject, Bounce and Attempts make a ScopedMessage a Message.
-func (m *ScopedMessage[A]) Dest() Address            { return m.To }
-func (m *ScopedMessage[A]) Head() Header             { return m.Header }
-func (m *ScopedMessage[A]) Subject() any             { return m.subject }
-func (m *ScopedMessage[A]) Bounce(r Reason) Decision { return m.onFail(r) }
-func (m *ScopedMessage[A]) Attempts() int            { return m.attempts }
+// Dest, Head, Subject, OnFail and Attempts make a ScopedMessage a Message.
+func (m *ScopedMessage[A]) Dest() Address  { return m.To }
+func (m *ScopedMessage[A]) Head() Header   { return m.Header }
+func (m *ScopedMessage[A]) Subject() any   { return m.subject }
+func (m *ScopedMessage[A]) OnFail() OnFail { return m.onFail }
+func (m *ScopedMessage[A]) Attempts() int  { return m.attempts }
 
 // ActionIDs returns the IDs of the actions in the message.
 func (m *ScopedMessage[A]) ActionIDs() []ID {

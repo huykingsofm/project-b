@@ -44,7 +44,9 @@ func (v *StableStateView) World() worldstate.ReadOnlyWorldState {
 		if v.world != nil {
 			copyTick = v.world.Tick
 		}
-		v.replayLog.StableRead(v.me, v.tick, action.WorldAddress(v.registry.worldID), copyTick)
+		v.replayLog.Append(v.me, v.tick, replay.StableRead{
+			Source: action.WorldAddress(v.registry.worldID), CopyTick: copyTick,
+		})
 	}
 	if v.world == nil {
 		return nil // not a nil pointer inside an interface
@@ -71,7 +73,9 @@ func (v *StableStateView) zone(zoneID state.ZoneID) *zonestate.State {
 	if z != nil {
 		copyTick = z.Tick
 	}
-	v.replayLog.StableRead(v.me, v.tick, action.ZoneAddress(zoneID), copyTick)
+	v.replayLog.Append(
+		v.me, v.tick, replay.StableRead{Source: action.ZoneAddress(zoneID), CopyTick: copyTick},
+	)
 	return z
 }
 
@@ -96,6 +100,8 @@ func (v *StableStateView) zoneLayer(zoneLayerID state.ZoneLayerID) *zonelayersta
 	if l != nil {
 		copyTick = l.Tick
 	}
-	v.replayLog.StableRead(v.me, v.tick, action.ZoneLayerAddress(zoneLayerID), copyTick)
+	v.replayLog.Append(v.me, v.tick, replay.StableRead{
+		Source: action.ZoneLayerAddress(zoneLayerID), CopyTick: copyTick,
+	})
 	return l
 }

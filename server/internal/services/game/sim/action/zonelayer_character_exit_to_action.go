@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerCharacterExitToAction is a character taking the exit it stands in, to a zonelayer of the
@@ -61,11 +62,26 @@ func (a *ZoneLayerCharacterExitToAction) ApplyZoneLayer(
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
 		selfID, back := s.ID, body.Pos
-		r.ToZoneLayer(zoneLayerID, OnFailCompensate(func(Reason) Message {
-			return MessageToZoneLayer(
-				selfID, OnFailDrop, &ZoneLayerCharacterEnterAction{Character: character, At: back},
-			)
-		}), &ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival})
+		r.ToZoneLayer(zoneLayerID, OnFailCompensate(MessageToZoneLayer(
+			selfID, OnFailDrop(), &ZoneLayerCharacterEnterAction{Character: character, At: back},
+		)), &ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival})
 		return
 	}
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterExitToAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uvarint(uint64(a.ExitEntityID))
+}
+
+// decodeZoneLayerCharacterExitToAction reads what Encode wrote.
+func decodeZoneLayerCharacterExitToAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterExitToAction{
+		CharacterID:  state.CharacterID(r.Uvarint()),
+		ExitEntityID: state.EntityID(r.Uvarint()),
+	}
+	return a, r.Err()
 }

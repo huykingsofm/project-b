@@ -12,20 +12,45 @@
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
 
+## Writing
+
+| Method of `replay.Log` | What it does |
+|---|---|
+| `Wants(kind)` | says whether the log wants records of the kind; an engine asks before it takes a hash, which costs as much as the state is big |
+| `Append(engine, tick, body)` | records what the engine took, sent or read at the tick |
+| `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick; a log in files hands the records to the goroutine that writes them |
+
 ## Records
 
 A record is the payload `[kind u8][tick uvarint][body]`. The whole tick is in each record, so a record does not depend on its segment. The engine is not in it: it is the engine of the log.
 
+| In code | What it is |
+|---|---|
+| `replay.Record` | `Engine`, `Tick` and a `Body` |
+| `replay.Body` | an interface: `Kind()`, `Encode(w)` and `Same(other)` |
+| a type for each kind | `Inbound`, `Command`, `ConfigRead`, `Hash`, `StableRead`, `Returned`: each holds only what its kind has |
+| `decoders` | the table that reads a body, by its kind; a test fails when a kind of the register has none |
+
 | Kind | Number | Body |
 |---|---|---|
-| `KindInbound` | 1 | sender scope `u8`, sender ID, `Seq`, count, then the number of each action ID |
+| `KindInbound` | 1 | a message, whole (below) |
 | `KindCommand` | 2 | the number of the command and its fields (below) |
 | `KindConfig` | 3 | the version of the config |
 | `KindHash` | 4 | the hash, 8 bytes |
 | `KindStableRead` | 5 | scope `u8` and ID of the engine read, the tick of the copy |
+| `KindReturned` | 6 | the header of a message the engine sent that came back (address of the sender, `Seq`), the reason `u8` (`action.Reason`) |
 
 - Integers are `uvarint` unless a width is said. An address is the scope `u8` and the ID.
-- An inbound message is recorded by its header and the numbers of its actions only: what the engines send is made again by a replay of the whole cluster.
+- An inbound message is recorded whole, so that a replay that starts from a checkpoint does not need the engine that sent it to have run before the checkpoint.
+- A message that came back (a queue that was full, an engine that was gone) is recorded at the tick the sender settled it: at the tick of the send when the router refused it at once, at the tick it was taken from the return queue otherwise. Whether it comes back depends on the time, so a replay cannot work it out.
+- A receiver drops a message whose `Seq` is not larger than the last it took from the same sender (a second copy), and records nothing for it. A message with `Seq` 0 is never a copy.
+
+## Messages and actions
+
+- A message is written as: the address it is for (scope `u8`, ID), its header (the address of the sender, `Seq`), the number of times it was tried, its `OnFail`, the count of its actions, and each action.
+- An action is its ID (the number in the table below) and then its fields, written by its method `Encode`; a function in its file reads them, found in `action.actionDecoders` by the ID. A test fails when an ID of the register has no decoder. Private fields of an action that waits are written too.
+- `OnFail` is data: the kind of decision `u8` and what the kind needs: an address for `DecisionRedirect` and `DecisionEscalate`, a message (written as above) for `DecisionCompensate`, a key and arguments (strings) for `DecisionNotify`, nothing for `DecisionRetry` and `DecisionDrop`. A message inside a message goes at most 8 deep.
+- A message that holds an action with no `Encode` or no decoder, or an `OnFail` with no kind, is not written: `EncodeMessage` returns `ErrNoCodec` and writes nothing.
 
 ## Meta of a segment
 
@@ -46,6 +71,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 | What | Table | Numbers |
 |---|---|---|
 | action ID | `action/id.go` (the value of the constant) | 1 to 15 |
+| decision kind | `action/message.go` (the value of the constant) | 1 to 6 |
 | cooldown key | `action/cooldown_key.go` (the value of the constant) | 1, 2 |
 | command ID | `command/id.go` (the value of the constant) | 1 to 9 |
 
@@ -86,7 +112,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 ## Not here yet
 
-- Checkpoints, the scheduler and cron in a checkpoint, the replay runner, and deleting old segments.
+- Checkpoints, the scheduler in a checkpoint, and the replay runner.
 - A `Close` is needed to write what the last ticks recorded: until then they are in memory and on the way to disk.
 
 Benchmarks: [replay_log](benchmark/replay_log.md).

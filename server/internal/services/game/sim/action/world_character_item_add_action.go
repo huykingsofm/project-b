@@ -4,6 +4,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 var (
@@ -49,7 +50,32 @@ func (a *WorldCharacterItemAddAction) ApplyWorld(
 	}
 	r.ToZoneLayer(
 		a.FromZoneLayerID,
-		OnFailDrop,
+		OnFailDrop(),
 		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
 	)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *WorldCharacterItemAddAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uvarint(uint64(a.ItemID))
+	w.Uvarint(uint64(a.Count))
+	w.Uvarint(uint64(a.FromZoneLayerID))
+	a.At.Encode(w)
+	w.Uvarint(a.Expiry)
+}
+
+// decodeWorldCharacterItemAddAction reads what Encode wrote.
+func decodeWorldCharacterItemAddAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &WorldCharacterItemAddAction{
+		CharacterID:     state.CharacterID(r.Uvarint()),
+		ItemID:          state.ItemID(r.Uvarint()),
+		Count:           uint32(r.Uvarint()),
+		FromZoneLayerID: state.ZoneLayerID(r.Uvarint()),
+		At:              state.DecodeVec(r, version),
+		Expiry:          r.Uvarint(),
+	}
+	return a, r.Err()
 }

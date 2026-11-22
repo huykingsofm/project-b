@@ -413,6 +413,80 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 	}
 }
 
+func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettled(
+	t *testing.T,
+) {
+	c, _, j, _ := newWorld(t, 1, 0)
+	walkToTheEastExit(t, c, 1)
+	c.Env.Router.Retire(action.ZoneLayerAddress(3))
+
+	c.ZoneLayer(1).Send(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1})
+	steps(c, 10)
+
+	var returned []replay.Record
+	for _, r := range j.Records {
+		if r.Kind() == replay.KindReturned {
+			returned = append(returned, r)
+		}
+	}
+	if len(returned) != 1 {
+		t.Fatalf("%d records of a message that came back, want 1", len(returned))
+	}
+	got := returned[0]
+	body := got.Body.(replay.Returned)
+	if got.Engine != action.ZoneLayerAddress(1) || body.Header.From != action.ZoneLayerAddress(1) ||
+		body.Header.Seq == 0 || body.Reason != action.Retired {
+		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as Retired", got)
+	}
+	var settledAt uint64
+	for _, r := range j.Records {
+		inbound, ok := r.Body.(replay.Inbound)
+		if ok && r.Engine == action.ZoneLayerAddress(1) &&
+			inbound.Message.Head().From == action.ZoneLayerAddress(1) && r.Tick > got.Tick {
+			settledAt = r.Tick // the compensation, which is sent to itself, is taken after
+		}
+	}
+	if settledAt == 0 {
+		t.Fatal("the compensation that follows the return was not taken at a later tick")
+	}
+}
+
+func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *testing.T) {
+	c, _, j, _ := newWorld(t, 1, 0)
+	layer := action.ZoneLayerAddress(1)
+	say := func(seq uint64) action.Message {
+		m := action.MessageToZoneLayer(
+			1, action.OnFailDrop(), &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
+		)
+		return m.Stamp(action.Header{From: action.ZoneAddress(1), Seq: seq})
+	}
+	for _, seq := range []uint64{5, 5, 4, 6} { // a copy, a number that went back, and a new one
+		if _, ok := c.Env.Router.Deliver(say(seq)); !ok {
+			t.Fatal("the message was not delivered")
+		}
+	}
+	steps(c, 1)
+	if got := c.ZoneLayer(1).State().Chat.Len(); got != 2 {
+		t.Fatalf("%d chat lines, want 2: the numbers 5 and 6, once each", got)
+	}
+	for range 2 { // no number: two messages, both taken
+		c.Env.Router.Deliver(say(0))
+	}
+	steps(c, 1)
+	if got := c.ZoneLayer(1).State().Chat.Len(); got != 4 {
+		t.Fatalf("%d chat lines, want 4: the two with no number are not copies", got)
+	}
+	taken := 0
+	for _, r := range j.Records {
+		if r.Kind() == replay.KindInbound && r.Engine == layer {
+			taken++
+		}
+	}
+	if taken != 4 {
+		t.Fatalf("%d messages recorded as taken by the zonelayer, want 4 (no copy)", taken)
+	}
+}
+
 func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testing.T) {
 	c, _, j, cfg := newWorld(t, 1, 0)
 	if _, err := cfg.Apply(map[string]string{"replay_log.hash_every_ticks": "5"}); err != nil {
@@ -421,7 +495,7 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 	steps(c, 22)
 	ticks := map[action.Address][]uint64{}
 	for _, r := range j.Records {
-		if r.Kind == replay.KindHash {
+		if r.Kind() == replay.KindHash {
 			ticks[r.Engine] = append(ticks[r.Engine], r.Tick)
 		}
 	}
@@ -459,8 +533,7 @@ func TestTheSameInputsGiveTheSameReplayLog(t *testing.T) {
 	}
 	a, b := run(), run()
 	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y replay.Record) bool {
-		return x.Kind == y.Kind && x.Engine == y.Engine && x.Tick == y.Tick && x.Value == y.Value &&
-			x.Header == y.Header
+		return x.Engine == y.Engine && x.Tick == y.Tick && x.Body.Same(y.Body)
 	}) {
 		t.Fatal("two runs of the same inputs recorded different replay logs")
 	}

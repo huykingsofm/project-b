@@ -4,6 +4,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 var zoneLayerCharacterItemPickupActionRadius = config.NewVar(
@@ -55,15 +56,30 @@ func (a *ZoneLayerCharacterItemPickupAction) ApplyZoneLayer(
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
 	selfID := s.ID
-	r.ToWorld(OnFailCompensate(func(Reason) Message {
-		return MessageToZoneLayer(
-			selfID,
-			OnFailDrop,
-			&ZoneLayerItemEntityAddAction{
-				ItemID: item.ItemID, Count: item.Count, At: item.Pos, Expiry: item.Expiry,
-			},
-		)
-	}),
+	r.ToWorld(OnFailCompensate(MessageToZoneLayer(
+		selfID,
+		OnFailDrop(),
+		&ZoneLayerItemEntityAddAction{
+			ItemID: item.ItemID, Count: item.Count, At: item.Pos, Expiry: item.Expiry,
+		},
+	)),
 		&WorldCharacterItemAddAction{CharacterID: a.CharacterID, ItemID: item.ItemID,
 			Count: item.Count, FromZoneLayerID: selfID, At: item.Pos, Expiry: item.Expiry})
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uvarint(uint64(a.ItemEntityID))
+}
+
+// decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
+func decodeZoneLayerCharacterItemPickupAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterItemPickupAction{
+		CharacterID:  state.CharacterID(r.Uvarint()),
+		ItemEntityID: state.EntityID(r.Uvarint()),
+	}
+	return a, r.Err()
 }

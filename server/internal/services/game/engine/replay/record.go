@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -8,29 +9,182 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-// Kind says what a Record is.
+// Kind names a kind of record by a number: the register below. A new kind takes the next number, at
+// the end of the list, and a number is never changed or reused, because the log writes it.
 type Kind uint8
 
-// The kinds of record.
+// The kinds of record. Each is the Kind of one type of Body.
 const (
 	KindInbound Kind = iota + 1
 	KindCommand
 	KindConfig
 	KindHash
 	KindStableRead
+	KindReturned
 )
 
-// Record is one entry of a MemLog.
+// Body is what a record holds besides the engine that made it and the tick it was made at. Each
+// kind of record is a type of its own that holds only what it has, writes itself (Encode) and says
+// whether another body is the same (Same); a function in this package reads it back, found by its
+// kind.
+type Body interface {
+	Kind() Kind
+	// Encode writes what the body holds, not its kind: encodeRecord writes the kind first.
+	Encode(w *binarycodec.Writer) error
+	// Same reports whether the other body is of the same kind and says the same thing.
+	Same(other Body) bool
+}
+
+// Record is one entry of a log: who recorded it, at which tick, and what.
 type Record struct {
-	Kind    Kind
-	Engine  action.Address
-	Tick    uint64
-	Header  action.Header
-	Actions []action.ID
-	Command command.Command
-	Source  action.Address // for a KindStableRead, the engine whose copy was read
-	// the version of a configuration, a hash, or the tick of a copy that was read
-	Value uint64
+	Engine action.Address
+	Tick   uint64
+	Body   Body
+}
+
+// Kind is the kind of the body of the record, or 0 when there is none.
+func (r Record) Kind() Kind {
+	if r.Body == nil {
+		return 0
+	}
+	return r.Body.Kind()
+}
+
+// Inbound is a message that the engine took, whole.
+type Inbound struct{ Message action.Message }
+
+func (Inbound) Kind() Kind { return KindInbound }
+
+func (b Inbound) Encode(w *binarycodec.Writer) error { return action.EncodeMessage(w, b.Message) }
+
+func (b Inbound) Same(other Body) bool {
+	o, ok := other.(Inbound)
+	return ok && SameMessage(b.Message, o.Message)
+}
+
+func decodeInbound(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
+	m, err := action.DecodeMessage(r, version)
+	return Inbound{Message: m}, err
+}
+
+// Command is a command of a client that the engine took.
+type Command struct{ Command command.Command }
+
+func (Command) Kind() Kind { return KindCommand }
+
+func (b Command) Encode(w *binarycodec.Writer) error { return command.Encode(w, b.Command) }
+
+func (b Command) Same(other Body) bool {
+	o, ok := other.(Command)
+	if !ok {
+		return false
+	}
+	var x, y binarycodec.Writer
+	if command.Encode(&x, b.Command) != nil || command.Encode(&y, o.Command) != nil {
+		return false
+	}
+	return bytes.Equal(x.B, y.B)
+}
+
+func decodeCommand(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
+	c, err := command.Decode(r, version)
+	return Command{Command: c}, err
+}
+
+// ConfigRead is the version of the configuration that the engine first read at the tick.
+type ConfigRead struct{ Version uint64 }
+
+func (ConfigRead) Kind() Kind { return KindConfig }
+
+func (b ConfigRead) Encode(w *binarycodec.Writer) error {
+	w.Uvarint(b.Version)
+	return nil
+}
+
+func (b ConfigRead) Same(other Body) bool { o, ok := other.(ConfigRead); return ok && b == o }
+
+func decodeConfigRead(r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+	return ConfigRead{Version: r.Uvarint()}, r.Err()
+}
+
+// Hash is the hash of the state of the engine at the end of the tick.
+type Hash struct{ Value uint64 }
+
+func (Hash) Kind() Kind { return KindHash }
+
+func (b Hash) Encode(w *binarycodec.Writer) error {
+	w.Fixed64(b.Value)
+	return nil
+}
+
+func (b Hash) Same(other Body) bool { o, ok := other.(Hash); return ok && b == o }
+
+func decodeHash(r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+	return Hash{Value: r.Fixed64()}, r.Err()
+}
+
+// StableRead says which copy of the state of another engine the engine read first at the tick: the
+// tick the copy was taken at, or 0 when there was none.
+type StableRead struct {
+	Source   action.Address
+	CopyTick uint64
+}
+
+func (StableRead) Kind() Kind { return KindStableRead }
+
+func (b StableRead) Encode(w *binarycodec.Writer) error {
+	b.Source.Encode(w)
+	w.Uvarint(b.CopyTick)
+	return nil
+}
+
+func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
+
+func decodeStableRead(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
+	return StableRead{Source: action.DecodeAddress(r, version), CopyTick: r.Uvarint()}, r.Err()
+}
+
+// Returned says that a message the engine sent came back undelivered, and why: the header of the
+// message, and the reason.
+type Returned struct {
+	Header action.Header
+	Reason action.Reason
+}
+
+func (Returned) Kind() Kind { return KindReturned }
+
+func (b Returned) Encode(w *binarycodec.Writer) error {
+	b.Header.Encode(w)
+	w.Uint8(uint8(b.Reason))
+	return nil
+}
+
+func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok && b == o }
+
+func decodeReturned(r *binarycodec.Reader, version binarycodec.Version) (Body, error) {
+	header := action.DecodeHeader(r, version)
+	return Returned{Header: header, Reason: action.Reason(r.Uint8())}, r.Err()
+}
+
+// SameMessage reports whether two messages are the same one, by what they are written as: that is
+// what the log holds, and it does not tell a nil list from an empty one.
+func SameMessage(a, b action.Message) bool {
+	var x, y binarycodec.Writer
+	if action.EncodeMessage(&x, a) != nil || action.EncodeMessage(&y, b) != nil {
+		return false
+	}
+	return bytes.Equal(x.B, y.B)
+}
+
+// decoders is the table of the functions that read a body, by its kind. A test fails when a kind of
+// the register has none.
+var decoders = map[Kind]func(r *binarycodec.Reader, version binarycodec.Version) (Body, error){
+	KindInbound:    decodeInbound,
+	KindCommand:    decodeCommand,
+	KindConfig:     decodeConfigRead,
+	KindHash:       decodeHash,
+	KindStableRead: decodeStableRead,
+	KindReturned:   decodeReturned,
 }
 
 // payloadTick is the tick of the record that a payload holds.
@@ -41,31 +195,15 @@ func payloadTick(payload []byte) (uint64, error) {
 	return tick, r.Err()
 }
 
-// encodeRecord writes a record: its kind, its tick and then what its kind has. The engine is not in
-// it: it is the engine of the log the record is written to.
+// encodeRecord writes a record: its kind, its tick and then its body. The engine is not in it: it
+// is the engine of the log the record is written to.
 func encodeRecord(w *binarycodec.Writer, r Record) error {
-	w.Uint8(uint8(r.Kind))
-	w.Uvarint(r.Tick)
-	switch r.Kind {
-	case KindInbound:
-		r.Header.Encode(w)
-		w.Uvarint(uint64(len(r.Actions)))
-		for _, id := range r.Actions {
-			w.Uvarint(uint64(id))
-		}
-	case KindCommand:
-		return command.Encode(w, r.Command)
-	case KindConfig:
-		w.Uvarint(r.Value)
-	case KindHash:
-		w.Fixed64(r.Value)
-	case KindStableRead:
-		r.Source.Encode(w)
-		w.Uvarint(r.Value)
-	default:
-		return fmt.Errorf("the record kind %d is not one the replay log writes", r.Kind)
+	if r.Body == nil {
+		return fmt.Errorf("the record has no body")
 	}
-	return nil
+	w.Uint8(uint8(r.Body.Kind()))
+	w.Uvarint(r.Tick)
+	return r.Body.Encode(w)
 }
 
 // decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
@@ -73,46 +211,20 @@ func decodeRecord(
 	engine action.Address, version binarycodec.Version, payload []byte,
 ) (Record, error) {
 	r := binarycodec.NewReader(payload)
-	rec := Record{Kind: Kind(r.Uint8()), Engine: engine, Tick: r.Uvarint()}
-	switch rec.Kind {
-	case KindInbound:
-		rec.Header = action.DecodeHeader(r, version)
-		n := r.Uvarint()
-		for i := uint64(0); i < n && r.Err() == nil; i++ {
-			code := r.Uvarint()
-			if r.Err() != nil {
-				break
-			}
-			if code > 0xffff {
-				return Record{}, fmt.Errorf("the action number %d is not one of an action", code)
-			}
-			rec.Actions = append(rec.Actions, action.ID(code))
-		}
-	case KindCommand:
-		c, err := command.Decode(r, version)
-		if err != nil {
-			return Record{}, err
-		}
-		rec.Command = c
-	case KindConfig:
-		rec.Value = r.Uvarint()
-	case KindHash:
-		rec.Value = r.Fixed64()
-	case KindStableRead:
-		rec.Source = action.DecodeAddress(r, version)
-		rec.Value = r.Uvarint()
-	default:
-		if r.Err() == nil {
-			return Record{}, fmt.Errorf(
-				"the record kind %d is not one the replay log writes", rec.Kind,
-			)
-		}
-	}
+	kind, tick := Kind(r.Uint8()), r.Uvarint()
 	if err := r.Err(); err != nil {
+		return Record{}, err
+	}
+	decode, ok := decoders[kind]
+	if !ok {
+		return Record{}, fmt.Errorf("the record kind %d is not one the replay log writes", kind)
+	}
+	body, err := decode(r, version)
+	if err != nil {
 		return Record{}, err
 	}
 	if r.Left() != 0 {
 		return Record{}, fmt.Errorf("%d bytes are left after the record", r.Left())
 	}
-	return rec, nil
+	return Record{Engine: engine, Tick: tick, Body: body}, nil
 }

@@ -20,35 +20,10 @@ import (
 // teeReplayLog gives every record to two replay logs.
 type teeReplayLog struct{ a, b replay.Log }
 
-func (t teeReplayLog) Inbound(e action.Address, tick uint64, h action.Header, ids []action.ID) {
-	t.a.Inbound(e, tick, h, ids)
-	t.b.Inbound(e, tick, h, ids)
-}
-func (t teeReplayLog) WorldCommand(e action.Address, tick uint64, c command.WorldCommand) {
-	t.a.WorldCommand(e, tick, c)
-	t.b.WorldCommand(e, tick, c)
-}
-func (t teeReplayLog) ZoneCommand(e action.Address, tick uint64, c command.ZoneCommand) {
-	t.a.ZoneCommand(e, tick, c)
-	t.b.ZoneCommand(e, tick, c)
-}
-func (t teeReplayLog) ZoneLayerCommand(e action.Address, tick uint64, c command.ZoneLayerCommand) {
-	t.a.ZoneLayerCommand(e, tick, c)
-	t.b.ZoneLayerCommand(e, tick, c)
-}
-func (t teeReplayLog) ConfigRead(e action.Address, tick uint64, v uint64) {
-	t.a.ConfigRead(e, tick, v)
-	t.b.ConfigRead(e, tick, v)
-}
-func (t teeReplayLog) Hash(e action.Address, tick uint64, hash func() uint64) {
-	t.a.Hash(e, tick, hash)
-	t.b.Hash(e, tick, hash)
-}
-func (t teeReplayLog) StableRead(
-	e action.Address, tick uint64, from action.Address, copyTick uint64,
-) {
-	t.a.StableRead(e, tick, from, copyTick)
-	t.b.StableRead(e, tick, from, copyTick)
+func (t teeReplayLog) Wants(k replay.Kind) bool { return t.a.Wants(k) || t.b.Wants(k) }
+func (t teeReplayLog) Append(e action.Address, tick uint64, body replay.Body) {
+	t.a.Append(e, tick, body)
+	t.b.Append(e, tick, body)
 }
 func (t teeReplayLog) EndTick(e action.Address, tick uint64) {
 	t.a.EndTick(e, tick)
@@ -112,16 +87,12 @@ func newTeeWorld(
 	return c, mem, file, cfg
 }
 
-// recordsOf returns the records of the memory log that belong to an engine, in order, with an empty
-// list of actions made nil as the file log reads it.
+// recordsOf returns the records of the memory log that belong to an engine, in order.
 func recordsOf(mem *replay.MemLog, e action.Address) []replay.Record {
 	var out []replay.Record
 	for _, r := range mem.Records {
 		if r.Engine != e {
 			continue
-		}
-		if len(r.Actions) == 0 {
-			r.Actions = nil
 		}
 		out = append(out, r)
 	}
@@ -161,7 +132,7 @@ func compareWithFiles(t *testing.T, dir string, mem *replay.MemLog) {
 			t.Fatalf("%v: the log has %d records and memory has %d", e, len(got), len(want))
 		}
 		for _, rec := range got {
-			kinds[rec.Kind]++
+			kinds[rec.Kind()]++
 		}
 	}
 	for _, k := range []replay.Kind{
@@ -263,7 +234,7 @@ func TestACommandThatIsCopiedGivesTheSameRunAsOneThatIsNot(t *testing.T) {
 		runScenario(t, c, cfg, sender{t: t, roundTrip: roundTrip, reuses: true})
 		var hashes []replay.Record
 		for _, r := range mem.Records {
-			if r.Kind == replay.KindHash {
+			if r.Kind() == replay.KindHash {
 				hashes = append(hashes, r)
 			}
 		}

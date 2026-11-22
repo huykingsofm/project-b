@@ -1,5 +1,7 @@
 package state
 
+import "github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+
 // Vec is a position or a distance, in units. Every position, radius and distance of the simulation
 // is in units; only the map knows how it is cut into tiles (package tilemap).
 type Vec struct{ X, Y int32 }
@@ -62,4 +64,16 @@ func (r Rect) Intersects(o Rect) bool {
 // Contains reports whether the position is inside the rectangle.
 func (r Rect) Contains(v Vec) bool {
 	return v.X >= r.Min.X && v.X <= r.Max.X && v.Y >= r.Min.Y && v.Y <= r.Max.Y
+}
+
+// Encode writes a vector: its two coordinates.
+func (v Vec) Encode(w *binarycodec.Writer) {
+	w.Varint(int64(v.X))
+	w.Varint(int64(v.Y))
+}
+
+// DecodeVec reads what Vec.Encode wrote, of the data version given. A reader that has failed gives
+// the zero vector.
+func DecodeVec(r *binarycodec.Reader, version binarycodec.Version) Vec {
+	return Vec{X: int32(r.Varint()), Y: int32(r.Varint())}
 }

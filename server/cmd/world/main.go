@@ -217,7 +217,7 @@ func main() {
 			}
 			counts, last := map[replay.Kind]int{}, uint64(0)
 			for reader.Next() {
-				counts[reader.Record().Kind]++
+				counts[reader.Record().Kind()]++
 				last = reader.Record().Tick
 			}
 			readErr := reader.Err()

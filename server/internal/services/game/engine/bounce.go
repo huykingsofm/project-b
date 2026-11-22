@@ -17,35 +17,35 @@ type bouncer struct {
 }
 
 // decide is the table of what each kind of decision does. A kind that is not in it is dropped.
-var decide = map[action.DecisionKind]func(b *bouncer, l action.Message, d action.Decision){
-	action.DecisionRetry: func(b *bouncer, l action.Message, _ action.Decision) {
+var decide = map[action.DecisionKind]func(b *bouncer, l action.Message, d action.OnFail){
+	action.DecisionRetry: func(b *bouncer, l action.Message, _ action.OnFail) {
 		b.pending = append(b.pending, l.Again())
 	},
-	action.DecisionRedirect: func(b *bouncer, l action.Message, d action.Decision) {
+	action.DecisionRedirect: func(b *bouncer, l action.Message, d action.OnFail) {
 		b.pending = append(b.pending, l.Redirected(d.To).Again())
 	},
-	action.DecisionCompensate: func(b *bouncer, _ action.Message, d action.Decision) {
+	action.DecisionCompensate: func(b *bouncer, _ action.Message, d action.OnFail) {
 		b.pending = append(b.pending, d.With)
 	},
-	action.DecisionNotify: func(b *bouncer, l action.Message, d action.Decision) {
+	action.DecisionNotify: func(b *bouncer, l action.Message, d action.OnFail) {
 		if b.notice != nil && l.Subject() != nil {
-			b.notice(l.Subject(), d.Key, d.Args)
+			b.notice(l.Subject(), d.Key, args(d.Args))
 		}
 	},
-	action.DecisionEscalate: func(b *bouncer, l action.Message, d action.Decision) {
+	action.DecisionEscalate: func(b *bouncer, l action.Message, d action.OnFail) {
 		b.pending = append(b.pending, l.Redirected(d.To))
 	},
-	action.DecisionDrop: func(b *bouncer, _ action.Message, _ action.Decision) { b.dropped++ },
+	action.DecisionDrop: func(b *bouncer, _ action.Message, _ action.OnFail) { b.dropped++ },
 }
 
 // handle runs what the message says to do about the failure. A message that has been tried
 // bounce.max_attempts times is dropped, and while the engine stops nothing is sent again.
 func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason) {
-	d := l.Bounce(r)
+	d := l.OnFail()
 	switch d.Kind {
 	case action.DecisionRetry, action.DecisionRedirect:
 		if b.stopping {
-			d = action.Decision{Kind: action.DecisionDrop}
+			d = action.OnFailDrop()
 		} else if l.Attempts() >= action.MaxAttempts.Get(cfg) {
 			logging.Warn(
 				"message dropped: too many attempts",
@@ -58,11 +58,11 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 				"attempts",
 				l.Attempts(),
 			)
-			d = action.Decision{Kind: action.DecisionDrop}
+			d = action.OnFailDrop()
 		}
 	case action.DecisionEscalate:
 		if b.stopping {
-			d = action.Decision{Kind: action.DecisionDrop}
+			d = action.OnFailDrop()
 		}
 	}
 	run, ok := decide[d.Kind]
@@ -87,5 +87,14 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 func (b *bouncer) take() []action.Message {
 	out := b.pending
 	b.pending = nil
+	return out
+}
+
+// args turns the arguments of a text, which a message holds as strings, into what the notice takes.
+func args(in []string) []any {
+	out := make([]any, len(in))
+	for i, a := range in {
+		out[i] = a
+	}
 	return out
 }

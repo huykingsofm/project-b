@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
@@ -156,35 +155,11 @@ func (f *FileLog) record(engine action.Address, r Record) {
 	}
 }
 
-func (f *FileLog) Inbound(engine action.Address, tick uint64, h action.Header, ids []action.ID) {
-	f.record(engine, Record{Kind: KindInbound, Tick: tick, Header: h, Actions: ids})
-}
+// Wants reports true for every kind: a FileLog writes what it is given.
+func (f *FileLog) Wants(Kind) bool { return true }
 
-func (f *FileLog) WorldCommand(engine action.Address, tick uint64, c command.WorldCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ZoneCommand(engine action.Address, tick uint64, c command.ZoneCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ZoneLayerCommand(engine action.Address, tick uint64, c command.ZoneLayerCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ConfigRead(engine action.Address, tick uint64, version uint64) {
-	f.record(engine, Record{Kind: KindConfig, Tick: tick, Value: version})
-}
-
-// Hash calls hash: the log records it.
-func (f *FileLog) Hash(engine action.Address, tick uint64, hash func() uint64) {
-	f.record(engine, Record{Kind: KindHash, Tick: tick, Value: hash()})
-}
-
-func (f *FileLog) StableRead(
-	engine action.Address, tick uint64, from action.Address, copyTick uint64,
-) {
-	f.record(engine, Record{Kind: KindStableRead, Tick: tick, Source: from, Value: copyTick})
+func (f *FileLog) Append(engine action.Address, tick uint64, body Body) {
+	f.record(engine, Record{Tick: tick, Body: body})
 }
 
 // EndTick hands the records of the tick to the goroutine that writes them.

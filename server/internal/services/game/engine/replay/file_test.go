@@ -37,7 +37,13 @@ func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Re
 // wrote.
 func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	from := action.ZoneLayerAddress(3)
-	ids := []action.ID{action.ZoneLayerCharacterMoveActionID, action.ZoneChatSendActionID}
+	inbound := action.MessageToZoneLayer(
+		3, action.OnFailCompensate(action.MessageToZoneLayer(
+			1, action.OnFailDrop(), &action.ZoneLayerCharacterRegenAction{},
+		)),
+		&action.ZoneLayerCharacterMoveAction{CharacterID: 7, Dir: state.East, Ticks: 3},
+		&action.ZoneLayerChatSendAction{FromID: 7, Text: "xin chào"},
+	).Stamp(action.Header{From: from, Seq: tick * 10})
 	ch := zonelayerstate.Character{
 		CharacterID: 7, Name: "Binh", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
 	}
@@ -46,34 +52,36 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	move := command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3}
 	chat := command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"}
 
-	log.ConfigRead(engine, tick, 5)
-	log.Inbound(engine, tick, action.Header{From: from, Seq: tick * 10}, ids)
-	log.WorldCommand(engine, tick, chat)
-	log.ZoneCommand(engine, tick, enter)
-	log.ZoneLayerCommand(engine, tick, move)
-	log.StableRead(engine, tick, action.ZoneAddress(2), tick-1)
-	log.Hash(engine, tick, func() uint64 { return 0xdeadbeefcafef00d + tick })
+	log.Append(engine, tick, ConfigRead{Version: 5})
+	log.Append(engine, tick, Inbound{Message: inbound})
+	log.Append(engine, tick, Returned{
+		Header: action.Header{From: from, Seq: tick*10 + 1}, Reason: action.Full,
+	})
+	log.Append(engine, tick, Command{Command: chat})
+	log.Append(engine, tick, Command{Command: enter})
+	log.Append(engine, tick, Command{Command: move})
+	log.Append(engine, tick, StableRead{Source: action.ZoneAddress(2), CopyTick: tick - 1})
+	log.Append(engine, tick, Hash{Value: 0xdeadbeefcafef00d + tick})
 	log.EndTick(engine, tick)
 	return []Record{
-		{Kind: KindConfig, Engine: engine, Tick: tick, Value: 5},
+		{Engine: engine, Tick: tick, Body: ConfigRead{Version: 5}},
+		{Engine: engine, Tick: tick, Body: Inbound{Message: inbound}},
 		{
-			Kind:    KindInbound,
-			Engine:  engine,
-			Tick:    tick,
-			Header:  action.Header{From: from, Seq: tick * 10},
-			Actions: ids,
-		},
-		{Kind: KindCommand, Engine: engine, Tick: tick, Command: chat},
-		{Kind: KindCommand, Engine: engine, Tick: tick, Command: enter},
-		{Kind: KindCommand, Engine: engine, Tick: tick, Command: move},
-		{
-			Kind:   KindStableRead,
 			Engine: engine,
 			Tick:   tick,
-			Source: action.ZoneAddress(2),
-			Value:  tick - 1,
+			Body: Returned{
+				Header: action.Header{From: from, Seq: tick*10 + 1}, Reason: action.Full,
+			},
 		},
-		{Kind: KindHash, Engine: engine, Tick: tick, Value: 0xdeadbeefcafef00d + tick},
+		{Engine: engine, Tick: tick, Body: Command{Command: chat}},
+		{Engine: engine, Tick: tick, Body: Command{Command: enter}},
+		{Engine: engine, Tick: tick, Body: Command{Command: move}},
+		{
+			Engine: engine,
+			Tick:   tick,
+			Body:   StableRead{Source: action.ZoneAddress(2), CopyTick: tick - 1},
+		},
+		{Engine: engine, Tick: tick, Body: Hash{Value: 0xdeadbeefcafef00d + tick}},
 	}
 }
 
@@ -120,7 +128,7 @@ func TestAnEngineWritesOnlyToItsOwnLogAndTheMetaSaysWhichAndTheSeed(t *testing.T
 	log.Close()
 	for _, e := range []action.Address{a, b} {
 		got, err := readLog(t, dir, e, 0)
-		if err != nil || len(got) != 7 {
+		if err != nil || len(got) != 8 {
 			t.Fatalf("%v: %d records, error %v", e, len(got), err)
 		}
 		for _, r := range got {
@@ -159,9 +167,9 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 9*7 || got[0].Tick != 12 || got[len(got)-1].Tick != 20 {
+	if len(got) != 9*8 || got[0].Tick != 12 || got[len(got)-1].Tick != 20 {
 		t.Fatalf(
-			"%d records from %d to %d, want 63 from 12 to 20",
+			"%d records from %d to %d, want 72 from 12 to 20",
 			len(got),
 			got[0].Tick,
 			got[len(got)-1].Tick,
@@ -184,7 +192,7 @@ func TestACrashThatCutsTheEndOfTheFileLeavesTheRecordsBeforeIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a torn end is not an error: %v", err)
 	}
-	if len(got) != 2*7 {
+	if len(got) != 2*8 {
 		t.Fatalf("%d records, want the two whole ticks and nothing of the cut one", len(got))
 	}
 }
@@ -193,9 +201,9 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
 	engine := action.ZoneLayerAddress(1)
-	log.ConfigRead(engine, 1, 1)
-	log.ZoneLayerCommand(engine, 1, nil)
-	log.ConfigRead(engine, 1, 2)
+	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.Append(engine, 1, Command{}) // no command: it cannot be written
+	log.Append(engine, 1, ConfigRead{Version: 2})
 	log.EndTick(engine, 1)
 	if log.Err() == nil {
 		t.Fatal("the log was not marked as failed")
@@ -204,7 +212,8 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 		t.Fatal("Close did not return the error")
 	}
 	got, err := readLog(t, dir, engine, 0)
-	if err != nil || len(got) != 2 || got[0].Value != 1 || got[1].Value != 2 {
+	if err != nil || len(got) != 2 || got[0].Body != (ConfigRead{Version: 1}) ||
+		got[1].Body != (ConfigRead{Version: 2}) {
 		t.Fatalf("%d records, error %v; want the two that could be written", len(got), err)
 	}
 }
@@ -240,6 +249,7 @@ func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 		{99},
 		{byte(KindInbound)},
 		{byte(KindInbound), 1, 3, 1, 1, 2, 5},
+		{byte(KindReturned), 1, 1},
 		{byte(KindHash), 1, 1, 2},
 		{byte(KindCommand), 1, 0xff, 0xff, 0x7f},
 		{byte(KindConfig), 1, 1, 9},
@@ -257,14 +267,14 @@ func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachReco
 		engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644,
 	)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.ConfigRead(engine, 1, 1)
+	log.Append(engine, 1, ConfigRead{Version: 1})
 	if log.Err() == nil {
 		t.Fatal("a log that could not be opened is not marked as failed")
 	}
 	// the obstacle goes away: an engine that tried again for each record would now open its log
 	os.Remove(engineDir(dir, engine))
 	for tick := uint64(2); tick < 10; tick++ {
-		log.ConfigRead(engine, tick, 1)
+		log.Append(engine, tick, ConfigRead{Version: 1})
 		log.EndTick(engine, tick)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {

@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerCharacterMoveAction is a run of movement: a character holds a direction for a number of
@@ -74,4 +75,25 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayerCancel(
 		s.CooldownUntil(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey) > c.Tick {
 		s.SetCooldown(a.CharacterID, ZoneLayerCharacterMoveActionCooldownKey, c.Tick)
 	}
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterMoveAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uint8(uint8(a.Dir))
+	w.Uvarint(uint64(a.Ticks))
+	w.Bool(a.reserved)
+}
+
+// decodeZoneLayerCharacterMoveAction reads what Encode wrote.
+func decodeZoneLayerCharacterMoveAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterMoveAction{
+		CharacterID: state.CharacterID(r.Uvarint()),
+		Dir:         state.Dir(r.Uint8()),
+		Ticks:       uint32(r.Uvarint()),
+		reserved:    r.Bool(),
+	}
+	return a, r.Err()
 }
