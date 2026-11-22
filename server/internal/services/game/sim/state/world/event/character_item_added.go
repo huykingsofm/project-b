@@ -12,4 +12,6 @@ type CharacterItemAdded struct {
 func (CharacterItemAdded) ID() ID { return CharacterItemAddedID }
 
 // Audience is the character that got the items, and nobody else.
-func (e CharacterItemAdded) Audience() state.Audience { return state.AudienceCharacters(e.CharacterID) }
+func (e CharacterItemAdded) Audience() state.Audience {
+	return state.AudienceCharacters(e.CharacterID)
+}

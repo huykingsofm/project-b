@@ -14,17 +14,30 @@ import (
 )
 
 var benchRecords = map[string]Record{
-	"inbound, 2 actions": {Kind: KindInbound, Tick: 123456, Header: action.Header{From: action.ZoneLayerAddress(3), Seq: 98765},
+	"inbound, 2 actions": {Kind: KindInbound, Tick: 123456,
+		Header:  action.Header{From: action.ZoneLayerAddress(3), Seq: 98765},
 		Actions: []action.ID{action.ZoneLayerCharacterMoveActionID, action.ZoneChatSendActionID}},
-	"command, move": {Kind: KindCommand, Tick: 123456, Command: command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3}},
-	"command, chat": {Kind: KindCommand, Tick: 123456, Command: command.ZoneLayerChatSendCommand{FromID: 7, Text: "xin chào mọi người, hôm nay thế nào"}},
-	"hash":          {Kind: KindHash, Tick: 123456, Value: 0xdeadbeefcafef00d},
-	"config read":   {Kind: KindConfig, Tick: 123456, Value: 5},
-	"stable read":   {Kind: KindStableRead, Tick: 123456, Source: action.ZoneAddress(2), Value: 123455},
+	"command, move": {
+		Kind:    KindCommand,
+		Tick:    123456,
+		Command: command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3},
+	},
+	"command, chat": {
+		Kind: KindCommand,
+		Tick: 123456,
+		Command: command.ZoneLayerChatSendCommand{
+			FromID: 7, Text: "xin chào mọi người, hôm nay thế nào",
+		},
+	},
+	"hash":        {Kind: KindHash, Tick: 123456, Value: 0xdeadbeefcafef00d},
+	"config read": {Kind: KindConfig, Tick: 123456, Value: 5},
+	"stable read": {
+		Kind: KindStableRead, Tick: 123456, Source: action.ZoneAddress(2), Value: 123455,
+	},
 }
 
-// BenchmarkEncodeRecord is the part of recording that the goroutine of an engine does: building the bytes of a
-// record. There is no file and no writer.
+// BenchmarkEncodeRecord is the part of recording that the goroutine of an engine does: building the
+// bytes of a record. There is no file and no writer.
 func BenchmarkEncodeRecord(b *testing.B) {
 	for name, rec := range benchRecords {
 		b.Run(name, func(b *testing.B) {
@@ -58,15 +71,16 @@ func BenchmarkDecodeRecord(b *testing.B) {
 	}
 }
 
-// tickRecorder records the ticks of one engine: a config read, a stable read, a hash, 5 commands and the rest inbound
-// messages, as a busy zonelayer does.
+// tickRecorder records the ticks of one engine: a config read, a stable read, a hash, 5 commands
+// and the rest inbound messages, as a busy zonelayer does.
 type tickRecorder struct {
 	log     *FileLog
 	engine  action.Address
 	records int
 	ids     []action.ID
-	move    command.ZoneLayerCommand // already an interface value, as a command is when an engine records it
-	hash    func() uint64
+	// already an interface value, as a command is when an engine records it
+	move command.ZoneLayerCommand
+	hash func() uint64
 }
 
 func newTickRecorder(log *FileLog, engine action.Address, records int) *tickRecorder {
@@ -74,7 +88,8 @@ func newTickRecorder(log *FileLog, engine action.Address, records int) *tickReco
 		log: log, engine: engine, records: records,
 		ids:  []action.ID{action.ZoneLayerCharacterMoveActionID, action.ZoneChatSendActionID},
 		move: command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3},
-		hash: func() uint64 { return 42 }, // the cost of taking a hash is the engine's, not the log's
+		// the cost of taking a hash is the engine's, not the log's
+		hash: func() uint64 { return 42 },
 	}
 }
 
@@ -92,10 +107,14 @@ func (r *tickRecorder) tick(tick uint64) {
 }
 
 func benchFile(b *testing.B) *FileLog {
-	return NewFileLog(b.TempDir(), FileLogOptions{Seed: 1, SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64})
+	return NewFileLog(
+		b.TempDir(),
+		FileLogOptions{Seed: 1, SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64},
+	)
 }
 
-// stalls is how many times a Commit of the log of an engine had to wait for the goroutine that writes.
+// stalls is how many times a Commit of the log of an engine had to wait for the goroutine that
+// writes.
 func stalls(log *FileLog, engine action.Address) uint64 {
 	v, ok := log.engines.Load(engine)
 	if !ok {
@@ -104,18 +123,21 @@ func stalls(log *FileLog, engine action.Address) uint64 {
 	return v.(*engineLog).w.Stalled()
 }
 
-// percentiles reports the time of the ticks as seen by the engine: the median, the 99th percentile and the worst.
+// percentiles reports the time of the ticks as seen by the engine: the median, the 99th percentile
+// and the worst.
 func percentiles(b *testing.B, durs []time.Duration) {
 	slices.Sort(durs)
-	at := func(q float64) float64 { return float64(durs[int(float64(len(durs)-1)*q)].Nanoseconds()) }
+	at := func(q float64) float64 {
+		return float64(durs[int(float64(len(durs)-1)*q)].Nanoseconds())
+	}
 	b.ReportMetric(at(0.5), "p50-ns/tick")
 	b.ReportMetric(at(0.99), "p99-ns/tick")
 	b.ReportMetric(float64(durs[len(durs)-1].Nanoseconds()), "max-ns/tick")
 }
 
-// BenchmarkFileTickHot records ticks one after the other with nothing in between, so everything is in the
-// cache and the goroutine that writes is never asked to wait for: it is the least that a tick can cost, and not
-// what an engine pays at 50 ticks a second.
+// BenchmarkFileTickHot records ticks one after the other with nothing in between, so everything is
+// in the cache and the goroutine that writes is never asked to wait for: it is the least that a
+// tick can cost, and not what an engine pays at 50 ticks a second.
 func BenchmarkFileTickHot(b *testing.B) {
 	log := benchFile(b)
 	r := newTickRecorder(log, action.ZoneLayerAddress(1), 20)
@@ -129,16 +151,18 @@ func BenchmarkFileTickHot(b *testing.B) {
 	}
 }
 
-// pacedTicks and pacedPause are the workload of BenchmarkFileTickPaced: 3,000 ticks with a millisecond between them.
+// pacedTicks and pacedPause are the workload of BenchmarkFileTickPaced: 3,000 ticks with a
+// millisecond between them.
 const (
 	pacedTicks = 3000
 	pacedPause = time.Millisecond
 )
 
-// BenchmarkFileTickPaced is what an engine pays: a tick of 20, 100 or 1,000 records, a pause between ticks as the
-// engine has between its own work, and the time of each tick measured from the engine's side. The workload is
-// fixed (pacedTicks ticks), so ns/op is the cost of the whole run and means nothing: the metrics are the mean,
-// the median, the 99th percentile and the worst of a tick, in ns/tick, and the number of waits for the writer.
+// BenchmarkFileTickPaced is what an engine pays: a tick of 20, 100 or 1,000 records, a pause
+// between ticks as the engine has between its own work, and the time of each tick measured from the
+// engine's side. The workload is fixed (pacedTicks ticks), so ns/op is the cost of the whole run
+// and means nothing: the metrics are the mean, the median, the 99th percentile and the worst of a
+// tick, in ns/tick, and the number of waits for the writer.
 func BenchmarkFileTickPaced(b *testing.B) {
 	for _, records := range []int{20, 100, 1000} {
 		b.Run(fmt.Sprintf("records=%d", records), func(b *testing.B) {
@@ -165,9 +189,10 @@ func BenchmarkFileTickPaced(b *testing.B) {
 	}
 }
 
-// BenchmarkFileTickSaturated records ticks of 100 records with no pause, far faster than an engine can tick, so the
-// goroutine that writes falls behind and a Commit has to wait for it: the median, the worst and the number of
-// waits show what happens to an engine when the disk cannot keep up (the sync runs on the goroutine that writes).
+// BenchmarkFileTickSaturated records ticks of 100 records with no pause, far faster than an engine
+// can tick, so the goroutine that writes falls behind and a Commit has to wait for it: the median,
+// the worst and the number of waits show what happens to an engine when the disk cannot keep up
+// (the sync runs on the goroutine that writes).
 func BenchmarkFileTickSaturated(b *testing.B) {
 	log := benchFile(b)
 	engine := action.ZoneLayerAddress(1)
@@ -189,8 +214,9 @@ func BenchmarkFileTickSaturated(b *testing.B) {
 	b.ReportMetric(float64(time.Since(closing).Nanoseconds()), "close-ns")
 }
 
-// BenchmarkFileTickManyEngines is 12 engines, each on its own goroutine with its own log, recording ticks of 100
-// records with no pause: the writers share the disk, as the engines of a cluster do. ns/op is a tick of any engine.
+// BenchmarkFileTickManyEngines is 12 engines, each on its own goroutine with its own log, recording
+// ticks of 100 records with no pause: the writers share the disk, as the engines of a cluster do.
+// ns/op is a tick of any engine.
 func BenchmarkFileTickManyEngines(b *testing.B) {
 	log := benchFile(b)
 	var next atomic.Uint32

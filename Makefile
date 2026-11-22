@@ -1,8 +1,8 @@
-.PHONY: ci fmt fix vet test hooks
+.PHONY: ci fmt fix vet lint test hooks
 
-# Everything the checks run, locally: format, go fix, vet, and the tests with the race detector. A new
+# Everything the checks run, locally: format, go fix, vet, lint, and the tests with the race detector. A new
 # check is a new target added to this list. The pre-commit hook runs this (see hooks).
-ci: fmt fix vet test
+ci: fmt fix vet lint test
 
 fmt:
 	@test -z "$$(gofmt -l server)" || { echo "gofmt needed on:"; gofmt -l server; exit 1; }
@@ -13,6 +13,10 @@ fix:
 
 vet:
 	go vet ./...
+
+# Lines of at most 100 columns (lll, set in .golangci.yml); a tab counts as 4.
+lint:
+	golangci-lint run ./...
 
 test:
 	go test -race -count=1 ./...

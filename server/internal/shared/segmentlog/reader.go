@@ -17,9 +17,10 @@ type Reader struct {
 	s        *segmentScanner
 	err      error
 
-	// The last segment may end with part of a batch that a crash cut, so its records are held back until the commit
-	// of their batch is read: collecting is the records of the batch being read, ready the records of a batch whose
-	// commit was read and that Next has not given yet. The other segments are read as they come.
+	// The last segment may end with part of a batch that a crash cut, so its records are held back
+	// until the commit of their batch is read: collecting is the records of the batch being read,
+	// ready the records of a batch whose commit was read and that Next has not given yet. The other
+	// segments are read as they come.
 	buffering  bool
 	collecting [][]byte
 	ready      [][]byte
@@ -27,13 +28,13 @@ type Reader struct {
 	payload    []byte
 }
 
-// OpenReader reads the log in dir from a segment the caller chooses. start is given the meta of a segment
-// and reports whether the segment is at or before where the caller wants to start; the reader starts at the
-// last segment for which it is true, or at the first when it is true for none, and reads on to the end of
-// the log. start has to be true for the first segments and false for the rest (a tick that is no later than
-// the one wanted is that); it is called for about log2(n) of the n segments, each of which has its header
-// read. A nil start reads from the first segment. A last segment whose header was not finished when a
-// crash came is not in the log.
+// OpenReader reads the log in dir from a segment the caller chooses. start is given the meta of a
+// segment and reports whether the segment is at or before where the caller wants to start; the
+// reader starts at the last segment for which it is true, or at the first when it is true for none,
+// and reads on to the end of the log. start has to be true for the first segments and false for the
+// rest (a tick that is no later than the one wanted is that); it is called for about log2(n) of the
+// n segments, each of which has its header read. A nil start reads from the first segment. A last
+// segment whose header was not finished when a crash came is not in the log.
 func OpenReader(dir string, start func(meta []byte) bool) (*Reader, error) {
 	segments, err := Segments(dir)
 	if err != nil {
@@ -74,10 +75,10 @@ func readMeta(path string) ([]byte, error) {
 	return s.meta, nil
 }
 
-// Next moves to the next record and reports whether there is one. It reports false at the end of the log
-// and when there is an error, which Err returns. What follows the last whole batch of the last segment (a
-// record cut off, or records whose commit is missing) is the end of the log, not an error: it is what a
-// crash leaves.
+// Next moves to the next record and reports whether there is one. It reports false at the end of
+// the log and when there is an error, which Err returns. What follows the last whole batch of the
+// last segment (a record cut off, or records whose commit is missing) is the end of the log, not an
+// error: it is what a crash leaves.
 func (r *Reader) Next() bool {
 	for r.err == nil {
 		if r.readyPos < len(r.ready) {
@@ -100,8 +101,8 @@ func (r *Reader) Next() bool {
 			r.payload = r.s.payload
 			return true
 		case errors.Is(err, io.EOF), errors.Is(err, errTorn) && r.buffering:
-			// the end of the segment, or of what a crash left of the last one: the records of a batch that was not
-			// committed are dropped
+			// the end of the segment, or of what a crash left of the last one: the records of a
+			// batch that was not committed are dropped
 			r.closeFile()
 			if r.buffering {
 				r.next = len(r.segments)

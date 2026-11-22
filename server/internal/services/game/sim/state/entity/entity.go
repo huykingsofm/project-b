@@ -1,6 +1,6 @@
 // Package entity holds the entities that stand in a zonelayer: what a character is, an item on the
-// ground and an exit have in common, and each kind in a file of its own. An entity is a value (R29):
-// a change builds a new value and replaces the old one in its container.
+// ground and an exit have in common, and each kind in a file of its own. An entity is a value
+// (R29): a change builds a new value and replaces the old one in its container.
 package entity
 
 import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
@@ -25,7 +25,8 @@ type Entity interface {
 	KindID() KindID
 	// Position is where the entity stands, in units.
 	Position() state.Vec
-	// Radius is how far the entity reaches from its position, in units; 0 is a point. Collision uses it.
+	// Radius is how far the entity reaches from its position, in units; 0 is a point. Collision
+	// uses it.
 	Radius() int32
 	// BoundingBox is the smallest rectangle that holds the entity, which a grid files it by.
 	BoundingBox() state.Rect
@@ -35,9 +36,9 @@ type Entity interface {
 	Hash(h *state.Hasher)
 }
 
-// DamageableEntity is an entity that has health and can lose and regain it. An entity says that it is
-// damageable by implementing this interface; the state asks no more than that, so a new kind of entity
-// with health is made damageable the same way.
+// DamageableEntity is an entity that has health and can lose and regain it. An entity says that it
+// is damageable by implementing this interface; the state asks no more than that, so a new kind of
+// entity with health is made damageable the same way.
 type DamageableEntity interface {
 	Entity
 	// Health is the health the entity has now.

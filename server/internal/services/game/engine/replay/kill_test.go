@@ -14,7 +14,9 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 )
 
-var killEngines = []action.Address{action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneAddress(1)}
+var killEngines = []action.Address{
+	action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneAddress(1),
+}
 
 // lastTick is the tick of the last record of an engine's log, or 0 when it has none.
 func lastTick(t testing.TB, dir string, engine action.Address) uint64 {
@@ -34,10 +36,10 @@ func lastTick(t testing.TB, dir string, engine action.Address) uint64 {
 	return last
 }
 
-// TestKillChild is the process that TestAProcessThatIsKilled... starts and kills: it is not a test. It opens the log
-// in the directory it was given, goes on from the tick after the end of each engine's log, and records ticks of
-// as many records as it is told (REPLAYLOG_KILL_RECORDS) on one goroutine for each engine as fast as it can, until it
-// is killed.
+// TestKillChild is the process that TestAProcessThatIsKilled... starts and kills: it is not a test.
+// It opens the log in the directory it was given, goes on from the tick after the end of each
+// engine's log, and records ticks of as many records as it is told (REPLAYLOG_KILL_RECORDS) on one
+// goroutine for each engine as fast as it can, until it is killed.
 func TestKillChild(t *testing.T) {
 	dir := os.Getenv("REPLAYLOG_KILL_DIR")
 	if dir == "" {
@@ -47,7 +49,12 @@ func TestKillChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log := NewFileLog(dir, FileLogOptions{Seed: 1, SegmentBytes: 8 << 20, SyncEvery: 10 * time.Millisecond, Backlog: 8})
+	log := NewFileLog(
+		dir,
+		FileLogOptions{
+			Seed: 1, SegmentBytes: 8 << 20, SyncEvery: 10 * time.Millisecond, Backlog: 8,
+		},
+	)
 	var wg sync.WaitGroup
 	var ready sync.Once
 	var started sync.WaitGroup
@@ -69,11 +76,12 @@ func TestKillChild(t *testing.T) {
 	wg.Wait() // never: the parent kills the process
 }
 
-// A process that is killed while it writes leaves a log that reads without an error, in which every tick has all its
-// records (the one that was being written is not read at all), and that the next process goes on from: six times in
-// the same directory, each time at another moment. A tick is a batch of one write, and a kill can stop a write
-// between two pages of the kernel: the first version of the log kept the records that were written and this test
-// found a tick with 43 records of 100. A batch is now all or nothing (see segmentlog).
+// A process that is killed while it writes leaves a log that reads without an error, in which every
+// tick has all its records (the one that was being written is not read at all), and that the next
+// process goes on from: six times in the same directory, each time at another moment. A tick is a
+// batch of one write, and a kill can stop a write between two pages of the kernel: the first
+// version of the log kept the records that were written and this test found a tick with 43 records
+// of 100. A batch is now all or nothing (see segmentlog).
 func TestAProcessThatIsKilledLeavesALogThatReadsAndCanBeContinued(t *testing.T) {
 	killRounds(t, 100)
 }
@@ -84,7 +92,11 @@ func killRounds(t *testing.T, records int) {
 	var previous [3]uint64
 	for round := range 6 {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestKillChild$")
-		cmd.Env = append(os.Environ(), "REPLAYLOG_KILL_DIR="+dir, "REPLAYLOG_KILL_RECORDS="+strconv.Itoa(records))
+		cmd.Env = append(
+			os.Environ(),
+			"REPLAYLOG_KILL_DIR="+dir,
+			"REPLAYLOG_KILL_RECORDS="+strconv.Itoa(records),
+		)
 		out, err := cmd.StdoutPipe()
 		if err != nil {
 			t.Fatal(err)
@@ -119,23 +131,43 @@ func killRounds(t *testing.T, records int) {
 				perTick[rec.Tick]++
 			}
 			if r.Err() != nil {
-				t.Fatalf("round %d, %v: the log of a killed process does not read: %v", round, e, r.Err())
+				t.Fatalf(
+					"round %d, %v: the log of a killed process does not read: %v",
+					round,
+					e,
+					r.Err(),
+				)
 			}
 			r.Close()
 			for tick, count := range perTick {
 				if count != records {
-					t.Fatalf("round %d, %v: tick %d has %d records of %d: a tick is all or nothing", round, e, tick, count, records)
+					t.Fatalf(
+						"round %d, %v: tick %d has %d records of %d: a tick is all or nothing",
+						round,
+						e,
+						tick,
+						count,
+						records,
+					)
 				}
 			}
 			if last <= previous[i] {
-				t.Fatalf("round %d, %v: the log did not grow: last tick %d, %d before", round, e, last, previous[i])
+				t.Fatalf(
+					"round %d, %v: the log did not grow: last tick %d, %d before",
+					round,
+					e,
+					last,
+					previous[i],
+				)
 			}
 			previous[i] = last
 		}
 	}
 
 	// the log can be written to again by this process too, and reads as one log
-	log := NewFileLog(dir, FileLogOptions{Seed: 1, SegmentBytes: 8 << 20, SyncEvery: time.Second, Backlog: 8})
+	log := NewFileLog(
+		dir, FileLogOptions{Seed: 1, SegmentBytes: 8 << 20, SyncEvery: time.Second, Backlog: 8},
+	)
 	engine := killEngines[0]
 	r := newTickRecorder(log, engine, records)
 	for tick := previous[0] + 1; tick <= previous[0]+10; tick++ {

@@ -13,4 +13,6 @@ type CharacterNoticed struct {
 func (CharacterNoticed) ID() ID { return CharacterNoticedID }
 
 // Audience is the character that is told, and nobody else.
-func (e CharacterNoticed) Audience() state.Audience { return state.AudienceCharacters(e.CharacterID) }
+func (e CharacterNoticed) Audience() state.Audience {
+	return state.AudienceCharacters(e.CharacterID)
+}

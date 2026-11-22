@@ -16,7 +16,9 @@ type WorldChatPrivateSendCommand struct {
 func (WorldChatPrivateSendCommand) ID() ID { return WorldChatPrivateSendCommandID }
 
 func (c WorldChatPrivateSendCommand) TranslateWorld() []action.WorldAction {
-	return []action.WorldAction{&action.WorldChatPrivateSendAction{FromID: c.FromID, ToID: c.ToID, Text: c.Text}}
+	return []action.WorldAction{
+		&action.WorldChatPrivateSendAction{FromID: c.FromID, ToID: c.ToID, Text: c.Text},
+	}
 }
 
 // Encode writes the fields of the command, not its ID: package command writes the ID first.
@@ -28,7 +30,11 @@ func (c WorldChatPrivateSendCommand) Encode(w *binarycodec.Writer) error {
 }
 
 // decodeWorldChatPrivateSendCommand reads what Encode wrote.
-func decodeWorldChatPrivateSendCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
-	c := WorldChatPrivateSendCommand{FromID: state.PlayerID(r.Uvarint()), ToID: state.PlayerID(r.Uvarint()), Text: r.String()}
+func decodeWorldChatPrivateSendCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
+	c := WorldChatPrivateSendCommand{
+		FromID: state.PlayerID(r.Uvarint()), ToID: state.PlayerID(r.Uvarint()), Text: r.String(),
+	}
 	return c, r.Err()
 }

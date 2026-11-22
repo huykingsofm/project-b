@@ -56,15 +56,34 @@ func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 		}
 	}
 	want := []replay.Record{
-		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(7), Value: 3},
-		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 10, Source: action.ZoneLayerAddress(8), Value: 0},
-		{Kind: replay.KindStableRead, Engine: action.ZoneAddress(1), Tick: 11, Source: action.ZoneLayerAddress(7), Value: 3},
+		{
+			Kind:   replay.KindStableRead,
+			Engine: action.ZoneAddress(1),
+			Tick:   10,
+			Source: action.ZoneLayerAddress(7),
+			Value:  3,
+		},
+		{
+			Kind:   replay.KindStableRead,
+			Engine: action.ZoneAddress(1),
+			Tick:   10,
+			Source: action.ZoneLayerAddress(8),
+			Value:  0,
+		},
+		{
+			Kind:   replay.KindStableRead,
+			Engine: action.ZoneAddress(1),
+			Tick:   11,
+			Source: action.ZoneLayerAddress(7),
+			Value:  3,
+		},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("%d records, want %d: %+v", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i].Kind != want[i].Kind || got[i].Engine != want[i].Engine || got[i].Tick != want[i].Tick ||
+		if got[i].Kind != want[i].Kind || got[i].Engine != want[i].Engine ||
+			got[i].Tick != want[i].Tick ||
 			got[i].Source != want[i].Source || got[i].Value != want[i].Value {
 			t.Fatalf("record %d = %+v, want %+v", i, got[i], want[i])
 		}

@@ -18,14 +18,21 @@ var allActions = []any{
 	WorldChatPrivateSendAction{}, WorldCharacterItemAddAction{},
 	ZoneChatSendAction{}, ZoneCharacterEnterAction{},
 	ZoneLayerChatSendAction{}, ZoneLayerCharacterEnterAction{}, ZoneLayerCharacterMoveAction{},
-	ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{}, ZoneLayerCharacterShieldGrantAction{},
-	ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{}, ZoneLayerCharacterItemPickupAction{},
+	ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{},
+	ZoneLayerCharacterShieldGrantAction{},
+	ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{},
+	ZoneLayerCharacterItemPickupAction{},
 	ZoneLayerItemEntityAddAction{}, ZoneLayerItemEntityRemoveAction{},
 }
 
 func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	pkgs, err := parser.ParseDir(
+		fset,
+		".",
+		func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") },
+		0,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +46,8 @@ func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {
 				}
 				for _, spec := range gd.Specs {
 					ts := spec.(*ast.TypeSpec)
-					if _, ok := ts.Type.(*ast.StructType); ok && strings.HasSuffix(ts.Name.Name, "Action") {
+					if _, ok := ts.Type.(*ast.StructType); ok &&
+						strings.HasSuffix(ts.Name.Name, "Action") {
 						declared = append(declared, ts.Name.Name)
 					}
 				}
@@ -53,12 +61,14 @@ func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {
 	slices.Sort(declared)
 	slices.Sort(listed)
 	if !slices.Equal(declared, listed) {
-		t.Fatalf("the actions declared are\n%v\nand the ones in allActions are\n%v", declared, listed)
+		t.Fatalf(
+			"the actions declared are\n%v\nand the ones in allActions are\n%v", declared, listed,
+		)
 	}
 }
 
-// An action is made by one engine and may be put in a message for another, so what it holds is a value or a type
-// with Clone, and whoever stores it in a state copies it (R29).
+// An action is made by one engine and may be put in a message for another, so what it holds is a
+// value or a type with Clone, and whoever stores it in a state copies it (R29).
 func TestEveryActionHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 	rules := aliasing.Rules{Boundary: true}
 	for _, a := range allActions {

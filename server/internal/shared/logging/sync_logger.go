@@ -10,7 +10,8 @@ import (
 func defaultLogger() Logger { return newSyncLogger(NewWriterConsumer(os.Stderr)) }
 
 // syncLogger gives every entry to its consumer at once, in the goroutine of the caller. It is the
-// logger of a program that has not called Init, where a line must not be lost and nothing is flushing.
+// logger of a program that has not called Init, where a line must not be lost and nothing is
+// flushing.
 type syncLogger struct {
 	c      Consumer
 	fields []any

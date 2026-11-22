@@ -6,7 +6,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-// ZoneLayerCharacterExitToCommand asks to take the exit, an entity of the zonelayer, that the character stands in.
+// ZoneLayerCharacterExitToCommand asks to take the exit, an entity of the zonelayer, that the
+// character stands in.
 type ZoneLayerCharacterExitToCommand struct {
 	CharacterID  state.CharacterID
 	ExitEntityID state.EntityID
@@ -15,7 +16,11 @@ type ZoneLayerCharacterExitToCommand struct {
 func (ZoneLayerCharacterExitToCommand) ID() ID { return ZoneLayerCharacterExitToCommandID }
 
 func (c ZoneLayerCharacterExitToCommand) TranslateZoneLayer() []action.ZoneLayerAction {
-	return []action.ZoneLayerAction{&action.ZoneLayerCharacterExitToAction{CharacterID: c.CharacterID, ExitEntityID: c.ExitEntityID}}
+	return []action.ZoneLayerAction{
+		&action.ZoneLayerCharacterExitToAction{
+			CharacterID: c.CharacterID, ExitEntityID: c.ExitEntityID,
+		},
+	}
 }
 
 // Encode writes the fields of the command, not its ID: package command writes the ID first.
@@ -26,7 +31,11 @@ func (c ZoneLayerCharacterExitToCommand) Encode(w *binarycodec.Writer) error {
 }
 
 // decodeZoneLayerCharacterExitToCommand reads what Encode wrote.
-func decodeZoneLayerCharacterExitToCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
-	c := ZoneLayerCharacterExitToCommand{CharacterID: state.CharacterID(r.Uvarint()), ExitEntityID: state.EntityID(r.Uvarint())}
+func decodeZoneLayerCharacterExitToCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
+	c := ZoneLayerCharacterExitToCommand{
+		CharacterID: state.CharacterID(r.Uvarint()), ExitEntityID: state.EntityID(r.Uvarint()),
+	}
 	return c, r.Err()
 }

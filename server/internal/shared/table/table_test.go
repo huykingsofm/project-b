@@ -114,7 +114,9 @@ type listRow struct {
 }
 
 func (r listRow) Index() map[string]any { return map[string]any{"id": r.ID} }
-func (r listRow) Clone() listRow        { return listRow{ID: r.ID, Items: append([]int(nil), r.Items...)} }
+func (r listRow) Clone() listRow {
+	return listRow{ID: r.ID, Items: append([]int(nil), r.Items...)}
+}
 
 func TestACloneCopiesRowsThatHaveACloneWithTheirClone(t *testing.T) {
 	tb := table.Build([]listRow{{ID: 1, Items: []int{1, 2}}})

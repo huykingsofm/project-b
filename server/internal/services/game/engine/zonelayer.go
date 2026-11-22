@@ -12,8 +12,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/channels"
 )
 
-// ZoneLayerEngine is the engine of a zonelayer: it owns the state of the zonelayer and is the only one that
-// changes it.
+// ZoneLayerEngine is the engine of a zonelayer: it owns the state of the zonelayer and is the only
+// one that changes it.
 type ZoneLayerEngine struct {
 	cell
 	st       *zonelayerstate.State
@@ -27,13 +27,15 @@ type ZoneLayerEngine struct {
 	rng      *rand.Rand
 }
 
-// NewZoneLayerEngine makes the engine of a zonelayer. The tick and the cron are its own: the caller gives
-// the ticks with Run or calls Step.
+// NewZoneLayerEngine makes the engine of a zonelayer. The tick and the cron are its own: the caller
+// gives the ticks with Run or calls Step.
 func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLayerEngine {
 	me := action.ZoneLayerAddress(st.ID)
 	e := &ZoneLayerEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
-		commands: make(chan command.ZoneLayerCommand, env.QueueSize), stable: env.Stable, emitter: env.ZoneLayerEmitter, rng: newRand(seed, me),
+		commands: make(
+			chan command.ZoneLayerCommand, env.QueueSize,
+		), stable: env.Stable, emitter: env.ZoneLayerEmitter, rng: newRand(seed, me),
 	}
 	e.reg.Common = action.Common{Me: me, Graph: env.Graph, Stable: e.view}
 	e.bounce.notice = func(who any, key string, args []any) {
@@ -51,7 +53,8 @@ func (e *ZoneLayerEngine) AddCron(every uint64, actions ...action.ZoneLayerActio
 
 // Send gives the zonelayer a command, without waiting. It reports false when the queue is full.
 func (e *ZoneLayerEngine) Send(c command.ZoneLayerCommand) bool {
-	c = command.Isolate(c) // the caller keeps its command and may change it: the engine keeps a copy
+	// the caller keeps its command and may change it: the engine keeps a copy
+	c = command.Isolate(c)
 	select {
 	case e.commands <- c:
 		return true
@@ -60,8 +63,8 @@ func (e *ZoneLayerEngine) Send(c command.ZoneLayerCommand) bool {
 	}
 }
 
-// State returns the state of the zonelayer. Only the goroutine that runs the zonelayer may use it; other
-// goroutines read what the zonelayer published.
+// State returns the state of the zonelayer. Only the goroutine that runs the zonelayer may use it;
+// other goroutines read what the zonelayer published.
 func (e *ZoneLayerEngine) State() *zonelayerstate.State { return e.st }
 
 // Step runs one tick of the zonelayer:
@@ -125,7 +128,8 @@ func (e *ZoneLayerEngine) planSelf(plan *action.Plan[action.ZoneLayerAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
+// are due.
 func (e *ZoneLayerEngine) planScheduled(plan *action.Plan[action.ZoneLayerAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -140,8 +144,8 @@ func (e *ZoneLayerEngine) planMessages(plan *action.Plan[action.ZoneLayerAction]
 	}
 }
 
-// planCommands takes the commands that clients sent since the last tick, writes them to the replay log
-// and puts their actions in the plan.
+// planCommands takes the commands that clients sent since the last tick, writes them to the replay
+// log and puts their actions in the plan.
 func (e *ZoneLayerEngine) planCommands(plan *action.Plan[action.ZoneLayerAction]) {
 	for _, c := range channels.Drain(e.commands) {
 		e.replayLog.ZoneLayerCommand(e.me, e.tick, c)

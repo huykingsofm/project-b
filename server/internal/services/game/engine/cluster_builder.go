@@ -26,8 +26,8 @@ type ZoneParams struct {
 	Adjacent []state.ZoneID
 }
 
-// ZoneLayerParams are the parameters of the zonelayers of one zone: how many it starts with, how many
-// characters each takes, and every how many ticks they heal their characters (0 for never).
+// ZoneLayerParams are the parameters of the zonelayers of one zone: how many it starts with, how
+// many characters each takes, and every how many ticks they heal their characters (0 for never).
 type ZoneLayerParams struct {
 	ZoneID     state.ZoneID
 	Count      int
@@ -35,9 +35,9 @@ type ZoneLayerParams struct {
 	RegenEvery uint64
 }
 
-// ClusterBuilder collects what a cluster is made of and builds it. NewBuilder gives one with a default for
-// everything that has one; each With method sets one thing and returns the builder, so calls chain, and
-// Build makes the cluster.
+// ClusterBuilder collects what a cluster is made of and builds it. NewBuilder gives one with a
+// default for everything that has one; each With method sets one thing and returns the builder, so
+// calls chain, and Build makes the cluster.
 type ClusterBuilder struct {
 	cfg              *config.Store
 	seed             uint64
@@ -52,8 +52,9 @@ type ClusterBuilder struct {
 	zoneLayers []ZoneLayerParams
 }
 
-// NewBuilder returns a builder with the defaults: a configuration store with every default value, seed
-// 0, a queue of 256 for each engine, a replay log that records nothing, and emitters that discard.
+// NewBuilder returns a builder with the defaults: a configuration store with every default value,
+// seed 0, a queue of 256 for each engine, a replay log that records nothing, and emitters that
+// discard.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:              config.NewStore(),
@@ -109,7 +110,8 @@ func (b *ClusterBuilder) WithZoneEmitter(e ZoneEmitter) *ClusterBuilder {
 	return b
 }
 
-// WithZoneLayerEmitter sets where the zonelayer engines give their changes. A nil emitter keeps the default.
+// WithZoneLayerEmitter sets where the zonelayer engines give their changes. A nil emitter keeps the
+// default.
 func (b *ClusterBuilder) WithZoneLayerEmitter(e ZoneLayerEmitter) *ClusterBuilder {
 	if e != nil {
 		b.zoneLayerEmitter = e
@@ -129,7 +131,8 @@ func (b *ClusterBuilder) WithZone(p ZoneParams) *ClusterBuilder {
 	return b
 }
 
-// WithZoneLayers sets the zonelayers that a zone starts with. A zone that has none has no zonelayer.
+// WithZoneLayers sets the zonelayers that a zone starts with. A zone that has none has no
+// zonelayer.
 func (b *ClusterBuilder) WithZoneLayers(p ZoneLayerParams) *ClusterBuilder {
 	b.zoneLayers = append(b.zoneLayers, p)
 	return b
@@ -163,22 +166,28 @@ func (b *ClusterBuilder) check() error {
 		}
 		withLayers[l.ZoneID] = true
 		if l.Count < 0 || (l.Count > 0 && l.Capacity <= 0) {
-			return fmt.Errorf("engine: zone %d has %d zonelayers of capacity %d", l.ZoneID, l.Count, l.Capacity)
+			return fmt.Errorf(
+				"engine: zone %d has %d zonelayers of capacity %d", l.ZoneID, l.Count, l.Capacity,
+			)
 		}
 	}
 	return nil
 }
 
-// Build makes the engines of the world and connects them. Nothing runs yet: give the ticks with Step,
-// or start them with Run. It returns an error when what the builder holds cannot make a cluster.
+// Build makes the engines of the world and connects them. Nothing runs yet: give the ticks with
+// Step, or start them with Run. It returns an error when what the builder holds cannot make a
+// cluster.
 func (b *ClusterBuilder) Build() (*Cluster, error) {
 	if err := b.check(); err != nil {
 		return nil, err
 	}
 	env := &Env{
-		Router: NewRouter(), Cfg: b.cfg, ReplayLog: b.replayLog, Stable: NewStableStateRegistry(b.world.ID),
+		Router: NewRouter(), Cfg: b.cfg, ReplayLog: b.replayLog, Stable: NewStableStateRegistry(
+			b.world.ID,
+		),
 		Graph: NewWorldGraph(b.world.ID), QueueSize: b.queueSize,
-		WorldEmitter: b.worldEmitter, ZoneEmitter: b.zoneEmitter, ZoneLayerEmitter: b.zoneLayerEmitter,
+		WorldEmitter: b.worldEmitter, ZoneEmitter: b.zoneEmitter,
+		ZoneLayerEmitter: b.zoneLayerEmitter,
 	}
 	layers := map[state.ZoneID]ZoneLayerParams{}
 	for _, l := range b.zoneLayers {

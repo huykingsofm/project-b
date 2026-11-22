@@ -13,7 +13,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
 )
 
-// tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
+// tile is the width of a tile in units; the map keeps it private, so a test that wants to name a
+// place by its tile says it here.
 const tile = 1024
 
 func TestFreeTilesAreInsideTheMapAndNotWalls(t *testing.T) {
@@ -38,12 +39,19 @@ func TestFreeTilesAreInsideTheMapAndNotWalls(t *testing.T) {
 }
 
 func TestExitsAreEntitiesInUnitsAndAreCopiedOutOfTheMap(t *testing.T) {
-	exit := tilemap.ExitDefinition{Min: tilemap.Tile{X: 3, Y: 0}, Max: tilemap.Tile{X: 3, Y: 2}, ToZoneID: 2, Arrival: tilemap.Tile{X: 1, Y: 1}}
+	exit := tilemap.ExitDefinition{
+		Min:      tilemap.Tile{X: 3, Y: 0},
+		Max:      tilemap.Tile{X: 3, Y: 2},
+		ToZoneID: 2,
+		Arrival:  tilemap.Tile{X: 1, Y: 1},
+	}
 	m := tilemaptest.New(t, 4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit})
 
 	got := m.Exits()
 	want := entity.ExitEntity{
-		Area:     state.Rect{Min: state.Vec{X: 3 * tile, Y: 0}, Max: state.Vec{X: 4*tile - 1, Y: 3*tile - 1}},
+		Area: state.Rect{
+			Min: state.Vec{X: 3 * tile, Y: 0}, Max: state.Vec{X: 4*tile - 1, Y: 3*tile - 1},
+		},
 		ToZoneID: 2,
 		Arrival:  state.Vec{X: tile + tile/2, Y: tile + tile/2},
 	}
@@ -58,11 +66,16 @@ func TestExitsAreEntitiesInUnitsAndAreCopiedOutOfTheMap(t *testing.T) {
 
 func TestReachStopsAtTheLastUnitBeforeAWall(t *testing.T) {
 	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
-	from := state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2} // the middle of tile (2,3), the wall is tile (4,3)
-	if got := m.Reach(from, state.East, 5*tile, 0); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
+	// the middle of tile (2,3), the wall is tile (4,3)
+	from := state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}
+	if got := m.Reach(
+		from, state.East, 5*tile, 0,
+	); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east = %+v, want the last unit before the wall (tile 4)", got)
 	}
-	if got := m.Reach(from, state.South, tile/4, 0); got != (state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2 + tile/4}) {
+	if got := m.Reach(
+		from, state.South, tile/4, 0,
+	); got != (state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2 + tile/4}) {
 		t.Fatalf("Reach south by a quarter of a tile = %+v, want it a quarter of a tile south", got)
 	}
 	if got := m.Reach(from, state.West, 100*tile, 0); got != (state.Vec{X: 0, Y: 3*tile + tile/2}) {
@@ -82,7 +95,9 @@ func TestTheSpawnIsTheMiddleOfItsTile(t *testing.T) {
 
 func TestTilesAtNegativePositionsAreOutsideTheMap(t *testing.T) {
 	m := tilemaptest.New(t, 4, 3, tilemap.Tile{}, nil, nil)
-	for _, v := range []state.Vec{{X: -1, Y: 0}, {X: 0, Y: -1}, {X: -1000, Y: -1000}, {X: -1001, Y: 500}} {
+	for _, v := range []state.Vec{
+		{X: -1, Y: 0}, {X: 0, Y: -1}, {X: -1000, Y: -1000}, {X: -1001, Y: 500},
+	} {
 		if m.Free(v) {
 			t.Errorf("Free(%+v) = true, want false", v)
 		}
@@ -92,18 +107,25 @@ func TestTilesAtNegativePositionsAreOutsideTheMap(t *testing.T) {
 func TestReachDoesNotJumpOverAWallHoweverFarItGoes(t *testing.T) {
 	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: tile / 2, Y: 3*tile + tile/2}
-	if got := m.Reach(from, state.East, 2_000_000_000, 0); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
+	if got := m.Reach(
+		from, state.East, 2_000_000_000, 0,
+	); got != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east by a huge distance = %+v, want it stopped by the wall", got)
 	}
 	open := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
-	if got := open.Reach(from, state.East, 2_000_000_000, 0); got != (state.Vec{X: 10*tile - 1, Y: 3*tile + tile/2}) {
+	if got := open.Reach(
+		from, state.East, 2_000_000_000, 0,
+	); got != (state.Vec{X: 10*tile - 1, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east by a huge distance = %+v, want the last unit of the map", got)
 	}
 }
 
 func TestADiagonalMoveDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T) {
-	// Walls at (4,3) and (5,2) touch at a corner; the way from tile (4,2) to tile (5,3) goes between them.
-	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
+	// Walls at (4,3) and (5,2) touch at a corner; the way from tile (4,2) to tile (5,3) goes
+	// between them.
+	m := tilemaptest.New(
+		t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil,
+	)
 	from := state.Vec{X: 4*tile + tile/2, Y: 2*tile + tile/2}
 	got := m.Reach(from, state.SouthEast, 2*tile, 0)
 	if tileOfUnits(got) != (tilemap.Tile{X: 4, Y: 2}) {
@@ -114,10 +136,14 @@ func TestADiagonalMoveDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T)
 func TestADiagonalMoveInTheOpenGoesTheWholeDistanceInBothAxes(t *testing.T) {
 	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	from := state.Vec{X: tile + tile/2, Y: tile + tile/2}
-	if got := m.Reach(from, state.SouthEast, tile, 0); got != (state.Vec{X: 2*tile + tile/2, Y: 2*tile + tile/2}) {
+	if got := m.Reach(
+		from, state.SouthEast, tile, 0,
+	); got != (state.Vec{X: 2*tile + tile/2, Y: 2*tile + tile/2}) {
 		t.Fatalf("Reach south-east = %+v, want one tile in each axis", got)
 	}
-	if got := m.Reach(from, state.NorthWest, tile, 0); got != (state.Vec{X: tile / 2, Y: tile / 2}) {
+	if got := m.Reach(
+		from, state.NorthWest, tile, 0,
+	); got != (state.Vec{X: tile / 2, Y: tile / 2}) {
 		t.Fatalf("Reach north-west = %+v, want one tile in each axis", got)
 	}
 }
@@ -128,29 +154,53 @@ func TestAPositionThatCannotBeStoodOnDoesNotMove(t *testing.T) {
 	if got := m.Reach(inWall, state.West, tile, 0); got != inWall {
 		t.Fatalf("Reach from a wall = %+v, want it not to move", got)
 	}
-	if got := m.Reach(state.Vec{X: -5, Y: 0}, state.East, tile, 0); got != (state.Vec{X: -5, Y: 0}) {
+	if got := m.Reach(
+		state.Vec{X: -5, Y: 0}, state.East, tile, 0,
+	); got != (state.Vec{X: -5, Y: 0}) {
 		t.Fatalf("Reach from outside the map = %+v, want it not to move", got)
 	}
 }
 
 func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
 	for name, make := range map[string]func() (*tilemap.TileMap, error){
-		"no size": func() (*tilemap.TileMap, error) { return tilemap.New(0, 3, tilemap.Tile{}, nil, nil) },
+		"no size": func() (*tilemap.TileMap, error) {
+			return tilemap.New(0, 3, tilemap.Tile{}, nil, nil)
+		},
 		"wall outside": func() (*tilemap.TileMap, error) {
 			return tilemap.New(4, 3, tilemap.Tile{}, []tilemap.Tile{{X: 4, Y: 0}}, nil)
 		},
-		"spawn outside": func() (*tilemap.TileMap, error) { return tilemap.New(4, 3, tilemap.Tile{X: 9, Y: 9}, nil, nil) },
+		"spawn outside": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4, 3, tilemap.Tile{X: 9, Y: 9}, nil, nil)
+		},
 		"spawn in a wall": func() (*tilemap.TileMap, error) {
 			return tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 1, Y: 1}}, nil)
 		},
 		"exit reversed": func() (*tilemap.TileMap, error) {
-			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 2}}})
+			return tilemap.New(
+				4,
+				3,
+				tilemap.Tile{},
+				nil,
+				[]tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 2}}},
+			)
 		},
-		"too many tiles": func() (*tilemap.TileMap, error) { return tilemap.New(4097, 4096, tilemap.Tile{}, nil, nil) },
-		"side too long":  func() (*tilemap.TileMap, error) { return tilemap.New(1<<20+1, 1, tilemap.Tile{}, nil, nil) },
-		"sides overflow": func() (*tilemap.TileMap, error) { return tilemap.New(1<<31-1, 1<<31-1, tilemap.Tile{}, nil, nil) },
+		"too many tiles": func() (*tilemap.TileMap, error) {
+			return tilemap.New(4097, 4096, tilemap.Tile{}, nil, nil)
+		},
+		"side too long": func() (*tilemap.TileMap, error) {
+			return tilemap.New(1<<20+1, 1, tilemap.Tile{}, nil, nil)
+		},
+		"sides overflow": func() (*tilemap.TileMap, error) {
+			return tilemap.New(1<<31-1, 1<<31-1, tilemap.Tile{}, nil, nil)
+		},
 		"exit outside": func() (*tilemap.TileMap, error) {
-			return tilemap.New(4, 3, tilemap.Tile{}, nil, []tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 4}}})
+			return tilemap.New(
+				4,
+				3,
+				tilemap.Tile{},
+				nil,
+				[]tilemap.ExitDefinition{{Min: tilemap.Tile{X: 3}, Max: tilemap.Tile{X: 4}}},
+			)
 		},
 	} {
 		m, err := make()
@@ -162,7 +212,8 @@ func TestAMapThatIsNotWellFormedIsRefused(t *testing.T) {
 
 func TestTheLargestMapsAreAccepted(t *testing.T) {
 	for _, size := range [][2]int32{{4096, 4096}, {1 << 20, 16}} {
-		if m, err := tilemap.New(size[0], size[1], tilemap.Tile{}, nil, nil); m == nil || err != nil {
+		if m, err := tilemap.New(size[0], size[1], tilemap.Tile{}, nil, nil); m == nil ||
+			err != nil {
 			t.Errorf("%d by %d: got %v, %v", size[0], size[1], m, err)
 		}
 	}
@@ -175,14 +226,17 @@ func TestABodyWithARadiusStopsWhenItsEdgeTouchesAWall(t *testing.T) {
 	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: tile / 2, Y: 3*tile + tile/2}
 	const radius = 300
-	if got := m.Reach(from, state.East, 5*tile, radius); got != (state.Vec{X: 4*tile - 1 - radius, Y: 3*tile + tile/2}) {
+	if got := m.Reach(
+		from, state.East, 5*tile, radius,
+	); got != (state.Vec{X: 4*tile - 1 - radius, Y: 3*tile + tile/2}) {
 		t.Fatalf("Reach east = %+v, want the body's edge on the last unit before the wall", got)
 	}
 }
 
 func TestABodyIsStoppedByAWallBesideItsPathThatAPointWouldPass(t *testing.T) {
-	// The path is along the middle of row 2; the wall is in row 3, below it. A point passes, a body that reaches
-	// 600 units to each side touches row 3 (the row is 1024 high and the middle is 512 from its edge).
+	// The path is along the middle of row 2; the wall is in row 3, below it. A point passes, a body
+	// that reaches 600 units to each side touches row 3 (the row is 1024 high and the middle is 512
+	// from its edge).
 	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	from := state.Vec{X: 2 * tile, Y: 2*tile + tile/2}
 	if got := m.Reach(from, state.East, 20*tile, 0); got.X != 10*tile-1 {
@@ -213,9 +267,13 @@ func TestABodyDoesNotFitWhereItsEdgeTouchesAWallOrTheEdgeOfTheMap(t *testing.T) 
 }
 
 func TestABodyDoesNotSlipBetweenTwoWallsThatTouchAtACorner(t *testing.T) {
-	m := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil)
+	m := tilemaptest.New(
+		t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}, {X: 5, Y: 2}}, nil,
+	)
 	from := state.Vec{X: 4*tile + tile/2, Y: 2*tile + tile/2}
-	if got := m.Reach(from, state.SouthEast, 2*tile, 100); tileOfUnits(got) != (tilemap.Tile{X: 4, Y: 2}) {
+	if got := m.Reach(from, state.SouthEast, 2*tile, 100); tileOfUnits(
+		got,
+	) != (tilemap.Tile{X: 4, Y: 2}) {
 		t.Fatalf("Reach south-east = %+v, want it to stay in tile (4,2)", got)
 	}
 }
@@ -231,7 +289,8 @@ func TestABodyThatDoesNotFitDoesNotMove(t *testing.T) {
 func BenchmarkReach(b *testing.B) {
 	m := tilemaptest.New(b, 200, 200, tilemap.Tile{}, nil, nil)
 	for _, radius := range []int32{0, 256, 511, 2048} {
-		// The first place where the body fits: the middle of the first tile, or the body's radius from the corner.
+		// The first place where the body fits: the middle of the first tile, or the body's radius
+		// from the corner.
 		corner := max(tile/2, radius)
 		from := state.Vec{X: corner, Y: corner}
 		b.Run(fmt.Sprintf("radius %d/a step of a quarter tile", radius), func(b *testing.B) {
@@ -252,8 +311,8 @@ func BenchmarkReach(b *testing.B) {
 	}
 }
 
-// BenchmarkReachLargeMap moves from many places of a map of 4096 by 4096 tiles, so that the tiles looked at
-// are not the same ones in the cache each time.
+// BenchmarkReachLargeMap moves from many places of a map of 4096 by 4096 tiles, so that the tiles
+// looked at are not the same ones in the cache each time.
 func BenchmarkReachLargeMap(b *testing.B) {
 	const side = 4096
 	m := tilemaptest.New(b, side, side, tilemap.Tile{}, nil, nil)
@@ -280,7 +339,9 @@ func TestABodyOfManyTilesIsStoppedByAWallAndDoesNotFitInANarrowPlace(t *testing.
 	m := tilemaptest.New(t, 20, 10, tilemap.Tile{X: 4, Y: 4}, []tilemap.Tile{{X: 12, Y: 5}}, nil)
 	const radius = 2 * tile // a boss five tiles wide
 	from := state.Vec{X: 4*tile + tile/2, Y: 4*tile + tile/2}
-	if got := m.Reach(from, state.East, 30*tile, radius); got != (state.Vec{X: 12*tile - 1 - radius, Y: 4*tile + tile/2}) {
+	if got := m.Reach(
+		from, state.East, 30*tile, radius,
+	); got != (state.Vec{X: 12*tile - 1 - radius, Y: 4*tile + tile/2}) {
 		t.Fatalf("Reach east = %+v, want the boss stopped by the wall that its edge touches", got)
 	}
 	if m.FreeForBody(state.Vec{X: tile / 2, Y: tile / 2}, radius) {
@@ -289,7 +350,9 @@ func TestABodyOfManyTilesIsStoppedByAWallAndDoesNotFitInANarrowPlace(t *testing.
 }
 
 // reachByEveryUnit is the answer by the plain way: one unit at a time, as long as the body fits.
-func reachByEveryUnit(m *tilemap.TileMap, from state.Vec, dir state.Dir, distance, radius int32) state.Vec {
+func reachByEveryUnit(
+	m *tilemap.TileMap, from state.Vec, dir state.Dir, distance, radius int32,
+) state.Vec {
 	at := from
 	for range distance {
 		next := state.Vec{X: at.X + dir.Vec().X, Y: at.Y + dir.Vec().Y}
@@ -311,7 +374,16 @@ func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 		}
 	}
 	m := tilemaptest.New(t, 20, 20, tilemap.Tile{X: 10, Y: 10}, walls, nil)
-	dirs := []state.Dir{state.North, state.NorthEast, state.East, state.SouthEast, state.South, state.SouthWest, state.West, state.NorthWest}
+	dirs := []state.Dir{
+		state.North,
+		state.NorthEast,
+		state.East,
+		state.SouthEast,
+		state.South,
+		state.SouthWest,
+		state.West,
+		state.NorthWest,
+	}
 	checked := 0
 	for range 4000 {
 		radius := []int32{0, 1, 100, 511, 700, 1500, 2048}[random.IntN(7)]
@@ -322,7 +394,15 @@ func TestReachIsTheSameAsGoingOneUnitAtATime(t *testing.T) {
 		dir, distance := dirs[random.IntN(len(dirs))], random.Int32N(6*tile)
 		want := reachByEveryUnit(m, from, dir, distance, radius)
 		if got := m.Reach(from, dir, distance, radius); got != want {
-			t.Fatalf("Reach(%+v, %v, %d, radius %d) = %+v, want %+v by going one unit at a time", from, dir, distance, radius, got, want)
+			t.Fatalf(
+				"Reach(%+v, %v, %d, radius %d) = %+v, want %+v by going one unit at a time",
+				from,
+				dir,
+				distance,
+				radius,
+				got,
+				want,
+			)
 		}
 		checked++
 	}

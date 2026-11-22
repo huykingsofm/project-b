@@ -19,7 +19,8 @@ func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *test
 	if left := add(1, 7, 4); left != 0 {
 		t.Fatalf("left = %d, want 0", left)
 	}
-	// 4 more of the same kind go to the slot that already holds it, up to 10; the rest to a new slot.
+	// 4 more of the same kind go to the slot that already holds it, up to 10; the rest to a new
+	// slot.
 	if left := add(1, 7, 9); left != 0 {
 		t.Fatalf("left = %d, want 0", left)
 	}
@@ -31,8 +32,8 @@ func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *test
 	if left := add(1, 8, 1); left != 0 {
 		t.Fatalf("left = %d, want 0", left)
 	}
-	// The three slots are full of kinds, so another kind does not fit, and 8 more of kind 7 fit in the
-	// slot that has 3 up to 10 (7 of them), with 1 left.
+	// The three slots are full of kinds, so another kind does not fit, and 8 more of kind 7 fit in
+	// the slot that has 3 up to 10 (7 of them), with 1 left.
 	if left := add(1, 9, 5); left != 5 {
 		t.Fatalf("a kind with no slot left: left = %d, want 5", left)
 	}
@@ -81,7 +82,8 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	}
 }
 
-// itemsHeld counts the items of a kind in the slots of a character; it is for the assertions of the tests.
+// itemsHeld counts the items of a kind in the slots of a character; it is for the assertions of the
+// tests.
 func itemsHeld(st *world.State, characterID state.CharacterID, itemID state.ItemID) uint32 {
 	inventory, _ := st.Inventories.Get(characterID)
 	var total uint32
@@ -103,7 +105,9 @@ func TestAClonedWorldStateSharesNoMemoryWithTheState(t *testing.T) {
 }
 
 func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
-	if err := aliasing.CheckCloneable(reflect.TypeFor[world.State](), aliasing.Rules{Skip: []string{"world.State.events"}}); err != nil {
+	if err := aliasing.CheckCloneable(
+		reflect.TypeFor[world.State](), aliasing.Rules{Skip: []string{"world.State.events"}},
+	); err != nil {
 		t.Fatal(err)
 	}
 }

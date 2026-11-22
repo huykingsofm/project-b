@@ -91,8 +91,8 @@ func appendValue(b []byte, v any) []byte {
 	return appendString(b, fmt.Sprint(v))
 }
 
-// appendString writes s as it is when it is a plain token, and quoted otherwise: empty, or holding a
-// space, `=`, `"`, a control character or bytes that are not UTF-8.
+// appendString writes s as it is when it is a plain token, and quoted otherwise: empty, or holding
+// a space, `=`, `"`, a control character or bytes that are not UTF-8.
 func appendString(b []byte, s string) []byte {
 	if needsQuote(s) {
 		return strconv.AppendQuote(b, s)

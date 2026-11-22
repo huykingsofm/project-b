@@ -1,16 +1,17 @@
 // Package action holds every action of the game, and what an action is made of.
 //
-// An action is code that changes the state of one scope (the world, a zone or a zonelayer) and never
-// leaves it. Each action belongs to exactly one scope, and the name of its type, the name of its
-// file and the interface it implements all say which:
+// An action is code that changes the state of one scope (the world, a zone or a zonelayer) and
+// never leaves it. Each action belongs to exactly one scope, and the name of its type, the name of
+// its file and the interface it implements all say which:
 //
 //   - the type ends with the name of its scope and then Action: ZoneLayerCharacterMoveAction,
 //     ZoneChatSendAction, WorldChatPrivateSendAction;
 //   - the file is named <scope>_<name>_action.go: zonelayer_character_move_action.go;
 //   - it implements the interface of its scope: ZoneLayerAction, ZoneAction or WorldAction.
 //
-// The ID of an action is a number of the register in id.go, and a cooldown key a number of the register
-// in cooldown_key.go; a number is never changed or reused, because the replay log writes it.
+// The ID of an action is a number of the register in id.go, and a cooldown key a number of the
+// register in cooldown_key.go; a number is never changed or reused, because the replay log writes
+// it.
 package action
 
 import (
@@ -19,8 +20,8 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ID names a kind of action, by a number: see id.go for the register. An action returns its own with its
-// method ID().
+// ID names a kind of action, by a number: see id.go for the register. An action returns its own
+// with its method ID().
 type ID uint16
 
 // Acting is implemented by an action that has an author: the actor that performs it. The author
@@ -34,19 +35,22 @@ type Action interface {
 	Priority() int16
 }
 
-// ZoneLayerAction is an action of a zonelayer. It is told what to do and cannot fail: when what it was
-// asked for is not possible it changes nothing, and that is its result. It changes the state only
-// through the methods of the state, which write the events; what it wants done outside its zonelayer
-// (a message to another engine, an action for itself at a later tick) it puts in the registry, and
-// the engine does it when the tick is over. Its priority says when it runs among the actions of a
-// tick: the smaller runs first, and equal priorities run in the order the actions arrived.
+// ZoneLayerAction is an action of a zonelayer. It is told what to do and cannot fail: when what it
+// was asked for is not possible it changes nothing, and that is its result. It changes the state
+// only through the methods of the state, which write the events; what it wants done outside its
+// zonelayer (a message to another engine, an action for itself at a later tick) it puts in the
+// registry, and the engine does it when the tick is over. Its priority says when it runs among the
+// actions of a tick: the smaller runs first, and equal priorities run in the order the actions
+// arrived.
 type ZoneLayerAction interface {
 	Action
-	ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, p *Plan[ZoneLayerAction])
+	ApplyZoneLayer(
+		c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, p *Plan[ZoneLayerAction],
+	)
 }
 
-// ZoneLayerCancellableAction is a ZoneLayerAction that has something to settle when another action cancels
-// it before it runs. It is an action in every other way: it has an ID and a priority.
+// ZoneLayerCancellableAction is a ZoneLayerAction that has something to settle when another action
+// cancels it before it runs. It is an action in every other way: it has an ID and a priority.
 type ZoneLayerCancellableAction interface {
 	ZoneLayerAction
 	ApplyZoneLayerCancel(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry)

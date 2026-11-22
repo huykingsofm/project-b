@@ -14,7 +14,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 )
 
-// tile is the width of a tile in units; the map keeps it private, so a test that wants to name a place by its tile says it here.
+// tile is the width of a tile in units; the map keeps it private, so a test that wants to name a
+// place by its tile says it here.
 const tile = 1024
 
 const cooldownKey zonelayer.CooldownKey = 1
@@ -42,7 +43,8 @@ func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 		t.Fatal("the item is still in the zonelayer")
 	}
 	events := st.TakeEvents()
-	if len(events) != 2 || events[0].ID() != event.ItemAppearedID || events[1].ID() != event.ItemDisappearedID {
+	if len(events) != 2 || events[0].ID() != event.ItemAppearedID ||
+		events[1].ID() != event.ItemDisappearedID {
 		t.Fatalf("events = %+v, want appeared then disappeared", events)
 	}
 }
@@ -143,7 +145,8 @@ func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T
 	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	st := newState()
 	id := st.AddItemEntity(7, 1, state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}, 0)
-	// The item is in the middle of tile (2,3); the wall is tile (4,3), which starts a tile and a half away.
+	// The item is in the middle of tile (2,3); the wall is tile (4,3), which starts a tile and a
+	// half away.
 	if !st.MoveEntity(walls, id, state.East, 5*tile) {
 		t.Fatal("the item did not move")
 	}
@@ -153,14 +156,18 @@ func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T
 	if !st.MoveEntity(walls, id, state.South, tile/4) {
 		t.Fatal("a move of a quarter of a tile did not move")
 	}
-	if e, _ := st.ItemEntityByID(id); e.Pos != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2 + tile/4}) {
+	if e, _ := st.ItemEntityByID(
+		id,
+	); e.Pos != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2 + tile/4}) {
 		t.Fatalf("the item is at %+v, want it a quarter of a tile south", e.Pos)
 	}
 }
 
 func TestTheRadiusOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 	st := newState()
-	id := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 300), state.Vec{X: tile + tile/2, Y: tile + tile/2})
+	id := st.AddCharacterEntity(
+		newCharacter(1, "a", 10, 1000, 300), state.Vec{X: tile + tile/2, Y: tile + tile/2},
+	)
 	body, _ := st.CharacterEntityByCharacterID(1)
 	if body.Rad != 300 || body.ID() != id {
 		t.Fatalf("body = %+v, want a radius of 300", body)
@@ -198,7 +205,9 @@ func BenchmarkMoveEntity(b *testing.B) {
 	for _, radius := range []int32{0, 256} {
 		b.Run(fmt.Sprintf("radius %d/a character's step of a tick", radius), func(b *testing.B) {
 			st := newState()
-			id := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, radius), state.Vec{X: 100 * tile, Y: 100 * tile})
+			id := st.AddCharacterEntity(
+				newCharacter(1, "a", 10, 1000, radius), state.Vec{X: 100 * tile, Y: 100 * tile},
+			)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				dir := state.East
@@ -213,7 +222,9 @@ func BenchmarkMoveEntity(b *testing.B) {
 }
 
 // newCharacter is a character of the values of a test, which are never invalid.
-func newCharacter(characterID state.CharacterID, name string, maxHealth, speed, radius int32) zonelayer.Character {
+func newCharacter(
+	characterID state.CharacterID, name string, maxHealth, speed, radius int32,
+) zonelayer.Character {
 	c, err := zonelayer.NewCharacter(characterID, name, maxHealth, speed, radius)
 	if err != nil {
 		panic(err)
@@ -227,7 +238,8 @@ func TestACharacterWithANegativeRadiusIsAnErrorNotACharacter(t *testing.T) {
 	}
 }
 
-// R29: a character that enters is copied, so the state shares nothing with what the caller sent and still holds.
+// R29: a character that enters is copied, so the state shares nothing with what the caller sent and
+// still holds.
 func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 	st := newState()
 	c := newCharacter(1, "a", 10, 1000, 0)
@@ -239,12 +251,16 @@ func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 	}
 	st.SetCooldown(1, cooldownKey, 99)
 	if got, _ := c.Cooldowns.Get(cooldownKey); got != 5 || c.Cooldowns.Len() != 1 {
-		t.Fatalf("the state changed the character that was sent: %d, %d cooldowns", got, c.Cooldowns.Len())
+		t.Fatalf(
+			"the state changed the character that was sent: %d, %d cooldowns",
+			got,
+			c.Cooldowns.Len(),
+		)
 	}
 }
 
-// R29: a character that leaves is the one the state held, now outside it; what it gives up is not shared with a
-// copy that was published.
+// R29: a character that leaves is the one the state held, now outside it; what it gives up is not
+// shared with a copy that was published.
 func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 	st := newState()
 	c := newCharacter(1, "a", 10, 1000, 0)
@@ -259,7 +275,10 @@ func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 
 func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 	// an Entity is implemented only by value types
-	rules := aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity]()}, Skip: []string{"zonelayer.State.events"}}
+	rules := aliasing.Rules{
+		Interfaces: []reflect.Type{reflect.TypeFor[entity.Entity]()},
+		Skip:       []string{"zonelayer.State.events"},
+	}
 	if err := aliasing.CheckCloneable(reflect.TypeFor[zonelayer.State](), rules); err != nil {
 		t.Fatal(err)
 	}

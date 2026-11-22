@@ -10,8 +10,8 @@ import (
 )
 
 // PlanKey names a set of actions that a plan keeps an index of: the actions of one ID that one
-// actor performs, or, with a nil Actor, all the actions of one ID; or, with Type set and nothing else, the
-// actions of one Go type.
+// actor performs, or, with a nil Actor, all the actions of one ID; or, with Type set and nothing
+// else, the actions of one Go type.
 type PlanKey struct {
 	Actor any
 	ID    ID
@@ -52,8 +52,8 @@ func NewPlan[A Action]() *Plan[A] {
 	return &Plan[A]{buckets: map[PlanKey][]*PlanEntry[A]{}, cfg: config.Defaults()}
 }
 
-// Reset empties the plan, puts the cursor before the first entry, and keeps the configuration of the
-// tick: the plan reads from it how many actions deep a chain may go.
+// Reset empties the plan, puts the cursor before the first entry, and keeps the configuration of
+// the tick: the plan reads from it how many actions deep a chain may go.
 func (p *Plan[A]) Reset(cfg *config.Snapshot) {
 	clear(p.entries)
 	p.entries = p.entries[:0]
@@ -71,15 +71,17 @@ func (p *Plan[A]) Reset(cfg *config.Snapshot) {
 func (p *Plan[A]) Len() int { return len(p.entries) }
 
 // Append adds an action in its place: after the last entry whose priority is not larger, and never
-// before the entry that runs. Its depth is one more than the depth of the entry that runs, or 0 when
-// none runs (a command, a message, what an engine set for itself).
+// before the entry that runs. Its depth is one more than the depth of the entry that runs, or 0
+// when none runs (a command, a message, what an engine set for itself).
 func (p *Plan[A]) Append(a A) {
 	e := &PlanEntry[A]{action: a}
 	if p.current != nil {
 		e.depth = p.current.depth + 1
 	}
 	rest := p.entries[p.next:]
-	at := p.next + sort.Search(len(rest), func(i int) bool { return rest[i].action.Priority() > a.Priority() })
+	at := p.next + sort.Search(
+		len(rest), func(i int) bool { return rest[i].action.Priority() > a.Priority() },
+	)
 	p.entries = append(p.entries, nil)
 	copy(p.entries[at+1:], p.entries[at:])
 	p.entries[at] = e
@@ -95,8 +97,8 @@ func (p *Plan[A]) Append(a A) {
 	}
 }
 
-// Next moves the cursor to the next entry that is not cancelled and is not too deep, and returns it.
-// An entry that is too deep is cut: it does not run and is listed in TooDeep.
+// Next moves the cursor to the next entry that is not cancelled and is not too deep, and returns
+// it. An entry that is too deep is cut: it does not run and is listed in TooDeep.
 func (p *Plan[A]) Next() (*PlanEntry[A], bool) {
 	for p.next < len(p.entries) {
 		e := p.entries[p.next]
@@ -107,7 +109,15 @@ func (p *Plan[A]) Next() (*PlanEntry[A], bool) {
 		if int(e.depth) > MaxDepth.Get(p.cfg) {
 			e.cancelled = true
 			p.tooDeep = append(p.tooDeep, e)
-			logging.Warn("action cut: its chain is too deep", "action", fmt.Sprintf("%T", e.action), "depth", e.depth, "max_depth", MaxDepth.Get(p.cfg))
+			logging.Warn(
+				"action cut: its chain is too deep",
+				"action",
+				fmt.Sprintf("%T", e.action),
+				"depth",
+				e.depth,
+				"max_depth",
+				MaxDepth.Get(p.cfg),
+			)
 			continue
 		}
 		e.ran = true
@@ -135,10 +145,10 @@ type Hit[A Action, T any] struct {
 	Action T
 }
 
-// FindType returns the entries that have not run and are not cancelled and whose action is a T, in the
-// order they were added to the plan. T is the Go type of the action as it was added (for an action
-// that is a pointer, the pointer type): p.FindType[*DamageAction](). It is the way an effect finds the
-// actions it changes without an ID value and without asserting a type itself.
+// FindType returns the entries that have not run and are not cancelled and whose action is a T, in
+// the order they were added to the plan. T is the Go type of the action as it was added (for an
+// action that is a pointer, the pointer type): p.FindType[*DamageAction](). It is the way an effect
+// finds the actions it changes without an ID value and without asserting a type itself.
 func (p *Plan[A]) FindType[T any]() []Hit[A, T] {
 	var out []Hit[A, T]
 	for _, e := range p.buckets[PlanKey{Type: reflect.TypeFor[T]()}] {

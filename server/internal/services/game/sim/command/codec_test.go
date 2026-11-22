@@ -18,10 +18,12 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-// characterWithCooldowns is a character that has been playing: it has cooldowns, in an order that is not the
-// order of the numbers of their keys.
+// characterWithCooldowns is a character that has been playing: it has cooldowns, in an order that
+// is not the order of the numbers of their keys.
 func characterWithCooldowns() zonelayerstate.Character {
-	c := zonelayerstate.Character{CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250}
+	c := zonelayerstate.Character{
+		CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+	}
 	c.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1_000_006)
 	c.Cooldowns.Set(action.ZoneLayerCharacterMoveActionCooldownKey, 52_004)
 	return c
@@ -31,7 +33,11 @@ func characterWithCooldowns() zonelayerstate.Character {
 var examples = []Command{
 	WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"},
 	ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
-	ZoneCharacterEnterCommand{Character: zonelayerstate.Character{CharacterID: 1, Name: "An", Health: 100, MaxHealth: 100, Radius: 256, Speed: 250}},
+	ZoneCharacterEnterCommand{
+		Character: zonelayerstate.Character{
+			CharacterID: 1, Name: "An", Health: 100, MaxHealth: 100, Radius: 256, Speed: 250,
+		},
+	},
 	ZoneChatSendCommand{FromID: 1, Text: "hello zone"},
 	ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
 	ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
@@ -60,13 +66,16 @@ func TestEveryKindOfCommandComesBackAsItWasWritten(t *testing.T) {
 
 func TestTheCooldownsOfACharacterKeepTheirOrder(t *testing.T) {
 	var w binarycodec.Writer
-	if err := Encode(&w, ZoneCharacterEnterCommand{Character: characterWithCooldowns()}); err != nil {
+	if err := Encode(
+		&w, ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := Decode(binarycodec.NewReader(w.B), 1)
 	ch := got.(ZoneCharacterEnterCommand).Character
 	keys := ch.Cooldowns.Keys()
-	if len(keys) != 2 || keys[0] != any(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey) {
+	if len(keys) != 2 ||
+		keys[0] != any(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey) {
 		t.Fatalf("keys %v, want the attack key first as it was set", keys)
 	}
 }
@@ -85,7 +94,8 @@ func TestBytesThatAreCutOffAreAnErrorAndNeverAPanic(t *testing.T) {
 	}
 }
 
-// strangerCommand has an ID that is not in the register, so it has no decoder and cannot be read back.
+// strangerCommand has an ID that is not in the register, so it has no decoder and cannot be read
+// back.
 type strangerCommand struct{}
 
 func (strangerCommand) ID() ID                           { return 60000 }
@@ -134,7 +144,9 @@ func TestANumberThatIsNotACommandOrTooLargeForACooldownKeyIsAnError(t *testing.T
 	w2.Uvarint(1)     // one cooldown
 	w2.Uvarint(70000) // a number that is not one of a key: it is more than 16 bits
 	w2.Uvarint(5)
-	if _, err := Decode(binarycodec.NewReader(w2.B), 1); !errors.Is(err, zonelayerstate.ErrUnknownCooldownKey) {
+	if _, err := Decode(binarycodec.NewReader(w2.B), 1); !errors.Is(
+		err, zonelayerstate.ErrUnknownCooldownKey,
+	) {
 		t.Fatalf("a cooldown key that is too large: %v", err)
 	}
 	var w3 binarycodec.Writer
@@ -151,11 +163,17 @@ func TestANumberThatIsNotACommandOrTooLargeForACooldownKeyIsAnError(t *testing.T
 	}
 }
 
-// commandTypes returns the names of the types that the files of the package give a Translate method: the commands.
+// commandTypes returns the names of the types that the files of the package give a Translate
+// method: the commands.
 func commandTypes(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	pkgs, err := parser.ParseDir(
+		fset,
+		".",
+		func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") },
+		0,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +213,8 @@ func registerSize(t *testing.T) int {
 	return n
 }
 
-// Every command of the package is in examples, so that the tests that go through the examples go through all of them.
+// Every command of the package is in examples, so that the tests that go through the examples go
+// through all of them.
 func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *testing.T) {
 	declared := commandTypes(t)
 	if len(declared) == 0 {
@@ -221,22 +240,32 @@ func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *tes
 	}
 	slices.Sort(listed)
 	if !slices.Equal(declared, listed) {
-		t.Fatalf("the commands declared are\n%v\nand the ones in examples are\n%v", declared, listed)
+		t.Fatalf(
+			"the commands declared are\n%v\nand the ones in examples are\n%v", declared, listed,
+		)
 	}
 	if n := registerSize(t); n != len(decoders) || n != len(declared) {
-		t.Fatalf("%d IDs in the register, %d decoders and %d commands: each command has an ID of its own, and each ID a decoder", n, len(decoders), len(declared))
+		t.Fatalf(
+			"%d IDs in the register, %d decoders and %d commands: each command has an ID of its "+
+				"own, and each ID a decoder",
+			n,
+			len(decoders),
+			len(declared),
+		)
 	}
 }
 
 func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
-	// A number that changes breaks every log that was written: add commands at the end, never renumber.
-	if WorldChatPrivateSendCommandID != 1 || ZoneCharacterEnterCommandID != 2 || ZoneLayerCharacterMoveCommandID != 4 || ZoneLayerCharacterShieldGrantCommandID != 9 {
+	// A number that changes breaks every log that was written: add commands at the end, never
+	// renumber.
+	if WorldChatPrivateSendCommandID != 1 || ZoneCharacterEnterCommandID != 2 ||
+		ZoneLayerCharacterMoveCommandID != 4 || ZoneLayerCharacterShieldGrantCommandID != 9 {
 		t.Fatal("the ID of a command changed")
 	}
 }
 
-// Commands come from outside, with the goroutine that sends one still holding what it sent, so what a command holds is
-// a value or has Clone, and the state that takes it copies it (R29).
+// Commands come from outside, with the goroutine that sends one still holding what it sent, so what
+// a command holds is a value or has Clone, and the state that takes it copies it (R29).
 func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 	rules := aliasing.Rules{Boundary: true}
 	for _, c := range examples {

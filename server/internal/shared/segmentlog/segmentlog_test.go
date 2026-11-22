@@ -14,11 +14,12 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
 )
 
-// opts keeps the first 8 bytes of the first payload of a segment as its meta; the payloads of these tests
-// start with the tick, so the meta of a segment is the tick it starts at.
-var opts = segmentlog.Options{SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4, SegmentMeta: func(first []byte) []byte {
-	return bytes.Clone(first[:min(8, len(first))])
-}}
+// opts keeps the first 8 bytes of the first payload of a segment as its meta; the payloads of these
+// tests start with the tick, so the meta of a segment is the tick it starts at.
+var opts = segmentlog.Options{
+	SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
+	SegmentMeta: func(first []byte) []byte { return bytes.Clone(first[:min(8, len(first))]) },
+}
 
 func open(t testing.TB, dir string, o segmentlog.Options) *segmentlog.Writer {
 	t.Helper()
@@ -46,10 +47,12 @@ func payload(tick uint64) []byte {
 	return fmt.Appendf(binary.LittleEndian.AppendUint64(nil, tick), "record of tick %d", tick)
 }
 
-// fromTick is what OpenReader is given to start at the segment that holds a tick: a segment is at or before it
-// when the tick it starts at, which is its meta, is no later.
+// fromTick is what OpenReader is given to start at the segment that holds a tick: a segment is at
+// or before it when the tick it starts at, which is its meta, is no later.
 func fromTick(tick uint64) func(meta []byte) bool {
-	return func(meta []byte) bool { return len(meta) == 8 && binary.LittleEndian.Uint64(meta) <= tick }
+	return func(meta []byte) bool {
+		return len(meta) == 8 && binary.LittleEndian.Uint64(meta) <= tick
+	}
 }
 
 // readAll returns the payloads of the log from a tick, and the error that stopped the read.
@@ -171,7 +174,8 @@ func TestACrashThatLeavesHalfARecordIsReadAsTheEndOfTheLogAndRepairedByOpen(t *t
 	whole, _ := os.Stat(path)
 
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-	f.Write([]byte{0x40, 0, 0, 0, 1, 2, 3, 4, 'h', 'a', 'l', 'f'}) // a record that says 64 bytes and has 4
+	// a record that says 64 bytes and has 4
+	f.Write([]byte{0x40, 0, 0, 0, 1, 2, 3, 4, 'h', 'a', 'l', 'f'})
 	f.Close()
 
 	got, err := readAll(t, dir, 0)
@@ -222,7 +226,9 @@ func TestOpenRemovesALastSegmentWithNoRecordsOrANoHeader(t *testing.T) {
 	w := open(t, dir, opts)
 	write(t, w, 0, 5)
 	w.Close()
-	os.WriteFile(filepath.Join(dir, fmt.Sprintf("seg-%020d.log", 1)), []byte("PBS"), 0o644) // a header that was not finished
+	os.WriteFile(
+		filepath.Join(dir, fmt.Sprintf("seg-%020d.log", 1)), []byte("PBS"), 0o644,
+	) // a header that was not finished
 
 	w = open(t, dir, opts)
 	w.Close()
@@ -367,10 +373,13 @@ func TestCloseWhileAnotherGoroutineCommitsNeverPanics(t *testing.T) {
 	}
 }
 
-// BenchmarkAppendOnly is what the caller of Append pays: the time of the Append calls alone, with the Commit that
-// hands the batch over, and the goroutine that writes it, left out of the time.
+// BenchmarkAppendOnly is what the caller of Append pays: the time of the Append calls alone, with
+// the Commit that hands the batch over, and the goroutine that writes it, left out of the time.
 func BenchmarkAppendOnly(b *testing.B) {
-	w, err := segmentlog.Open(b.TempDir(), segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64})
+	w, err := segmentlog.Open(
+		b.TempDir(),
+		segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64},
+	)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -392,13 +401,17 @@ func BenchmarkAppendOnly(b *testing.B) {
 	}
 }
 
-// BenchmarkAppendAndCommit is the throughput of the whole path, to a file: records, a Commit for each batch, and the
-// goroutine that writes. When the goroutine that writes is the slower one the time is its time, not the caller's,
-// and "stalls" counts the Commits that had to wait for it; BenchmarkAppendOnly is what the caller pays.
+// BenchmarkAppendAndCommit is the throughput of the whole path, to a file: records, a Commit for
+// each batch, and the goroutine that writes. When the goroutine that writes is the slower one the
+// time is its time, not the caller's, and "stalls" counts the Commits that had to wait for it;
+// BenchmarkAppendOnly is what the caller pays.
 func BenchmarkAppendAndCommit(b *testing.B) {
 	for _, perTick := range []int{1, 100, 1000} {
 		b.Run(fmt.Sprintf("records per tick=%d", perTick), func(b *testing.B) {
-			w, err := segmentlog.Open(b.TempDir(), segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64})
+			w, err := segmentlog.Open(
+				b.TempDir(),
+				segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64},
+			)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -422,7 +435,9 @@ func BenchmarkAppendAndCommit(b *testing.B) {
 
 func BenchmarkRead(b *testing.B) {
 	dir := b.TempDir()
-	w, _ := segmentlog.Open(dir, segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64})
+	w, _ := segmentlog.Open(
+		dir, segmentlog.Options{SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64},
+	)
 	rec := bytes.Repeat([]byte{'x'}, 100)
 	for i := range 1 << 16 {
 		w.Append(rec)
@@ -442,7 +457,8 @@ func BenchmarkRead(b *testing.B) {
 	}
 }
 
-// writeBatches writes a batch for each of the ticks from..to, each with `per` records, all with the payload of the tick.
+// writeBatches writes a batch for each of the ticks from..to, each with `per` records, all with the
+// payload of the tick.
 func writeBatches(t testing.TB, w *segmentlog.Writer, from, to uint64, per int) {
 	t.Helper()
 	for tick := from; tick < to; tick++ {
@@ -468,8 +484,8 @@ func readTicks(t *testing.T, dir string) (map[uint64]int, error) {
 	return counts, err
 }
 
-// A batch is all or nothing: a write that was cut anywhere, in a record or in the commit that ends the batch, leaves
-// the whole batch out of what is read, and Open removes it from the file.
+// A batch is all or nothing: a write that was cut anywhere, in a record or in the commit that ends
+// the batch, leaves the whole batch out of what is read, and Open removes it from the file.
 func TestABatchThatWasCutAnywhereIsNotReadAtAll(t *testing.T) {
 	const per = 5
 	dir := t.TempDir()
@@ -479,7 +495,8 @@ func TestABatchThatWasCutAnywhereIsNotReadAtAll(t *testing.T) {
 	segs, _ := segmentlog.Segments(dir)
 	path := segs[0].Path
 	whole, _ := os.ReadFile(path)
-	oneBatch := len(whole) - len(logBytes(t, 9, per)) // the bytes of the last batch: its records and its commit
+	// the bytes of the last batch: its records and its commit
+	oneBatch := len(whole) - len(logBytes(t, 9, per))
 	if oneBatch <= 12 {
 		t.Fatalf("a batch of %d bytes", oneBatch)
 	}
@@ -490,7 +507,11 @@ func TestABatchThatWasCutAnywhereIsNotReadAtAll(t *testing.T) {
 			t.Fatalf("cut %d: %v", cut, err)
 		}
 		if len(counts) != 9 || counts[9] != 0 {
-			t.Fatalf("cut %d: %d ticks were read, want the 9 whole ones and nothing of the cut one", cut, len(counts))
+			t.Fatalf(
+				"cut %d: %d ticks were read, want the 9 whole ones and nothing of the cut one",
+				cut,
+				len(counts),
+			)
 		}
 		for tick, n := range counts {
 			if n != per {
@@ -535,7 +556,11 @@ func TestACommitThatDoesNotMatchItsRecordsEndsTheLogBeforeItsBatch(t *testing.T)
 	os.WriteFile(segs[0].Path, data, 0o644)
 	counts, err := readTicks(t, dir)
 	if err != nil || len(counts) != 3 || counts[3] != 0 {
-		t.Fatalf("%d ticks, error %v: a commit with a wrong count must leave its batch out", len(counts), err)
+		t.Fatalf(
+			"%d ticks, error %v: a commit with a wrong count must leave its batch out",
+			len(counts),
+			err,
+		)
 	}
 }
 
@@ -586,12 +611,14 @@ func TestAHeaderThatWasNeverWrittenIsRemovedButOneThatIsNotRightIsKeptAndReporte
 		case "crc that is wrong":
 			content = bytes.Clone(whole)
 			content[10] ^= 0xff // a byte of the meta
-		case "a header and zeros": // the header of a real segment, then zeros where the batch was not written
+		// the header of a real segment, then zeros where the batch was not written
+		case "a header and zeros":
 			content = append(bytes.Clone(whole[:22]), make([]byte, 100)...)
 		}
 		os.WriteFile(next, content, 0o644)
 
-		keep := name == "another version" || name == "crc that is wrong" || name == "another file type"
+		keep := name == "another "+
+			"version" || name == "crc that is wrong" || name == "another file type"
 		w2, err := segmentlog.Open(dir, opts)
 		if keep {
 			if err == nil {
@@ -636,7 +663,9 @@ func readAll2(dir string) ([][]byte, error) {
 	return out, r.Err()
 }
 
-func TestWhatOpenCutsFromTheLastSegmentIsKeptNextToItWhetherItWasATornBatchOrDamageInTheMiddle(t *testing.T) {
+func TestWhatOpenCutsFromTheLastSegmentIsKeptNextToItWhetherItWasATornBatchOrDamageInTheMiddle(
+	t *testing.T,
+) {
 	for name, damage := range map[string]func(whole []byte) []byte{
 		"a batch that was cut": func(whole []byte) []byte { return whole[:len(whole)-3] },
 		"damage in the middle": func(whole []byte) []byte {
@@ -661,8 +690,16 @@ func TestWhatOpenCutsFromTheLastSegmentIsKeptNextToItWhetherItWasATornBatchOrDam
 			t.Fatalf("%s: %d files of discarded bytes, want 1", name, len(kept))
 		}
 		discarded, _ := os.ReadFile(kept[0])
-		if len(after)+len(discarded) != len(damaged) || !bytes.Equal(append(bytes.Clone(after), discarded...), damaged) {
-			t.Errorf("%s: what was kept and what remains are not what was in the segment: %d + %d bytes, was %d", name, len(after), len(discarded), len(damaged))
+		if len(after)+len(discarded) != len(damaged) ||
+			!bytes.Equal(append(bytes.Clone(after), discarded...), damaged) {
+			t.Errorf(
+				"%s: what was kept and what remains are not what was in the segment: %d + %d "+
+					"bytes, was %d",
+				name,
+				len(after),
+				len(discarded),
+				len(damaged),
+			)
 		}
 		if len(discarded) == 0 {
 			t.Errorf("%s: nothing was kept", name)

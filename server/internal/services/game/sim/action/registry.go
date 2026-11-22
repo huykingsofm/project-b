@@ -28,8 +28,8 @@ type StableView interface {
 	ZoneLayer(zoneLayerID state.ZoneLayerID) *zonelayerstate.State
 }
 
-// Outbox is what an engine wants to send in a tick. Nothing is sent while the actions run: the engine
-// sends the messages, in the order they were put here, when the plan is done.
+// Outbox is what an engine wants to send in a tick. Nothing is sent while the actions run: the
+// engine sends the messages, in the order they were put here, when the plan is done.
 type Outbox struct{ messages []Message }
 
 // Add puts a message in the outbox.
@@ -56,7 +56,9 @@ type Common struct {
 func (c *Common) Begin(tick uint64) { c.Tick = tick }
 
 // ToZoneLayer puts a message for a zonelayer in the outbox.
-func (c *Common) ToZoneLayer(zoneLayerID state.ZoneLayerID, onFail OnFail, actions ...ZoneLayerAction) {
+func (c *Common) ToZoneLayer(
+	zoneLayerID state.ZoneLayerID, onFail OnFail, actions ...ZoneLayerAction,
+) {
 	c.Add(MessageToZoneLayer(zoneLayerID, onFail, actions...))
 }
 
@@ -99,8 +101,8 @@ func (b *self[A]) take() ([]A, []Timed[A]) {
 	return next, later
 }
 
-// ZoneLayerRegistry is what an action of a zonelayer is given besides the state: what it wants done outside
-// the state of its zonelayer.
+// ZoneLayerRegistry is what an action of a zonelayer is given besides the state: what it wants done
+// outside the state of its zonelayer.
 type ZoneLayerRegistry struct {
 	Common
 	self[ZoneLayerAction]
@@ -109,13 +111,15 @@ type ZoneLayerRegistry struct {
 // ToSelf sets an action to run in the next tick of the zonelayer.
 func (r *ZoneLayerRegistry) ToSelf(a ZoneLayerAction) { r.toSelf(a) }
 
-// ToSelfAt sets an action to run at a tick of the zonelayer. An action that knows when it may run, a
-// wait for a cooldown for example, is set for exactly that tick and not tried again at every tick
+// ToSelfAt sets an action to run at a tick of the zonelayer. An action that knows when it may run,
+// a wait for a cooldown for example, is set for exactly that tick and not tried again at every tick
 // in between.
 func (r *ZoneLayerRegistry) ToSelfAt(tick uint64, a ZoneLayerAction) { r.toSelfAt(r.Tick, tick, a) }
 
 // TakeSelf returns what the zonelayer set for itself in this tick.
-func (r *ZoneLayerRegistry) TakeSelf() ([]ZoneLayerAction, []Timed[ZoneLayerAction]) { return r.take() }
+func (r *ZoneLayerRegistry) TakeSelf() ([]ZoneLayerAction, []Timed[ZoneLayerAction]) {
+	return r.take()
+}
 
 // ZoneRegistry is what an action of a zone is given besides the state.
 type ZoneRegistry struct {

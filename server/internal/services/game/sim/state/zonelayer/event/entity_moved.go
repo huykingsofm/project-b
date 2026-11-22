@@ -11,7 +11,8 @@ type EntityMoved struct {
 
 func (EntityMoved) ID() ID { return EntityMovedID }
 
-// Audience is whoever can see any part of the entity on the way it went, from where it was to where it is.
+// Audience is whoever can see any part of the entity on the way it went, from where it was to where
+// it is.
 func (e EntityMoved) Audience() state.Audience {
 	return state.AudienceInSightOf(state.RectCovering(e.From, e.To).Grown(e.Radius))
 }

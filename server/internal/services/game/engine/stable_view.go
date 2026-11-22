@@ -9,13 +9,13 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// StableStateView is what one engine reads of the StableStateRegistry in a tick. The first time the engine reads a scope in
-// the tick it keeps the copy it got, and every later read of that scope in the tick returns the same
-// copy, so what an engine knows of the others does not change while its plan runs (the registry itself
-// gives the latest copy at the moment of the read, and the other engines publish at any time). The
-// first read of each scope in a tick is written to the replay log, with the tick of the copy, so that
-// a replay can give the engine the same one. Only the goroutine of its engine uses it, so it takes no
-// lock.
+// StableStateView is what one engine reads of the StableStateRegistry in a tick. The first time the
+// engine reads a scope in the tick it keeps the copy it got, and every later read of that scope in
+// the tick returns the same copy, so what an engine knows of the others does not change while its
+// plan runs (the registry itself gives the latest copy at the moment of the read, and the other
+// engines publish at any time). The first read of each scope in a tick is written to the replay
+// log, with the tick of the copy, so that a replay can give the engine the same one. Only the
+// goroutine of its engine uses it, so it takes no lock.
 type StableStateView struct {
 	registry   *StableStateRegistry
 	replayLog  replay.Log

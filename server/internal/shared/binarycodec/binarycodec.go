@@ -1,7 +1,7 @@
-// Package binarycodec writes and reads values as bytes: variable-length integers, fixed-width integers
-// and strings. A Reader never panics on bytes that are cut off or wrong: it keeps the first error and
-// returns zero values after it, so a decoder reads everything it needs and looks at Err once. It
-// imports nothing of the project.
+// Package binarycodec writes and reads values as bytes: variable-length integers, fixed-width
+// integers and strings. A Reader never panics on bytes that are cut off or wrong: it keeps the
+// first error and returns zero values after it, so a decoder reads everything it needs and looks at
+// Err once. It imports nothing of the project.
 package binarycodec
 
 import (
@@ -15,9 +15,9 @@ var ErrShort = errors.New("binarycodec: the bytes end before the value does")
 // ErrBadValue is the error of a Reader that found bytes that are not a value of the kind asked for.
 var ErrBadValue = errors.New("binarycodec: the bytes are not a value of that kind")
 
-// Version is the version of the data that is read: how its bytes were encoded. The container of the bytes (a segment
-// header, a checkpoint header) says which, and a Decode function is given it, so that it can read what an older
-// version wrote.
+// Version is the version of the data that is read: how its bytes were encoded. The container of the
+// bytes (a segment header, a checkpoint header) says which, and a Decode function is given it, so
+// that it can read what an older version wrote.
 type Version uint16
 
 // Writer appends values to a slice of bytes.
@@ -32,7 +32,8 @@ func (w *Writer) Uvarint(v uint64) { w.B = binary.AppendUvarint(w.B, v) }
 // Varint appends a signed integer in 1 to 10 bytes; values near zero take one.
 func (w *Writer) Varint(v int64) { w.B = binary.AppendVarint(w.B, v) }
 
-// Fixed64 appends an unsigned integer in 8 bytes, for values that are spread over all 64 bits, like a hash.
+// Fixed64 appends an unsigned integer in 8 bytes, for values that are spread over all 64 bits, like
+// a hash.
 func (w *Writer) Fixed64(v uint64) { w.B = binary.LittleEndian.AppendUint64(w.B, v) }
 
 // String appends the length of the string and then its bytes.

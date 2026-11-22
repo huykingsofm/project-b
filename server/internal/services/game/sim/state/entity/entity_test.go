@@ -33,7 +33,9 @@ func TestTheBoundingBoxComesFromThePositionAndTheRadius(t *testing.T) {
 }
 
 func TestAnExitIsAnAreaAndItsPositionAndRadiusCoverIt(t *testing.T) {
-	e := entity.ExitEntity{Area: state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}}}
+	e := entity.ExitEntity{
+		Area: state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}},
+	}
 	if got := e.BoundingBox(); got != e.Area {
 		t.Fatalf("BoundingBox = %+v, want the area", got)
 	}
@@ -71,8 +73,14 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 
 func TestEveryKindCanBeMovedAndTheOriginalDoesNotChange(t *testing.T) {
 	to := state.Vec{X: 4500, Y: 4500}
-	exit := entity.ExitEntity{Area: state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}}}
-	for _, e := range []entity.Entity{entity.CharacterEntity{Pos: state.Vec{X: 1, Y: 1}}, entity.ItemEntity{Pos: state.Vec{X: 1, Y: 1}}, exit} {
+	exit := entity.ExitEntity{
+		Area: state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}},
+	}
+	for _, e := range []entity.Entity{
+		entity.CharacterEntity{Pos: state.Vec{X: 1, Y: 1}},
+		entity.ItemEntity{Pos: state.Vec{X: 1, Y: 1}},
+		exit,
+	} {
 		moved := e.MovedTo(to)
 		if moved.Position() != to {
 			t.Fatalf("%T moved to %+v, want %+v", e, moved.Position(), to)

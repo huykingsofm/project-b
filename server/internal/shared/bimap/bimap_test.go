@@ -168,7 +168,11 @@ func TestEveryOperationWorksFromEitherSide(t *testing.T) {
 		backs = append(backs, v1)
 	}
 	if !slices.Equal(firsts, backs) {
-		t.Fatalf("AllV1 gave %v and AllV2 gave the V1s %v: not the same links in the same order", firsts, backs)
+		t.Fatalf(
+			"AllV1 gave %v and AllV2 gave the V1s %v: not the same links in the same order",
+			firsts,
+			backs,
+		)
 	}
 	if !slices.Equal(seconds, []string{"a", "c"}) {
 		t.Fatalf("AllV2 gave %v", seconds)

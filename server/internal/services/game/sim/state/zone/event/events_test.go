@@ -31,7 +31,8 @@ func TestAZoneMessageGoesToEveryoneInTheZone(t *testing.T) {
 	}
 }
 
-// Events leave the engine to the emitter, which reads them on another goroutine, so they are values (R29).
+// Events leave the engine to the emitter, which reads them on another goroutine, so they are values
+// (R29).
 func TestEveryEventIsAValue(t *testing.T) {
 	for _, e := range allEvents {
 		if err := aliasing.CheckCloneable(reflect.TypeOf(e), aliasing.Rules{}); err != nil {

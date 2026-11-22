@@ -9,7 +9,9 @@ import (
 )
 
 func playedCharacter() Character {
-	c := Character{CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250}
+	c := Character{
+		CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+	}
 	c.Cooldowns.Set(9, 1_000_006)
 	c.Cooldowns.Set(2, 52_004)
 	return c
@@ -46,7 +48,9 @@ func TestACharacterCutOffOrWithAKeyTooLargeIsAnErrorAndNeverAPanic(t *testing.T)
 	big.Uvarint(1)
 	big.Uvarint(70000)
 	big.Uvarint(5)
-	if _, err := DecodeCharacter(binarycodec.NewReader(big.B), 1); !errors.Is(err, ErrUnknownCooldownKey) {
+	if _, err := DecodeCharacter(binarycodec.NewReader(big.B), 1); !errors.Is(
+		err, ErrUnknownCooldownKey,
+	) {
 		t.Fatalf("a key that is too large: %v", err)
 	}
 }

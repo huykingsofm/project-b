@@ -35,8 +35,12 @@ func TestDisjointFindsAMapAPointerAndASliceThatTwoValuesShare(t *testing.T) {
 }
 
 func TestDisjointAcceptsValuesThatShareNothingAndStringsAndNil(t *testing.T) {
-	a := outer{Name: "same", M: map[string]int{"x": 1}, P: &inner{Items: []int{1}}, hidden: []int{1}}
-	b := outer{Name: "same", M: map[string]int{"x": 1}, P: &inner{Items: []int{1}}, hidden: []int{1}}
+	a := outer{
+		Name: "same", M: map[string]int{"x": 1}, P: &inner{Items: []int{1}}, hidden: []int{1},
+	}
+	b := outer{
+		Name: "same", M: map[string]int{"x": 1}, P: &inner{Items: []int{1}}, hidden: []int{1},
+	}
 	if err := aliasing.Disjoint(a, b); err != nil {
 		t.Fatalf("separate copies: %v", err)
 	}
@@ -81,7 +85,8 @@ type badHolder struct {
 	Items []int
 }
 
-type badInside struct{ Rows []badHolder } // a slice of a type with a slice and no Clone, inside a type with Clone
+// a slice of a type with a slice and no Clone, inside a type with Clone
+type badInside struct{ Rows []badHolder }
 
 func (b badInside) Clone() badInside { return b }
 
@@ -106,7 +111,12 @@ func TestCheckCloneableAcceptsValuesAndTypesWithClone(t *testing.T) {
 		S string
 		P struct{ X, Y int32 }
 	}
-	for _, typ := range []reflect.Type{reflect.TypeFor[int](), reflect.TypeFor[pureStruct](), reflect.TypeFor[listWithClone](), reflect.TypeFor[keyed]()} {
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[int](),
+		reflect.TypeFor[pureStruct](),
+		reflect.TypeFor[listWithClone](),
+		reflect.TypeFor[keyed](),
+	} {
 		if err := check(typ, aliasing.Rules{}); err != nil {
 			t.Errorf("%v: %v", typ, err)
 		}
@@ -119,7 +129,10 @@ func TestCheckCloneableRefusesAReferenceWithNoCloneAndSaysWhere(t *testing.T) {
 		t.Fatalf("a struct with a slice and no Clone: %v", err)
 	}
 	if err := check(reflect.TypeFor[holder](), aliasing.Rules{}); err == nil {
-		t.Fatal("a struct that holds a type with Clone is not itself copied right by assignment, so it needs its own Clone")
+		t.Fatal(
+			"a struct that holds a type with Clone is not itself copied right by assignment, so " +
+				"it needs its own Clone",
+		)
 	}
 	err = check(reflect.TypeFor[badInside](), aliasing.Rules{})
 	if err == nil || !strings.Contains(err.Error(), "Rows") {
@@ -134,7 +147,10 @@ func TestCheckCloneableRefusesChannelsFunctionsAndInterfacesThatAreNotAllowed(t 
 	if err := check(reflect.TypeFor[withInterface](), aliasing.Rules{}); err == nil {
 		t.Error("an interface that was not allowed was accepted")
 	}
-	if err := check(reflect.TypeFor[withInterface](), aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[any]()}}); err != nil {
+	if err := check(
+		reflect.TypeFor[withInterface](),
+		aliasing.Rules{Interfaces: []reflect.Type{reflect.TypeFor[any]()}},
+	); err != nil {
 		t.Errorf("an interface that was allowed: %v", err)
 	}
 }

@@ -2,10 +2,10 @@ package state
 
 import "math/bits"
 
-// Hasher builds a number that depends on the values written to it and on nothing else. It is meant to
-// be fast, not strong: it takes a whole 64-bit word in one step (a rotate, an xor and a multiply, as
-// FxHash does) and mixes the result once at the end, which is enough to tell two states apart in a
-// replay. It makes no allocation. A state uses it to say what its data is.
+// Hasher builds a number that depends on the values written to it and on nothing else. It is meant
+// to be fast, not strong: it takes a whole 64-bit word in one step (a rotate, an xor and a
+// multiply, as FxHash does) and mixes the result once at the end, which is enough to tell two
+// states apart in a replay. It makes no allocation. A state uses it to say what its data is.
 type Hasher uint64
 
 const hasherMul = 0x517cc1b727220a95
@@ -18,8 +18,8 @@ func (h *Hasher) U64(v uint64) {
 	*h = Hasher((bits.RotateLeft64(uint64(*h), 5) ^ v) * hasherMul)
 }
 
-// String writes a text, eight bytes at a time, with its length so that two texts in a row cannot run
-// together.
+// String writes a text, eight bytes at a time, with its length so that two texts in a row cannot
+// run together.
 func (h *Hasher) String(s string) {
 	h.U64(uint64(len(s)))
 	for len(s) >= 8 {

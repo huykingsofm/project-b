@@ -1,11 +1,12 @@
 // Package logging writes log lines as key=value pairs. A call only puts an entry into a channel and
-// returns: it never encodes, never writes and never waits. A Consumer, given to Init, takes the entries
-// out on a timer, so a log call costs the caller one channel send. It imports only the channels package.
+// returns: it never encodes, never writes and never waits. A Consumer, given to Init, takes the
+// entries out on a timer, so a log call costs the caller one channel send. It imports only the
+// channels package.
 //
-// The package keeps one global Logger. Before Init and after the function Init returned has run, it is a
-// synchronous logger that writes each line to stderr at once, so a line is never lost and code that logs
-// never needs a check. The functions Debug, Info, Warn and Error
-// write through it; With makes a logger of its own that carries fixed fields.
+// The package keeps one global Logger. Before Init and after the function Init returned has run, it
+// is a synchronous logger that writes each line to stderr at once, so a line is never lost and code
+// that logs never needs a check. The functions Debug, Info, Warn and Error write through it; With
+// makes a logger of its own that carries fixed fields.
 package logging
 
 import (
@@ -13,11 +14,12 @@ import (
 	"time"
 )
 
-// Logger writes log lines. A value in a field is read later, when the Consumer encodes it, so it must
-// not change after the call: pass numbers, strings, errors and values, not a pointer to state that is
-// still changing.
+// Logger writes log lines. A value in a field is read later, when the Consumer encodes it, so it
+// must not change after the call: pass numbers, strings, errors and values, not a pointer to state
+// that is still changing.
 type Logger interface {
-	// Debug, Info, Warn and Error log msg at their level, followed by the pairs kv (key, value, key, ...).
+	// Debug, Info, Warn and Error log msg at their level, followed by the pairs kv (key, value,
+	// key, ...).
 	Debug(msg string, kv ...any)
 	Info(msg string, kv ...any)
 	Warn(msg string, kv ...any)
@@ -56,9 +58,9 @@ func Warn(msg string, kv ...any) { Global().Warn(msg, kv...) }
 // Error logs at LevelError through the global logger.
 func Error(msg string, kv ...any) { Global().Error(msg, kv...) }
 
-// With returns a logger of the global logger that starts its lines with the pairs kv. It keeps writing
-// where it was made from: a logger made after Init puts its entries in the queue, and after close the
-// queue is no longer read.
+// With returns a logger of the global logger that starts its lines with the pairs kv. It keeps
+// writing where it was made from: a logger made after Init puts its entries in the queue, and after
+// close the queue is no longer read.
 func With(kv ...any) Logger { return Global().With(kv...) }
 
 // appendFields returns the fixed fields followed by kv, in a slice of its own.

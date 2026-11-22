@@ -29,7 +29,9 @@ func (l *queueLogger) With(kv ...any) Logger {
 
 func (l *queueLogger) log(level Level, msg string, kv []any) {
 	select {
-	case l.q.entries <- Entry{Time: time.Now(), Level: level, Message: msg, Fields: appendFields(l.fields, kv)}:
+	case l.q.entries <- Entry{
+		Time: time.Now(), Level: level, Message: msg, Fields: appendFields(l.fields, kv),
+	}:
 	default:
 		l.q.dropped.Add(1)
 	}
