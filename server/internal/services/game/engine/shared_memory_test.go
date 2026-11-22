@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/enginetest"
 	"sync"
 	"testing"
 	"time"
@@ -17,11 +18,11 @@ import (
 func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCooldowns(
 	t *testing.T,
 ) {
-	c, _, _, _ := newWorld(t, 1, 0)
-	kept := newCharacter(1, "An", 100, 1000, 0)
+	c, _, _, _ := enginetest.NewWorld(t, 1, 0)
+	kept := enginetest.NewCharacter(1, "An", 100, 1000, 0)
 	kept.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 5)
 	kept.Cooldowns.Set(action.ZoneLayerCharacterMoveActionCooldownKey, 7)
-	target := newCharacter(2, "Binh", 1000, 1000, 0)
+	target := enginetest.NewCharacter(2, "Binh", 1000, 1000, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup

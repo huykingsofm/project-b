@@ -3,6 +3,7 @@ package replay
 import (
 	"fmt"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"os"
 
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
 )
@@ -80,3 +81,41 @@ func (l *FileLogReader) Err() error { return l.err }
 
 // Close releases the files that are open.
 func (l *FileLogReader) Close() error { return l.r.Close() }
+
+// Engines returns the engines that have a log under dir, in the order of their directory names.
+// A directory that is not the log of an engine is not one of them.
+func Engines(dir string) ([]message.Address, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	scopes := []message.Scope{message.ScopeWorld, message.ScopeZone, message.ScopeZoneLayer}
+	var out []message.Address
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		for _, scope := range scopes {
+			var id uint32
+			if n, err := fmt.Sscanf(e.Name(), scope.String()+"-%d", &id); err == nil && n == 1 &&
+				e.Name() == fmt.Sprintf("%s-%d", scope, id) {
+				out = append(out, message.Address{Scope: scope, ID: id})
+			}
+		}
+	}
+	return out, nil
+}
+
+// ReadAll reads every record of the log of an engine under dir, in the order they were written.
+func ReadAll(dir string, engine message.Address) ([]Record, error) {
+	r, err := ReadFileLog(dir, engine, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	var out []Record
+	for r.Next() {
+		out = append(out, r.Record())
+	}
+	return out, r.Err()
+}

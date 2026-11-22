@@ -19,6 +19,20 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
+// MessageRouter is what an engine needs of the router that carries its messages: to make itself
+// reachable and to retire, to deliver a message and to give back one it could not take, and to
+// stop.
+// The router of a cluster that runs is a Router; a replay gives the engines another one.
+type MessageRouter interface {
+	Register(o OutgoingChannel)
+	Retire(a message.Address)
+	Stop()
+	Deliver(l message.Message) (message.Reason, bool)
+	Return(l message.Message, r message.Reason)
+}
+
+var _ MessageRouter = (*Router)(nil)
+
 type routerData struct {
 	chans   map[message.Address]OutgoingChannel
 	retired map[message.Address]bool

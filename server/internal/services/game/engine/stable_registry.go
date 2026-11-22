@@ -10,6 +10,30 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/registry"
 )
 
+// StableRegistry is where the engines publish their states and where they read each other's: the
+// StableStateRegistry of a cluster that runs, or the one a replay gives them, which serves the copy
+// that the log says each read found.
+type StableRegistry interface {
+	PublishWorld(w *worldstate.State)
+	PublishZone(z *zonestate.State)
+	PublishZoneLayer(l *zonelayerstate.State)
+	RemoveZoneLayer(zoneLayerID state.ZoneLayerID)
+	View(reader message.Address, replayLog replay.Log) *StableStateView
+}
+
+// CopySource says which copy of an engine a StableStateView finds when its engine reads one at a
+// tick. A registry that runs gives the latest; a replay gives the one that was read. A registry
+// that is not the one of a cluster that runs makes its views with NewStableStateView.
+type CopySource interface {
+	CopyOfWorld(reader message.Address, tick uint64) *worldstate.State
+	CopyOfZone(reader message.Address, tick uint64, zoneID state.ZoneID) *zonestate.State
+	CopyOfZoneLayer(
+		reader message.Address, tick uint64, zoneLayerID state.ZoneLayerID,
+	) *zonelayerstate.State
+}
+
+var _ StableRegistry = (*StableStateRegistry)(nil)
+
 // StableStateRegistry is the registry of the states that the engines published: the latest copy of
 // the state of the world, of each zone and of each zonelayer.
 //
@@ -46,18 +70,20 @@ func (s *StableStateRegistry) RemoveZoneLayer(zoneLayerID state.ZoneLayerID) {
 // states out itself: an engine reads them through its own view, which keeps the first copy it reads
 // of each scope in a tick (see StableStateView) and writes the read to the replay log.
 func (s *StableStateRegistry) View(reader message.Address, replayLog replay.Log) *StableStateView {
-	return &StableStateView{
-		registry: s, replayLog: replayLog, me: reader,
-		zones:      map[state.ZoneID]*zonestate.State{},
-		zonelayers: map[state.ZoneLayerID]*zonelayerstate.State{},
-	}
+	return NewStableStateView(s, s.worldID, reader, replayLog)
 }
 
-// latestWorld, latestZone and latestZoneLayer return the latest published copy, or nil.
-func (s *StableStateRegistry) latestWorld() *worldstate.State { return s.world.Get(s.worldID) }
-func (s *StableStateRegistry) latestZone(zoneID state.ZoneID) *zonestate.State {
+// CopyOfWorld, CopyOfZone and CopyOfZoneLayer return the latest published copy, or nil.
+func (s *StableStateRegistry) CopyOfWorld(message.Address, uint64) *worldstate.State {
+	return s.world.Get(s.worldID)
+}
+func (s *StableStateRegistry) CopyOfZone(
+	_ message.Address, _ uint64, zoneID state.ZoneID,
+) *zonestate.State {
 	return s.zones.Get(zoneID)
 }
-func (s *StableStateRegistry) latestZoneLayer(zoneLayerID state.ZoneLayerID) *zonelayerstate.State {
+func (s *StableStateRegistry) CopyOfZoneLayer(
+	_ message.Address, _ uint64, zoneLayerID state.ZoneLayerID,
+) *zonelayerstate.State {
 	return s.zonelayers.Get(zoneLayerID)
 }

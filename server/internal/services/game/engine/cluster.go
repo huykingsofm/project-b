@@ -3,10 +3,10 @@ package engine
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"slices"
 	"sync"
 	"time"
 
-	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 )
 
@@ -14,10 +14,10 @@ import (
 // configuration they read, the replay log they write, the registry of the states they publish, the
 // graph of the world, and the emitters where they give what changed.
 type Env struct {
-	Router    *Router
-	Cfg       *config.Store
+	Router    MessageRouter
+	Cfg       ConfigSource
 	ReplayLog replay.Log
-	Stable    *StableStateRegistry
+	Stable    StableRegistry
 	Graph     *WorldGraph
 	QueueSize int
 
@@ -91,3 +91,9 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 	c.Env.Router.Stop()
 	wg.Wait()
 }
+
+// Zones returns the engines of the zones, in the order they were added.
+func (c *Cluster) Zones() []*ZoneEngine { return slices.Clone(c.zones) }
+
+// ZoneLayers returns the engines of the zonelayers, in the order they were made.
+func (c *Cluster) ZoneLayers() []*ZoneLayerEngine { return slices.Clone(c.zonelayers) }

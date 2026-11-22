@@ -18,14 +18,20 @@ import (
 // at the same tick.
 var replayLogHashEvery = config.NewVar("replay_log.hash_every_ticks", 20, config.Range(1, 100000))
 
+// ConfigSource is what an engine needs of the configuration: the snapshot it takes once for each
+// tick. A config.Store is one; a replay gives the engines the version that the log says they read.
+type ConfigSource interface {
+	Snapshot() *config.Snapshot
+}
+
 // cell is what every engine has to talk to the other engines: its address and channels, the
 // router it sends through, the configuration it reads, the replay log it writes, and the
 // bouncer that runs what a message says a failed delivery means.
 type cell struct {
 	me             message.Address
-	router         *Router
+	router         MessageRouter
 	in             IncomingChannel // what the engine itself reads; the router holds the other end
-	cfg            *config.Store
+	cfg            ConfigSource
 	cfgVersionSeen uint64
 	replayLog      replay.Log
 	view           *StableStateView // what the engine reads of the other engines, kept for the tick
@@ -36,10 +42,10 @@ type cell struct {
 
 func newCell(
 	me message.Address,
-	router *Router,
-	cfg *config.Store,
+	router MessageRouter,
+	cfg ConfigSource,
 	rpl replay.Log,
-	stable *StableStateRegistry,
+	stable StableRegistry,
 	queue int,
 ) cell {
 	in, out := NewChannel(me, queue)
@@ -49,6 +55,9 @@ func newCell(
 		lastSeq: map[message.Address]uint64{},
 	}
 }
+
+// address is the address of the engine.
+func (c *cell) Address() message.Address { return c.me }
 
 // newRand makes the random numbers of an engine: the seed of the cluster and the address of the
 // engine decide them, so the same inputs give the same run.

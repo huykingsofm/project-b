@@ -24,7 +24,7 @@ type ZoneLayerEngine struct {
 	reg      action.ZoneLayerRegistry
 	selfNext []action.ZoneLayerAction
 	commands chan command.ZoneLayerCommand
-	stable   *StableStateRegistry
+	stable   StableRegistry
 	emitter  ZoneLayerEmitter
 	tick     uint64
 	rng      *rand.Rand

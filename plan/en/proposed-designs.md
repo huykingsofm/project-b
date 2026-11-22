@@ -118,7 +118,14 @@ Replay is the engines running again, not a second implementation:
 | configuration | the store | the content of the version recorded, from the control stream |
 | events to clients and the replay log | the emitter and the file log | nothing |
 
-- **Going live is changing the adapters:** after the log is played to its end, the same engines get the router, the store, the emitter and the file log, and go on from their own ticks. Recovery and replay are one mechanism.
+- **Going live is making the engines again in the real environment (agreed):** after the log is played to its end, each replayed engine is checkpointed at its last tick, and an engine is restored from that checkpoint (`Restore...Engine`) in the environment with the real router, store, emitter and file log; it goes on from its own tick. A replayed engine never runs live, so no engine that runs carries an adapter of the replay and the path of a running engine has no extra indirection. Recovery and replay share the runner; they differ in what is made at the end.
+- What making them again needs:
+  - the crons added again, as the builder does;
+  - the latest copy of each engine put in the registry, so that the others can read it;
+  - the queues empty (what was not taken from them is in the log);
+  - the store of the configuration at its latest version;
+  - the file logs cut at the recovery line and opened to go on writing.
+- What it costs and how it is checked: two copies of an engine are in memory while it is made again, and a field that the checkpoint does not hold, or that the hash does not cover, would be lost without a sign. So the acceptance test compares the hash of the restored engine with that of the replayed one and the bytes of their checkpoints, and runs both on for some ticks with the same hash.
 - The replay needs the published copies by tick (the registry keeps only the latest) and the configuration by version.
 
 Costs and risks:
@@ -133,7 +140,7 @@ The order of the work, one commit for each step, all in one pull request, each s
 2. The replay runner from tick 0 on the real engines with replay adapters: the whole cluster in dependency order, every recorded hash matches (`Cluster.Step` is the reference run).
 3. Codecs of the states, and the checkpoint of one engine: written, read, and the restored engine has the same hash, with actions waiting in the scheduler.
 4. Periodic writing with offsets and the sets of the manifest.
-5. Loading from a checkpoint set with the start rule, the recovery line, sending again what was in flight, and going live; the acceptance test of the phase.
+5. Loading from a checkpoint set with the start rule, the recovery line, and sending again what was in flight; going live by making each engine again in the real environment from a checkpoint of the replayed engine; the acceptance test of the phase.
 
 ## List of ideas
 
