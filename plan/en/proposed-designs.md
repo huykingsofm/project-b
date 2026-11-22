@@ -39,23 +39,108 @@ An item has an ID of its own and exactly one owner (an entity on the ground, an 
 
 Agreed (phase 1).
 
-- **One log per engine.** Each engine writes only to its own file, with no shared lock; the cluster is put back in order by `tick` when replayed.
+- **One writer per engine, one log for the cluster.** Each engine writes only to its own files, with no shared lock; the files are one log of the cluster, read as one when replayed (see the end of this section).
 - **Two layers.** `shared/segmentlog` is a general append-only log: it knows segments, framing and the crash repair, and nothing of ticks or engines. The replay log puts what it needs in the two places the segment log leaves to its user, the meta of a segment header and the payload of a record.
 - **Segments.** `<dir>/<scope>-<id>/seg-<index>.log` (for example `zonelayer-3/seg-00000000000000000000.log`), the index in 20 digits counted from 0 in the order the segments were made, closed when it reaches a configured size.
 - **Record framing like Kafka's.** `[u32 length][u32 crc][payload]`, and a batch (a tick) ends with a commit marker, so a batch is all or nothing. After a crash, a half-written record or a batch with no commit at the end is detected through the length, the crc and the commit, and cut off (and kept next to the segment). The payload is the replay log's own: `[kind][tick][body]`, with the tick whole in each record so that a record does not depend on its segment.
 - **Segment header.** Magic, format version and a meta. The replay log's meta is the format version of its records, the engine address, the seed, and the tick of the first record of the segment; a tick is found by reading the meta of about log2(n) segments, so no index file is needed.
 - **Record bodies.** Commands and actions are written as numbers of registers (action ID, command ID, cooldown key); a command writes its own fields with its `Encode`, and a function in its file reads them, found by the ID in a table, so a new kind is new code and changes nothing that exists.
 - **No cost during the tick.** The methods of `replay.Log` only append to a reused per-tick buffer. When the tick ends, the buffer goes to one writer goroutine that writes each batch with one `Write` and syncs at a configured interval (group commit), not on every tick.
-- **Checkpoint.** `ckpt-<tick>.snap` (written to a temporary file, then renamed) encodes the copy the engine already published, outside the engine's goroutine. R29 guarantees the copy does not change. The log has a marker record at that tick; segments older than the oldest kept checkpoint are deleted (the number of kept checkpoints is a config parameter). The period is a config parameter, rarer than the hash, and offset per engine.
-- **Recovery (option A).** Every engine loads its own latest checkpoint and replays its own input (messages, commands, config) to the end of the log. `StableRead` is not recorded by value, so after a failure the actions that read another engine's state run against the recovered states. A verifying replay of the whole cluster from tick 0 still compares the hash.
+- **Checkpoint.** One file `ckpt-<tick>.snap` for each engine (written to a temporary file, then renamed), and a set of them for the cluster in the manifest. The period is a config parameter, rarer than the hash, and offset per engine. What it holds and how it is taken: see the end of this section.
+- **Recovery.** Of the cluster, not of an engine: it is the replay runner playing the logs from a set of checkpoints. See the end of this section.
 - **S3.** Pushing closed segments and checkpoints to S3 is in the plan at low priority (phase 6), not now.
+
+### The log and the checkpoint belong to the cluster (pending approval; replaces recovery by option A)
+
+Principle:
+
+- **The unit of recording and of recovery is the cluster.** An engine stays independent while it runs: its own goroutine, its own files, no shared lock. The log and the checkpoints are one thing for the whole cluster: one directory, one manifest, read as one by the replay. No engine loads or replays alone.
+- **There is no global tick.** Engines tick at their own pace, so replaying the cluster means running every engine in an order that respects what depends on what, not in tick order.
+
+What crosses from one engine to another (the only thing a replay needs besides the input of each engine):
+
+| Crossing | Recorded today | Needed |
+|---|---|---|
+| A message (sender, `Seq`) taken by an engine at its tick | header and action IDs, at the receiver | the actions too (codecs by ID) |
+| A copy of another engine read in a tick (`StableRead`) | the tick of the copy | nothing more |
+| A message that came back (`Full`, `Retired`) and was settled at a tick | nothing | a record: the tick, the header of the message and the reason |
+| An engine added or removed while running | not built yet | a record of the cluster: which engine, when it starts, and the engine and tick that caused it |
+| The version of the configuration | at the first read of each version | the content of each version, in the control stream |
+
+Why it can be done:
+
+- Every crossing happened before what depends on it in real time, so the order is a graph with no cycle.
+- An engine's tick may run once every message it took at that tick is known and every copy it reads exists. The runner runs an engine until it has to wait for another, and keeps each published copy until its last recorded reader has passed.
+- The log decides who receives what at which tick, and the senders are replayed too, so the hashes at every recorded point are compared for every engine.
+
+The log:
+
+- `<dir>/manifest`: the cluster, its seed, the format versions, and each engine with its address, kind and the tick it was born at.
+- `<dir>/<scope>-<id>/`: the segments of each engine, as agreed; one writer for each file.
+- `<dir>/control/`: the records of the cluster itself: engines added and removed, and the content of each version of the configuration (what `Store.Apply` was given), so that a replay needs nothing outside the log; the cluster writes it, not an engine.
+- The manifest and the control stream are written by the cluster, never from a tick.
+
+The checkpoint:
+
+- **One file for each engine, at the tick of its own offset** (as the hash has), so the engines do not write at the same time. What is written, in a file: the tick; the state data, by the codec of its scope; the scheduler (the actions set for each tick, in order); the self list; the state of the random generator; the sequence number; the version of the configuration read. Not the map of a zone (its ID finds it), not the crons (made again at startup; `IsDue` needs only the tick).
+- **Taken at the end of the tick, written outside the goroutine.** At its checkpoint tick the engine clones what is outside the state next to the clone it publishes and hands both to one writer goroutine; the write is a temporary file and a rename. Actions hold only values (R29), so copying the slices is enough. The checkpoint tick also writes a hash and a marker to the log of the engine.
+- **A cluster checkpoint is a set:** an entry of the manifest that lists, for every engine, its file and its tick. The cluster writes it when every engine has written one in the period.
+- **Staggered ticks are not a consistent cut,** so the replay chooses where each engine starts: the start tick of an engine is its latest snapshot not later than the smallest copy of it that another engine reads after that engine's own start, and the choice is repeated until it stops changing. It ends, at worst at tick 0. A start that goes far back is accepted: exactness comes before the time a replay takes, and how far each start went is a metric. A message in flight at the cut does not matter: its receiver has it in its log, with its actions.
+- **Nothing is deleted.** Segments, snapshots and sets stay where they are; storage and archive are a separate job, planned later.
+- **Loading is the replay:** after a stop, the cluster starts as the replay runner does, plays every log to its end in dependency order, and goes live with each engine at its own tick.
+
+Codecs and the hash:
+
+- Every action gets `Encode(w)` and a decode function found by its ID in a table (R8); a test fails when an action of the register has none. The states of the three scopes get an `Encode` and a `Decode`, and each kind of entity is found by its `KindID` in a table.
+- The hash covers the scheduler, by hashing the encoding of its actions.
+- `Inbound` carries the actions, and the checkpoint carries the messages the bouncer holds.
+- **`OnFail` is data, not a function.** `OnFailCompensate` takes the message that undoes what the first one set going (where it goes, its actions, and its own `OnFail`), and `OnFailRedirect` takes an address. The chain ends at a kind that holds no message (`Drop`, `Retry`). A message is then written whole by one codec (the scope, the destination, the actions, the `OnFail`), used for `Inbound`, for the checkpoint and for the message that compensates. Nothing a message does on failure depends on the `Reason` today; if it must, a table by `Reason` (R8) is data too.
+
+Messages in flight when the server stops (the reason a transfer of an item between two players must never lose or duplicate it):
+
+- **Not lost:** a message that a sender replays but that no receiver recorded is sent again when the cluster goes live, and the receiver drops a second copy of the same `(From, Seq)`.
+- **Not duplicated:** the logs of two engines reach the disk at different times, so a receiver may have recorded a message whose cause the sender did not. The recovery line cuts the log of the receiver at the first record that the sender, replayed to the end of its durable log, does not produce; the receiver loses what follows and nothing is duplicated. The runner finds it as it plays the engines in order.
+- **What the log cannot give:** the last interval before a stop (`SyncEvery`) may be lost. What a player must not lose (an item) is saved in the store of phase 6, where an item has exactly one owner and a transfer is one transaction.
+
+A message that came back (`Full`, `Retired`) depends on how busy the receiver was, so it cannot be worked out again: the log records the tick, the header of the message and the reason, and the replay of the sender settles it at that tick.
+
+Replay is the engines running again, not a second implementation:
+
+- The code of a tick (`Step`) is the same. What differs is where its inputs come from and where its outputs go, which are the adapters the engine already receives (R1):
+
+| Seam | Live | Replay |
+|---|---|---|
+| ticks | a ticker | the runner calls `Step` |
+| commands | the queue of the engine | the records of its log |
+| messages in | the router | what the log says it took at each tick (the senders, replayed, produce them) |
+| messages out and returned | the router | caught by the replay and delivered as the receivers recorded; returned as the log says |
+| copies of other engines | the latest published | the copy of the tick recorded |
+| configuration | the store | the content of the version recorded, from the control stream |
+| events to clients and the replay log | the emitter and the file log | nothing |
+
+- **Going live is changing the adapters:** after the log is played to its end, the same engines get the router, the store, the emitter and the file log, and go on from their own ticks. Recovery and replay are one mechanism.
+- The replay needs the published copies by tick (the registry keeps only the latest) and the configuration by version.
+
+Costs and risks:
+
+- The runner is one goroutine that plays the engines in turn: replay costs about what the cluster costs live on one core, which is the machine the server targets. Running it in parallel as live does, one goroutine for each engine that waits for what it depends on, is a task of the plan.
+- The log is bigger by the bodies of the messages; the benchmark of the replay log records it.
+- An engine added at run time needs the control stream; its shape is fixed now (R22) and the feature comes with the zonelayers that are added and removed.
+
+The order of the work, one commit for each step, all in one pull request, each step with its tests:
+
+1. Codecs of the actions and of the message; `OnFail` as data; `Inbound` with the actions; the record of a message that came back; dropping a message received twice.
+2. The replay runner from tick 0 on the real engines with replay adapters: the whole cluster in dependency order, every recorded hash matches (`Cluster.Step` is the reference run).
+3. Codecs of the states, and the checkpoint of one engine: written, read, and the restored engine has the same hash, with actions waiting in the scheduler.
+4. Periodic writing with offsets and the sets of the manifest.
+5. Loading from a checkpoint set with the start rule, the recovery line, sending again what was in flight, and going live; the acceptance test of the phase.
 
 ## List of ideas
 
 | Idea | What it must achieve in project-b | Phase | Status |
 |---|---|---|---|
 | Entity as an interface | `ID`, `KindID`, `Position`, `Radius`, `BoundingBox`; `CharacterEntity`, `ItemEntity`; a pickup action; appear and disappear events | 0 | detail pending approval |
-| Checkpoint and replay log | The log is written to a file, append-only, in segments; periodic checkpoints offset between engines; recovery by option A | 1 | agreed |
+| Checkpoint and replay log | The log is written to a file, append-only, in segments; periodic checkpoints offset between engines; recovery is the replay of the cluster from a set of checkpoints | 1 | agreed, the cluster-wide form pending approval |
 | Early playable slice | Protobuf protocol, WebSocket gateway, TypeScript and PixiJS client, fighting, monsters, drops, pickup | 2 | agreed |
 | Grid | A spatial index for fast lookup by area, and localizing the map (each entity belongs to cells by its `BoundingBox`, queries by cell) | 3 | agreed |
 | Sight (AOI) | Who sees whom; entering and leaving sight; which cells changed in the tick | 3 | pending approval |
