@@ -8,7 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world/event"
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {

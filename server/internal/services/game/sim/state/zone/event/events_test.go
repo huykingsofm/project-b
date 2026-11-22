@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 // allEvents has an event of every kind of the package, for the tests that look at all of them.

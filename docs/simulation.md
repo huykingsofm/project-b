@@ -111,7 +111,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/segmentlog` | append-only log in segment files, under the replay log ([segmentlog](segmentlog.md)) |
 | `shared/binarycodec` | integers and strings as bytes, and `Version`, the version of the data that a `Decode` reads, for the replay log |
 | `shared/clone` | the contract for copying: a value, or a type with `Clone`; the containers use it ([R29](../plan/rule/r29-clone-or-value.md)) |
-| `shared/aliasing` | for tests: finds memory that two values share, and checks that a type is a value or has `Clone` |
+| `shared/testing/aliasing` | for tests: finds memory that two values share, and checks that a type is a value or has `Clone` |
 | `config` | `Var[T]` with defaults and limits; a snapshot taken once per tick; a whole set is rejected when one value is wrong |
 
 ## Temporary values

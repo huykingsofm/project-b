@@ -8,7 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 func newState(t *testing.T) *zone.State {

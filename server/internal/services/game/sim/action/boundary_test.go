@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 // allActions has a value of every action of the package, for the tests that look at all of them.

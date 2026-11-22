@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 type inner struct{ Items []int }

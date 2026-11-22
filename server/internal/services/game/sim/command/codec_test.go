@@ -14,8 +14,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/server/internal/shared/aliasing"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+	"github.com/huykingsofm/project-b/server/internal/shared/testing/aliasing"
 )
 
 // characterWithCooldowns is a character that has been playing: it has cooldowns, in an order that
