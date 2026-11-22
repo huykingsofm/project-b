@@ -19,7 +19,7 @@ var replayLogHashEvery = config.NewVar("replay_log.hash_every_ticks", 20, config
 
 // cell is what every engine has to talk to the other engines: its address and channels, the
 // router it sends through, the configuration it reads, the replay log it writes, and the
-// bouncer that decides what a message that could not be delivered means.
+// bouncer that runs what a message says a failed delivery means.
 type cell struct {
 	me             action.Address
 	router         *Router
@@ -82,7 +82,7 @@ func (c *cell) recordHash(cfg *config.Snapshot, tick uint64, hash func() uint64)
 // endTick tells the replay log that the engine has recorded all it will for the tick.
 func (c *cell) endTick(tick uint64) { c.replayLog.EndTick(c.me, tick) }
 
-// settle takes what came back undelivered since the last tick and decides what each means.
+// settle takes what came back undelivered since the last tick and runs what each says to do.
 func (c *cell) settle(cfg *config.Snapshot, tick uint64) {
 	for _, r := range channels.Drain(c.in.Back) {
 		c.replayLog.Append(
@@ -139,7 +139,7 @@ func (c *cell) receivedActions[A action.Action](tick uint64) []A {
 
 // flush sends what the engine wants to send: first the messages that earlier failures made
 // necessary, then what the actions of this tick put in the outbox. A message that cannot be
-// delivered is decided on at once, and the replay log records that it came back, at the tick of
+// delivered is handled at once, and the replay log records that it came back, at the tick of
 // the send.
 func (c *cell) flush(cfg *config.Snapshot, tick uint64, outbox []action.Message) {
 	for _, m := range append(c.bounce.take(), outbox...) {

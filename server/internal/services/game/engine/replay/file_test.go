@@ -38,9 +38,9 @@ func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Re
 func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	from := action.ZoneLayerAddress(3)
 	inbound := action.MessageToZoneLayer(
-		3, action.OnFailCompensate(action.MessageToZoneLayer(
-			1, action.OnFailDrop(), &action.ZoneLayerCharacterRegenAction{},
-		)),
+		3, action.OnFailCompensate{With: action.MessageToZoneLayer(
+			1, action.OnFailDrop{}, &action.ZoneLayerCharacterRegenAction{},
+		)},
 		&action.ZoneLayerCharacterMoveAction{CharacterID: 7, Dir: state.East, Ticks: 3},
 		&action.ZoneLayerChatSendAction{FromID: 7, Text: "xin chào"},
 	).Stamp(action.Header{From: from, Seq: tick * 10})

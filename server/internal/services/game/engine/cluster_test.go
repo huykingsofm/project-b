@@ -456,7 +456,7 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 	layer := action.ZoneLayerAddress(1)
 	say := func(seq uint64) action.Message {
 		m := action.MessageToZoneLayer(
-			1, action.OnFailDrop(), &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
+			1, action.OnFailDrop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
 		)
 		return m.Stamp(action.Header{From: action.ZoneAddress(1), Seq: seq})
 	}

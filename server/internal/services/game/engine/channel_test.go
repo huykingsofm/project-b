@@ -11,7 +11,7 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 	if out.Address() != action.ZoneAddress(1) {
 		t.Fatalf("address = %v", out.Address())
 	}
-	m := action.MessageToZone(1, action.OnFailDrop(), nil...)
+	m := action.MessageToZone(1, action.OnFailDrop{}, nil...)
 	if !out.Send(m) {
 		t.Fatal("the first message was refused")
 	}

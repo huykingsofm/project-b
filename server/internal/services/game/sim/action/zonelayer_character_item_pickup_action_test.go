@@ -121,9 +121,9 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 	pickup(1, stack, 10, st, reg)
 	message := reg.Take()[0]
 
-	back := message.OnFail()
-	if back.Kind != DecisionCompensate {
-		t.Fatalf("a failed delivery decides %v, want to compensate", back.Kind)
+	back, ok := message.OnFail().(OnFailCompensate)
+	if !ok {
+		t.Fatalf("a failed delivery means %T, want to compensate", message.OnFail())
 	}
 	scoped := back.With.(*ScopedMessage[ZoneLayerAction])
 	put, ok := scoped.Actions[0].(*ZoneLayerItemEntityAddAction)

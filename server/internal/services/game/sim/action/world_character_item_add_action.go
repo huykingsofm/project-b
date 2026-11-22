@@ -50,7 +50,7 @@ func (a *WorldCharacterItemAddAction) ApplyWorld(
 	}
 	r.ToZoneLayer(
 		a.FromZoneLayerID,
-		OnFailDrop(),
+		OnFailDrop{},
 		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
 	)
 }

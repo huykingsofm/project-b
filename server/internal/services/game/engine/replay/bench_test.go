@@ -16,7 +16,7 @@ import (
 // benchMessage is a message for a zonelayer with two actions, as the engines send them.
 func benchMessage(seq uint64) action.Message {
 	return action.MessageToZoneLayer(
-		3, action.OnFailDrop(),
+		3, action.OnFailDrop{},
 		&action.ZoneLayerCharacterMoveAction{CharacterID: 7, Dir: state.East, Ticks: 3},
 		&action.ZoneLayerChatSendAction{FromID: 7, Text: "xin chào mọi người"},
 	).Stamp(action.Header{From: action.ZoneAddress(1), Seq: seq})

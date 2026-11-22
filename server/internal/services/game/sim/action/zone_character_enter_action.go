@@ -38,7 +38,7 @@ func (a *ZoneCharacterEnterAction) ApplyZone(
 		}
 		r.ToZoneLayer(
 			zoneLayerID,
-			OnFailDrop(),
+			OnFailDrop{},
 			&ZoneLayerCharacterEnterAction{
 				Character: a.Character, At: zoneCharacterEnterActionArrival,
 			},

@@ -81,13 +81,10 @@ func TestEveryActionOfTheRegisterHasACodecAndComesBackAsItWas(t *testing.T) {
 	}
 }
 
-func TestEveryKindOfDecisionAndEveryScopeHasACodec(t *testing.T) {
-	for _, k := range []DecisionKind{
-		DecisionRetry, DecisionRedirect, DecisionCompensate, DecisionNotify, DecisionEscalate,
-		DecisionDrop,
-	} {
-		if _, ok := onFailCodecs[k]; !ok {
-			t.Errorf("the decision %d has no codec", k)
+func TestEveryKindOfOnFailAndEveryScopeHasACodec(t *testing.T) {
+	for id := OnFailID(1); id <= OnFailDropID; id++ { // the last ID of the register
+		if _, ok := onFailDecoders[id]; !ok {
+			t.Errorf("the OnFail with the ID %d has no decoder", id)
 		}
 	}
 	for _, s := range []Scope{ScopeWorld, ScopeZone, ScopeZoneLayer} {
@@ -108,20 +105,20 @@ func aMessageOfEveryKind() []Message {
 		).Stamp(Header{From: ZoneAddress(2), Seq: 77}).Again()
 	}
 	undo := MessageToZoneLayer(
-		5, OnFailDrop(), actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
+		5, OnFailDrop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
 	)
 	return []Message{
-		layer(OnFailRetry()),
-		layer(OnFailDrop()),
-		layer(OnFailRedirect(ZoneLayerAddress(6))),
-		layer(OnFailEscalate(ZoneAddress(1))),
-		layer(OnFailNotify("item.gone", "sword", "3")),
-		layer(OnFailNotify("item.gone")),
-		layer(OnFailCompensate(undo)),
-		layer(OnFailCompensate(MessageToZone(1, OnFailCompensate(undo)))),
-		MessageToZone(1, OnFailDrop(), actions[ZoneChatSendActionID].(ZoneAction)),
-		MessageToWorld(1, OnFailDrop(), actions[WorldChatPrivateSendActionID].(WorldAction)),
-		MessageToWorld(1, OnFailDrop()),
+		layer(OnFailRetry{}),
+		layer(OnFailDrop{}),
+		layer(OnFailRedirect{To: ZoneLayerAddress(6)}),
+		layer(OnFailEscalate{To: ZoneAddress(1)}),
+		layer(OnFailNotify{Key: "item.gone", Args: []string{"sword", "3"}}),
+		layer(OnFailNotify{Key: "item.gone"}),
+		layer(OnFailCompensate{With: undo}),
+		layer(OnFailCompensate{With: MessageToZone(1, OnFailCompensate{With: undo})}),
+		MessageToZone(1, OnFailDrop{}, actions[ZoneChatSendActionID].(ZoneAction)),
+		MessageToWorld(1, OnFailDrop{}, actions[WorldChatPrivateSendActionID].(WorldAction)),
+		MessageToWorld(1, OnFailDrop{}),
 	}
 }
 
@@ -169,7 +166,7 @@ func TestAMessageWithAnActionOfAnotherScopeOrTooDeepIsRefused(t *testing.T) {
 	w.Uvarint(0)
 	w.Uvarint(0) // the header: the sender and the number
 	w.Uvarint(0) // attempts
-	w.Uint8(uint8(DecisionDrop))
+	w.Uvarint(uint64(OnFailDropID))
 	w.Uvarint(1)
 	zoneAction := &ZoneChatSendAction{FromID: 1, Text: "x"}
 	if err := EncodeAction(&w, zoneAction); err != nil {
@@ -179,9 +176,9 @@ func TestAMessageWithAnActionOfAnotherScopeOrTooDeepIsRefused(t *testing.T) {
 		t.Fatalf("an action of another scope: %v, want ErrUnknownCode", err)
 	}
 
-	deep := MessageToZone(1, OnFailDrop())
+	deep := MessageToZone(1, OnFailDrop{})
 	for range 9 {
-		deep = MessageToZone(1, OnFailCompensate(deep))
+		deep = MessageToZone(1, OnFailCompensate{With: deep})
 	}
 	var d binarycodec.Writer
 	if err := EncodeMessage(&d, deep); err != nil {
@@ -209,12 +206,12 @@ func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testin
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
 	}
 	m := MessageToZoneLayer(
-		1, OnFailDrop(), &ZoneLayerCharacterRegenAction{}, noCodecAction{},
+		1, OnFailDrop{}, &ZoneLayerCharacterRegenAction{}, noCodecAction{},
 	)
 	if err := EncodeMessage(&w, m); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a message with such an action: %v, %d bytes written", err, len(w.B))
 	}
-	if err := EncodeMessage(&w, MessageToZone(1, OnFail{})); !errors.Is(err, ErrNoCodec) {
-		t.Fatalf("a message whose OnFail has no kind: %v, want ErrNoCodec", err)
+	if err := EncodeMessage(&w, MessageToZone(1, nil)); !errors.Is(err, ErrNoCodec) {
+		t.Fatalf("a message with no OnFail: %v, want ErrNoCodec", err)
 	}
 }

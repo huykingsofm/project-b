@@ -41,16 +41,35 @@ A record is the payload `[kind u8][tick uvarint][body]`. The whole tick is in ea
 | `KindReturned` | 6 | the header of a message the engine sent that came back (address of the sender, `Seq`), the reason `u8` (`action.Reason`) |
 
 - Integers are `uvarint` unless a width is said. An address is the scope `u8` and the ID.
-- An inbound message is recorded whole, so that a replay that starts from a checkpoint does not need the engine that sent it to have run before the checkpoint.
-- A message that came back (a queue that was full, an engine that was gone) is recorded at the tick the sender settled it: at the tick of the send when the router refused it at once, at the tick it was taken from the return queue otherwise. Whether it comes back depends on the time, so a replay cannot work it out.
-- A receiver drops a message whose `Seq` is not larger than the last it took from the same sender (a second copy), and records nothing for it. A message with `Seq` 0 is never a copy.
+- An inbound message is recorded whole.
+- A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
+- A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
 
 ## Messages and actions
 
-- A message is written as: the address it is for (scope `u8`, ID), its header (the address of the sender, `Seq`), the number of times it was tried, its `OnFail`, the count of its actions, and each action.
-- An action is its ID (the number in the table below) and then its fields, written by its method `Encode`; a function in its file reads them, found in `action.actionDecoders` by the ID. A test fails when an ID of the register has no decoder. Private fields of an action that waits are written too.
-- `OnFail` is data: the kind of decision `u8` and what the kind needs: an address for `DecisionRedirect` and `DecisionEscalate`, a message (written as above) for `DecisionCompensate`, a key and arguments (strings) for `DecisionNotify`, nothing for `DecisionRetry` and `DecisionDrop`. A message inside a message goes at most 8 deep.
-- A message that holds an action with no `Encode` or no decoder, or an `OnFail` with no kind, is not written: `EncodeMessage` returns `ErrNoCodec` and writes nothing.
+A message, in order:
+
+| Field | Written as |
+|---|---|
+| destination | address: scope `u8`, ID |
+| header | address of the sender, `Seq` |
+| attempts | `uvarint` |
+| `OnFail` | below |
+| actions | count, then each action |
+
+An action is its ID, then its fields written by its `Encode`; its decoder is in `action.actionDecoders`, found by the ID. Private fields of an action that waits are written.
+
+`OnFail` is its ID (`uvarint`) and then:
+
+| Kind | Body |
+|---|---|
+| `OnFailRetry`, `OnFailDrop` | nothing |
+| `OnFailRedirect`, `OnFailEscalate` | an address |
+| `OnFailCompensate` | a message, written as above, at most 8 deep |
+| `OnFailNotify` | key string, count, each argument string |
+
+- A test fails when an action ID, an `OnFail` ID or a scope has no decoder.
+- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`.
 
 ## Meta of a segment
 
@@ -71,7 +90,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 | What | Table | Numbers |
 |---|---|---|
 | action ID | `action/id.go` (the value of the constant) | 1 to 15 |
-| decision kind | `action/message.go` (the value of the constant) | 1 to 6 |
+| `OnFail` ID | `action/on_fail.go` (the value of the constant) | 1 to 6 |
 | cooldown key | `action/cooldown_key.go` (the value of the constant) | 1, 2 |
 | command ID | `command/id.go` (the value of the constant) | 1 to 9 |
 

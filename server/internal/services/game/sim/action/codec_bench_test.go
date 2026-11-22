@@ -8,20 +8,20 @@ import (
 
 func benchMessages() map[string]Message {
 	actions := everyAction()
-	two := MessageToZoneLayer(5, OnFailDrop(),
+	two := MessageToZoneLayer(5, OnFailDrop{},
 		actions[ZoneLayerCharacterMoveActionID].(ZoneLayerAction),
 		actions[ZoneLayerChatSendActionID].(ZoneLayerAction),
 	).Stamp(Header{From: ZoneAddress(2), Seq: 98765})
 	undo := MessageToZoneLayer(
-		5, OnFailDrop(), actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
+		5, OnFailDrop{}, actions[ZoneLayerItemEntityAddActionID].(ZoneLayerAction),
 	)
 	return map[string]Message{
 		"2 actions": two,
 		"enter, a character": MessageToZoneLayer(
-			5, OnFailDrop(), actions[ZoneLayerCharacterEnterActionID].(ZoneLayerAction),
+			5, OnFailDrop{}, actions[ZoneLayerCharacterEnterActionID].(ZoneLayerAction),
 		),
 		"pickup, with compensator": MessageToWorld(
-			1, OnFailCompensate(undo), actions[WorldCharacterItemAddActionID].(WorldAction),
+			1, OnFailCompensate{With: undo}, actions[WorldCharacterItemAddActionID].(WorldAction),
 		),
 	}
 }

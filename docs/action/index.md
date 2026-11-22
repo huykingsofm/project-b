@@ -55,7 +55,22 @@ What must happen outside a scope goes in its registry and happens after the plan
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick |
 
-A message names what a failed delivery means, as data: `OnFailDrop()`, `OnFailRetry()`, `OnFailRedirect(address)`, `OnFailEscalate(address)`, `OnFailNotify(key, args...)` and `OnFailCompensate(message)`, where the message is the one that undoes what the first set going (where it goes, its actions and its own `OnFail`).
+## Failed delivery
+
+Every message carries an `OnFail`: data, not a function, so the message can be written whole.
+
+| Type | ID | What it does | Holds |
+|---|---|---|---|
+| `OnFailRetry{}` | 1 | sends the message again to the same address | nothing |
+| `OnFailRedirect{To}` | 2 | sends it again to `To`, an engine of the same scope | an address |
+| `OnFailCompensate{With}` | 3 | sends `With`, the message that undoes what the first set going | a message: where it goes, its actions, its own `OnFail` |
+| `OnFailNotify{Key, Args}` | 4 | tells the actor of the message | a text key, arguments (strings) |
+| `OnFailEscalate{To}` | 5 | gives the message to `To` to decide | an address |
+| `OnFailDrop{}` | 6 | forgets the message and counts it | nothing |
+
+- `OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `action.Bouncer`.
+- `OnFailRetry` and `OnFailRedirect` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
+- A message with no `OnFail` is dropped, and logged.
 
 ## Reading other scopes
 

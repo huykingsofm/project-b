@@ -5,9 +5,9 @@
 //
 // Everything about the actions and the state is in package sim; this package is what makes
 // them run, and what connects the engines: the router that carries the messages, the
-// registry of published states, the graph of the world, the table that decides what a failed
-// delivery means, and the replay log that a replay is made from. Nothing here knows what the
-// actions do.
+// registry of published states, the graph of the world, the bouncer that runs what a message says
+// a failed delivery means, and the replay log that a replay is made from. Nothing here knows what
+// the actions do.
 package engine
 
 import (

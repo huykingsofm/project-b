@@ -11,8 +11,8 @@ import (
 // no Encode.
 var ErrNoCodec = errors.New("action: no codec for it")
 
-// ErrUnknownCode is returned when bytes name an action, a scope or a decision that is not one.
-var ErrUnknownCode = errors.New("action: the number is not one of an action, a scope or a decision")
+// ErrUnknownCode is returned when bytes name an action, a scope or an OnFail that is not one.
+var ErrUnknownCode = errors.New("action: the number is not one of an action, a scope or an OnFail")
 
 // Encoder is what an action has to be written: its fields, without its ID.
 type Encoder interface {
@@ -71,94 +71,55 @@ func DecodeAction(r *binarycodec.Reader, version binarycodec.Version) (Action, e
 	return decode(r, version)
 }
 
-// onFailCodec writes and reads what a kind of decision needs besides its kind.
-type onFailCodec struct {
-	encode func(w *binarycodec.Writer, f OnFail) error
-	decode func(r *binarycodec.Reader, version binarycodec.Version, depth int) (OnFail, error)
-}
-
-// onFailCodecs is the table of the codecs of OnFail, by kind. A test fails when a kind has none. It
-// is filled in by init because a message holds an OnFail that holds a message: written as the
-// value of a variable, the table would depend on itself.
-var onFailCodecs map[DecisionKind]onFailCodec
+// onFailDecoders is the table of the functions that read a kind of OnFail, by its ID, each in the
+// file of its kind (on_fail.go) next to the Encode that it reads. A test fails when an ID of the
+// register has no decoder. It is filled in by init because a message holds an OnFail that holds a
+// message: written as the value of a variable, the table would depend on itself.
+var onFailDecoders map[OnFailID]func(
+	r *binarycodec.Reader, version binarycodec.Version, depth int,
+) (OnFail, error)
 
 func init() {
-	onFailCodecs = map[DecisionKind]onFailCodec{
-		DecisionRetry: {
-			func(*binarycodec.Writer, OnFail) error { return nil },
-			func(*binarycodec.Reader, binarycodec.Version, int) (OnFail, error) {
-				return OnFailRetry(), nil
-			},
-		},
-		DecisionDrop: {
-			func(*binarycodec.Writer, OnFail) error { return nil },
-			func(*binarycodec.Reader, binarycodec.Version, int) (OnFail, error) {
-				return OnFailDrop(), nil
-			},
-		},
-		DecisionRedirect: {
-			func(w *binarycodec.Writer, f OnFail) error { f.To.Encode(w); return nil },
-			func(r *binarycodec.Reader, v binarycodec.Version, _ int) (OnFail, error) {
-				return OnFailRedirect(DecodeAddress(r, v)), r.Err()
-			},
-		},
-		DecisionEscalate: {
-			func(w *binarycodec.Writer, f OnFail) error { f.To.Encode(w); return nil },
-			func(r *binarycodec.Reader, v binarycodec.Version, _ int) (OnFail, error) {
-				return OnFailEscalate(DecodeAddress(r, v)), r.Err()
-			},
-		},
-		DecisionCompensate: {
-			func(w *binarycodec.Writer, f OnFail) error { return EncodeMessage(w, f.With) },
-			func(r *binarycodec.Reader, v binarycodec.Version, depth int) (OnFail, error) {
-				m, err := decodeMessage(r, v, depth+1)
-				return OnFailCompensate(m), err
-			},
-		},
-		DecisionNotify: {
-			func(w *binarycodec.Writer, f OnFail) error {
-				w.String(f.Key)
-				w.Uvarint(uint64(len(f.Args)))
-				for _, a := range f.Args {
-					w.String(a)
-				}
-				return nil
-			},
-			func(r *binarycodec.Reader, _ binarycodec.Version, _ int) (OnFail, error) {
-				key := r.String()
-				n := r.Uvarint()
-				if n > uint64(r.Left()) {
-					return OnFail{}, fmt.Errorf("%w: %d arguments", binarycodec.ErrShort, n)
-				}
-				var args []string
-				for i := uint64(0); i < n && r.Err() == nil; i++ {
-					args = append(args, r.String())
-				}
-				return OnFailNotify(key, args...), r.Err()
-			},
-		},
+	onFailDecoders = map[OnFailID]func(
+		r *binarycodec.Reader, version binarycodec.Version, depth int,
+	) (OnFail, error){
+		OnFailRetryID:      decodeOnFailRetry,
+		OnFailRedirectID:   decodeOnFailRedirect,
+		OnFailCompensateID: decodeOnFailCompensate,
+		OnFailNotifyID:     decodeOnFailNotify,
+		OnFailEscalateID:   decodeOnFailEscalate,
+		OnFailDropID:       decodeOnFailDrop,
 	}
 }
 
-func (f OnFail) encode(w *binarycodec.Writer) error {
-	c, ok := onFailCodecs[f.Kind]
-	if !ok {
-		return fmt.Errorf("%w: the decision %d has no codec", ErrNoCodec, f.Kind)
+// EncodeOnFail writes an OnFail: its ID and then what it holds. It returns ErrNoCodec, and writes
+// nothing, for a nil OnFail or one whose ID has no decoder.
+func EncodeOnFail(w *binarycodec.Writer, f OnFail) error {
+	if f == nil {
+		return fmt.Errorf("%w: nil OnFail", ErrNoCodec)
 	}
-	w.Uint8(uint8(f.Kind))
-	return c.encode(w, f)
+	if _, ok := onFailDecoders[f.ID()]; !ok {
+		return fmt.Errorf("%w: %T has the ID %d", ErrNoCodec, f, f.ID())
+	}
+	start := len(w.B)
+	w.Uvarint(uint64(f.ID()))
+	if err := f.Encode(w); err != nil {
+		w.B = w.B[:start] // nothing of an OnFail that could not be written is left
+		return err
+	}
+	return nil
 }
 
 func decodeOnFail(r *binarycodec.Reader, version binarycodec.Version, depth int) (OnFail, error) {
-	kind := DecisionKind(r.Uint8())
+	code := r.Uvarint()
 	if err := r.Err(); err != nil {
-		return OnFail{}, err
+		return nil, err
 	}
-	c, ok := onFailCodecs[kind]
-	if !ok {
-		return OnFail{}, fmt.Errorf("%w: decision %d", ErrUnknownCode, kind)
+	decode, ok := onFailDecoders[OnFailID(code)]
+	if !ok || code > 0xffff {
+		return nil, fmt.Errorf("%w: OnFail %d", ErrUnknownCode, code)
 	}
-	return c.decode(r, version, depth)
+	return decode(r, version, depth)
 }
 
 // messageDecoders is the table of the functions that read the rest of a message, by the scope of
@@ -212,7 +173,7 @@ func decodeMessage(r *binarycodec.Reader, version binarycodec.Version, depth int
 func (m *ScopedMessage[A]) encodeBody(w *binarycodec.Writer) error {
 	m.Header.Encode(w)
 	w.Uvarint(uint64(m.attempts))
-	if err := m.onFail.encode(w); err != nil {
+	if err := EncodeOnFail(w, m.onFail); err != nil {
 		return err
 	}
 	w.Uvarint(uint64(len(m.Actions)))

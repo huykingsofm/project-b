@@ -56,13 +56,13 @@ func (a *ZoneLayerCharacterItemPickupAction) ApplyZoneLayer(
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
 	selfID := s.ID
-	r.ToWorld(OnFailCompensate(MessageToZoneLayer(
+	r.ToWorld(OnFailCompensate{With: MessageToZoneLayer(
 		selfID,
-		OnFailDrop(),
+		OnFailDrop{},
 		&ZoneLayerItemEntityAddAction{
 			ItemID: item.ItemID, Count: item.Count, At: item.Pos, Expiry: item.Expiry,
 		},
-	)),
+	)},
 		&WorldCharacterItemAddAction{CharacterID: a.CharacterID, ItemID: item.ItemID,
 			Count: item.Count, FromZoneLayerID: selfID, At: item.Pos, Expiry: item.Expiry})
 }

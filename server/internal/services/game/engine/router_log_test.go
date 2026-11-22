@@ -28,7 +28,7 @@ func TestReturnLogsAWarningWhenTheSenderIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := NewRouter()
-	m := action.MessageToZone(1, action.OnFailDrop()).Stamp(
+	m := action.MessageToZone(1, action.OnFailDrop{}).Stamp(
 		action.Header{From: action.ZoneAddress(9)},
 	)
 	rt.Return(m, action.Retired)

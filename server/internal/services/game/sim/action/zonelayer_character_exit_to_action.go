@@ -62,9 +62,9 @@ func (a *ZoneLayerCharacterExitToAction) ApplyZoneLayer(
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
 		selfID, back := s.ID, body.Pos
-		r.ToZoneLayer(zoneLayerID, OnFailCompensate(MessageToZoneLayer(
-			selfID, OnFailDrop(), &ZoneLayerCharacterEnterAction{Character: character, At: back},
-		)), &ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival})
+		r.ToZoneLayer(zoneLayerID, OnFailCompensate{With: MessageToZoneLayer(
+			selfID, OnFailDrop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
+		)}, &ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival})
 		return
 	}
 }

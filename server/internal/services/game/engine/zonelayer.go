@@ -74,7 +74,7 @@ func (e *ZoneLayerEngine) State() *zonelayerstate.State { return e.st }
 
 // Step runs one tick of the zonelayer:
 //
-//  1. read the configuration, once, and decide on what came back undelivered;
+//  1. read the configuration, once, and handle what came back undelivered;
 //  2. build the plan: what the zonelayer set for itself, what was scheduled for this tick, the
 //     messages of other engines, the commands;
 //  3. run the plan, one action after another, on the state;

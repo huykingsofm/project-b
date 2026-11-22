@@ -25,7 +25,7 @@ func (a *ZoneChatSendAction) ApplyZone(
 	s.SendMessage(zonestate.ChatMessage{FromID: a.FromID, Text: a.Text, Tick: c.Tick})
 	for _, zoneLayerID := range s.ZoneLayers.Keys() {
 		r.ToZoneLayer(
-			zoneLayerID, OnFailDrop(), &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
+			zoneLayerID, OnFailDrop{}, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
 		)
 	}
 }

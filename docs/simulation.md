@@ -58,9 +58,9 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Delivery of messages
 
-- The message decides what a failed delivery means, as data (`OnFail`): `OnFailDrop()`, `OnFailRetry()`, `OnFailRedirect`, `OnFailEscalate`, `OnFailNotify`, `OnFailCompensate(message)`.
-- The decision is run by a table (`engine/bounce.go`).
-- A message and its `OnFail` are written whole by one codec (`action/codec.go`), so a message can be recorded and carried through a checkpoint.
+- A message decides what a failed delivery means with its `OnFail`: [action/index](action/index.md#failed-delivery).
+- The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`engine/bounce.go`), through `action.Bouncer`.
+- A message and its `OnFail` are written by one codec (`action/codec.go`): [replay_log](replay_log.md#messages-and-actions).
 
 ## Chat
 

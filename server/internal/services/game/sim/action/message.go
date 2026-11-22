@@ -87,58 +87,6 @@ func (r Reason) String() string {
 	return "unknown"
 }
 
-// DecisionKind is what to do with a message that could not be delivered.
-type DecisionKind uint8
-
-// The kinds of decision. The engine that sent the message runs them from a table.
-const (
-	// DecisionRetry sends it again to the same address.
-	DecisionRetry DecisionKind = iota + 1
-	// DecisionRedirect sends it to another engine of the same scope.
-	DecisionRedirect
-	// DecisionCompensate sends another message that undoes what the first one set going.
-	DecisionCompensate
-	// DecisionNotify tells the actor that the message is about, and drops it.
-	DecisionNotify
-	// DecisionEscalate gives it to another engine to decide.
-	DecisionEscalate
-	// DecisionDrop forgets it and counts it.
-	DecisionDrop
-)
-
-// OnFail is the part of a message that says what a failed delivery means: the kind of decision and
-// what that kind needs. It is data and not a function, so that a message can be written to a file
-// whole (see codec.go). Every send names one: the zero OnFail has no kind, and the bouncer drops it
-// and logs it.
-type OnFail struct {
-	Kind DecisionKind
-	To   Address  // for DecisionRedirect and DecisionEscalate
-	With Message  // for DecisionCompensate: the message that undoes the first
-	Key  string   // for DecisionNotify: the text key
-	Args []string // for DecisionNotify: the arguments of the text
-}
-
-// OnFailRetry sends the message again.
-func OnFailRetry() OnFail { return OnFail{Kind: DecisionRetry} }
-
-// OnFailDrop forgets the message.
-func OnFailDrop() OnFail { return OnFail{Kind: DecisionDrop} }
-
-// OnFailRedirect sends the message to another engine of the same scope.
-func OnFailRedirect(to Address) OnFail { return OnFail{Kind: DecisionRedirect, To: to} }
-
-// OnFailCompensate sends the message that undoes what the first one set going: where it goes, its
-// actions and its own OnFail. The chain ends at a kind that holds no message.
-func OnFailCompensate(undo Message) OnFail { return OnFail{Kind: DecisionCompensate, With: undo} }
-
-// OnFailNotify tells the actor that the message is about, with a text key.
-func OnFailNotify(key string, args ...string) OnFail {
-	return OnFail{Kind: DecisionNotify, Key: key, Args: args}
-}
-
-// OnFailEscalate gives the message to the engine at the address.
-func OnFailEscalate(to Address) OnFail { return OnFail{Kind: DecisionEscalate, To: to} }
-
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bounce table handle messages and do not know which kind of action
 // one carries.
@@ -146,7 +94,7 @@ type Message interface {
 	Dest() Address
 	Head() Header
 	// Subject is the actor that the message is about (the author of its first action that has
-	// one): the one that is told when the message could not be delivered and the decision is to
+	// one): the one that is told when the message could not be delivered and the OnFail is to
 	// notify. It is nil when no action of the message has an author.
 	Subject() any
 	OnFail() OnFail
