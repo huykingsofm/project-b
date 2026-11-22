@@ -69,7 +69,7 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 		if err != nil {
 			return nil, err
 		}
-		var inventory Inventory
+		inventory := Inventory{Slots: make([]InventorySlot, 0, slots)}
 		for range slots {
 			inventory.Slots = append(
 				inventory.Slots,

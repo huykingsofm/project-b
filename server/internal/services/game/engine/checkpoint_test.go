@@ -10,6 +10,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap/tilemaptest"
@@ -275,5 +276,85 @@ func BenchmarkHashZoneLayerState(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		l.st.Hash()
+	}
+}
+
+// aBigWorld is a world as full as the design says one gets: 2,000 characters with a full inventory
+// of 20 slots each, and the 1,000 private messages that it keeps.
+func aBigWorld(t testing.TB) *WorldEngine {
+	t.Helper()
+	w := aWorldToCheckpoint(t).World
+	for i := range 2000 {
+		for item := range 20 {
+			w.st.AddItemToCharacter(state.CharacterID(i+1), state.ItemID(item+1), 7, 20, 99)
+		}
+	}
+	for i := range 1000 {
+		w.st.SendPrivateMessage(worldstate.PrivateChatMessage{
+			FromID: state.PlayerID(i), ToID: state.PlayerID(i + 1),
+			Text: "xin chào, hôm nay thế nào", Tick: uint64(i),
+		})
+	}
+	return w
+}
+
+func BenchmarkCheckpointWorld(b *testing.B) {
+	w := aBigWorld(b)
+	data, err := w.Checkpoint()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := w.Checkpoint(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRestoreWorld(b *testing.B) {
+	w := aBigWorld(b)
+	data, err := w.Checkpoint()
+	if err != nil {
+		b.Fatal(err)
+	}
+	env := &Env{
+		Router: NewRouter(), Cfg: w.cfg, ReplayLog: replay.NopLog{},
+		Stable: NewStableStateRegistry(1), Graph: NewWorldGraph(1), QueueSize: 16,
+		WorldEmitter: NopEmitter{}, ZoneEmitter: NopEmitter{}, ZoneLayerEmitter: NopEmitter{},
+	}
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := RestoreWorldEngine(data, env, 0); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkHashWorld(b *testing.B) {
+	w := aBigWorld(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		w.hash()
+	}
+}
+
+// The clone that every engine publishes at the end of every tick, for comparison with what a
+// checkpoint costs.
+func BenchmarkCloneWorld(b *testing.B) {
+	w := aBigWorld(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		w.st.Clone()
+	}
+}
+
+func BenchmarkCloneZoneLayer(b *testing.B) {
+	l := aBigZoneLayer(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		l.st.Clone()
 	}
 }
