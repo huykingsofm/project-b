@@ -19,17 +19,32 @@ import (
 // What the engine does again and again is an action that waits, so it is in the scheduler and
 // there is nothing else to write for it.
 
-// engineHash is the hash of an engine: the hash of its state, and what it waits for, the scheduler
-// and the actions it set for itself for the next tick. A restore that waits for something else
-// than the engine it came from has another hash, and a replay finds it.
+// engineHash is the hash of an engine: of everything a checkpoint of it holds that the engine goes
+// on from: its state, what it waits for (the scheduler and the actions it set for itself for the
+// next tick), and what only it knows (the place of its random numbers, the number of its messages
+// and the last it took from each sender, the version of the configuration it read, and the
+// messages it holds to send again). A restore that differs from the engine it came from in any of
+// them has another hash, and a replay finds it.
 func engineHash[A action.Action](
-	stateHash uint64, sched *action.Scheduler[A], self []A,
+	c *cell, stateHash uint64, sched *action.Scheduler[A], self []A,
 ) uint64 {
 	h := state.NewHasher()
 	h.U64(stateHash)
 	action.HashScheduler(&h, sched)
 	action.HashActions(&h, self)
+	c.hashInto(&h)
 	return h.Sum()
+}
+
+// hashInto adds what every engine knows besides its state to a hash, as the bytes that a
+// checkpoint writes for it, so that the hash covers exactly what the checkpoint carries.
+func (c *cell) hashInto(h *state.Hasher) {
+	var w binarycodec.Writer
+	if err := c.encode(&w); err != nil {
+		h.String("a cell that cannot be written") // the hash still tells it from another
+		return
+	}
+	h.Bytes(w.B)
 }
 
 // checkpoint writes the checkpoint of an engine of a scope, given how its state is written.

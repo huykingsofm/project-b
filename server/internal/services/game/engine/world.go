@@ -147,7 +147,9 @@ func (e *WorldEngine) Run(ctx context.Context, ticks <-chan time.Time) {
 }
 
 // hash is the hash of the engine: its state and what it waits for.
-func (e *WorldEngine) hash() uint64 { return engineHash(e.st.Hash(), &e.sched, e.selfNext) }
+func (e *WorldEngine) hash() uint64 {
+	return engineHash(&e.cell, e.st.Hash(), &e.sched, e.selfNext)
+}
 
 // Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
 // by the goroutine of the engine or while the engine does not run.

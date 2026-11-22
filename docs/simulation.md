@@ -122,7 +122,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 ## Replay
 
 - Needs the inputs from outside and what only the time decides (`engine/replay/`); what engines send themselves is made again from the state.
-- The hash an engine records is the hash of its state and of what it waits for ([checkpoint](checkpoint.md#hash)).
+- The hash an engine records is the hash of its state, of what it waits for and of what only it knows ([checkpoint](checkpoint.md#hash)).
 - An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
 - In files: [replay_log](replay_log.md).
 - Run again from the records, on the real engines with other adapters: [replay_runner](replay_runner.md).

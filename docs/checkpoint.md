@@ -55,8 +55,15 @@ In this order:
 
 ## Hash
 
-- The hash of an engine is the hash of its state and of what it waits for: the scheduler and the self list, each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it.
-- A restore that waits for something else than the engine it came from has another hash, and a replay finds it.
+- The hash of an engine covers what the checkpoint of it holds, which is what the engine goes on from:
+
+| Part of the hash | How |
+|---|---|
+| state | the hash of the state |
+| scheduler, self list | each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it |
+| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `seq`, `lastSeq`, the version of the configuration, the messages held |
+
+- A restore that differs from the engine it came from in any of them has another hash, and a replay finds it.
 
 ## Not here yet
 

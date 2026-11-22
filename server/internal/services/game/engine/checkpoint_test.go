@@ -399,3 +399,26 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 		t.Fatalf("healing asked, none waiting: error %v, %d waiting", err, none.sched.Pending())
 	}
 }
+
+func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
+	c := aWorldWithActionsThatWait(t)
+	l := c.ZoneLayer(1)
+	base := l.hash()
+	changes := map[string]func(){
+		"the number of its messages":          func() { l.seq++ },
+		"the last number taken from a sender": func() { l.lastSeq[message.ZoneAddress(77)] = 5 },
+		"the version of the configuration":    func() { l.cfgVersionSeen++ },
+		"its random numbers":                  func() { l.rng.Uint64() },
+		"a message it holds to send again": func() {
+			l.bounce.pending = append(l.bounce.pending, action.MessageToZone(1, onfail.Drop{}))
+		},
+	}
+	for name, change := range changes {
+		change()
+		now := l.hash()
+		if now == base {
+			t.Errorf("a change of %s did not change the hash", name)
+		}
+		base = now
+	}
+}
