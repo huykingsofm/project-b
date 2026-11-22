@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerCharacterShieldGrantAction is a standing action: it stands in the plan at every tick, by
@@ -46,4 +47,25 @@ func (a *ZoneLayerCharacterShieldGrantAction) ApplyZoneLayer(
 		}
 	}
 	r.ToSelf(a)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uvarint(a.Duration)
+	w.Bool(a.started)
+	w.Uvarint(a.until)
+}
+
+// decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
+func decodeZoneLayerCharacterShieldGrantAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterShieldGrantAction{
+		CharacterID: state.CharacterID(r.Uvarint()),
+		Duration:    r.Uvarint(),
+		started:     r.Bool(),
+		until:       r.Uvarint(),
+	}
+	return a, r.Err()
 }

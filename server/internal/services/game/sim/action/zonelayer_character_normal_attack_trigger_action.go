@@ -4,6 +4,7 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/config"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // normalAttackDamage is 1 for now. Later it will come from the attack of the attacker and the
@@ -66,4 +67,21 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) ApplyZoneLayer(
 			SourceID: source.ID(), VictimID: victim.ID(), Amount: normalAttackDamage,
 		},
 	)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.CharacterID))
+	w.Uvarint(uint64(a.TargetID))
+}
+
+// decodeZoneLayerCharacterNormalAttackTriggerAction reads what Encode wrote.
+func decodeZoneLayerCharacterNormalAttackTriggerAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerCharacterNormalAttackTriggerAction{
+		CharacterID: state.CharacterID(r.Uvarint()),
+		TargetID:    state.CharacterID(r.Uvarint()),
+	}
+	return a, r.Err()
 }

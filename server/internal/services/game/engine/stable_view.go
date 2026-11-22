@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
@@ -19,7 +20,7 @@ import (
 type StableStateView struct {
 	registry   *StableStateRegistry
 	replayLog  replay.Log
-	me         action.Address
+	me         message.Address
 	tick       uint64
 	world      *worldstate.State
 	worldRead  bool
@@ -44,7 +45,9 @@ func (v *StableStateView) World() worldstate.ReadOnlyWorldState {
 		if v.world != nil {
 			copyTick = v.world.Tick
 		}
-		v.replayLog.StableRead(v.me, v.tick, action.WorldAddress(v.registry.worldID), copyTick)
+		v.replayLog.Append(v.me, v.tick, replay.StableRead{
+			Source: message.WorldAddress(v.registry.worldID), CopyTick: copyTick,
+		})
 	}
 	if v.world == nil {
 		return nil // not a nil pointer inside an interface
@@ -71,7 +74,9 @@ func (v *StableStateView) zone(zoneID state.ZoneID) *zonestate.State {
 	if z != nil {
 		copyTick = z.Tick
 	}
-	v.replayLog.StableRead(v.me, v.tick, action.ZoneAddress(zoneID), copyTick)
+	v.replayLog.Append(
+		v.me, v.tick, replay.StableRead{Source: message.ZoneAddress(zoneID), CopyTick: copyTick},
+	)
 	return z
 }
 
@@ -96,6 +101,8 @@ func (v *StableStateView) zoneLayer(zoneLayerID state.ZoneLayerID) *zonelayersta
 	if l != nil {
 		copyTick = l.Tick
 	}
-	v.replayLog.StableRead(v.me, v.tick, action.ZoneLayerAddress(zoneLayerID), copyTick)
+	v.replayLog.Append(v.me, v.tick, replay.StableRead{
+		Source: message.ZoneLayerAddress(zoneLayerID), CopyTick: copyTick,
+	})
 	return l
 }

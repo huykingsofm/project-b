@@ -2,7 +2,7 @@ package engine
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
@@ -45,7 +45,7 @@ func (s *StableStateRegistry) RemoveZoneLayer(zoneLayerID state.ZoneLayerID) {
 // View returns what the engine at the address reads of the registry. The registry does not give its
 // states out itself: an engine reads them through its own view, which keeps the first copy it reads
 // of each scope in a tick (see StableStateView) and writes the read to the replay log.
-func (s *StableStateRegistry) View(reader action.Address, replayLog replay.Log) *StableStateView {
+func (s *StableStateRegistry) View(reader message.Address, replayLog replay.Log) *StableStateView {
 	return &StableStateView{
 		registry: s, replayLog: replayLog, me: reader,
 		zones:      map[state.ZoneID]*zonestate.State{},

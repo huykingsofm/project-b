@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
@@ -29,7 +31,7 @@ type WorldEngine struct {
 
 // NewWorldEngine makes the engine of the world.
 func NewWorldEngine(st *worldstate.State, env *Env, seed uint64) *WorldEngine {
-	me := action.WorldAddress(st.ID)
+	me := message.WorldAddress(st.ID)
 	e := &WorldEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
 		commands: make(
@@ -72,7 +74,7 @@ func (e *WorldEngine) Step() {
 	e.st.SetTick(e.tick)
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
-	e.settle(cfg)
+	e.settle(cfg, e.tick)
 
 	plan := worldPlans.Get(cfg)
 	defer worldPlans.Put(plan)
@@ -99,7 +101,7 @@ func (e *WorldEngine) Step() {
 	}
 	e.stable.PublishWorld(e.st.Clone())
 	e.recordHash(cfg, e.tick, e.st.Hash)
-	e.flush(cfg, e.reg.Take())
+	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
 }
 
@@ -131,7 +133,7 @@ func (e *WorldEngine) planMessages(plan *action.Plan[action.WorldAction]) {
 // log and puts their actions in the plan.
 func (e *WorldEngine) planCommands(plan *action.Plan[action.WorldAction]) {
 	for _, c := range channels.Drain(e.commands) {
-		e.replayLog.WorldCommand(e.me, e.tick, c)
+		e.replayLog.Append(e.me, e.tick, replay.Command{Command: c})
 		for _, a := range c.TranslateWorld() {
 			plan.Append(a)
 		}

@@ -1,10 +1,8 @@
 package replay
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"sync"
-
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 )
 
 // MemLog keeps the records in memory.
@@ -19,33 +17,12 @@ func (j *MemLog) add(r Record) {
 	j.mu.Unlock()
 }
 
-func (j *MemLog) Inbound(a action.Address, t uint64, h action.Header, ids []action.ID) {
-	j.add(Record{Kind: KindInbound, Engine: a, Tick: t, Header: h, Actions: ids})
-}
+// Wants reports true for every kind: a MemLog keeps what it is given.
+func (j *MemLog) Wants(Kind) bool { return true }
 
-func (j *MemLog) WorldCommand(a action.Address, t uint64, c command.WorldCommand) {
-	j.add(Record{Kind: KindCommand, Engine: a, Tick: t, Command: c})
-}
-
-func (j *MemLog) ZoneCommand(a action.Address, t uint64, c command.ZoneCommand) {
-	j.add(Record{Kind: KindCommand, Engine: a, Tick: t, Command: c})
-}
-
-func (j *MemLog) ZoneLayerCommand(a action.Address, t uint64, c command.ZoneLayerCommand) {
-	j.add(Record{Kind: KindCommand, Engine: a, Tick: t, Command: c})
-}
-
-func (j *MemLog) ConfigRead(a action.Address, t uint64, v uint64) {
-	j.add(Record{Kind: KindConfig, Engine: a, Tick: t, Value: v})
-}
-
-func (j *MemLog) Hash(a action.Address, t uint64, hash func() uint64) {
-	j.add(Record{Kind: KindHash, Engine: a, Tick: t, Value: hash()})
-}
-
-func (j *MemLog) StableRead(a action.Address, t uint64, from action.Address, copyTick uint64) {
-	j.add(Record{Kind: KindStableRead, Engine: a, Tick: t, Source: from, Value: copyTick})
+func (j *MemLog) Append(a message.Address, t uint64, body Body) {
+	j.add(Record{Engine: a, Tick: t, Body: body})
 }
 
 // EndTick does nothing: a MemLog has already kept every record.
-func (j *MemLog) EndTick(action.Address, uint64) {}
+func (j *MemLog) EndTick(message.Address, uint64) {}

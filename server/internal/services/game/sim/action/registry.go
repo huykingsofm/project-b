@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
@@ -30,13 +31,13 @@ type StableView interface {
 
 // Outbox is what an engine wants to send in a tick. Nothing is sent while the actions run: the
 // engine sends the messages, in the order they were put here, when the plan is done.
-type Outbox struct{ messages []Message }
+type Outbox struct{ messages []message.Message }
 
 // Add puts a message in the outbox.
-func (o *Outbox) Add(l Message) { o.messages = append(o.messages, l) }
+func (o *Outbox) Add(l message.Message) { o.messages = append(o.messages, l) }
 
 // Take returns the messages and empties the outbox.
-func (o *Outbox) Take() []Message {
+func (o *Outbox) Take() []message.Message {
 	out := o.messages
 	o.messages = nil
 	return out
@@ -46,7 +47,7 @@ func (o *Outbox) Take() []Message {
 // the world and the latest state of the other engines.
 type Common struct {
 	Outbox
-	Me     Address
+	Me     message.Address
 	Tick   uint64
 	Graph  Graph
 	Stable StableView
@@ -57,18 +58,18 @@ func (c *Common) Begin(tick uint64) { c.Tick = tick }
 
 // ToZoneLayer puts a message for a zonelayer in the outbox.
 func (c *Common) ToZoneLayer(
-	zoneLayerID state.ZoneLayerID, onFail OnFail, actions ...ZoneLayerAction,
+	zoneLayerID state.ZoneLayerID, onFail message.OnFail, actions ...ZoneLayerAction,
 ) {
 	c.Add(MessageToZoneLayer(zoneLayerID, onFail, actions...))
 }
 
 // ToZone puts a message for a zone in the outbox.
-func (c *Common) ToZone(zoneID state.ZoneID, onFail OnFail, actions ...ZoneAction) {
+func (c *Common) ToZone(zoneID state.ZoneID, onFail message.OnFail, actions ...ZoneAction) {
 	c.Add(MessageToZone(zoneID, onFail, actions...))
 }
 
 // ToWorld puts a message for the world in the outbox.
-func (c *Common) ToWorld(onFail OnFail, actions ...WorldAction) {
+func (c *Common) ToWorld(onFail message.OnFail, actions ...WorldAction) {
 	c.Add(MessageToWorld(c.Graph.World(), onFail, actions...))
 }
 

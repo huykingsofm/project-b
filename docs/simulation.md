@@ -58,8 +58,9 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Delivery of messages
 
-- The message decides what a failed delivery means: `OnFailDrop`, `OnFailRetry`, `OnFailCompensate`.
-- The decision is run by a table (`engine/bounce.go`).
+- A message decides what a failed delivery means with its `OnFail`: [action/index](action/index.md#failed-delivery).
+- The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`engine/bounce.go`), through `message.Bouncer`.
+- A message and its `OnFail` are written by one codec (`action/codec.go`): [replay_log](replay_log.md#messages-and-actions).
 
 ## Chat
 
@@ -120,6 +121,6 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Replay
 
-- Needs only the inputs from outside (`engine/replay/`); what engines send themselves is made again from the state.
-- An engine records, in its own log: the messages it took (header and action numbers), the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
+- Needs the inputs from outside and what only the time decides (`engine/replay/`); what engines send themselves is made again from the state.
+- An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
 - In files: [replay_log](replay_log.md).

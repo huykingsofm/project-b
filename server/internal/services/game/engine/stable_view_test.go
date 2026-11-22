@@ -2,9 +2,9 @@ package engine
 
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"testing"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
@@ -18,7 +18,7 @@ func publishedAt(stable *StableStateRegistry, tick uint64) *zonelayerstate.State
 func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 	stable := NewStableStateRegistry(1)
 	replayLog := &replay.MemLog{}
-	view := stable.View(action.ZoneAddress(1), replayLog)
+	view := stable.View(message.ZoneAddress(1), replayLog)
 
 	first := publishedAt(stable, 3)
 	view.begin(10)
@@ -39,7 +39,7 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 	stable := NewStableStateRegistry(1)
 	replayLog := &replay.MemLog{}
-	view := stable.View(action.ZoneAddress(1), replayLog)
+	view := stable.View(message.ZoneAddress(1), replayLog)
 	publishedAt(stable, 3)
 
 	view.begin(10)
@@ -51,40 +51,26 @@ func TestTheFirstReadOfEachScopeInATickIsWrittenToTheReplayLog(t *testing.T) {
 
 	var got []replay.Record
 	for _, r := range replayLog.Records {
-		if r.Kind == replay.KindStableRead {
+		if r.Kind() == replay.KindStableRead {
 			got = append(got, r)
 		}
 	}
+	read := func(tick uint64, source message.Address, copyTick uint64) replay.Record {
+		return replay.Record{
+			Engine: message.ZoneAddress(1), Tick: tick,
+			Body: replay.StableRead{Source: source, CopyTick: copyTick},
+		}
+	}
 	want := []replay.Record{
-		{
-			Kind:   replay.KindStableRead,
-			Engine: action.ZoneAddress(1),
-			Tick:   10,
-			Source: action.ZoneLayerAddress(7),
-			Value:  3,
-		},
-		{
-			Kind:   replay.KindStableRead,
-			Engine: action.ZoneAddress(1),
-			Tick:   10,
-			Source: action.ZoneLayerAddress(8),
-			Value:  0,
-		},
-		{
-			Kind:   replay.KindStableRead,
-			Engine: action.ZoneAddress(1),
-			Tick:   11,
-			Source: action.ZoneLayerAddress(7),
-			Value:  3,
-		},
+		read(10, message.ZoneLayerAddress(7), 3),
+		read(10, message.ZoneLayerAddress(8), 0),
+		read(11, message.ZoneLayerAddress(7), 3),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("%d records, want %d: %+v", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i].Kind != want[i].Kind || got[i].Engine != want[i].Engine ||
-			got[i].Tick != want[i].Tick ||
-			got[i].Source != want[i].Source || got[i].Value != want[i].Value {
+		if got[i] != want[i] {
 			t.Fatalf("record %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}

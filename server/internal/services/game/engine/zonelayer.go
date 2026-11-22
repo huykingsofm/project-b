@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"math/rand/v2"
 	"time"
@@ -31,7 +33,7 @@ type ZoneLayerEngine struct {
 // NewZoneLayerEngine makes the engine of a zonelayer. The tick and the cron are its own: the caller
 // gives the ticks with Run or calls Step.
 func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLayerEngine {
-	me := action.ZoneLayerAddress(st.ID)
+	me := message.ZoneLayerAddress(st.ID)
 	e := &ZoneLayerEngine{
 		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
 		commands: make(
@@ -73,7 +75,7 @@ func (e *ZoneLayerEngine) State() *zonelayerstate.State { return e.st }
 
 // Step runs one tick of the zonelayer:
 //
-//  1. read the configuration, once, and decide on what came back undelivered;
+//  1. read the configuration, once, and handle what came back undelivered;
 //  2. build the plan: what the zonelayer set for itself, what was scheduled for this tick, the
 //     messages of other engines, the commands;
 //  3. run the plan, one action after another, on the state;
@@ -88,7 +90,7 @@ func (e *ZoneLayerEngine) Step() {
 	e.st.SetTick(e.tick)
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
-	e.settle(cfg)
+	e.settle(cfg, e.tick)
 
 	plan := zoneLayerPlans.Get(cfg)
 	defer zoneLayerPlans.Put(plan)
@@ -120,7 +122,7 @@ func (e *ZoneLayerEngine) Step() {
 	}
 	e.stable.PublishZoneLayer(e.st.Clone())
 	e.recordHash(cfg, e.tick, e.st.Hash)
-	e.flush(cfg, e.reg.Take())
+	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
 }
 
@@ -152,7 +154,7 @@ func (e *ZoneLayerEngine) planMessages(plan *action.Plan[action.ZoneLayerAction]
 // log and puts their actions in the plan.
 func (e *ZoneLayerEngine) planCommands(plan *action.Plan[action.ZoneLayerAction]) {
 	for _, c := range channels.Drain(e.commands) {
-		e.replayLog.ZoneLayerCommand(e.me, e.tick, c)
+		e.replayLog.Append(e.me, e.tick, replay.Command{Command: c})
 		for _, a := range c.TranslateZoneLayer() {
 			plan.Append(a)
 		}

@@ -26,6 +26,15 @@ type Writer struct{ B []byte }
 // Uint8 appends one byte.
 func (w *Writer) Uint8(v uint8) { w.B = append(w.B, v) }
 
+// Bool appends one byte: 1 for true and 0 for false.
+func (w *Writer) Bool(v bool) {
+	if v {
+		w.B = append(w.B, 1)
+		return
+	}
+	w.B = append(w.B, 0)
+}
+
 // Uvarint appends an unsigned integer in 1 to 10 bytes; small values take one.
 func (w *Writer) Uvarint(v uint64) { w.B = binary.AppendUvarint(w.B, v) }
 
@@ -73,6 +82,18 @@ func (r *Reader) Uint8() uint8 {
 	v := r.b[0]
 	r.b = r.b[1:]
 	return v
+}
+
+// Bool reads what Writer.Bool wrote. A byte that is neither 0 nor 1 is a bad value.
+func (r *Reader) Bool() bool {
+	switch r.Uint8() {
+	case 0:
+		return false
+	case 1:
+		return true
+	}
+	r.fail(ErrBadValue)
+	return false
 }
 
 // Uvarint reads what Writer.Uvarint wrote.

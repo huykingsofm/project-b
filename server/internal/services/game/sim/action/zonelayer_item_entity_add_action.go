@@ -3,6 +3,7 @@ package action
 import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the
@@ -33,4 +34,25 @@ func (a *ZoneLayerItemEntityAddAction) ApplyZoneLayer(
 	if a.Expiry > 0 {
 		r.ToSelfAt(c.Tick+a.Expiry, &ZoneLayerItemEntityRemoveAction{EntityID: id})
 	}
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneLayerItemEntityAddAction) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(a.ItemID))
+	w.Uvarint(uint64(a.Count))
+	a.At.Encode(w)
+	w.Uvarint(a.Expiry)
+}
+
+// decodeZoneLayerItemEntityAddAction reads what Encode wrote.
+func decodeZoneLayerItemEntityAddAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	a := &ZoneLayerItemEntityAddAction{
+		ItemID: state.ItemID(r.Uvarint()),
+		Count:  uint32(r.Uvarint()),
+		At:     state.DecodeVec(r, version),
+		Expiry: r.Uvarint(),
+	}
+	return a, r.Err()
 }

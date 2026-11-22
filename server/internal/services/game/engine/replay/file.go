@@ -3,12 +3,11 @@ package replay
 import (
 	"errors"
 	"fmt"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
@@ -46,7 +45,7 @@ type FileLog struct {
 	opts FileLogOptions
 
 	mu      sync.Mutex // protects opening a log; the logs of the engines are then read without it
-	engines sync.Map   // action.Address -> *engineLog
+	engines sync.Map   // message.Address -> *engineLog
 	failure error      // protected by mu
 }
 
@@ -64,7 +63,7 @@ func NewFileLog(dir string, opts FileLogOptions) *FileLog {
 }
 
 // engineDir is the directory of the log of an engine.
-func engineDir(dir string, engine action.Address) string {
+func engineDir(dir string, engine message.Address) string {
 	return filepath.Join(dir, fmt.Sprintf("%s-%d", engine.Scope, engine.ID))
 }
 
@@ -91,7 +90,7 @@ func (f *FileLog) Err() error {
 	return err
 }
 
-func (f *FileLog) fail(engine action.Address, err error) {
+func (f *FileLog) fail(engine message.Address, err error) {
 	f.mu.Lock()
 	first := f.failure == nil
 	if first {
@@ -110,7 +109,7 @@ func (f *FileLog) fail(engine action.Address, err error) {
 }
 
 // log returns the log of an engine, opening it the first time.
-func (f *FileLog) log(engine action.Address) (*engineLog, error) {
+func (f *FileLog) log(engine message.Address) (*engineLog, error) {
 	if v, ok := f.engines.Load(engine); ok {
 		l := v.(*engineLog)
 		return l, l.err
@@ -142,7 +141,7 @@ func (f *FileLog) log(engine action.Address) (*engineLog, error) {
 }
 
 // record appends one record to the buffer of the tick of the engine.
-func (f *FileLog) record(engine action.Address, r Record) {
+func (f *FileLog) record(engine message.Address, r Record) {
 	l, err := f.log(engine)
 	if err != nil {
 		return // the log of the engine could not be opened; log() reported it
@@ -156,39 +155,15 @@ func (f *FileLog) record(engine action.Address, r Record) {
 	}
 }
 
-func (f *FileLog) Inbound(engine action.Address, tick uint64, h action.Header, ids []action.ID) {
-	f.record(engine, Record{Kind: KindInbound, Tick: tick, Header: h, Actions: ids})
-}
+// Wants reports true for every kind: a FileLog writes what it is given.
+func (f *FileLog) Wants(Kind) bool { return true }
 
-func (f *FileLog) WorldCommand(engine action.Address, tick uint64, c command.WorldCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ZoneCommand(engine action.Address, tick uint64, c command.ZoneCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ZoneLayerCommand(engine action.Address, tick uint64, c command.ZoneLayerCommand) {
-	f.record(engine, Record{Kind: KindCommand, Tick: tick, Command: c})
-}
-
-func (f *FileLog) ConfigRead(engine action.Address, tick uint64, version uint64) {
-	f.record(engine, Record{Kind: KindConfig, Tick: tick, Value: version})
-}
-
-// Hash calls hash: the log records it.
-func (f *FileLog) Hash(engine action.Address, tick uint64, hash func() uint64) {
-	f.record(engine, Record{Kind: KindHash, Tick: tick, Value: hash()})
-}
-
-func (f *FileLog) StableRead(
-	engine action.Address, tick uint64, from action.Address, copyTick uint64,
-) {
-	f.record(engine, Record{Kind: KindStableRead, Tick: tick, Source: from, Value: copyTick})
+func (f *FileLog) Append(engine message.Address, tick uint64, body Body) {
+	f.record(engine, Record{Tick: tick, Body: body})
 }
 
 // EndTick hands the records of the tick to the goroutine that writes them.
-func (f *FileLog) EndTick(engine action.Address, _ uint64) {
+func (f *FileLog) EndTick(engine message.Address, _ uint64) {
 	v, ok := f.engines.Load(engine)
 	if !ok {
 		return // the engine recorded nothing yet
@@ -223,7 +198,7 @@ func (f *FileLog) Close() error {
 
 // segmentMeta is the meta of a segment that starts with the payload first: the format, the engine,
 // the seed and the tick of that record.
-func segmentMeta(engine action.Address, seed uint64, first []byte) []byte {
+func segmentMeta(engine message.Address, seed uint64, first []byte) []byte {
 	var w binarycodec.Writer
 	w.Uvarint(uint64(formatVersion))
 	engine.Encode(&w)
@@ -236,7 +211,7 @@ func segmentMeta(engine action.Address, seed uint64, first []byte) []byte {
 // segmentInfo is what the meta of a segment says.
 type segmentInfo struct {
 	Version   binarycodec.Version // of the data of the records of the segment
-	Engine    action.Address
+	Engine    message.Address
 	Seed      uint64
 	FirstTick uint64
 }
@@ -251,7 +226,7 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 	}
 	info := segmentInfo{
 		Version:   version,
-		Engine:    action.DecodeAddress(r, version),
+		Engine:    message.DecodeAddress(r, version),
 		Seed:      r.Fixed64(),
 		FirstTick: r.Uvarint(),
 	}

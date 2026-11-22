@@ -12,20 +12,64 @@
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
 
+## Writing
+
+| Method of `replay.Log` | What it does |
+|---|---|
+| `Wants(kind)` | says whether the log wants records of the kind; an engine asks before it takes a hash, which costs as much as the state is big |
+| `Append(engine, tick, body)` | records what the engine took, sent or read at the tick |
+| `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick; a log in files hands the records to the goroutine that writes them |
+
 ## Records
 
 A record is the payload `[kind u8][tick uvarint][body]`. The whole tick is in each record, so a record does not depend on its segment. The engine is not in it: it is the engine of the log.
 
+| In code | What it is |
+|---|---|
+| `replay.Record` | `Engine`, `Tick` and a `Body` |
+| `replay.Body` | an interface: `Kind()`, `Encode(w)` and `Same(other)` |
+| a type for each kind | `Inbound`, `Command`, `ConfigRead`, `Hash`, `StableRead`, `Returned`: each holds only what its kind has |
+| `decoders` | the table that reads a body, by its kind; a test fails when a kind of the register has none |
+
 | Kind | Number | Body |
 |---|---|---|
-| `KindInbound` | 1 | sender scope `u8`, sender ID, `Seq`, count, then the number of each action ID |
+| `KindInbound` | 1 | a message, whole (below) |
 | `KindCommand` | 2 | the number of the command and its fields (below) |
 | `KindConfig` | 3 | the version of the config |
 | `KindHash` | 4 | the hash, 8 bytes |
 | `KindStableRead` | 5 | scope `u8` and ID of the engine read, the tick of the copy |
+| `KindReturned` | 6 | the header of a message the engine sent that came back (address of the sender, `Seq`), the reason `u8` (`action.Reason`) |
 
 - Integers are `uvarint` unless a width is said. An address is the scope `u8` and the ID.
-- An inbound message is recorded by its header and the numbers of its actions only: what the engines send is made again by a replay of the whole cluster.
+- An inbound message is recorded whole.
+- A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
+- A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
+
+## Messages and actions
+
+A message, in order:
+
+| Field | Written as |
+|---|---|
+| destination | address: scope `u8`, ID |
+| header | address of the sender, `Seq` |
+| attempts | `uvarint` |
+| `OnFail` | below |
+| actions | count, then each action |
+
+An action is its ID, then its fields written by its `Encode`; its decoder is in `action.actionDecoders`, found by the ID. Private fields of an action that waits are written.
+
+`OnFail` is its ID (`uvarint`) and then:
+
+| Kind | Body |
+|---|---|
+| `onfail.Retry`, `onfail.Drop` | nothing |
+| `onfail.Redirect`, `onfail.Escalate` | an address |
+| `onfail.Compensate` | a message, written as above, at most 8 deep |
+| `onfail.Notify` | key string, count, each argument string |
+
+- A test fails when an action ID, an `OnFail` ID or a scope has no decoder.
+- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`.
 
 ## Meta of a segment
 
@@ -46,6 +90,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 | What | Table | Numbers |
 |---|---|---|
 | action ID | `action/id.go` (the value of the constant) | 1 to 15 |
+| `OnFail` ID | `action/onfail/onfail.go` (the value of the constant) | 1 to 6 |
 | cooldown key | `action/cooldown_key.go` (the value of the constant) | 1, 2 |
 | command ID | `command/id.go` (the value of the constant) | 1 to 9 |
 
@@ -86,7 +131,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 ## Not here yet
 
-- Checkpoints, the scheduler and cron in a checkpoint, the replay runner, and deleting old segments.
+- Checkpoints, the scheduler in a checkpoint, and the replay runner.
 - A `Close` is needed to write what the last ticks recorded: until then they are in memory and on the way to disk.
 
 Benchmarks: [replay_log](benchmark/replay_log.md).

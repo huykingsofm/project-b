@@ -1,9 +1,11 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
 // zoneCharacterEnterActionArrival is the arrival position of a character that enters the world: it
@@ -37,11 +39,28 @@ func (a *ZoneCharacterEnterAction) ApplyZone(
 		}
 		r.ToZoneLayer(
 			zoneLayerID,
-			OnFailDrop,
+			onfail.Drop{},
 			&ZoneLayerCharacterEnterAction{
 				Character: a.Character, At: zoneCharacterEnterActionArrival,
 			},
 		)
 		return
 	}
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a *ZoneCharacterEnterAction) Encode(w *binarycodec.Writer) {
+	a.Character.Encode(w)
+}
+
+// decodeZoneCharacterEnterAction reads what Encode wrote.
+func decodeZoneCharacterEnterAction(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Action, error) {
+	c, err := zonelayerstate.DecodeCharacter(r, version)
+	if err != nil {
+		return nil, err
+	}
+	a := &ZoneCharacterEnterAction{Character: c}
+	return a, r.Err()
 }

@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/onfail"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
@@ -119,11 +120,11 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 	at := state.Vec{X: 2500, Y: 2500}
 	stack := st.AddItemEntity(8, 5, at, 40)
 	pickup(1, stack, 10, st, reg)
-	message := reg.Take()[0]
+	sent := reg.Take()[0]
 
-	back := message.Bounce(Retired)
-	if back.Kind != DecisionCompensate {
-		t.Fatalf("a failed delivery decides %v, want to compensate", back.Kind)
+	back, ok := sent.OnFail().(onfail.Compensate)
+	if !ok {
+		t.Fatalf("a failed delivery means %T, want to compensate", sent.OnFail())
 	}
 	scoped := back.With.(*ScopedMessage[ZoneLayerAction])
 	put, ok := scoped.Actions[0].(*ZoneLayerItemEntityAddAction)

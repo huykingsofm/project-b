@@ -12,6 +12,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [segmentlog.md](segmentlog.md) | appending to and reading the segment log | `shared/segmentlog` |
 | [replay_log.md](replay_log.md) | recording and reading the replay log in files | `engine/replay` |
 | [plan.md](plan.md) | filling a plan and finding actions in it | `sim/action` |
+| [codec.md](codec.md) | writing and reading a message with its actions | `sim/action` |
 
 ## Run
 
@@ -20,7 +21,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 
 | Benchmarks of | Directory |
 |---|---|
-| the simulation | `server/internal/services/game/sim` |
+| the simulation, the codec of messages | `server/internal/services/game/sim` |
 | logging | `server/internal/shared/logging` |
 | the bitset | `server/internal/shared/bitset` |
 | the segment log | `server/internal/shared/segmentlog` |

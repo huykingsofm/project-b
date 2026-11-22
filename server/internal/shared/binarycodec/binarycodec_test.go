@@ -95,3 +95,17 @@ func TestTheFirstErrorIsKept(t *testing.T) {
 		t.Fatal(r.Err())
 	}
 }
+
+func TestABoolComesBackAndAnyOtherByteIsABadValue(t *testing.T) {
+	var w binarycodec.Writer
+	w.Bool(true)
+	w.Bool(false)
+	r := binarycodec.NewReader(w.B)
+	if !r.Bool() || r.Bool() || r.Err() != nil {
+		t.Fatalf("a bool did not come back: %v", r.Err())
+	}
+	bad := binarycodec.NewReader([]byte{2})
+	if bad.Bool(); !errors.Is(bad.Err(), binarycodec.ErrBadValue) {
+		t.Fatalf("the byte 2 is not a bool, got %v", bad.Err())
+	}
+}

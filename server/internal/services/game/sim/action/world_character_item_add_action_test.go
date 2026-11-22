@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
@@ -31,11 +32,11 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("%d messages were sent, want 1 back to the zonelayer", len(messages))
 	}
-	message := messages[0].(*ScopedMessage[ZoneLayerAction])
-	if message.To != ZoneLayerAddress(5) {
-		t.Fatalf("the message goes to %+v, want zonelayer 5", message.To)
+	back := messages[0].(*ScopedMessage[ZoneLayerAction])
+	if back.To != message.ZoneLayerAddress(5) {
+		t.Fatalf("the message goes to %+v, want zonelayer 5", back.To)
 	}
-	put := message.Actions[0].(*ZoneLayerItemEntityAddAction)
+	put := back.Actions[0].(*ZoneLayerItemEntityAddAction)
 	want := ZoneLayerItemEntityAddAction{ItemID: 7, Count: 5, At: at, Expiry: 40}
 	if *put != want {
 		t.Fatalf("what goes back is %+v, want %+v", *put, want)

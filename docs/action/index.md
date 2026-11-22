@@ -55,7 +55,28 @@ What must happen outside a scope goes in its registry and happens after the plan
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick |
 
-A message names what a failed delivery means: `OnFailDrop`, `OnFailRetry`, `OnFailCompensate`.
+## Failed delivery
+
+Every message carries an `OnFail`: data, not a function, so the message can be written whole.
+
+| Type (package `onfail`) | ID | What it does | Holds |
+|---|---|---|---|
+| `onfail.Retry{}` | 1 | sends the message again to the same address | nothing |
+| `onfail.Redirect{To}` | 2 | sends it again to `To`, an engine of the same scope | an address |
+| `onfail.Compensate{With}` | 3 | sends `With`, the message that undoes what the first set going | a message: where it goes, its actions, its own `OnFail` |
+| `onfail.Notify{Key, Args}` | 4 | tells the actor of the message | a text key, arguments (strings) |
+| `onfail.Escalate{To}` | 5 | gives the message to `To` to decide | an address |
+| `onfail.Drop{}` | 6 | forgets the message and counts it | nothing |
+
+| Package | Holds |
+|---|---|
+| `sim/action/message` | `Address`, `Scope`, `Header`, `Reason`, and the interfaces `Message`, `OnFail` and `Bouncer` |
+| `sim/action/onfail` | the kinds above, each in a file of its own (`retry.go`, `redirect.go`, `compensate.go`, `notify.go`, `escalate.go`, `drop.go`), the register of their IDs, and their codec (`onfail.Encode`, `onfail.Decode`) |
+| `sim/action` | the actions, and the messages that carry them (`MessageToZoneLayer`, `MessageToZone`, `MessageToWorld`) |
+
+- `message.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `message.Bouncer`.
+- `onfail.Retry` and `onfail.Redirect` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
+- A message with no `OnFail` is dropped, and logged.
 
 ## Reading other scopes
 
