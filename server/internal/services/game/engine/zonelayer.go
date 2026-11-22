@@ -195,11 +195,14 @@ func RestoreZoneLayerEngine(data []byte, env *Env, seed uint64) (*ZoneLayerEngin
 	if message.ZoneLayerAddress(st.ID) != address {
 		return nil, fmt.Errorf("%v: the state is of the zonelayer %d", address, st.ID)
 	}
-	e := NewZoneLayerEngine(st, env, seed)
-	e.tick = tick
-	if e.selfNext, err = readCheckpointRest(r, version, &e.cell, &e.sched); err != nil {
+	rest, err := readCheckpointRest[action.ZoneLayerAction](r, version)
+	if err != nil {
 		return nil, fmt.Errorf("%v: %w", address, err)
 	}
+	e := NewZoneLayerEngine(st, env, seed)
+	e.tick = tick
+	e.sched, e.selfNext = rest.sched, rest.self
+	e.cell.restore(rest.cell)
 	return e, nil
 }
 

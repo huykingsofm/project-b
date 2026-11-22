@@ -11,7 +11,7 @@
 | `RestoreZoneEngine(data, env, seed, tilesOf)` | the same for a zone; `tilesOf` gives the map of the zone by its ID |
 | `RestoreZoneLayerEngine(data, env, seed)` | the same for a zonelayer |
 
-- A restore registers the engine in the router of `env`, as `New...Engine` does.
+- A restore registers the engine in the router of `env`, as `New...Engine` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
 - What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `ZoneLayerEngine.EnsureRegen(every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
 - A checkpoint that is cut, has a byte too many, is of another data version or of another scope is an error, never a panic.
 
