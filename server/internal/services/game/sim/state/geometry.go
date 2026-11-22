@@ -1,7 +1,7 @@
 package state
 
-// Vec is a position or a distance, in units. Every position, radius and distance of the simulation is in
-// units; only the map knows how it is cut into tiles (package tilemap).
+// Vec is a position or a distance, in units. Every position, radius and distance of the simulation
+// is in units; only the map knows how it is cut into tiles (package tilemap).
 type Vec struct{ X, Y int32 }
 
 // Add returns the sum of the two vectors.
@@ -26,8 +26,10 @@ const (
 	NorthWest
 )
 
-var dirVec = [...]Vec{NoDir: {0, 0}, North: {0, -1}, NorthEast: {1, -1}, East: {1, 0}, SouthEast: {1, 1},
-	South: {0, 1}, SouthWest: {-1, 1}, West: {-1, 0}, NorthWest: {-1, -1}}
+var dirVec = [...]Vec{
+	NoDir: {0, 0}, North: {0, -1}, NorthEast: {1, -1}, East: {1, 0}, SouthEast: {1, 1},
+	South: {0, 1}, SouthWest: {-1, 1}, West: {-1, 0}, NorthWest: {-1, -1},
+}
 
 // Vec returns the step of one unit in the direction, in each axis it moves in.
 func (d Dir) Vec() Vec {
@@ -42,7 +44,9 @@ type Rect struct{ Min, Max Vec }
 
 // RectCovering returns the smallest rectangle that holds both positions.
 func RectCovering(a, b Vec) Rect {
-	return Rect{Min: Vec{X: min(a.X, b.X), Y: min(a.Y, b.Y)}, Max: Vec{X: max(a.X, b.X), Y: max(a.Y, b.Y)}}
+	return Rect{
+		Min: Vec{X: min(a.X, b.X), Y: min(a.Y, b.Y)}, Max: Vec{X: max(a.X, b.X), Y: max(a.Y, b.Y)},
+	}
 }
 
 // Grown returns the rectangle with n more units on every side.

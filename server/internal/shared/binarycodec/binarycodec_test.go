@@ -79,7 +79,9 @@ func TestAStringThatClaimsMoreBytesThanThereAreIsRefused(t *testing.T) {
 }
 
 func TestAnIntegerOfMoreThan64BitsIsABadValue(t *testing.T) {
-	r := binarycodec.NewReader([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01})
+	r := binarycodec.NewReader(
+		[]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01},
+	)
 	if r.Uvarint() != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
 		t.Fatalf("error %v", r.Err())
 	}

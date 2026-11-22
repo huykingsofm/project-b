@@ -9,11 +9,11 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/channels"
 )
 
-// replayLogHashEvery is every how many ticks an engine records the hash of its state: it costs as much
-// as the state is big, so it is taken at checkpoints and not at every tick. A replay that finds a
-// difference at a checkpoint runs the ticks since the one before it again to find where it began.
-// Each engine has its own checkpoints (see recordHash), so that the engines do not all hash at the same
-// tick.
+// replayLogHashEvery is every how many ticks an engine records the hash of its state: it costs as
+// much as the state is big, so it is taken at checkpoints and not at every tick. A replay that
+// finds a difference at a checkpoint runs the ticks since the one before it again to find where it
+// began. Each engine has its own checkpoints (see recordHash), so that the engines do not all hash
+// at the same tick.
 var replayLogHashEvery = config.NewVar("replay_log.hash_every_ticks", 20, config.Range(1, 100000))
 
 // cell is what every engine has to talk to the other engines: its address and channels, the
@@ -31,10 +31,19 @@ type cell struct {
 	bounce         bouncer
 }
 
-func newCell(me action.Address, router *Router, cfg *config.Store, rpl replay.Log, stable *StableStateRegistry, queue int) cell {
+func newCell(
+	me action.Address,
+	router *Router,
+	cfg *config.Store,
+	rpl replay.Log,
+	stable *StableStateRegistry,
+	queue int,
+) cell {
 	in, out := NewChannel(me, queue)
 	router.Register(out)
-	return cell{me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl)}
+	return cell{
+		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
+	}
 }
 
 // newRand makes the random numbers of an engine: the seed of the cluster and the address of the
@@ -54,10 +63,11 @@ func (c *cell) snapshot(tick uint64) *config.Snapshot {
 	return s
 }
 
-// recordHash writes the hash of the state to the replay log at every replayLogHashEvery-th tick. Where the
-// count starts depends on the address of the engine (its ID times 3, plus its scope: there are three
-// scopes, and the IDs of one scope follow each other), so that the engines of a cluster do not all hash
-// in the same tick and make a peak of work there. hash is only called when it is written.
+// recordHash writes the hash of the state to the replay log at every replayLogHashEvery-th tick.
+// Where the count starts depends on the address of the engine (its ID times 3, plus its scope:
+// there are three scopes, and the IDs of one scope follow each other), so that the engines of a
+// cluster do not all hash in the same tick and make a peak of work there. hash is only called when
+// it is written.
 func (c *cell) recordHash(cfg *config.Snapshot, tick uint64, hash func() uint64) {
 	every := uint64(replayLogHashEvery.Get(cfg))
 	offset := uint64(c.me.ID)*3 + uint64(c.me.Scope)
@@ -76,8 +86,8 @@ func (c *cell) settle(cfg *config.Snapshot) {
 	}
 }
 
-// received takes the messages that other engines sent since the last tick, in the order they arrived,
-// and writes each to the replay log.
+// received takes the messages that other engines sent since the last tick, in the order they
+// arrived, and writes each to the replay log.
 func (c *cell) received(tick uint64) []action.Message {
 	messages := channels.Drain(c.in.In)
 	for _, m := range messages {
@@ -86,8 +96,8 @@ func (c *cell) received(tick uint64) []action.Message {
 	return messages
 }
 
-// receivedActions returns the actions of the messages that were sent to an engine of the scope of A, in
-// the order they arrived.
+// receivedActions returns the actions of the messages that were sent to an engine of the scope of
+// A, in the order they arrived.
 func (c *cell) receivedActions[A action.Action](tick uint64) []A {
 	var out []A
 	for _, m := range c.received(tick) {

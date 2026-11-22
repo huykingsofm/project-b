@@ -146,6 +146,10 @@ After startup nothing panics: a mistake found while running is returned as an `e
 
 Written data has two versions: the format of the container (owned by the library, such as `segmentlog`) and the version of the data (written in the meta by the user of the container and passed to `Decode`). A breaking change to an `Encode` makes a new data version and keeps the `Decode` of the older ones until nothing of them can be read; it never overwrites. While the project is in pre-alpha (no official production, until the owner says it is over) there is no version and no back-compatibility for any breaking change in the code, not only written data: a breaking change is made as it is and everything that depends on it is refactored.
 
+### [R33. A line is at most 100 columns (hard)](r33-line-length.md)
+
+No line of code or comment is longer than 100 columns (a tab is 4); `lll` checks it in `make ci`. Comments are wrapped, code is broken after the commas inside brackets or after `&&` and `||`, and no tool does it for us.
+
 ## 5. Ways of working
 
 ### [Ways of working](ways-of-working.md)

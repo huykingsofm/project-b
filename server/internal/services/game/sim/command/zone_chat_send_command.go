@@ -29,7 +29,9 @@ func (c ZoneChatSendCommand) Encode(w *binarycodec.Writer) error {
 }
 
 // decodeZoneChatSendCommand reads what Encode wrote.
-func decodeZoneChatSendCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
+func decodeZoneChatSendCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
 	c := ZoneChatSendCommand{FromID: state.CharacterID(r.Uvarint()), Text: r.String()}
 	return c, r.Err()
 }

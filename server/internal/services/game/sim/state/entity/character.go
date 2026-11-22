@@ -2,8 +2,8 @@ package entity
 
 import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 
-// CharacterEntity is the body of a character in a zonelayer. Which character it is the body of is in
-// the state of the zonelayer, not here.
+// CharacterEntity is the body of a character in a zonelayer. Which character it is the body of is
+// in the state of the zonelayer, not here.
 type CharacterEntity struct {
 	EntityID state.EntityID
 	Pos      state.Vec

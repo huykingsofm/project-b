@@ -18,7 +18,11 @@ func (ZoneLayerCharacterItemPickupCommand) ID() ID { return ZoneLayerCharacterIt
 func (c ZoneLayerCharacterItemPickupCommand) Clone() ZoneLayerCommand { return c }
 
 func (c ZoneLayerCharacterItemPickupCommand) TranslateZoneLayer() []action.ZoneLayerAction {
-	return []action.ZoneLayerAction{&action.ZoneLayerCharacterItemPickupAction{CharacterID: c.CharacterID, ItemEntityID: c.ItemEntityID}}
+	return []action.ZoneLayerAction{
+		&action.ZoneLayerCharacterItemPickupAction{
+			CharacterID: c.CharacterID, ItemEntityID: c.ItemEntityID,
+		},
+	}
 }
 
 // Encode writes the fields of the command, not its ID: package command writes the ID first.
@@ -29,7 +33,11 @@ func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binarycodec.Writer) error
 }
 
 // decodeZoneLayerCharacterItemPickupCommand reads what Encode wrote.
-func decodeZoneLayerCharacterItemPickupCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
-	c := ZoneLayerCharacterItemPickupCommand{CharacterID: state.CharacterID(r.Uvarint()), ItemEntityID: state.EntityID(r.Uvarint())}
+func decodeZoneLayerCharacterItemPickupCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
+	c := ZoneLayerCharacterItemPickupCommand{
+		CharacterID: state.CharacterID(r.Uvarint()), ItemEntityID: state.EntityID(r.Uvarint()),
+	}
 	return c, r.Err()
 }

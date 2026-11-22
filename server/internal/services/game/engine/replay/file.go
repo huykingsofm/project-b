@@ -28,18 +28,19 @@ type FileLogOptions struct {
 }
 
 // FileLog is a Log that writes to files, one log for each engine, in the directory
-// `<dir>/<scope>-<id>/` of the engine (see segmentlog). Each engine writes only to its own log with no lock
-// shared with the others: the first record of an engine opens its log, and the records of a tick are kept in
-// a buffer that EndTick hands to the goroutine that writes. So the methods of an engine must be called from
-// one goroutine at a time, which they are: they are called by the engine itself.
+// `<dir>/<scope>-<id>/` of the engine (see segmentlog). Each engine writes only to its own log with
+// no lock shared with the others: the first record of an engine opens its log, and the records of a
+// tick are kept in a buffer that EndTick hands to the goroutine that writes. So the methods of an
+// engine must be called from one goroutine at a time, which they are: they are called by the engine
+// itself.
 //
-// A record that cannot be written (an action with no number, a command with no codec) is not written, and the
-// log is marked as failed: Err returns the first error, which is also logged. A log that failed is not enough
-// to replay from.
+// A record that cannot be written (an action with no number, a command with no codec) is not
+// written, and the log is marked as failed: Err returns the first error, which is also logged. A
+// log that failed is not enough to replay from.
 //
-// Records are the bytes `[kind][tick][body]`, with the whole tick in each so that a record does not depend on
-// the segment it is in. The meta of a segment is the version, the engine address, the seed and the tick of its
-// first record.
+// Records are the bytes `[kind][tick][body]`, with the whole tick in each so that a record does not
+// depend on the segment it is in. The meta of a segment is the version, the engine address, the
+// seed and the tick of its first record.
 type FileLog struct {
 	dir  string
 	opts FileLogOptions
@@ -51,8 +52,9 @@ type FileLog struct {
 
 // engineLog is the log of one engine.
 type engineLog struct {
-	w       *segmentlog.Writer // nil when the log of the engine could not be opened
-	err     error              // why it could not: the engine does not try again, as a writer that failed does not
+	w *segmentlog.Writer // nil when the log of the engine could not be opened
+	// why it could not: the engine does not try again, as a writer that failed does not
+	err     error
 	scratch binarycodec.Writer // used by the goroutine of the engine only
 }
 
@@ -97,7 +99,13 @@ func (f *FileLog) fail(engine action.Address, err error) {
 	}
 	f.mu.Unlock()
 	if first {
-		logging.Error("the replay log could not record and is not enough to replay from", "engine", engine, "err", err)
+		logging.Error(
+			"the replay log could not record and is not enough to replay from",
+			"engine",
+			engine,
+			"err",
+			err,
+		)
 	}
 }
 
@@ -119,9 +127,16 @@ func (f *FileLog) log(engine action.Address) (*engineLog, error) {
 	})
 	l := &engineLog{w: w, err: err}
 	f.engines.Store(engine, l)
-	if err != nil && f.failure == nil { // reported here, once: record does not report it again for each record
+	// reported here, once: record does not report it again for each record
+	if err != nil && f.failure == nil {
 		f.failure = err
-		logging.Error("the replay log could not record and is not enough to replay from", "engine", engine, "err", err)
+		logging.Error(
+			"the replay log could not record and is not enough to replay from",
+			"engine",
+			engine,
+			"err",
+			err,
+		)
 	}
 	return l, err
 }
@@ -166,7 +181,9 @@ func (f *FileLog) Hash(engine action.Address, tick uint64, hash func() uint64) {
 	f.record(engine, Record{Kind: KindHash, Tick: tick, Value: hash()})
 }
 
-func (f *FileLog) StableRead(engine action.Address, tick uint64, from action.Address, copyTick uint64) {
+func (f *FileLog) StableRead(
+	engine action.Address, tick uint64, from action.Address, copyTick uint64,
+) {
 	f.record(engine, Record{Kind: KindStableRead, Tick: tick, Source: from, Value: copyTick})
 }
 
@@ -204,8 +221,8 @@ func (f *FileLog) Close() error {
 	return errors.Join(errs...)
 }
 
-// segmentMeta is the meta of a segment that starts with the payload first: the format, the engine, the seed
-// and the tick of that record.
+// segmentMeta is the meta of a segment that starts with the payload first: the format, the engine,
+// the seed and the tick of that record.
 func segmentMeta(engine action.Address, seed uint64, first []byte) []byte {
 	var w binarycodec.Writer
 	w.Uvarint(uint64(formatVersion))
@@ -228,8 +245,15 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 	r := binarycodec.NewReader(meta)
 	version := binarycodec.Version(r.Uvarint())
 	if r.Err() == nil && version != formatVersion {
-		return segmentInfo{}, fmt.Errorf("the replay log is of format %d, this code reads format %d", version, formatVersion)
+		return segmentInfo{}, fmt.Errorf(
+			"the replay log is of format %d, this code reads format %d", version, formatVersion,
+		)
 	}
-	info := segmentInfo{Version: version, Engine: action.DecodeAddress(r, version), Seed: r.Fixed64(), FirstTick: r.Uvarint()}
+	info := segmentInfo{
+		Version:   version,
+		Engine:    action.DecodeAddress(r, version),
+		Seed:      r.Fixed64(),
+		FirstTick: r.Uvarint(),
+	}
 	return info, r.Err()
 }

@@ -114,18 +114,23 @@ func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	}
 }
 
-// Clone returns a copy that shares nothing with the map. The values are copied with their Clone method when
-// the type of the values has one (see package clone), and by assignment otherwise, so the type of the values
-// must be a value (no pointer, slice, map, channel or function in it) or have Clone. The keys are copied by
-// assignment: a key is an identifier, a value that is never changed in place.
+// Clone returns a copy that shares nothing with the map. The values are copied with their Clone
+// method when the type of the values has one (see package clone), and by assignment otherwise, so
+// the type of the values must be a value (no pointer, slice, map, channel or function in it) or
+// have Clone. The keys are copied by assignment: a key is an identifier, a value that is never
+// changed in place.
 func (m *Map[K, V]) Clone() Map[K, V] {
-	return Map[K, V]{index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: clone.Slice(m.vals)}
+	return Map[K, V]{
+		index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: clone.Slice(m.vals),
+	}
 }
 
-// CloneFunc is Clone with a function that copies each value, for a type of values that has no Clone method of
-// its own.
+// CloneFunc is Clone with a function that copies each value, for a type of values that has no Clone
+// method of its own.
 func (m *Map[K, V]) CloneFunc(copyValue func(V) V) Map[K, V] {
-	c := Map[K, V]{index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: make([]V, len(m.vals))}
+	c := Map[K, V]{
+		index: maps.Clone(m.index), keys: slices.Clone(m.keys), vals: make([]V, len(m.vals)),
+	}
 	for i, v := range m.vals {
 		c.vals[i] = copyValue(v)
 	}

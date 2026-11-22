@@ -30,7 +30,9 @@ func (c ZoneCharacterEnterCommand) Encode(w *binarycodec.Writer) error {
 }
 
 // decodeZoneCharacterEnterCommand reads what Encode wrote.
-func decodeZoneCharacterEnterCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
+func decodeZoneCharacterEnterCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
 	ch, err := zonelayerstate.DecodeCharacter(r, version)
 	return ZoneCharacterEnterCommand{Character: ch}, err
 }

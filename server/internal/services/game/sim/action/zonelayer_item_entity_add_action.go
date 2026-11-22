@@ -5,11 +5,12 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
-// ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the removal
-// of it (ZoneLayerItemEntityRemoveAction) for the end of its expiry. It is how an item comes to the
-// ground anywhere, and how it comes back when it could not be taken: the world sends it when the inventory
-// is full, and a pickup sends it to its own zonelayer when its message to the world cannot be delivered.
-// The item keeps its kind, count, position and expiry, gets a new entity, and its expiry starts again.
+// ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the
+// removal of it (ZoneLayerItemEntityRemoveAction) for the end of its expiry. It is how an item
+// comes to the ground anywhere, and how it comes back when it could not be taken: the world sends
+// it when the inventory is full, and a pickup sends it to its own zonelayer when its message to the
+// world cannot be delivered. The item keeps its kind, count, position and expiry, gets a new
+// entity, and its expiry starts again.
 type ZoneLayerItemEntityAddAction struct {
 	ItemID state.ItemID
 	Count  uint32
@@ -22,7 +23,9 @@ func (a *ZoneLayerItemEntityAddAction) ID() ID          { return ZoneLayerItemEn
 func (a *ZoneLayerItemEntityAddAction) Priority() int16 { return PriorityResolve }
 
 // ApplyZoneLayer puts the items on the ground and sets their removal.
-func (a *ZoneLayerItemEntityAddAction) ApplyZoneLayer(c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, _ *Plan[ZoneLayerAction]) {
+func (a *ZoneLayerItemEntityAddAction) ApplyZoneLayer(
+	c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, _ *Plan[ZoneLayerAction],
+) {
 	if a.Count == 0 {
 		return
 	}

@@ -133,10 +133,10 @@ func (t *Table[T]) Dirty() []int { return slices.Sorted(maps.Keys(t.dirty)) }
 // ClearDirty forgets which rows changed.
 func (t *Table[T]) ClearDirty() { t.dirty = nil }
 
-// Clone returns a copy that shares nothing with the table: the rows are copied with their Clone method
-// when the type of the rows has one (see package clone), and by assignment otherwise, so the type of the
-// rows must be a value or have Clone. The indexes are copied too, so the copy can be searched at once. It
-// has no dirty rows.
+// Clone returns a copy that shares nothing with the table: the rows are copied with their Clone
+// method when the type of the rows has one (see package clone), and by assignment otherwise, so the
+// type of the rows must be a value or have Clone. The indexes are copied too, so the copy can be
+// searched at once. It has no dirty rows.
 func (t *Table[T]) Clone() Table[T] {
 	c := Table[T]{rows: clone.Slice(t.rows)}
 	if t.indexBy != nil {

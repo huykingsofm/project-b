@@ -19,7 +19,11 @@ func (ZoneLayerCharacterMoveCommand) ID() ID { return ZoneLayerCharacterMoveComm
 func (c ZoneLayerCharacterMoveCommand) Clone() ZoneLayerCommand { return c }
 
 func (c ZoneLayerCharacterMoveCommand) TranslateZoneLayer() []action.ZoneLayerAction {
-	return []action.ZoneLayerAction{&action.ZoneLayerCharacterMoveAction{CharacterID: c.CharacterID, Dir: c.Dir, Ticks: c.Ticks}}
+	return []action.ZoneLayerAction{
+		&action.ZoneLayerCharacterMoveAction{
+			CharacterID: c.CharacterID, Dir: c.Dir, Ticks: c.Ticks,
+		},
+	}
 }
 
 // Encode writes the fields of the command, not its ID: package command writes the ID first.
@@ -31,7 +35,13 @@ func (c ZoneLayerCharacterMoveCommand) Encode(w *binarycodec.Writer) error {
 }
 
 // decodeZoneLayerCharacterMoveCommand reads what Encode wrote.
-func decodeZoneLayerCharacterMoveCommand(r *binarycodec.Reader, version binarycodec.Version) (Command, error) {
-	c := ZoneLayerCharacterMoveCommand{CharacterID: state.CharacterID(r.Uvarint()), Dir: state.Dir(r.Uint8()), Ticks: uint32(r.Uvarint())}
+func decodeZoneLayerCharacterMoveCommand(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (Command, error) {
+	c := ZoneLayerCharacterMoveCommand{
+		CharacterID: state.CharacterID(r.Uvarint()),
+		Dir:         state.Dir(r.Uint8()),
+		Ticks:       uint32(r.Uvarint()),
+	}
 	return c, r.Err()
 }

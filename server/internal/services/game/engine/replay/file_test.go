@@ -15,7 +15,9 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/segmentlog"
 )
 
-var testFileLogOptions = FileLogOptions{Seed: 42, SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4}
+var testFileLogOptions = FileLogOptions{
+	Seed: 42, SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
+}
 
 func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Record, error) {
 	t.Helper()
@@ -31,11 +33,14 @@ func readLog(t *testing.T, dir string, engine action.Address, from uint64) ([]Re
 	return out, r.Err()
 }
 
-// recordsOfEveryKind writes a record of every kind for an engine at a tick, and returns what it wrote.
+// recordsOfEveryKind writes a record of every kind for an engine at a tick, and returns what it
+// wrote.
 func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	from := action.ZoneLayerAddress(3)
 	ids := []action.ID{action.ZoneLayerCharacterMoveActionID, action.ZoneChatSendActionID}
-	ch := zonelayerstate.Character{CharacterID: 7, Name: "Binh", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250}
+	ch := zonelayerstate.Character{
+		CharacterID: 7, Name: "Binh", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+	}
 	ch.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, tick+6)
 	enter := command.ZoneCharacterEnterCommand{Character: ch}
 	move := command.ZoneLayerCharacterMoveCommand{CharacterID: 7, Dir: state.East, Ticks: 3}
@@ -51,11 +56,23 @@ func recordsOfEveryKind(log Log, engine action.Address, tick uint64) []Record {
 	log.EndTick(engine, tick)
 	return []Record{
 		{Kind: KindConfig, Engine: engine, Tick: tick, Value: 5},
-		{Kind: KindInbound, Engine: engine, Tick: tick, Header: action.Header{From: from, Seq: tick * 10}, Actions: ids},
+		{
+			Kind:    KindInbound,
+			Engine:  engine,
+			Tick:    tick,
+			Header:  action.Header{From: from, Seq: tick * 10},
+			Actions: ids,
+		},
 		{Kind: KindCommand, Engine: engine, Tick: tick, Command: chat},
 		{Kind: KindCommand, Engine: engine, Tick: tick, Command: enter},
 		{Kind: KindCommand, Engine: engine, Tick: tick, Command: move},
-		{Kind: KindStableRead, Engine: engine, Tick: tick, Source: action.ZoneAddress(2), Value: tick - 1},
+		{
+			Kind:   KindStableRead,
+			Engine: engine,
+			Tick:   tick,
+			Source: action.ZoneAddress(2),
+			Value:  tick - 1,
+		},
 		{Kind: KindHash, Engine: engine, Tick: tick, Value: 0xdeadbeefcafef00d + tick},
 	}
 }
@@ -76,7 +93,12 @@ func TestEveryKindOfRecordComesBackAsItWasWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %d records and want %d; first difference:\n%s", len(got), len(want), firstDifference(got, want))
+		t.Fatalf(
+			"got %d records and want %d; first difference:\n%s",
+			len(got),
+			len(want),
+			firstDifference(got, want),
+		)
 	}
 }
 
@@ -138,7 +160,12 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 		t.Fatal(err)
 	}
 	if len(got) != 9*7 || got[0].Tick != 12 || got[len(got)-1].Tick != 20 {
-		t.Fatalf("%d records from %d to %d, want 63 from 12 to 20", len(got), got[0].Tick, got[len(got)-1].Tick)
+		t.Fatalf(
+			"%d records from %d to %d, want 63 from 12 to 20",
+			len(got),
+			got[0].Tick,
+			got[len(got)-1].Tick,
+		)
 	}
 }
 
@@ -207,7 +234,16 @@ func TestTheLogOfAnotherEngineIsRefused(t *testing.T) {
 
 func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 	engine := action.ZoneLayerAddress(1)
-	for _, p := range [][]byte{nil, {}, {99}, {byte(KindInbound)}, {byte(KindInbound), 1, 3, 1, 1, 2, 5}, {byte(KindHash), 1, 1, 2}, {byte(KindCommand), 1, 0xff, 0xff, 0x7f}, {byte(KindConfig), 1, 1, 9}} {
+	for _, p := range [][]byte{
+		nil,
+		{},
+		{99},
+		{byte(KindInbound)},
+		{byte(KindInbound), 1, 3, 1, 1, 2, 5},
+		{byte(KindHash), 1, 1, 2},
+		{byte(KindCommand), 1, 0xff, 0xff, 0x7f},
+		{byte(KindConfig), 1, 1, 9},
+	} {
 		if _, err := decodeRecord(engine, formatVersion, p); err == nil {
 			t.Errorf("%v was read", p)
 		}
@@ -217,7 +253,9 @@ func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachRecord(t *testing.T) {
 	dir := t.TempDir()
 	engine := action.WorldAddress(1)
-	os.WriteFile(engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644)
+	os.WriteFile(
+		engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644,
+	)
 	log := NewFileLog(dir, testFileLogOptions)
 	log.ConfigRead(engine, 1, 1)
 	if log.Err() == nil {

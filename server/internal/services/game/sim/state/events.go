@@ -1,9 +1,9 @@
 package state
 
 // Events is the events of a tick, in the order they happened: what the clients of a scope should be
-// told. It is the second region of a state: it is not data, it is not cloned and it is not published.
-// The three scopes share this one container; each scope has its own type of event (E), so an event of
-// one scope cannot be put in the events of another.
+// told. It is the second region of a state: it is not data, it is not cloned and it is not
+// published. The three scopes share this one container; each scope has its own type of event (E),
+// so an event of one scope cannot be put in the events of another.
 type Events[E any] struct{ events []E }
 
 // Add appends an event.

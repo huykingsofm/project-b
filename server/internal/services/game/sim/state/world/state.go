@@ -1,6 +1,6 @@
-// Package world holds the state of the world: the private messages between players and the items of the characters. It follows the
-// same rules as the state of a zonelayer: data and nothing else, changed only through its own methods,
-// with events of its own.
+// Package world holds the state of the world: the private messages between players and the items of
+// the characters. It follows the same rules as the state of a zonelayer: data and nothing else,
+// changed only through its own methods, with events of its own.
 package world
 
 import (
@@ -27,7 +27,8 @@ func (m PrivateChatMessage) Index() map[string]any {
 	return map[string]any{"from": m.FromID, "to": m.ToID}
 }
 
-// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0 is empty.
+// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
+// is empty.
 type InventorySlot struct {
 	ItemID state.ItemID
 	Count  uint32
@@ -51,7 +52,8 @@ type State struct {
 	Tick    uint64
 	Private table.Table[PrivateChatMessage]
 
-	// Inventories holds the slots of every character: the items of a character belong to the world (R28).
+	// Inventories holds the slots of every character: the items of a character belong to the world
+	// (R28).
 	Inventories orderedmap.Map[state.CharacterID, Inventory]
 
 	// Events: not data, never cloned.
@@ -63,7 +65,12 @@ func NewState(worldID state.WorldID) *State { return &State{ID: worldID} }
 
 // Clone returns a copy of the data, with an empty event.
 func (s *State) Clone() *State {
-	return &State{ID: s.ID, Tick: s.Tick, Private: s.Private.Clone(), Inventories: s.Inventories.CloneFunc(Inventory.Clone)}
+	return &State{
+		ID:          s.ID,
+		Tick:        s.Tick,
+		Private:     s.Private.Clone(),
+		Inventories: s.Inventories.CloneFunc(Inventory.Clone),
+	}
 }
 
 // SetTick sets the tick that the state is at.
@@ -76,15 +83,23 @@ func (s *State) TakeEvents() []event.Event { return s.events.Take() }
 func (s *State) SendPrivateMessage(m PrivateChatMessage) {
 	s.Private.Add(m)
 	s.Private.Trim(chatKeep)
-	s.events.Add(event.PrivateChatMessageSent{FromID: m.FromID, ToID: m.ToID, Text: m.Text, Tick: m.Tick})
+	s.events.Add(
+		event.PrivateChatMessageSent{FromID: m.FromID, ToID: m.ToID, Text: m.Text, Tick: m.Tick},
+	)
 }
 
-// AddItemToCharacter puts count items of a kind in the inventory of a character and returns how many did
-// not fit. The inventory has slotLimit slots (made when it is first needed, and made longer, never
-// shorter, when the limit grows), and a slot holds at most stackLimit items of one kind. The items fill the
-// slots that already hold that kind first, and then the empty slots, in order. The events tell the
-// clients how many were added.
-func (s *State) AddItemToCharacter(characterID state.CharacterID, itemID state.ItemID, count uint32, inventorySlotLimit int, stackLimit uint32) uint32 {
+// AddItemToCharacter puts count items of a kind in the inventory of a character and returns how
+// many did not fit. The inventory has slotLimit slots (made when it is first needed, and made
+// longer, never shorter, when the limit grows), and a slot holds at most stackLimit items of one
+// kind. The items fill the slots that already hold that kind first, and then the empty slots, in
+// order. The events tell the clients how many were added.
+func (s *State) AddItemToCharacter(
+	characterID state.CharacterID,
+	itemID state.ItemID,
+	count uint32,
+	inventorySlotLimit int,
+	stackLimit uint32,
+) uint32 {
 	inventory, _ := s.Inventories.Get(characterID)
 	inventory = inventory.Clone()
 	for len(inventory.Slots) < inventorySlotLimit {
@@ -94,14 +109,18 @@ func (s *State) AddItemToCharacter(characterID state.CharacterID, itemID state.I
 	left = fillEmptyInventorySlots(inventory.Slots, itemID, left, stackLimit)
 	s.Inventories.Set(characterID, inventory)
 	if added := count - left; added > 0 {
-		s.events.Add(event.CharacterItemAdded{CharacterID: characterID, ItemID: itemID, Count: added})
+		s.events.Add(
+			event.CharacterItemAdded{CharacterID: characterID, ItemID: itemID, Count: added},
+		)
 	}
 	return left
 }
 
-// topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to stackLimit
-// in each, and returns how many are left.
-func topUpInventorySlotsOfKind(slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32) uint32 {
+// topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
+// stackLimit in each, and returns how many are left.
+func topUpInventorySlotsOfKind(
+	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
+) uint32 {
 	for i := range slots {
 		if left == 0 {
 			return 0
@@ -116,9 +135,11 @@ func topUpInventorySlotsOfKind(slots []InventorySlot, itemID state.ItemID, left 
 	return left
 }
 
-// fillEmptyInventorySlots puts items in the empty slots, in order, up to stackLimit in each, and returns how
-// many are left.
-func fillEmptyInventorySlots(slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32) uint32 {
+// fillEmptyInventorySlots puts items in the empty slots, in order, up to stackLimit in each, and
+// returns how many are left.
+func fillEmptyInventorySlots(
+	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
+) uint32 {
 	for i := range slots {
 		if left == 0 {
 			return 0

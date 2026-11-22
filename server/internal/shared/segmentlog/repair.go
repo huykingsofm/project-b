@@ -10,17 +10,18 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
 )
 
-// repair makes the last segment of the log in dir whole after a crash. What follows the last whole batch (a
-// record that is cut off, or records whose commit is missing) is cut from the file, and a segment with no whole
-// batch is deleted, and so is one whose header was never written (cut off, or zeros). Only the last segment can
-// have been written when the crash came; damage anywhere else is not repaired and is reported when the segment is
-// read.
+// repair makes the last segment of the log in dir whole after a crash. What follows the last whole
+// batch (a record that is cut off, or records whose commit is missing) is cut from the file, and a
+// segment with no whole batch is deleted, and so is one whose header was never written (cut off, or
+// zeros). Only the last segment can have been written when the crash came; damage anywhere else is
+// not repaired and is reported when the segment is read.
 //
-// What repair removes is not thrown away: the bytes that were cut are kept next to the segment, in a file named
-// <segment>.discarded-<offset>, and a warning says so, because the bytes after the last whole batch are a
-// batch that a crash cut or whole batches after damage in the middle of the segment, and repair cannot tell
-// the two apart. A segment whose header is of another format, or whose header does not match its crc, is not
-// repaired: Open returns the error and the file is left as it is.
+// What repair removes is not thrown away: the bytes that were cut are kept next to the segment, in
+// a file named <segment>.discarded-<offset>, and a warning says so, because the bytes after the
+// last whole batch are a batch that a crash cut or whole batches after damage in the middle of the
+// segment, and repair cannot tell the two apart. A segment whose header is of another format, or
+// whose header does not match its crc, is not repaired: Open returns the error and the file is left
+// as it is.
 func repair(dir string) error {
 	segments, err := Segments(dir)
 	if err != nil || len(segments) == 0 {
@@ -86,7 +87,17 @@ func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	logging.Warn("segmentlog cut what follows the last whole batch of a segment and kept it", "segment", filepath.Base(path), "from", from, "bytes", to-from, "kept_in", filepath.Base(name))
+	logging.Warn(
+		"segmentlog cut what follows the last whole batch of a segment and kept it",
+		"segment",
+		filepath.Base(path),
+		"from",
+		from,
+		"bytes",
+		to-from,
+		"kept_in",
+		filepath.Base(name),
+	)
 	return syncDir(dir)
 }
 
@@ -98,8 +109,9 @@ func removeSegment(dir, path string) error {
 	return syncDir(dir)
 }
 
-// syncDir forces the entries of a directory to disk: the file that was made, or deleted, in it is not durable
-// until then, and after a power loss a segment that was synced could be missing from its directory.
+// syncDir forces the entries of a directory to disk: the file that was made, or deleted, in it is
+// not durable until then, and after a power loss a segment that was synced could be missing from
+// its directory.
 func syncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {

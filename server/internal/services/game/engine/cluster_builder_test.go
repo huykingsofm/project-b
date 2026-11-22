@@ -25,7 +25,9 @@ func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {
 
 func TestANilEmitterOrReplayLogKeepsTheDefault(t *testing.T) {
 	c, err := engine.NewBuilder().
-		WithReplayLog(nil).WithWorldEmitter(nil).WithZoneEmitter(nil).WithZoneLayerEmitter(nil).WithConfig(nil).
+		WithReplayLog(nil).WithWorldEmitter(nil).WithZoneEmitter(nil).WithZoneLayerEmitter(
+		nil,
+	).WithConfig(nil).
 		WithWorld(engine.WorldParams{ID: 1}).
 		WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}).
 		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 1, Capacity: 2}).
@@ -39,15 +41,27 @@ func TestANilEmitterOrReplayLogKeepsTheDefault(t *testing.T) {
 func TestABuilderThatCannotMakeAClusterSaysWhy(t *testing.T) {
 	world := engine.WorldParams{ID: 1}
 	cases := map[string]*engine.ClusterBuilder{
-		"no world":                                engine.NewBuilder(),
-		"a queue of nothing":                      engine.NewBuilder().WithWorld(world).WithQueueSize(0),
-		"a zone without a map":                    engine.NewBuilder().WithWorld(world).WithZone(engine.ZoneParams{ID: 1}),
-		"the same zone twice":                     engine.NewBuilder().WithWorld(world).WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}).WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}),
-		"zonelayers of a zone that was not added": engine.NewBuilder().WithWorld(world).WithZoneLayers(engine.ZoneLayerParams{ZoneID: 9, Count: 1, Capacity: 1}),
-		"zonelayers set twice": engine.NewBuilder().WithWorld(world).WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}).
+		"no world": engine.NewBuilder(),
+		"a queue of nothing": engine.NewBuilder().WithWorld(
+			world,
+		).WithQueueSize(0),
+		"a zone without a map": engine.NewBuilder().WithWorld(world).WithZone(
+			engine.ZoneParams{ID: 1},
+		),
+		"the same zone twice": engine.NewBuilder().WithWorld(world).WithZone(
+			engine.ZoneParams{ID: 1, Tiles: smallMap(t)},
+		).WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}),
+		"zonelayers of a zone that was not added": engine.NewBuilder().WithWorld(
+			world,
+		).WithZoneLayers(engine.ZoneLayerParams{ZoneID: 9, Count: 1, Capacity: 1}),
+		"zonelayers set twice": engine.NewBuilder().WithWorld(world).WithZone(
+			engine.ZoneParams{ID: 1, Tiles: smallMap(t)},
+		).
 			WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 1, Capacity: 1}).
 			WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 1, Capacity: 1}),
-		"zonelayers that hold nobody": engine.NewBuilder().WithWorld(world).WithZone(engine.ZoneParams{ID: 1, Tiles: smallMap(t)}).
+		"zonelayers that hold nobody": engine.NewBuilder().WithWorld(world).WithZone(
+			engine.ZoneParams{ID: 1, Tiles: smallMap(t)},
+		).
 			WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 1, Capacity: 0}),
 	}
 	for name, b := range cases {

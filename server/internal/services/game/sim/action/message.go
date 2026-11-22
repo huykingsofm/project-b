@@ -5,8 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
-// Scope is a kind of engine: the world, a zone or a zonelayer. (Level would clash with the level of a
-// character.)
+// Scope is a kind of engine: the world, a zone or a zonelayer. (Level would clash with the level of
+// a character.)
 type Scope uint8
 
 // The scopes.
@@ -165,8 +165,8 @@ type Message interface {
 	Redirected(Address) Message
 }
 
-// ScopedMessage is a list of actions for one engine, that are put in its plan together, with what a failed
-// delivery means. A message is delivered whole or bounced whole.
+// ScopedMessage is a list of actions for one engine, that are put in its plan together, with what a
+// failed delivery means. A message is delivered whole or bounced whole.
 type ScopedMessage[A Action] struct {
 	Header   Header
 	To       Address
@@ -225,7 +225,9 @@ func (m *ScopedMessage[A]) Redirected(to Address) Message {
 }
 
 // MessageToZoneLayer makes a message for a zonelayer.
-func MessageToZoneLayer(zoneLayerID state.ZoneLayerID, onFail OnFail, actions ...ZoneLayerAction) Message {
+func MessageToZoneLayer(
+	zoneLayerID state.ZoneLayerID, onFail OnFail, actions ...ZoneLayerAction,
+) Message {
 	return newScopedMessage(ZoneLayerAddress(zoneLayerID), onFail, actions)
 }
 
@@ -245,8 +247,8 @@ func (a Address) Encode(w *binarycodec.Writer) {
 	w.Uvarint(uint64(a.ID))
 }
 
-// DecodeAddress reads what Address.Encode wrote, of the data version given. A reader that has failed gives the zero
-// address.
+// DecodeAddress reads what Address.Encode wrote, of the data version given. A reader that has
+// failed gives the zero address.
 func DecodeAddress(r *binarycodec.Reader, version binarycodec.Version) Address {
 	return Address{Scope: Scope(r.Uint8()), ID: uint32(r.Uvarint())}
 }

@@ -47,7 +47,17 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 		if b.stopping {
 			d = action.Decision{Kind: action.DecisionDrop}
 		} else if l.Attempts() >= action.MaxAttempts.Get(cfg) {
-			logging.Warn("message dropped: too many attempts", "from", l.Head().From, "dest", l.Dest(), "reason", r, "attempts", l.Attempts())
+			logging.Warn(
+				"message dropped: too many attempts",
+				"from",
+				l.Head().From,
+				"dest",
+				l.Dest(),
+				"reason",
+				r,
+				"attempts",
+				l.Attempts(),
+			)
 			d = action.Decision{Kind: action.DecisionDrop}
 		}
 	case action.DecisionEscalate:
@@ -57,7 +67,17 @@ func (b *bouncer) handle(cfg *config.Snapshot, l action.Message, r action.Reason
 	}
 	run, ok := decide[d.Kind]
 	if !ok {
-		logging.Error("message dropped: its decision has no kind in the table", "from", l.Head().From, "dest", l.Dest(), "reason", r, "kind", d.Kind)
+		logging.Error(
+			"message dropped: its decision has no kind in the table",
+			"from",
+			l.Head().From,
+			"dest",
+			l.Dest(),
+			"reason",
+			r,
+			"kind",
+			d.Kind,
+		)
 		run = decide[action.DecisionDrop]
 	}
 	run(b, l, d)

@@ -13,9 +13,12 @@ func anActionOfEachKind() []Action {
 	return []Action{
 		&WorldChatPrivateSendAction{}, &WorldCharacterItemAddAction{},
 		&ZoneChatSendAction{}, &ZoneCharacterEnterAction{},
-		&ZoneLayerChatSendAction{}, &ZoneLayerCharacterEnterAction{}, &ZoneLayerCharacterMoveAction{},
-		&ZoneLayerCharacterNormalAttackTriggerAction{}, &ZoneLayerCharacterDamageAction{}, &ZoneLayerCharacterShieldGrantAction{},
-		&ZoneLayerCharacterRegenAction{}, &ZoneLayerCharacterExitToAction{}, &ZoneLayerCharacterItemPickupAction{},
+		&ZoneLayerChatSendAction{}, &ZoneLayerCharacterEnterAction{},
+		&ZoneLayerCharacterMoveAction{},
+		&ZoneLayerCharacterNormalAttackTriggerAction{}, &ZoneLayerCharacterDamageAction{},
+		&ZoneLayerCharacterShieldGrantAction{},
+		&ZoneLayerCharacterRegenAction{}, &ZoneLayerCharacterExitToAction{},
+		&ZoneLayerCharacterItemPickupAction{},
 		&ZoneLayerItemEntityAddAction{}, &ZoneLayerItemEntityRemoveAction{},
 	}
 }
@@ -46,7 +49,12 @@ func TestEveryActionReturnsItsOwnIDFromTheRegisterAndEveryNumberOfItIsUsed(t *te
 	slices.Sort(got)
 	n := registerSize(t, "id.go")
 	if len(got) != n {
-		t.Fatalf("%d actions and %d IDs in the register: each action has an ID of its own and each ID an action", len(got), n)
+		t.Fatalf(
+			"%d actions and %d IDs in the register: each action has an ID of its own and each ID "+
+				"an action",
+			len(got),
+			n,
+		)
 	}
 	for i, id := range got {
 		if id != ID(i+1) {
@@ -57,10 +65,12 @@ func TestEveryActionReturnsItsOwnIDFromTheRegisterAndEveryNumberOfItIsUsed(t *te
 
 func TestTheNumbersOfTheIDsAndTheCooldownKeysAreFixedForTheFormatOfTheLog(t *testing.T) {
 	// A number that changes breaks every log that was written: add at the end, never renumber.
-	if WorldChatPrivateSendActionID != 1 || ZoneLayerCharacterMoveActionID != 7 || ZoneLayerItemEntityRemoveActionID != 15 {
+	if WorldChatPrivateSendActionID != 1 || ZoneLayerCharacterMoveActionID != 7 ||
+		ZoneLayerItemEntityRemoveActionID != 15 {
 		t.Fatal("the number of an action ID changed")
 	}
-	if ZoneLayerCharacterMoveActionCooldownKey != 1 || ZoneLayerCharacterNormalAttackTriggerActionCooldownKey != 2 {
+	if ZoneLayerCharacterMoveActionCooldownKey != 1 ||
+		ZoneLayerCharacterNormalAttackTriggerActionCooldownKey != 2 {
 		t.Fatal("the number of a cooldown key changed")
 	}
 	if registerSize(t, "cooldown_key.go") != 2 {

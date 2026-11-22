@@ -1,7 +1,8 @@
-// Package replay is what an engine writes so that a replay can run it again: the Log interface the engines
-// record to, the records, and three logs: NopLog records nothing, MemLog keeps the records in memory (for tests), and
-// FileLog writes them to files, one log for each engine, on top of shared/segmentlog. Read gives the records of a
-// FileLog back. It imports the actions and the commands, but no engine: the engines import it.
+// Package replay is what an engine writes so that a replay can run it again: the Log interface the
+// engines record to, the records, and three logs: NopLog records nothing, MemLog keeps the records
+// in memory (for tests), and FileLog writes them to files, one log for each engine, on top of
+// shared/segmentlog. Read gives the records of a FileLog back. It imports the actions and the
+// commands, but no engine: the engines import it.
 package replay
 
 import (
@@ -23,19 +24,21 @@ import (
 // seed of the engine and time from its tick count.
 type Log interface {
 	Inbound(engine action.Address, tick uint64, h action.Header, ids []action.ID)
-	// WorldCommand, ZoneCommand and ZoneLayerCommand record a command of a client, with the type of its scope.
+	// WorldCommand, ZoneCommand and ZoneLayerCommand record a command of a client, with the type of
+	// its scope.
 	WorldCommand(engine action.Address, tick uint64, c command.WorldCommand)
 	ZoneCommand(engine action.Address, tick uint64, c command.ZoneCommand)
 	ZoneLayerCommand(engine action.Address, tick uint64, c command.ZoneLayerCommand)
 	ConfigRead(engine action.Address, tick uint64, version uint64)
-	// Hash is given a function that takes the hash of the state, and calls it only if it records the
-	// hash: it costs as much as the state is big, so a replay log that records nothing must not make it.
+	// Hash is given a function that takes the hash of the state, and calls it only if it records
+	// the hash: it costs as much as the state is big, so a replay log that records nothing must not
+	// make it.
 	Hash(engine action.Address, tick uint64, hash func() uint64)
-	// StableRead says which copy of the state of another engine the engine read first in the tick: the
-	// tick the copy was taken at, or 0 when there was none.
+	// StableRead says which copy of the state of another engine the engine read first in the tick:
+	// the tick the copy was taken at, or 0 when there was none.
 	StableRead(engine action.Address, tick uint64, from action.Address, copyTick uint64)
-	// EndTick says that the engine has recorded all it will record for the tick. A log that writes to a file
-	// hands what it has kept for the tick to the goroutine that writes it.
+	// EndTick says that the engine has recorded all it will record for the tick. A log that writes
+	// to a file hands what it has kept for the tick to the goroutine that writes it.
 	EndTick(engine action.Address, tick uint64)
 }
 

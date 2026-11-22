@@ -3,8 +3,8 @@
 // package of its own below this one, and its events in a package of its own below that.
 package state
 
-// WorldID names a world, ZoneID a zone and ZoneLayerID a zonelayer. A zonelayer ID is unique in the world,
-// so a message can be addressed to a zonelayer by it alone.
+// WorldID names a world, ZoneID a zone and ZoneLayerID a zonelayer. A zonelayer ID is unique in the
+// world, so a message can be addressed to a zonelayer by it alone.
 type (
 	WorldID     uint32
 	ZoneID      uint32

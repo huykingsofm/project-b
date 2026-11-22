@@ -28,13 +28,18 @@ func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) 
 	}
 	q := pool.Get(cfg)
 	if q.Len() != 0 || len(q.Cancelled()) != 0 || len(q.TooDeep()) != 0 {
-		t.Fatalf("a plan from the pool holds %d entries, %d cancelled, %d cut", q.Len(), len(q.Cancelled()), len(q.TooDeep()))
+		t.Fatalf(
+			"a plan from the pool holds %d entries, %d cancelled, %d cut",
+			q.Len(),
+			len(q.Cancelled()),
+			len(q.TooDeep()),
+		)
 	}
 	if _, ok := q.Next(); ok {
 		t.Fatal("a plan from the pool had something to run")
 	}
-	// the configuration is the one given: with a maximum depth of 1 the command and its child run, and
-	// the grandchild is cut.
+	// the configuration is the one given: with a maximum depth of 1 the command and its child run,
+	// and the grandchild is cut.
 	q.Append(&poolTestAction{})
 	ran := 0
 	for {

@@ -23,7 +23,9 @@ func (s *Snapshot) Version() uint64 { return s.version }
 // its options: if any of them is wrong, no snapshot is made and the error names each one, so a
 // bad document never replaces a good configuration. A name that is not declared is returned in
 // unknown and otherwise ignored.
-func (r *registry) build(version uint64, overrides map[string]string) (snap *Snapshot, unknown []string, err error) {
+func (r *registry) build(
+	version uint64, overrides map[string]string,
+) (snap *Snapshot, unknown []string, err error) {
 	r.mu.Lock()
 	r.frozen = true
 	decls, byName := r.decls, r.byName
@@ -68,6 +70,8 @@ func Defaults() *Snapshot {
 }
 
 // Build returns the snapshot of the given version with the overrides applied to the defaults.
-func Build(version uint64, overrides map[string]string) (snap *Snapshot, unknown []string, err error) {
+func Build(
+	version uint64, overrides map[string]string,
+) (snap *Snapshot, unknown []string, err error) {
 	return std.build(version, overrides)
 }
