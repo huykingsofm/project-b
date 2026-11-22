@@ -117,7 +117,7 @@ func (t *Table[K, V]) attach(col column[K, V]) {
 // Lookup walks the values whose column has the key, in the stable order. A handle that is not a
 // column of this table finds nothing.
 func (t *Table[K, V]) Lookup[IK comparable](h Handle[IK], ik IK) iter.Seq2[K, V] {
-	col, ok := columnOf[K, V, *column1[K, V, IK]](t, h.pos)
+	col, ok := t.columnAt[*column1[K, V, IK]](h.pos)
 	if !ok {
 		return empty[K, V]
 	}
@@ -129,9 +129,9 @@ func (t *Table[K, V]) LookupAs[IK comparable, T any](h Handle[IK], ik IK) iter.S
 	return as[K, V, T](t.Lookup(h, ik))
 }
 
-// LookupFirst walks the values whose column has the first key, whatever the second.
-func (t *Table[K, V]) LookupFirst[A, B comparable](h Handle2[A, B], a A) iter.Seq2[K, V] {
-	col, ok := columnOf[K, V, *column2[K, V, A, B]](t, h.pos)
+// Lookup2First walks the values whose column has the first key, whatever the second.
+func (t *Table[K, V]) Lookup2First[A, B comparable](h Handle2[A, B], a A) iter.Seq2[K, V] {
+	col, ok := t.columnAt[*column2[K, V, A, B]](h.pos)
 	if !ok {
 		return empty[K, V]
 	}
@@ -140,17 +140,22 @@ func (t *Table[K, V]) LookupFirst[A, B comparable](h Handle2[A, B], a A) iter.Se
 
 // Lookup2 walks the values whose column has both keys.
 func (t *Table[K, V]) Lookup2[A, B comparable](h Handle2[A, B], a A, b B) iter.Seq2[K, V] {
-	col, ok := columnOf[K, V, *column2[K, V, A, B]](t, h.pos)
+	col, ok := t.columnAt[*column2[K, V, A, B]](h.pos)
 	if !ok {
 		return empty[K, V]
 	}
 	return t.values(col.keysOf(a, b))
 }
 
-// LookupFirstAs is LookupFirst that gives each value as a T, and leaves out the values that are
+// Lookup2As is Lookup2 that gives each value as a T, and leaves out the values that are not one.
+func (t *Table[K, V]) Lookup2As[A, B comparable, T any](h Handle2[A, B], a A, b B) iter.Seq2[K, T] {
+	return as[K, V, T](t.Lookup2(h, a, b))
+}
+
+// Lookup2FirstAs is Lookup2First that gives each value as a T, and leaves out the values that are
 // not one.
-func (t *Table[K, V]) LookupFirstAs[A, B comparable, T any](h Handle2[A, B], a A) iter.Seq2[K, T] {
-	return as[K, V, T](t.LookupFirst(h, a))
+func (t *Table[K, V]) Lookup2FirstAs[A, B comparable, T any](h Handle2[A, B], a A) iter.Seq2[K, T] {
+	return as[K, V, T](t.Lookup2First(h, a))
 }
 
 // values gives the value of each key that a column found. A column and the data agree, so a key
@@ -166,7 +171,9 @@ func (t *Table[K, V]) values(keys iter.Seq[K]) iter.Seq2[K, V] {
 	}
 }
 
-func columnOf[K comparable, V any, C column[K, V]](t *Table[K, V], pos int) (C, bool) {
+// columnAt returns the column at a position when it is a C: a handle that is not of this table, or
+// of another kind of column, finds none.
+func (t *Table[K, V]) columnAt[C column[K, V]](pos int) (C, bool) {
 	var zero C
 	if pos < 0 || pos >= len(t.columns) {
 		return zero, false

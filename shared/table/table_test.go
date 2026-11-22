@@ -55,7 +55,7 @@ func TestACompositeColumnFindsByTheFirstKeyAloneAndByBoth(t *testing.T) {
 	tb.Set(1, thing{1, "item"})
 	tb.Set(2, thing{1, "body"})
 	tb.Set(3, thing{2, "item"})
-	if got := keysOf[thing](tb.LookupFirst(byOwnerKind, 1)); !slices.Equal(got, []int{1, 2}) {
+	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 1)); !slices.Equal(got, []int{1, 2}) {
 		t.Fatalf("owner 1 has %v, want [1 2]", got)
 	}
 	if got := keysOf[thing](tb.Lookup2(byOwnerKind, 1, "item")); !slices.Equal(got, []int{1}) {
@@ -63,10 +63,10 @@ func TestACompositeColumnFindsByTheFirstKeyAloneAndByBoth(t *testing.T) {
 	}
 	tb.Delete(1)
 	tb.Delete(2)
-	if got := keysOf[thing](tb.LookupFirst(byOwnerKind, 1)); len(got) != 0 {
+	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 1)); len(got) != 0 {
 		t.Fatalf("owner 1 has %v after its values went, want none", got)
 	}
-	if got := keysOf[thing](tb.LookupFirst(byOwnerKind, 2)); !slices.Equal(got, []int{3}) {
+	if got := keysOf[thing](tb.Lookup2First(byOwnerKind, 2)); !slices.Equal(got, []int{3}) {
 		t.Fatalf("owner 2 has %v, want [3]", got)
 	}
 }
@@ -104,6 +104,20 @@ func TestACloneSharesNothingAndItsColumnsAreTheSame(t *testing.T) {
 	}
 }
 
+func TestLookup2AsLeavesOutTheValuesThatAreNotOfTheType(t *testing.T) {
+	var tb table.Table[int, any]
+	tb.Set(1, 10)
+	tb.Set(2, "ten")
+	h := tb.Index2(func(any) (bool, bool, bool) { return true, true, true })
+	n := 0
+	for range tb.Lookup2As[bool, bool, int](h, true, true) {
+		n++
+	}
+	if n != 1 {
+		t.Fatalf("%d ints found, want 1", n)
+	}
+}
+
 func TestAHandleOfAnotherTableOrOfAnotherKindOfColumnFindsNothing(t *testing.T) {
 	tb, byKind, _ := newThings()
 	tb.Set(1, thing{1, "item"})
@@ -112,7 +126,7 @@ func TestAHandleOfAnotherTableOrOfAnotherKindOfColumnFindsNothing(t *testing.T) 
 		t.Fatalf("a handle that is not of the table found %d values", n)
 	}
 	wrong := table.Handle2[int, string]{} // position 0 is a column of one key
-	if n := len(keysOf[thing](tb.LookupFirst(wrong, 1))); n != 0 {
+	if n := len(keysOf[thing](tb.Lookup2First(wrong, 1))); n != 0 {
 		t.Fatalf("a handle of another kind of column found %d values", n)
 	}
 }
