@@ -12,7 +12,7 @@
 | `RestoreZoneLayerEngine(data, env, seed)` | the same for a zonelayer |
 
 - A restore registers the engine in the router of `env`, as `New...Engine` does.
-- The caller adds the crons again, as it did when it made the engine the first time.
+- What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `ZoneLayerEngine.EnsureRegen(every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
 - A checkpoint that is cut, has a byte too many, is of another data version or of another scope is an error, never a panic.
 
 ## What is written
@@ -39,7 +39,6 @@ In this order:
 |---|---|
 | the events of the state | they are not data (R18); the engine gives them to its clients at the end of the tick |
 | the map of a zone | it never changes, and the ID of the zone finds it |
-| the crons | they are made again at startup; `IsDue` needs only the tick |
 | the queues of the engine | what was not yet taken from them is in the replay log |
 | `View`, the registry of the tick, the emitters | made again by the engine |
 

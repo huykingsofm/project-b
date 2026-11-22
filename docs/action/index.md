@@ -17,7 +17,7 @@ Each action lists these keys, in this order, and leaves out the ones that do not
 
 | Key | Meaning |
 |---|---|
-| Kind | intent (from a command), message (from another engine), system (cron), made (added by another action); cancellable, standing |
+| Kind | intent (from a command), message (from another engine), system (heal over time), made (added by another action); cancellable, standing |
 | Priority | when it runs in the tick |
 | Command | the command that makes it |
 | Fields | what it carries |
@@ -54,6 +54,7 @@ What must happen outside a scope goes in its registry and happens after the plan
 | `ToZoneLayer`, `ToZone`, `ToWorld` | a message to that scope |
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick |
+| `CancelWaiting` | cancels the actions a key names (an ID and, if given, an actor) that wait in the scheduler or were set for the next tick before this call; it takes effect when the tick is over |
 
 ## Failed delivery
 

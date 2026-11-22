@@ -6,7 +6,6 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 
 	"github.com/huykingsofm/project-b/server/internal/config"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
@@ -189,7 +188,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		WorldEmitter: b.worldEmitter, ZoneEmitter: b.zoneEmitter,
 		ZoneLayerEmitter: b.zoneLayerEmitter,
 	}
-	return b.assemble(env), nil
+	return b.assemble(env)
 }
 
 // WorldID is the ID of the world that the builder describes. It is 0 until WithWorld is called.
@@ -210,12 +209,12 @@ func (b *ClusterBuilder) BuildIn(env *Env) (*Cluster, error) {
 	if err := b.check(); err != nil {
 		return nil, err
 	}
-	return b.assemble(env), nil
+	return b.assemble(env)
 }
 
 // assemble makes the engines of the world in the environment given and connects them: the same
 // engines whether the environment is the one of a cluster that runs or the one of a replay.
-func (b *ClusterBuilder) assemble(env *Env) *Cluster {
+func (b *ClusterBuilder) assemble(env *Env) (*Cluster, error) {
 	layers := map[state.ZoneID]ZoneLayerParams{}
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
@@ -235,13 +234,13 @@ func (b *ClusterBuilder) assemble(env *Env) *Cluster {
 			zst.AddZoneLayer(nextZoneLayerID, lp.Capacity)
 			env.Graph.AddZoneLayer(zp.ID, nextZoneLayerID)
 			le := NewZoneLayerEngine(zonelayerstate.NewState(nextZoneLayerID, zp.ID), env, b.seed)
-			if lp.RegenEvery > 0 {
-				le.AddCron(lp.RegenEvery, &action.ZoneLayerCharacterRegenAction{})
+			if err := le.EnsureRegen(lp.RegenEvery); err != nil {
+				return nil, err
 			}
 			zonelayers = append(zonelayers, le)
 		}
 		c.zones = append(c.zones, NewZoneEngine(zst, env, b.seed))
 		c.zonelayers = append(c.zonelayers, zonelayers...)
 	}
-	return c
+	return c, nil
 }

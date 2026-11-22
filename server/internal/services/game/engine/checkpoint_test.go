@@ -86,7 +86,6 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.AddCron(10, &action.ZoneLayerCharacterRegenAction{})
 
 	if r.hash() != l.hash() || r.tick != l.tick || r.st.Hash() != l.st.Hash() {
 		t.Fatal("the restored engine has another hash, or another tick")
@@ -104,7 +103,7 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 			t.Fatalf("%d ticks after the restore the hash differs", tick)
 		}
 	}
-	if l.sched.Pending() != 0 {
+	if l.sched.Pending() != 1 { // only the heal, which sets itself again, waits
 		t.Fatalf("the original still waits for %d actions: the test did not run long enough",
 			l.sched.Pending())
 	}
@@ -356,5 +355,47 @@ func BenchmarkCloneZoneLayer(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		l.st.Clone()
+	}
+}
+
+func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *testing.T) {
+	c := aWorldToCheckpoint(t) // the builder asked for healing every 10 ticks
+	l := c.ZoneLayer(1)
+	key := action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID}
+	regen, ok := action.FindWaiting(&l.sched, l.selfNext, key)
+	if !ok || regen.(*action.ZoneLayerCharacterRegenAction).Every != 10 {
+		t.Fatalf("the zonelayer does not wait for the heal that was asked for: %v, %v", regen, ok)
+	}
+	if err := l.EnsureRegen(10); err != nil || l.sched.Pending() != 1 {
+		t.Fatalf("the same period: error %v, %d waiting, want none added", err, l.sched.Pending())
+	}
+	if err := l.EnsureRegen(20); err == nil {
+		t.Fatal("a period that is not the one that waits was accepted")
+	}
+	if err := l.EnsureRegen(0); err == nil {
+		t.Fatal("no healing was accepted while a heal waits")
+	}
+	data, err := l.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := RestoreZoneLayerEngine(data, c.Env, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.EnsureRegen(10); err != nil || r.sched.Pending() != 1 {
+		t.Fatalf("a restored zonelayer: error %v, %d waiting", err, r.sched.Pending())
+	}
+	if err := r.EnsureRegen(20); err == nil {
+		t.Fatal("a restored zonelayer accepted another period than the one it was written with")
+	}
+
+	none := aWorldToCheckpoint(t).ZoneLayer(1)
+	none.sched.Cancel(action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID})
+	if err := none.EnsureRegen(0); err != nil || none.sched.Pending() != 0 {
+		t.Fatalf("no healing asked, none waiting: error %v, %d waiting", err, none.sched.Pending())
+	}
+	if err := none.EnsureRegen(5); err != nil || none.sched.Pending() != 1 {
+		t.Fatalf("healing asked, none waiting: error %v, %d waiting", err, none.sched.Pending())
 	}
 }

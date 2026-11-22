@@ -35,7 +35,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 `engine/zonelayer.go`, `Step`:
 
 1. Take the configuration once; decide on what came back undelivered.
-2. Build the plan: what the engine set for itself, what was scheduled for this tick (and the crons), the messages of other engines, the commands.
+2. Build the plan: what the engine set for itself, what was scheduled for this tick, the messages of other engines, the commands.
 3. Run the plan, one action after another, on the state, in place.
 4. Settle the actions that were cancelled; take what the actions set for the engine.
 5. Hand the events to the emitter.
@@ -95,7 +95,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - Priority, a running pointer, an index by ID and by author. `FindByID` walks the actions of an ID as a type, lazily and with no allocation; `Find` returns a slice.
 - A depth limit on chains of actions.
-- A scheduler (an action set for a tick) and a cron (an action repeated every N ticks).
+- A scheduler (an action set for a tick). What repeats is an action that sets itself again; the scheduler finds and cancels what waits by a key (the ID of the action and its actor), and an action cancels through its registry (`CancelWaiting`), which takes effect when the tick is over.
 - Messages with `OnFail`.
 
 ## Shared libraries and configuration

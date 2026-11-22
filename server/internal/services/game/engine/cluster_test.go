@@ -178,7 +178,7 @@ func TestAKilledCharacterStaysDead(t *testing.T) {
 	}
 }
 
-func TestACronHealsEveryCharacterEveryPeriod(t *testing.T) {
+func TestAZoneLayerHealsEveryCharacterEveryPeriod(t *testing.T) {
 	c, _, _, _ := enginetest.NewWorld(t, 1, 10)
 	hurt := enginetest.NewCharacter(1, "An", 100, 1000, 0)
 	hurt.Health = 50

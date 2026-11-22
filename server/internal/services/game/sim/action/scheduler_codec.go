@@ -71,9 +71,8 @@ func hashActions[A Action](h *state.Hasher, actions []A, w *binarycodec.Writer) 
 }
 
 // EncodeScheduler writes what the scheduler waits for: the last tick it gave out, and the actions
-// set for a later tick, by tick and in the order they were set. The crons are not written: they
-// are made again, in the same order, when the engine starts, and a cron needs nothing but the
-// tick.
+// set for a later tick, by tick and in the order they were set. An action that sets itself again
+// is among them, so what the engine does again and again is written with the rest.
 func EncodeScheduler[A Action](w *binarycodec.Writer, s *Scheduler[A]) error {
 	w.Uvarint(s.last)
 	ticks := make([]uint64, 0, len(s.at))
@@ -94,7 +93,7 @@ func EncodeScheduler[A Action](w *binarycodec.Writer, s *Scheduler[A]) error {
 }
 
 // DecodeScheduler reads what EncodeScheduler wrote, of the data version given, and makes it what
-// the scheduler waits for: the crons it has are kept.
+// the scheduler waits for.
 func DecodeScheduler[A Action](
 	r *binarycodec.Reader, version binarycodec.Version, s *Scheduler[A],
 ) error {

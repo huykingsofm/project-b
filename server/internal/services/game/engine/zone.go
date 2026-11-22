@@ -46,11 +46,6 @@ func NewZoneEngine(st *zonestate.State, env *Env, seed uint64) *ZoneEngine {
 	return e
 }
 
-// AddCron makes actions run every every ticks.
-func (e *ZoneEngine) AddCron(every uint64, actions ...action.ZoneAction) {
-	e.sched.AddCron(every, actions...)
-}
-
 // Send gives the zone a command, without waiting. It reports false when the queue is full.
 func (e *ZoneEngine) Send(c command.ZoneCommand) bool {
 	if c == nil {
@@ -95,10 +90,7 @@ func (e *ZoneEngine) Step() {
 		entry.Action().ApplyZone(ctx, e.st, &e.reg, plan)
 	}
 	next, later := e.reg.TakeSelf()
-	e.selfNext = next
-	for _, t := range later {
-		e.sched.At(t.At, t.Action)
-	}
+	e.selfNext = action.SettleSelf(&e.sched, next, later, e.reg.TakeCancels())
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.EmitZone(e.me, e.tick, events)
@@ -117,8 +109,7 @@ func (e *ZoneEngine) planSelf(plan *action.Plan[action.ZoneAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
-// are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick.
 func (e *ZoneEngine) planScheduled(plan *action.Plan[action.ZoneAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -167,8 +158,7 @@ func (e *ZoneEngine) Checkpoint() ([]byte, error) {
 }
 
 // RestoreZoneEngine makes the engine of a zone from a checkpoint, in the environment given, at the
-// tick of the checkpoint. The map of the zone is the one that tilesOf gives for its ID, and the
-// crons are added again by the caller, as it did when it made the engine the first time.
+// tick of the checkpoint. The map of the zone is the one that tilesOf gives for its ID.
 func RestoreZoneEngine(
 	data []byte, env *Env, seed uint64, tilesOf func(zoneID state.ZoneID) *tilemap.TileMap,
 ) (*ZoneEngine, error) {

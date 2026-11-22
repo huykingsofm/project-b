@@ -10,7 +10,7 @@ import (
 
 func aSchedulerThatWaits() *Scheduler[ZoneLayerAction] {
 	var s Scheduler[ZoneLayerAction]
-	s.AddCron(10, &ZoneLayerCharacterRegenAction{})
+	s.At(30, &ZoneLayerCharacterRegenAction{Every: 10})
 	s.Due(4) // the last tick it gave out
 	s.At(9, &ZoneLayerItemEntityRemoveAction{EntityID: 12})
 	s.At(7, &ZoneLayerCharacterShieldGrantAction{
@@ -28,27 +28,26 @@ func hashOf(s *Scheduler[ZoneLayerAction]) uint64 {
 	return h.Sum()
 }
 
-func TestASchedulerComesBackAsItWasWrittenAndKeepsItsCrons(t *testing.T) {
+func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	s := aSchedulerThatWaits()
 	var w binarycodec.Writer
 	if err := EncodeScheduler(&w, s); err != nil {
 		t.Fatal(err)
 	}
 	var got Scheduler[ZoneLayerAction]
-	got.AddCron(10, &ZoneLayerCharacterRegenAction{}) // made again when the engine starts
 	r := binarycodec.NewReader(w.B)
 	if err := DecodeScheduler(r, 1, &got); err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
-	if hashOf(&got) != hashOf(s) || got.Pending() != 3 {
-		t.Fatalf("what it waits for differs: %d actions, want 3", got.Pending())
+	if hashOf(&got) != hashOf(s) || got.Pending() != 4 {
+		t.Fatalf("what it waits for differs: %d actions, want 4", got.Pending())
 	}
 	var again binarycodec.Writer
 	if err := EncodeScheduler(&again, &got); err != nil || !bytes.Equal(again.B, w.B) {
 		t.Fatalf("it is written differently: %v", err)
 	}
-	// it goes on as the original does: the same actions at the same ticks, the cron included
-	for tick := uint64(5); tick <= 20; tick++ {
+	// it goes on as the original does: the same actions at the same ticks
+	for tick := uint64(5); tick <= 40; tick++ {
 		a, b := s.Due(tick), got.Due(tick)
 		if len(a) != len(b) {
 			t.Fatalf("tick %d: %d actions, want %d", tick, len(b), len(a))

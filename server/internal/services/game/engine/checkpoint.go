@@ -16,7 +16,8 @@ import (
 //
 // It is taken between two ticks, by the goroutine of the engine or while the engine does not run.
 // The queues of the engine are not in it: what was not yet taken from them is in the replay log.
-// The crons are not in it: they are made again when the engine starts.
+// What the engine does again and again is an action that waits, so it is in the scheduler and
+// there is nothing else to write for it.
 
 // engineHash is the hash of an engine: the hash of its state, and what it waits for, the scheduler
 // and the actions it set for itself for the next tick. A restore that waits for something else

@@ -8,29 +8,35 @@ import (
 // regenAmount is the health that every living entity gets each time. It is 1 for now.
 const regenAmount = 1
 
-// ZoneLayerCharacterRegenAction gives a little health to every living entity. It has no state, so
-// one value of it is the action of a cron and runs every time the cron is due.
-type ZoneLayerCharacterRegenAction struct{}
+// ZoneLayerCharacterRegenAction gives a little health to every living entity, and sets itself again
+// Every ticks after. It is how a zonelayer heals as time goes: one such action waits in the
+// scheduler, and the zonelayer is made to heal by setting the first. Every 0 heals once.
+type ZoneLayerCharacterRegenAction struct {
+	Every uint64
+}
 
 func (a *ZoneLayerCharacterRegenAction) ID() ID          { return ZoneLayerCharacterRegenActionID }
 func (a *ZoneLayerCharacterRegenAction) Priority() int16 { return PrioritySystem }
 
-// ApplyZoneLayer heals everyone.
+// ApplyZoneLayer heals everyone and sets the action again.
 func (a *ZoneLayerCharacterRegenAction) ApplyZoneLayer(
-	_ *Context, s *zonelayerstate.State, _ *ZoneLayerRegistry, _ *Plan[ZoneLayerAction],
+	c *Context, s *zonelayerstate.State, r *ZoneLayerRegistry, _ *Plan[ZoneLayerAction],
 ) {
 	s.HealAllEntities(regenAmount)
+	if a.Every > 0 {
+		r.ToSelfAt(c.Tick+a.Every, a)
+	}
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a *ZoneLayerCharacterRegenAction) Encode(w *binarycodec.Writer) {
-	_ = w
+	w.Uvarint(a.Every)
 }
 
 // decodeZoneLayerCharacterRegenAction reads what Encode wrote.
 func decodeZoneLayerCharacterRegenAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (Action, error) {
-	a := &ZoneLayerCharacterRegenAction{}
+	a := &ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
 	return a, r.Err()
 }

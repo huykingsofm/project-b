@@ -70,7 +70,7 @@ How it runs:
 | Choice | Options | What it changes |
 |---|---|---|
 | Decision model | State machine (FSM); behavior tree; utility scoring; GOAP; a mix | How much a designer can add without code, and how complex a monster can be |
-| Where the AI runs | Inside the zonelayer engine as a cron or scheduled action that produces actions; or an engine of its own that sends commands by message | Tick cost per layer (R28, the 45 ms budget), and whether the AI reads a state that is a few ticks old |
+| Where the AI runs | Inside the zonelayer engine as a scheduled action that produces actions; or an engine of its own that sends commands by message | Tick cost per layer (R28, the 45 ms budget), and whether the AI reads a state that is a few ticks old |
 | What the AI may do | Only the actions a player's command makes (R7); or extra NPC-only actions | Fairness, and whether a client can show an NPC exactly like a player |
 | Perception | Which events an NPC receives (all of its zonelayer, or only what it sees), sight and hearing range, memory of what it saw | Depends on the audience of events and on sight (phase 3) |
 | Aggro and threat | One target; or a threat table; how threat is gained, lost and shared; leash distance and reset rules | How kiting, tanking and pulling behave |

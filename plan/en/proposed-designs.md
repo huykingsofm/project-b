@@ -82,7 +82,7 @@ The log:
 
 The checkpoint:
 
-- **One file for each engine, at the tick of its own offset** (as the hash has), so the engines do not write at the same time. What is written, in a file: the tick; the state data, by the codec of its scope; the scheduler (the actions set for each tick, in order); the self list; the state of the random generator; the sequence number of its messages and the last number it took from each sender; the version of the configuration read. Not the map of a zone (its ID finds it), not the crons (made again at startup; `IsDue` needs only the tick).
+- **One file for each engine, at the tick of its own offset** (as the hash has), so the engines do not write at the same time. What is written, in a file: the tick; the state data, by the codec of its scope; the scheduler (the actions set for each tick, in order); the self list; the state of the random generator; the sequence number of its messages and the last number it took from each sender; the version of the configuration read. Not the map of a zone (its ID finds it). What an engine does again and again is an action that sets itself again, so it is in the scheduler and nothing else is written for it.
 - **Taken at the end of the tick, written outside the goroutine.** At its checkpoint tick the engine clones what is outside the state next to the clone it publishes and hands both to one writer goroutine; the write is a temporary file and a rename. Actions hold only values (R29), so copying the slices is enough. The checkpoint tick also writes a hash and a marker to the log of the engine.
 - **A cluster checkpoint is a set:** an entry of the manifest that lists, for every engine, its file and its tick. The cluster writes it when every engine has written one in the period.
 - **Staggered ticks are not a consistent cut,** so the replay chooses where each engine starts: the start tick of an engine is its latest snapshot not later than the smallest copy of it that another engine reads after that engine's own start, and the choice is repeated until it stops changing. It ends, at worst at tick 0. A start that goes far back is accepted: exactness comes before the time a replay takes, and how far each start went is a metric. A message in flight at the cut does not matter: its receiver has it in its log, with its actions.
@@ -120,7 +120,7 @@ Replay is the engines running again, not a second implementation:
 
 - **Going live is making the engines again in the real environment (agreed):** after the log is played to its end, each replayed engine is checkpointed at its last tick, and an engine is restored from that checkpoint (`Restore...Engine`) in the environment with the real router, store, emitter and file log; it goes on from its own tick. A replayed engine never runs live, so no engine that runs carries an adapter of the replay and the path of a running engine has no extra indirection. Recovery and replay share the runner; they differ in what is made at the end.
 - What making them again needs:
-  - the crons added again, as the builder does;
+  - what repeats checked: `ZoneLayerEngine.EnsureRegen` sets the first heal when none waits and refuses a period that differs from the one that waits;
   - the latest copy of each engine put in the registry, so that the others can read it;
   - the queues empty (what was not taken from them is in the log);
   - the store of the configuration at its latest version;

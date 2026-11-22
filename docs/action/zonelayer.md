@@ -68,10 +68,11 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 
 - Kind: system
 - Priority: `PrioritySystem`
-- Fields: none
-- Schedule: every `RegenEvery` ticks (`actor.Spec`, registered by `actor.Build` with `AddCron`); 0 never
+- Fields: `Every`, the ticks between two heals; 0 heals once
+- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is set by `ZoneLayerEngine.EnsureRegen(RegenEvery)` when the cluster is built, 0 never
 - Steps:
   1. `HealAllEntities(1)`: every damageable entity above 0 health gets 1, up to its most; one health-changed event per change.
+  2. When `Every` is more than 0, `ToSelfAt(tick + Every, itself)`.
 - Example: `RegenEvery: 10`, health 90 of 100: 91 at tick 10, 92 at tick 20.
 
 ## Enter and exit

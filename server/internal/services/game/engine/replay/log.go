@@ -19,7 +19,7 @@ import (
 //   - the messages the engine sent that came back undelivered, at the tick it settled them;
 //   - the version of the configuration, at the tick an engine first read a new one.
 //
-// What the engines send themselves (the self list, the scheduler, the crons) is not recorded: it
+// What the engines send themselves (the self list, the scheduler) is not recorded: it
 // follows from the state and the inputs and is made again by the replay. Randomness comes from the
 // seed of the engine and time from its tick count.
 type Log interface {

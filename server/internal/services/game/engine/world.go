@@ -44,11 +44,6 @@ func NewWorldEngine(st *worldstate.State, env *Env, seed uint64) *WorldEngine {
 	return e
 }
 
-// AddCron makes actions run every every ticks.
-func (e *WorldEngine) AddCron(every uint64, actions ...action.WorldAction) {
-	e.sched.AddCron(every, actions...)
-}
-
 // Send gives the world a command, without waiting. It reports false when the queue is full.
 func (e *WorldEngine) Send(c command.WorldCommand) bool {
 	if c == nil {
@@ -93,10 +88,7 @@ func (e *WorldEngine) Step() {
 		entry.Action().ApplyWorld(ctx, e.st, &e.reg, plan)
 	}
 	next, later := e.reg.TakeSelf()
-	e.selfNext = next
-	for _, t := range later {
-		e.sched.At(t.At, t.Action)
-	}
+	e.selfNext = action.SettleSelf(&e.sched, next, later, e.reg.TakeCancels())
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.EmitWorld(e.me, e.tick, events)
@@ -115,8 +107,7 @@ func (e *WorldEngine) planSelf(plan *action.Plan[action.WorldAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
-// are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick.
 func (e *WorldEngine) planScheduled(plan *action.Plan[action.WorldAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -169,8 +160,7 @@ func (e *WorldEngine) Checkpoint() ([]byte, error) {
 }
 
 // RestoreWorldEngine makes the engine of the world from a checkpoint, in the environment given, at
-// the tick of the checkpoint. The crons are added again by the caller, as it did when it made the
-// engine the first time.
+// the tick of the checkpoint.
 func RestoreWorldEngine(data []byte, env *Env, seed uint64) (*WorldEngine, error) {
 	r := binarycodec.NewReader(data)
 	version, address, tick, err := readCheckpointStart(r, message.ScopeWorld)

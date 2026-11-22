@@ -30,8 +30,8 @@ type ZoneLayerEngine struct {
 	tick     uint64
 }
 
-// NewZoneLayerEngine makes the engine of a zonelayer. The tick and the cron are its own: the caller
-// gives the ticks with Run or calls Step.
+// NewZoneLayerEngine makes the engine of a zonelayer. The tick is its own: the caller gives the
+// ticks with Run or calls Step.
 func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLayerEngine {
 	me := message.ZoneLayerAddress(st.ID)
 	e := &ZoneLayerEngine{
@@ -49,11 +49,6 @@ func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLa
 		}
 	}
 	return e
-}
-
-// AddCron makes actions run every every ticks.
-func (e *ZoneLayerEngine) AddCron(every uint64, actions ...action.ZoneLayerAction) {
-	e.sched.AddCron(every, actions...)
 }
 
 // Send gives the zonelayer a command, without waiting. It reports false when the queue is full.
@@ -114,10 +109,7 @@ func (e *ZoneLayerEngine) Step() {
 		}
 	}
 	next, later := e.reg.TakeSelf()
-	e.selfNext = next
-	for _, t := range later {
-		e.sched.At(t.At, t.Action)
-	}
+	e.selfNext = action.SettleSelf(&e.sched, next, later, e.reg.TakeCancels())
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.EmitZoneLayer(e.me, e.tick, events)
@@ -136,8 +128,7 @@ func (e *ZoneLayerEngine) planSelf(plan *action.Plan[action.ZoneLayerAction]) {
 	e.selfNext = nil
 }
 
-// planScheduled puts in the plan the actions that were scheduled for this tick, and the crons that
-// are due.
+// planScheduled puts in the plan the actions that were scheduled for this tick.
 func (e *ZoneLayerEngine) planScheduled(plan *action.Plan[action.ZoneLayerAction]) {
 	for _, a := range e.sched.Due(e.tick) {
 		plan.Append(a)
@@ -186,8 +177,9 @@ func (e *ZoneLayerEngine) Checkpoint() ([]byte, error) {
 }
 
 // RestoreZoneLayerEngine makes the engine of a zonelayer from a checkpoint, in the environment
-// given, at the tick of the checkpoint. The crons are not in a checkpoint: the caller adds them
-// again, as it did when it made the engine the first time.
+// given, at the tick of the checkpoint. What the zonelayer does again and again, healing its
+// characters, is an action that waits in the checkpoint like any other; EnsureRegen checks that the
+// zonelayer is made to do it as the cluster says.
 func RestoreZoneLayerEngine(data []byte, env *Env, seed uint64) (*ZoneLayerEngine, error) {
 	r := binarycodec.NewReader(data)
 	version, address, tick, err := readCheckpointStart(r, message.ScopeZoneLayer)
@@ -207,4 +199,36 @@ func RestoreZoneLayerEngine(data []byte, env *Env, seed uint64) (*ZoneLayerEngin
 		return nil, fmt.Errorf("%v: %w", address, err)
 	}
 	return e, nil
+}
+
+// EnsureRegen makes the zonelayer heal its characters every every ticks, which one action does: it
+// heals and sets itself again. When no such action waits, the first is set for every ticks from
+// now; when one waits, it must be the one asked for. One that waits with another period is an
+// error, because a period that changed while the cluster ran would change what a replay makes, and
+// so is one that waits when the period is 0, which means no healing.
+func (e *ZoneLayerEngine) EnsureRegen(every uint64) error {
+	key := action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID}
+	waiting, found := action.FindWaiting(&e.sched, e.selfNext, key)
+	if !found {
+		if every > 0 {
+			e.sched.At(e.tick+every, &action.ZoneLayerCharacterRegenAction{Every: every})
+		}
+		return nil
+	}
+	regen, ok := waiting.(*action.ZoneLayerCharacterRegenAction)
+	if !ok || regen.Every != every {
+		return fmt.Errorf(
+			"%v: the zonelayer heals every %d ticks and the cluster says every %d",
+			e.me, regenEveryOf(waiting), every,
+		)
+	}
+	return nil
+}
+
+// regenEveryOf is the period of an action that heals, or 0.
+func regenEveryOf(a action.ZoneLayerAction) uint64 {
+	if regen, ok := a.(*action.ZoneLayerCharacterRegenAction); ok {
+		return regen.Every
+	}
+	return 0
 }

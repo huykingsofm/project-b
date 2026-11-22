@@ -22,7 +22,7 @@ A layer never carries the business of another layer, in names, comments, options
 
 ### [R3. Where shared code lives (hard)](r03-shared-code.md)
 
-Use an external library when one exists; only what none provides is written in `shared`, each as its own package that imports nothing of the project. Plan, scheduler and cron are game logic and live in `sim/action`, and `engine` runs the engines without knowing what the actions do.
+Use an external library when one exists; only what none provides is written in `shared`, each as its own package that imports nothing of the project. Plan and scheduler are game logic and live in `sim/action`, and `engine` runs the engines without knowing what the actions do.
 
 ### [R4. Generic base until the tag `base-v1` (hard)](r04-generic-base.md)
 
@@ -82,9 +82,9 @@ For what needs low latency, the rule lives on the client, the server checks it a
 
 ## 4. Rules new in project-b
 
-### [R17. The plan, the scheduler and the cron are not in `shared`](r17-plan-scheduler-cron.md)
+### [R17. The plan and the scheduler are not in `shared`](r17-plan-and-scheduler.md)
 
-Plan, scheduler and cron are game logic: they live in `sim/action`, never in `shared`, and a package of `shared` never imports anything of the project. Being common to several engines does not mean having no business.
+Plan and scheduler are game logic: they live in `sim/action`, never in `shared`, and a package of `shared` never imports anything of the project. Being common to several engines does not mean having no business.
 
 ### [R18. State is data, and the events are a region of its own](r18-state-and-events.md)
 
