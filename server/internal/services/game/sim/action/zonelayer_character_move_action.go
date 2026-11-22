@@ -59,7 +59,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyZoneLayer(
 		r.ToSelf(a)
 		return
 	}
-	s.MoveEntity(zone.Tiles, entity.ID(), a.Dir, ch.Speed)
+	s.MoveEntity(zone.TileMap(), entity.ID(), a.Dir, ch.Speed)
 	a.Ticks--
 	if a.Ticks > 0 {
 		r.ToSelf(a)

@@ -23,9 +23,9 @@ type Graph interface {
 // few ticks old, and it is nil for an engine that published none. An action that reads it acts on
 // what is known, and the owner of the data decides exactly what it is.
 type StableView interface {
-	World() *worldstate.State
-	Zone(zoneID state.ZoneID) *zonestate.State
-	ZoneLayer(zoneLayerID state.ZoneLayerID) *zonelayerstate.State
+	World() worldstate.ReadOnlyWorldState
+	Zone(zoneID state.ZoneID) zonestate.ReadOnlyZoneState
+	ZoneLayer(zoneLayerID state.ZoneLayerID) zonelayerstate.ReadOnlyZoneLayerState
 }
 
 // Outbox is what an engine wants to send in a tick. Nothing is sent while the actions run: the

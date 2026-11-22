@@ -42,6 +42,14 @@ func NewState(zoneLayerID state.ZoneLayerID, zoneID state.ZoneID) *State {
 	return &State{ID: zoneLayerID, ZoneID: zoneID}
 }
 
+// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
+// a copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyZoneLayerState interface {
+	CharacterCount() int
+}
+
+var _ ReadOnlyZoneLayerState = (*State)(nil)
+
 // Clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
 func (s *State) Clone() *State {
 	return &State{
@@ -194,7 +202,7 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bo
 // It reports whether the entity moved. The map is the one of the zone, which the action reads from
 // the state of the zone.
 func (s *State) MoveEntity(
-	tiles *tilemap.TileMap, entityID state.EntityID, dir state.Dir, distance int32,
+	tiles tilemap.ReadOnlyTileMap, entityID state.EntityID, dir state.Dir, distance int32,
 ) bool {
 	e, ok := s.Entities.Get(entityID)
 	if !ok {

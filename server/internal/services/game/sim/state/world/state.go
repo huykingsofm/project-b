@@ -63,6 +63,14 @@ type State struct {
 // NewState makes the state of an empty world.
 func NewState(worldID state.WorldID) *State { return &State{ID: worldID} }
 
+// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
+// copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyWorldState interface {
+	Hash() uint64
+}
+
+var _ ReadOnlyWorldState = (*State)(nil)
+
 // Clone returns a copy of the data, with an empty event.
 func (s *State) Clone() *State {
 	return &State{

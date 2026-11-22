@@ -64,9 +64,9 @@ A message names what a failed delivery means: `OnFailDrop`, `OnFailRetry`, `OnFa
 
 | Read | From |
 |---|---|
-| map | `r.Stable.Zone(zoneID).Tiles` |
+| map | `r.Stable.Zone(zoneID).TileMap()` |
 | exits | `r.Stable.Zone(zoneID).ExitEntityByID` |
-| zonelayers and capacity of a zone | `r.Stable.Zone(zoneID)` |
+| zonelayers and capacity of a zone | `r.Stable.Zone(zoneID).ZoneLayerSlots()` |
 | characters held by a zonelayer | `r.Stable.ZoneLayer(id).CharacterCount()` |
 
 ## Cooldowns
