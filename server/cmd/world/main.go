@@ -5,14 +5,21 @@
 // Run it with:
 //
 //	go run ./server/cmd/world
+//
+// With -replay-dir it also writes the replay log of every engine to files under that directory, and reads
+// them back at the end to say what each engine recorded:
+//
+//	go run ./server/cmd/world -replay-dir /tmp/replay
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
+	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
@@ -46,6 +53,9 @@ func (printer) EmitZoneLayer(from action.Address, tick uint64, events []zonelaye
 }
 
 func main() {
+	replayDir := flag.String("replay-dir", "", "write the replay log of every engine under this directory")
+	flag.Parse()
+
 	closeLogs, err := logging.Init(logging.NewWriterConsumer(os.Stderr),
 		logging.WithCapacity(4096),
 		logging.WithFlushEvery(time.Second))
@@ -74,8 +84,17 @@ func main() {
 		fail("the map of zone 2 is not well formed", err)
 	}
 
+	seed := uint64(1)
+	var replayLog replay.Log = replay.NopLog{}
+	var replayFile *replay.FileLog
+	if *replayDir != "" {
+		replayFile = replay.NewFileLog(*replayDir, replay.FileLogOptions{Seed: seed, SegmentBytes: 1 << 20, SyncEvery: time.Second, Backlog: 64})
+		replayLog = replayFile
+	}
+
 	cluster, err := engine.NewBuilder().
-		WithSeed(1).
+		WithSeed(seed).
+		WithReplayLog(replayLog).
 		WithWorldEmitter(printer{}).
 		WithZoneEmitter(printer{}).
 		WithZoneLayerEmitter(printer{}).
@@ -130,4 +149,33 @@ func main() {
 
 	fmt.Printf("\ncharacters in zonelayer 1: %d, zonelayer 2: %d, zonelayer 3 (zone 2): %d\n",
 		cluster.ZoneLayer(1).State().CharacterCount(), cluster.ZoneLayer(2).State().CharacterCount(), cluster.ZoneLayer(3).State().CharacterCount())
+
+	if replayFile != nil {
+		if err := replayFile.Close(); err != nil {
+			fail("the replay log could not be written", err)
+		}
+		engines := []action.Address{
+			action.WorldAddress(1), action.ZoneAddress(1), action.ZoneAddress(2),
+			action.ZoneLayerAddress(1), action.ZoneLayerAddress(2), action.ZoneLayerAddress(3),
+		}
+		fmt.Printf("\nthe replay log under %s, read back:\n", *replayDir)
+		for _, e := range engines {
+			reader, err := replay.ReadFileLog(*replayDir, e, 0)
+			if err != nil {
+				fail("the replay log could not be read", err)
+			}
+			counts, last := map[replay.Kind]int{}, uint64(0)
+			for reader.Next() {
+				counts[reader.Record().Kind]++
+				last = reader.Record().Tick
+			}
+			readErr := reader.Err()
+			reader.Close()
+			if readErr != nil {
+				fail("the replay log is damaged", readErr)
+			}
+			fmt.Printf("  %-9s %d: %d inbound, %d commands, %d config, %d hashes, %d stable reads, up to tick %d\n",
+				e.Scope, e.ID, counts[replay.KindInbound], counts[replay.KindCommand], counts[replay.KindConfig], counts[replay.KindHash], counts[replay.KindStableRead], last)
+		}
+	}
 }

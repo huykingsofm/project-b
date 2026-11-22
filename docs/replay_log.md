@@ -79,6 +79,11 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 - A log that failed is not enough to replay from.
 
+## Running it
+
+- `go run ./server/cmd/world -replay-dir <dir>` runs the script of `cmd/world` with a `File` as the replay log of the cluster, closes it at the end, and reads it back to say what each engine recorded.
+- `TestAProcessThatIsKilledLeavesALogThatReadsAndCanBeContinued` starts a process that records on three engines as fast as it can, kills it with SIGKILL at six different moments in the same directory, and requires that each log reads, that every tick in it has all its records, and that the next process goes on from the end of the log. A kill can stop a write between two pages of the kernel, which left a tick of 43 records of 100 in the first version of the log; a batch is now all or nothing ([segmentlog](segmentlog.md)), and the tick that was being written is simply not in the log. What a crash of the machine can leave is tested by cutting the end of a file at every byte.
+
 ## Not here yet
 
 - Checkpoints, the scheduler and cron in a checkpoint, the replay runner, and deleting old segments.
