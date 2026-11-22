@@ -34,10 +34,10 @@ func TestAnActionComesBackAsItWasWritten(t *testing.T) {
 
 func TestACodecRefusesANumberOrATypeThatTwoKindsShare(t *testing.T) {
 	c := mustCodecs(t)
-	if err := c.RegisterAction[*toyState](&addAction{}, decodeAddAction); err == nil {
+	if err := c.RegisterAction(&addAction{}, decodeAddAction); err == nil {
 		t.Fatal("the same action was registered twice")
 	}
-	if err := c.RegisterState[*toyState](&toyState{}, decodeToyState); err == nil {
+	if err := c.RegisterState(&toyState{}, decodeToyState); err == nil {
 		t.Fatal("the same state was registered twice")
 	}
 	if err := c.RegisterOnFail(testDrop{}, decodeTestDrop); err == nil {
@@ -45,23 +45,23 @@ func TestACodecRefusesANumberOrATypeThatTwoKindsShare(t *testing.T) {
 	}
 	// another Go type that says it has a number that is taken
 	taken := &otherAction{}
-	if err := c.RegisterAction[*otherState](taken, decodeOtherAction); err == nil {
+	if err := c.RegisterAction(taken, decodeOtherAction); err == nil {
 		t.Fatal("an action was registered under a number that was taken")
 	}
 }
 
 func toyMessages() []Message {
 	add := func(n int64) Action[*toyState] { return &addAction{N: n} }
-	undo := NewActionMessage[*toyState](5, testDrop{}, add(1))
+	undo := NewActionMessage(5, testDrop{}, add(1))
 	return []Message{
-		NewActionMessage[*toyState](5, testDrop{}, add(1), add(2)).
+		NewActionMessage(5, testDrop{}, add(1), add(2)).
 			Stamp(Header{From: 2, Seq: 77}).Again(),
 		NewActionMessage[*toyState](5, testDrop{}),
-		NewActionMessage[*toyState](5, testCompensate{With: undo}, add(3)),
+		NewActionMessage(5, testCompensate{With: undo}, add(3)),
 		NewActionMessage[*toyState](
 			5, testCompensate{With: NewActionMessage[*toyState](1, testCompensate{With: undo})},
 		),
-		NewActionMessage[*otherState](9, testDrop{}, &otherAction{}),
+		NewActionMessage(9, testDrop{}, &otherAction{}),
 	}
 }
 
@@ -167,7 +167,7 @@ func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testin
 	if !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
 	}
-	m := NewActionMessage[*toyState](1, testDrop{}, &addAction{}, noEncodeAction{})
+	m := NewActionMessage(1, testDrop{}, &addAction{}, noEncodeAction{})
 	if err := EncodeMessage(&w, m); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a message with such an action: %v, %d bytes written", err, len(w.B))
 	}
@@ -223,7 +223,7 @@ func (f fixedReader) Read(id StateID) (State, error) {
 
 func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) {
 	r := &Registry[*toyState]{Stable: fixedReader{1: &toyState{id: 1}, 2: &otherState{}}}
-	if got, err := r.Get[*toyState](1); err != nil || got.StateID() != 1 {
+	if got, err := r.Get[*toyState](1); err != nil || got.ID() != 1 {
 		t.Fatalf("a state that is there: %v, %v", got, err)
 	}
 	if _, err := r.Get[*toyState](3); !errors.Is(err, ErrStateNotFound) {

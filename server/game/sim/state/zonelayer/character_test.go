@@ -10,10 +10,10 @@ import (
 
 func playedCharacter() Character {
 	c := Character{
-		CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+		characterID: 7, name: "Binh Nguyên", health: 80, maxHealth: 100, radius: 256, speed: 250,
 	}
-	c.Cooldowns.Set(9, 1_000_006)
-	c.Cooldowns.Set(2, 52_004)
+	c.SetCooldown(9, 1_000_006)
+	c.SetCooldown(2, 52_004)
 	return c
 }
 
@@ -26,7 +26,7 @@ func TestACharacterComesBackAsItWasWrittenWithItsCooldownsInOrder(t *testing.T) 
 	if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, c) {
 		t.Fatalf("got %+v, error %v, %d left; want %+v", got, err, r.Left(), c)
 	}
-	if keys := got.Cooldowns.Keys(); keys[0] != any(CooldownKey(9)) {
+	if keys := got.cooldowns.Keys(); keys[0] != any(CooldownKey(9)) {
 		t.Fatalf("keys %v, want 9 first as it was set", keys)
 	}
 }

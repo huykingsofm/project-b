@@ -14,7 +14,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	worldevent "github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	zoneevent "github.com/huykingsofm/project-b/server/game/sim/state/zone/event"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
@@ -63,8 +62,9 @@ func TestRunsOfMovementAreAppliedInOrderThroughTheCooldown(t *testing.T) {
 	testkit.Steps(c, 8)
 
 	end, _ := l.State().CharacterEntityByCharacterID(1)
-	if want := (state.Vec{X: start.Pos.X + 3000, Y: start.Pos.Y + 2000}); end.Pos != want {
-		t.Fatalf("position = %+v, want %+v", end.Pos, want)
+	at := start.Position()
+	if want := (state.Vec{X: at.X + 3000, Y: at.Y + 2000}); end.Position() != want {
+		t.Fatalf("position = %+v, want %+v", end.Position(), want)
 	}
 	if until := l.State().CooldownUntil(
 		1, action.ZoneLayerCharacterMoveActionCooldownKey,
@@ -113,7 +113,7 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 	l := c.ZoneLayer(testkit.Layer1)
 	health := func(characterID state.CharacterID) int32 {
 		ch, _ := l.State().CharacterByID(characterID)
-		return ch.Health
+		return ch.Health()
 	}
 
 	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
@@ -159,8 +159,8 @@ func TestAttackOnATargetThatIsNotThereDoesNothing(t *testing.T) {
 	l := c.ZoneLayer(testkit.Layer1)
 	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 9})
 	testkit.Steps(c, 3)
-	if ch, _ := l.State().CharacterByID(1); ch.Health != 100 {
-		t.Fatalf("an attack on nobody changed health to %d", ch.Health)
+	if ch, _ := l.State().CharacterByID(1); ch.Health() != 100 {
+		t.Fatalf("an attack on nobody changed health to %d", ch.Health())
 	}
 }
 
@@ -174,21 +174,21 @@ func TestAKilledCharacterStaysDead(t *testing.T) {
 		)
 		testkit.Steps(c, 8)
 	}
-	if ch, _ := c.ZoneLayer(testkit.Layer1).State().CharacterByID(2); ch.Health != 0 {
-		t.Fatalf("the target has %d health, want it dead", ch.Health)
+	if ch, _ := c.ZoneLayer(testkit.Layer1).State().CharacterByID(2); ch.Health() != 0 {
+		t.Fatalf("the target has %d health, want it dead", ch.Health())
 	}
 }
 
 func TestAZoneLayerHealsEveryCharacterEveryPeriod(t *testing.T) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 10)
 	hurt := testkit.NewCharacter(1, "An", 100, 1000, 0)
-	hurt.Health = 50
+	hurt.SetHealth(50)
 	testkit.EnterCharacter(t, c, testkit.Zone1, hurt)
 	before, _ := c.ZoneLayer(testkit.Layer1).State().CharacterByID(1)
 	testkit.Steps(c, 100)
 	after, _ := c.ZoneLayer(testkit.Layer1).State().CharacterByID(1)
-	if after.Health <= before.Health || after.Health > after.MaxHealth {
-		t.Fatalf("health went from %d to %d, want it to rise", before.Health, after.Health)
+	if after.Health() <= before.Health() || after.Health() > after.MaxHealth() {
+		t.Fatalf("health went from %d to %d, want it to rise", before.Health(), after.Health())
 	}
 }
 
@@ -204,7 +204,7 @@ func TestAnExitMovesTheCharacterAtOnceToAZoneLayerOfTheOtherZone(t *testing.T) {
 		t.Fatal("the character is still in the zonelayer it left")
 	}
 	e, ok := c.ZoneLayer(testkit.Layer3).State().CharacterEntityByCharacterID(1)
-	if !ok || e.Pos != (state.Vec{X: tile + tile/2, Y: 2*tile + tile/2}) {
+	if !ok || e.Position() != (state.Vec{X: tile + tile/2, Y: 2*tile + tile/2}) {
 		t.Fatalf("the character is not at the arrival point of zone 2: %+v, %v", e, ok)
 	}
 }
@@ -280,9 +280,10 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 	testkit.Steps(c, 10)
 
 	after, ok := c.ZoneLayer(testkit.Layer1).State().CharacterEntityByCharacterID(1)
-	if !ok || after.Pos != before.Pos {
+	if !ok || after.Position() != before.Position() {
 		t.Fatalf(
-			"the character was not put back where it was: %+v, %v (was %+v)", after, ok, before.Pos,
+			"the character was not put back where it was: %+v, %v (was %+v)",
+			after, ok, before.Position(),
 		)
 	}
 	if _, ok := c.ZoneLayer(testkit.Layer3).State().CharacterByID(1); ok {
@@ -346,14 +347,14 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 		}
 	}
 	testkit.Steps(c, 1)
-	if got := c.ZoneLayer(testkit.Layer1).State().Chat.Len(); got != 2 {
+	if got := c.ZoneLayer(testkit.Layer1).State().ChatMessageCount(); got != 2 {
 		t.Fatalf("%d chat lines, want 2: the numbers 5 and 6, once each", got)
 	}
 	for range 2 { // no number: two messages, both taken
 		c.Env.Router.Deliver(say(0))
 	}
 	testkit.Steps(c, 1)
-	if got := c.ZoneLayer(testkit.Layer1).State().Chat.Len(); got != 4 {
+	if got := c.ZoneLayer(testkit.Layer1).State().ChatMessageCount(); got != 4 {
 		t.Fatalf("%d chat lines, want 4: the two with no number are not copies", got)
 	}
 	taken := 0
@@ -461,7 +462,7 @@ func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testi
 	if _, ok := c.ZoneLayer(testkit.Layer1).State().EntityByID(itemID); ok {
 		t.Fatal("the item is still on the ground")
 	}
-	if got := itemsHeld(c.World.State(), 1, 7); got != 1 {
+	if got := c.World.State().ItemsHeld(1, 7); got != 1 {
 		t.Fatalf("the character has %d of the item, want 1", got)
 	}
 	if n := rec.Count[zonelayerevent.ItemDisappeared](); n != 1 {
@@ -487,7 +488,7 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 	)
 	testkit.Steps(c, 4)
 
-	got := itemsHeld(c.World.State(), 1, 7) + itemsHeld(c.World.State(), 2, 7)
+	got := c.World.State().ItemsHeld(1, 7) + c.World.State().ItemsHeld(2, 7)
 	if got != 1 {
 		t.Fatalf("%d items were handed out for one item", got)
 	}
@@ -506,32 +507,19 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 	)
 	testkit.Steps(c, 6)
 
-	if got := itemsHeld(c.World.State(), 1, 7); got != 0 {
+	if got := c.World.State().ItemsHeld(1, 7); got != 0 {
 		t.Fatalf("the character got %d items that did not fit", got)
 	}
 	layer := c.ZoneLayer(testkit.Layer1).State()
 	var back []zonelayerstate.ItemEntity
-	for _, id := range layer.Entities.Keys() {
+	for _, id := range layer.EntityIDs() {
 		if item, ok := layer.ItemEntityByID(id); ok {
 			back = append(back, item)
 		}
 	}
-	if len(back) != 1 || back[0].ItemID != 7 || back[0].Count != 3 || back[0].Pos != at {
+	if len(back) != 1 || back[0].ItemID() != 7 || back[0].Count() != 3 || back[0].Position() != at {
 		t.Fatalf("on the ground: %+v, want the stack of 3 of kind 7 where it was", back)
 	}
-}
-
-// itemsHeld counts the items of a kind in the slots of a character; it is for the assertions of the
-// tests.
-func itemsHeld(st *worldstate.State, characterID state.CharacterID, itemID state.ItemID) uint32 {
-	inventory, _ := st.Inventories.Get(characterID)
-	var total uint32
-	for _, inventorySlot := range inventory.Slots {
-		if inventorySlot.Count > 0 && inventorySlot.ItemID == itemID {
-			total += inventorySlot.Count
-		}
-	}
-	return total
 }
 
 func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
@@ -547,14 +535,14 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 
 	layer := c.ZoneLayer(testkit.Layer1).State()
 	items := func() (found []zonelayerstate.ItemEntity) {
-		for _, id := range layer.Entities.Keys() {
+		for _, id := range layer.EntityIDs() {
 			if item, ok := layer.ItemEntityByID(id); ok {
 				found = append(found, item)
 			}
 		}
 		return found
 	}
-	if got := items(); len(got) != 1 || got[0].Expiry != 20 {
+	if got := items(); len(got) != 1 || got[0].Expiry() != 20 {
 		t.Fatalf("on the ground: %+v, want the stack back with its expiry of 20", got)
 	}
 	testkit.Steps(c, 30)

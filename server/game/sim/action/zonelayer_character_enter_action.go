@@ -23,23 +23,23 @@ type ZoneLayerCharacterEnterAction struct {
 
 func (a *ZoneLayerCharacterEnterAction) ID() sim.ActionID { return ZoneLayerCharacterEnterActionID }
 func (a *ZoneLayerCharacterEnterAction) Priority() int16  { return PriorityResolve }
-func (a *ZoneLayerCharacterEnterAction) Actor() any       { return a.Character.CharacterID }
+func (a *ZoneLayerCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
 
 // Apply gives the character a body.
 func (a *ZoneLayerCharacterEnterAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
-	if _, held := s.CharacterByID(a.Character.CharacterID); held {
+	if _, held := s.CharacterByID(a.Character.CharacterID()); held {
 		return
 	}
-	zone, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID)
+	zone, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID())
 	if err != nil {
 		r.ToSelf(a)
 		return
 	}
 	at := a.At
-	if !zone.TileMap().FreeForBody(at, a.Character.Radius) {
+	if !zone.TileMap().FreeForBody(at, a.Character.Radius()) {
 		at = zone.TileMap().SpawnPosition()
 	}
 	s.AddCharacterEntity(a.Character, at)

@@ -141,7 +141,8 @@ func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 	if again, err := z.Checkpoint(); err != nil || !bytes.Equal(again, zone) {
 		t.Fatalf("the restored zone is written differently: %v", err)
 	}
-	if c.World.State().Private.Len() == 0 || c.Zone(testkit.Zone1).State().Chat.Len() == 0 {
+	zoneState := c.Zone(testkit.Zone1).State()
+	if c.World.State().PrivateMessageCount() == 0 || zoneState.ChatMessageCount() == 0 {
 		t.Fatal("the world and the zone hold nothing to restore: the test checks nothing")
 	}
 }
@@ -268,7 +269,7 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ch.Cooldowns.Set(1, 40)
+		ch.SetCooldown(1, 40)
 		at := state.Vec{X: int32(1000 + 40*i), Y: 2500}
 		l.State().AddCharacterEntity(ch, at)
 		l.State().AddItemEntity(state.ItemID(i%9+1), 3, at, 500)
@@ -341,10 +342,9 @@ func aBigWorld(t testing.TB) *engine.Engine[*worldstate.State] {
 		}
 	}
 	for i := range 1000 {
-		w.State().SendPrivateMessage(worldstate.PrivateChatMessage{
-			FromID: state.PlayerID(i), ToID: state.PlayerID(i + 1),
-			Text: "xin chào, hôm nay thế nào", Tick: uint64(i),
-		})
+		w.State().SendPrivateMessage(worldstate.NewPrivateChatMessage(
+			state.PlayerID(i), state.PlayerID(i+1), "xin chào, hôm nay thế nào", uint64(i),
+		))
 	}
 	return w
 }

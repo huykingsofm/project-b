@@ -49,7 +49,7 @@ func (s *replayStable) kept(source sim.StateID, tick uint64) bool {
 
 // Publish keeps a copy that some read will ask for.
 func (s *replayStable) Publish(st sim.State) {
-	id, tick := st.StateID(), st.StateTick()
+	id, tick := st.ID(), st.Tick()
 	if s.kept(id, tick) {
 		if s.states[id] == nil {
 			s.states[id] = map[uint64]sim.State{}

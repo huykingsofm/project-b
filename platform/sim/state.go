@@ -28,21 +28,21 @@ type Event any
 // A state is data and nothing else: it holds no function, channel or connection, and it never
 // reaches another engine. A state of another engine is found by its StateID in a StableView.
 type State interface {
-	// StateID is the ID of the state.
-	StateID() StateID
+	// ID is the ID of the state.
+	ID() StateID
 	// Type is the type of the state. It must return the same number for every value, including a
 	// nil pointer, because the type of a state is asked of its Go type alone (see StateTypeOf).
 	Type() StateType
 	// String is the name of the type of the state, in letters, for a file or a log. It does not
 	// include the ID.
 	String() string
-	// StateTick is the tick that the state is at.
-	StateTick() uint64
+	// Tick is the tick that the state is at.
+	Tick() uint64
 	// SetTick sets the tick that the state is at, at the start of every tick.
 	SetTick(tick uint64)
-	// Snapshot returns a copy of the data that shares nothing with the state, and has no event. The
-	// engine publishes it and never changes it again.
-	Snapshot() State
+	// Clone returns a copy of the data that shares nothing with the state, and has no event. The
+	// engine publishes it for the other engines to read and never changes it again.
+	Clone() State
 	// Hash is the hash of the data of the state.
 	Hash() uint64
 	// Encode writes the state whole, but not its type: Codecs.EncodeState writes that first.

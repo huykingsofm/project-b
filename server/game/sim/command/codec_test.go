@@ -21,14 +21,25 @@ import (
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
+// aCharacter is a character of full health, as NewCharacter makes it.
+func aCharacter(id state.CharacterID, name string) zonelayerstate.Character {
+	c, err := zonelayerstate.NewCharacter(id, name, 100, 250, 256)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 // characterWithCooldowns is a character that has been playing: it has cooldowns, in an order that
 // is not the order of the numbers of their keys.
 func characterWithCooldowns() zonelayerstate.Character {
-	c := zonelayerstate.Character{
-		CharacterID: 7, Name: "Binh Nguyên", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+	c, err := zonelayerstate.NewCharacter(7, "Binh Nguyên", 100, 250, 256)
+	if err != nil {
+		panic(err)
 	}
-	c.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1_000_006)
-	c.Cooldowns.Set(action.ZoneLayerCharacterMoveActionCooldownKey, 52_004)
+	c.SetHealth(80)
+	c.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1_000_006)
+	c.SetCooldown(action.ZoneLayerCharacterMoveActionCooldownKey, 52_004)
 	return c
 }
 
@@ -37,9 +48,7 @@ var examples = []sim.BaseCommand{
 	WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"},
 	ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
 	ZoneCharacterEnterCommand{
-		Character: zonelayerstate.Character{
-			CharacterID: 1, Name: "An", Health: 100, MaxHealth: 100, Radius: 256, Speed: 250,
-		},
+		Character: aCharacter(1, "An"),
 	},
 	ZoneChatSendCommand{FromID: 1, Text: "hello zone"},
 	ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
@@ -87,7 +96,7 @@ func TestTheCooldownsOfACharacterKeepTheirOrder(t *testing.T) {
 	}
 	got, _ := codecs.DecodeCommand(binarycodec.NewReader(w.B), 1)
 	ch := got.(ZoneCharacterEnterCommand).Character
-	keys := ch.Cooldowns.Keys()
+	keys := ch.CooldownKeys()
 	if len(keys) != 2 ||
 		keys[0] != any(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey) {
 		t.Fatalf("keys %v, want the attack key first as it was set", keys)
@@ -336,8 +345,8 @@ func TestTheCloneOfACommandThatHoldsCooldownsIsNotChangedByItsSender(t *testing.
 	sent := ZoneCharacterEnterCommand{Character: characterWithCooldowns()}
 	kept := sent.Clone().(ZoneCharacterEnterCommand)
 	key := action.ZoneLayerCharacterMoveActionCooldownKey
-	sent.Character.Cooldowns.Set(key, 999)
-	if until, _ := kept.Character.Cooldowns.Get(key); until == 999 {
+	sent.Character.SetCooldown(key, 999)
+	if until, _ := kept.Character.CooldownUntil(key); until == 999 {
 		t.Fatal("the sender changed the clone")
 	}
 }

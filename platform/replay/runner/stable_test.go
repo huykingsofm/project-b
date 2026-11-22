@@ -14,12 +14,12 @@ type stampState struct {
 	tick uint64
 }
 
-func (s *stampState) StateID() sim.StateID           { return s.id }
+func (s *stampState) ID() sim.StateID                { return s.id }
 func (*stampState) Type() sim.StateType              { return 1 }
 func (*stampState) String() string                   { return "stamp" }
-func (s *stampState) StateTick() uint64              { return s.tick }
+func (s *stampState) Tick() uint64                   { return s.tick }
 func (s *stampState) SetTick(t uint64)               { s.tick = t }
-func (s *stampState) Snapshot() sim.State            { return s }
+func (s *stampState) Clone() sim.State               { return s }
 func (*stampState) Hash() uint64                     { return 0 }
 func (*stampState) TakeEvents() []sim.Event          { return nil }
 func (*stampState) Encode(*binarycodec.Writer) error { return nil }
@@ -48,7 +48,7 @@ func TestACopyIsLetGoOfAsSoonAsItsLastReadIsMade(t *testing.T) {
 		held int
 	}{{5, 3, 2}, {6, 3, 1}, {7, 4, 0}} {
 		got := s.Copy(1, c.tick, 2)
-		if got == nil || got.StateTick() != c.want {
+		if got == nil || got.Tick() != c.want {
 			t.Fatalf("the read at %d found %v, want the copy of tick %d", c.tick, got, c.want)
 		}
 		if s.held() != c.held {

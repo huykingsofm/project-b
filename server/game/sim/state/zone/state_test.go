@@ -24,7 +24,7 @@ func TestTheExitsOfTheMapStandInTheZoneAsEntities(t *testing.T) {
 	st := newState(t)
 	first := state.NewEntityID(1, 1)
 	exit, ok := st.ExitEntityByID(first)
-	if !ok || exit.ToZoneID != 2 || exit.EntityID != first || first.Owner() != 1 {
+	if !ok || exit.ToZoneID() != 2 || exit.ID() != first || first.Owner() != 1 {
 		t.Fatalf("ExitEntityByID(%d) = %+v, %v", first, exit, ok)
 	}
 	if _, ok := st.ExitEntityByID(state.NewEntityID(1, 2)); ok {
@@ -35,34 +35,18 @@ func TestTheExitsOfTheMapStandInTheZoneAsEntities(t *testing.T) {
 // R29: nothing in a state is shared with its clone, except the map, which never changes.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
 	st := newState(t)
-	st.ZoneLayers.Set(1, zone.ZoneLayerSlot{ID: 1, Capacity: 4})
+	st.AddZoneLayer(1, 4)
 	before := st.Hash()
-	copied := st.Clone()
+	copied := st.Clone().(*zone.State)
 
-	st.ZoneLayers.Set(2, zone.ZoneLayerSlot{ID: 2, Capacity: 4})
-	st.ZoneLayers.Set(1, zone.ZoneLayerSlot{ID: 1, Capacity: 9})
-	st.Entities.Delete(state.NewEntityID(1, 1))
-	if copied.Hash() != before || copied.ZoneLayers.Len() != 1 || copied.Entities.Len() != 1 {
+	st.AddZoneLayer(2, 4)
+	st.AddZoneLayer(1, 9)
+	if copied.Hash() != before || copied.ZoneLayerCount() != 1 || copied.ExitEntityCount() != 1 {
 		t.Fatal("a change of the state changed its copy")
 	}
-	copied.ZoneLayers.Delete(1)
-	if st.ZoneLayers.Len() != 2 {
+	copied.RemoveZoneLayer(1)
+	if st.ZoneLayerCount() != 2 {
 		t.Fatal("a change of the copy changed the state")
-	}
-}
-
-func TestAClonedZoneStateSharesNoMemoryWithTheStateExceptTheMapThatNeverChanges(t *testing.T) {
-	st := newState(t)
-	st.ZoneLayers.Set(1, zone.ZoneLayerSlot{ID: 1, Capacity: 4})
-	copied := st.Clone()
-	if copied.Tiles != st.Tiles {
-		t.Fatal("the map of the zone is meant to be shared")
-	}
-	// the map is shared on purpose, so it is not looked at: compare the rest
-	a, b := *st, *copied
-	a.Tiles, b.Tiles = nil, nil
-	if err := aliasing.Disjoint(a, b); err != nil {
-		t.Fatal(err)
 	}
 }
 

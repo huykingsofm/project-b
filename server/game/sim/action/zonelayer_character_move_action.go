@@ -44,7 +44,7 @@ func (a *ZoneLayerCharacterMoveAction) Apply(
 		return
 	}
 	entity, _ := s.CharacterEntityByCharacterID(a.CharacterID)
-	if ch.Health <= 0 || ch.Speed <= 0 || a.Ticks == 0 {
+	if ch.Health() <= 0 || ch.Speed() <= 0 || a.Ticks == 0 {
 		return
 	}
 	if !a.reserved {
@@ -58,12 +58,12 @@ func (a *ZoneLayerCharacterMoveAction) Apply(
 			return
 		}
 	}
-	zone, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID)
+	zone, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID())
 	if err != nil {
 		r.ToSelf(a)
 		return
 	}
-	s.MoveEntity(zone.TileMap(), entity.ID(), a.Dir, ch.Speed)
+	s.MoveEntity(zone.TileMap(), entity.ID(), a.Dir, ch.Speed())
 	a.Ticks--
 	if a.Ticks > 0 {
 		r.ToSelf(a)

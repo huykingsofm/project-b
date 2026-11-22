@@ -16,7 +16,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 	}
 	body := st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048})
 	st.DamageEntity(body, 30)
-	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health }
+	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health() }
 
 	var reg sim.Registry[*zonelayerstate.State]
 	reg.Begin(10)

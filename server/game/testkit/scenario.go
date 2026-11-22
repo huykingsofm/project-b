@@ -45,10 +45,10 @@ func Via[C sim.BaseCommand](s Sender, c C) C {
 func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)
-	an.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
+	an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
 	c.Zone(Zone1).Send(Via(s, command.ZoneCharacterEnterCommand{Character: an}))
 	if s.Reuses {
-		an.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
+		an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
 	}
 	Steps(c, 4)
 	c.Zone(Zone1).Send(
@@ -63,7 +63,7 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	).Stamp(sim.Header{From: 99, Seq: 1}))
 	Steps(c, 1)
 	var itemID state.EntityID
-	for _, id := range c.ZoneLayer(Layer1).State().Entities.Keys() {
+	for _, id := range c.ZoneLayer(Layer1).State().EntityIDs() {
 		if _, ok := c.ZoneLayer(Layer1).State().ItemEntityByID(id); ok {
 			itemID = id
 		}

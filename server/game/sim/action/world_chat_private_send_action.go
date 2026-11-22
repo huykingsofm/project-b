@@ -26,7 +26,7 @@ func (a *WorldChatPrivateSendAction) Apply(
 	_ *sim.Plan[*worldstate.State],
 ) {
 	s.SendPrivateMessage(
-		worldstate.PrivateChatMessage{FromID: a.FromID, ToID: a.ToID, Text: a.Text, Tick: c.Tick},
+		worldstate.NewPrivateChatMessage(a.FromID, a.ToID, a.Text, c.Tick),
 	)
 }
 

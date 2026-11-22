@@ -15,29 +15,29 @@ import (
 // was said, and the ID the next entity gets. The map is not written: it never changes and the ID of
 // the zone finds it. The events are not data (R18) and are not written.
 func (s *State) Encode(w *binarycodec.Writer) error {
-	w.Uvarint(uint64(s.ID))
-	w.Uvarint(uint64(s.WorldID))
-	w.Uvarint(s.Tick)
-	w.Uvarint(uint64(len(s.Adjacent)))
-	for _, zoneID := range s.Adjacent {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(uint64(s.worldID))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(len(s.adjacent)))
+	for _, zoneID := range s.adjacent {
 		w.Uvarint(uint64(zoneID))
 	}
-	w.Uvarint(uint64(s.Entities.Len()))
-	for id, e := range s.Entities.All() {
+	w.Uvarint(uint64(s.entities.Len()))
+	for id, e := range s.entities.All() {
 		w.Uvarint(uint64(id))
 		e.Encode(w)
 	}
-	w.Uvarint(uint64(s.ZoneLayers.Len()))
-	for id, slot := range s.ZoneLayers.All() {
+	w.Uvarint(uint64(s.zoneLayers.Len()))
+	for id, slot := range s.zoneLayers.All() {
 		w.Uvarint(uint64(id))
-		w.Varint(int64(slot.Capacity))
+		w.Varint(int64(slot.capacity))
 	}
-	rows := s.Chat.Rows()
+	rows := s.chat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
-		w.Uvarint(uint64(m.FromID))
-		w.String(m.Text)
-		w.Uvarint(m.Tick)
+		w.Uvarint(uint64(m.fromID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
 	}
 	w.Uvarint(uint64(s.nextEntityID))
 	return nil
@@ -62,11 +62,11 @@ func DecodeState(
 	r *binarycodec.Reader, version binarycodec.Version,
 	tilesOf func(zoneID sim.StateID) *tilemap.TileMap,
 ) (*State, error) {
-	s := &State{ID: sim.StateID(r.Uvarint()), WorldID: sim.StateID(r.Uvarint()), Tick: r.Uvarint()}
+	s := &State{id: sim.StateID(r.Uvarint()), worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint()}
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	if s.Tiles = tilesOf(s.ID); s.Tiles == nil {
+	if s.tiles = tilesOf(s.id); s.tiles == nil {
 		return nil, errors.New("zone: there is no map for the zone")
 	}
 	n, err := count(r)
@@ -74,7 +74,7 @@ func DecodeState(
 		return nil, err
 	}
 	for range n {
-		s.Adjacent = append(s.Adjacent, sim.StateID(r.Uvarint()))
+		s.adjacent = append(s.adjacent, sim.StateID(r.Uvarint()))
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -85,14 +85,14 @@ func DecodeState(
 		if err != nil {
 			return nil, err
 		}
-		s.Entities.Set(id, e)
+		s.entities.Set(id, e)
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
 	}
 	for range n {
 		id := sim.StateID(r.Uvarint())
-		s.ZoneLayers.Set(id, ZoneLayerSlot{ID: id, Capacity: int32(r.Varint())})
+		s.zoneLayers.Set(id, ZoneLayerSlot{id: id, capacity: int32(r.Varint())})
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -100,10 +100,10 @@ func DecodeState(
 	rows := make([]ChatMessage, 0, n)
 	for range n {
 		rows = append(rows, ChatMessage{
-			FromID: state.CharacterID(r.Uvarint()), Text: r.String(), Tick: r.Uvarint(),
+			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
 		})
 	}
-	s.Chat = *table.Build(rows)
+	s.chat = *table.Build(rows)
 	s.nextEntityID = uint32(r.Uvarint())
 	return s, r.Err()
 }

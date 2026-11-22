@@ -6,13 +6,20 @@ import (
 
 // ChatMessage is something a character said in the zonelayer.
 type ChatMessage struct {
-	FromID state.CharacterID
-	Text   string
-	Tick   uint64
+	fromID state.CharacterID
+	text   string
+	tick   uint64
 }
 
 // Index says by which columns a message is found in a table of messages: who said it.
-func (m ChatMessage) Index() map[string]any { return map[string]any{"from": m.FromID} }
+func (m ChatMessage) Index() map[string]any { return map[string]any{"from": m.fromID} }
 
 // chatKeep is how many messages a zonelayer keeps of what was said in it.
 const chatKeep = 100
+
+// NewChatMessage makes a message that a character said in a zonelayer at a tick.
+func NewChatMessage(fromID state.CharacterID, text string, tick uint64) ChatMessage {
+	return ChatMessage{
+		fromID: fromID, text: text, tick: tick,
+	}
+}

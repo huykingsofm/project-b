@@ -240,9 +240,9 @@ func replayAndCompare(t *testing.T, c *game.Cluster, mem *replay.MemLog) {
 	}
 	want, ok := c.ZoneLayer(testkit.Layer1).State().CharacterEntityByCharacterID(1)
 	got, replayed := layerOf(result.Cluster, testkit.Layer1).State().CharacterEntityByCharacterID(1)
-	if !ok || !replayed || got.Pos != want.Pos {
+	if !ok || !replayed || got.Position() != want.Position() {
 		t.Fatalf("the character is at %+v (%v) in the replay and at %+v (%v) in the run",
-			got.Pos, replayed, want.Pos, ok)
+			got.Position(), replayed, want.Position(), ok)
 	}
 	gotHash := layerOf(result.Cluster, testkit.Layer1).State().Hash()
 	wantHash := c.ZoneLayer(testkit.Layer1).State().Hash()

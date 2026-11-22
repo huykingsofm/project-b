@@ -40,7 +40,7 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 	p *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
-	if !ok || ch.Health <= 0 {
+	if !ok || ch.Health() <= 0 {
 		return
 	}
 	source, ok := s.CharacterEntityByCharacterID(a.CharacterID)
@@ -51,7 +51,7 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 	if !ok {
 		return
 	}
-	if target, _ := s.CharacterByID(a.TargetID); target.Health <= 0 {
+	if target, _ := s.CharacterByID(a.TargetID); target.Health() <= 0 {
 		return
 	}
 	if s.CooldownUntil(

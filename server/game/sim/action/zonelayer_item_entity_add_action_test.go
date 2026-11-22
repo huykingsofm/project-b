@@ -47,11 +47,11 @@ func TestTheRemovalOfAnItemThatWasPickedUpDoesNothing(t *testing.T) {
 		ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}, Expiry: 25,
 	}).
 		Apply(&sim.Context{Tick: 11}, st, reg, sim.NewPlan[*zonelayerstate.State]())
-	before := st.Entities.Len()
+	before := st.EntityCount()
 	(&ZoneLayerItemEntityRemoveAction{EntityID: item}).Apply(
 		&sim.Context{Tick: 99}, st, reg, sim.NewPlan[*zonelayerstate.State](),
 	)
-	if st.Entities.Len() != before {
+	if st.EntityCount() != before {
 		t.Fatal("the removal of a picked up item took another item")
 	}
 }

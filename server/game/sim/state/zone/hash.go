@@ -7,19 +7,19 @@ import (
 // Hash returns a number that depends on the data of the state and on nothing else.
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.ID))
-	h.U64(uint64(s.WorldID))
-	h.U64(s.Tick)
-	for _, zoneID := range s.Adjacent {
+	h.U64(uint64(s.id))
+	h.U64(uint64(s.worldID))
+	h.U64(s.tick)
+	for _, zoneID := range s.adjacent {
 		h.U64(uint64(zoneID))
 	}
-	for _, l := range s.ZoneLayers.All() {
-		h.U64(uint64(l.ID))
-		h.U64(uint64(uint32(l.Capacity)))
+	for _, l := range s.zoneLayers.All() {
+		h.U64(uint64(l.id))
+		h.U64(uint64(uint32(l.capacity)))
 	}
-	for _, e := range s.Entities.All() {
+	for _, e := range s.entities.All() {
 		e.Hash(&h)
 	}
-	h.U64(uint64(s.Chat.Len()))
+	h.U64(uint64(s.chat.Len()))
 	return h.Sum()
 }

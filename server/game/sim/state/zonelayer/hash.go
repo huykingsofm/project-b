@@ -9,22 +9,22 @@ import (
 // time. It walks the containers in their own order, which is fixed.
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.ID))
-	h.U64(uint64(s.ZoneID))
-	h.U64(uint64(s.WorldID))
-	h.U64(s.Tick)
-	for _, e := range s.Entities.All() {
+	h.U64(uint64(s.id))
+	h.U64(uint64(s.zoneID))
+	h.U64(uint64(s.worldID))
+	h.U64(s.tick)
+	for _, e := range s.entities.All() {
 		e.Hash(&h)
 	}
 	for characterID, entityID := range s.bodies.AllV1() {
 		h.U64(uint64(characterID))
 		h.U64(uint64(entityID))
 	}
-	for _, c := range s.Characters.All() {
-		h.U64(uint64(c.CharacterID))
-		h.String(c.Name)
-		h.U64(uint64(uint32(c.Speed)))
-		for key, until := range c.Cooldowns.All() {
+	for _, c := range s.characters.All() {
+		h.U64(uint64(c.characterID))
+		h.String(c.name)
+		h.U64(uint64(uint32(c.speed)))
+		for key, until := range c.cooldowns.All() {
 			h.U64(uint64(key))
 			h.U64(until)
 		}

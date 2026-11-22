@@ -26,8 +26,8 @@ func (a *ZoneChatSendAction) Apply(
 	c *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],
 	_ *sim.Plan[*zonestate.State],
 ) {
-	s.SendMessage(zonestate.ChatMessage{FromID: a.FromID, Text: a.Text, Tick: c.Tick})
-	for _, zoneLayerID := range s.ZoneLayers.Keys() {
+	s.SendMessage(zonestate.NewChatMessage(a.FromID, a.Text, c.Tick))
+	for zoneLayerID := range s.ZoneLayerSlots() {
 		r.Send[*zonelayerstate.State](
 			zoneLayerID, onfail.Drop{}, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
 		)

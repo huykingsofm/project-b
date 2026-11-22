@@ -15,9 +15,9 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 	st := newState(t)
 	st.AddZoneLayer(4, 50)
 	st.AddZoneLayer(5, 20)
-	st.SendMessage(zone.ChatMessage{FromID: 1, Text: "hello zone", Tick: 3})
+	st.SendMessage(zone.NewChatMessage(1, "hello zone", 3))
 	st.SetTick(7)
-	tiles := st.Tiles
+	tiles := st.TileMap().(*tilemap.TileMap)
 
 	var w binarycodec.Writer
 	if err := st.Encode(&w); err != nil {
@@ -34,11 +34,12 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
-	if got.Hash() != st.Hash() || got.Tiles != tiles {
+	if got.Hash() != st.Hash() || got.TileMap() != tiles {
 		t.Fatal("the state that came back has another hash, or another map")
 	}
-	if got.WorldID != st.WorldID || !slices.Equal(got.Adjacent, st.Adjacent) || got.WorldID == 0 {
-		t.Fatalf("the zone knows world %d and zones %v", got.WorldID, got.Adjacent)
+	if got.WorldID() != st.WorldID() || got.WorldID() == 0 ||
+		!slices.Equal(got.AdjacentZones(), st.AdjacentZones()) {
+		t.Fatalf("the zone knows world %d and zones %v", got.WorldID(), got.AdjacentZones())
 	}
 	var again binarycodec.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {

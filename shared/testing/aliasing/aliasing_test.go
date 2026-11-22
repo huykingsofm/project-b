@@ -201,3 +201,15 @@ func TestBoundaryAcceptsAStructOfValuesAndTypesWithCloneThatHasNoCloneItself(t *
 		t.Error("with Boundary a slice that is not in a type with Clone was accepted")
 	}
 }
+
+type copier interface{ Clone() copier }
+
+type behindInterface struct{ Items []int }
+
+func (b *behindInterface) Clone() copier { return &behindInterface{Items: slices.Clone(b.Items)} }
+
+func TestACloneThatReturnsAnInterfaceTheTypeImplementsIsAClone(t *testing.T) {
+	if err := check(reflect.TypeFor[behindInterface](), aliasing.Rules{}); err != nil {
+		t.Fatal(err)
+	}
+}

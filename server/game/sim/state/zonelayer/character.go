@@ -23,25 +23,25 @@ type CooldownKey uint16
 // zonelayer they are on the body (the health on a damageable entity, entity.DamageableEntity), and
 // CharacterByID reads them from there.
 type Character struct {
-	CharacterID state.CharacterID
-	Name        string
-	Health      int32
-	MaxHealth   int32
-	// Radius is how far the body of the character reaches from its position, in units. The body is
+	characterID state.CharacterID
+	name        string
+	health      int32
+	maxHealth   int32
+	// radius is how far the body of the character reaches from its position, in units. The body is
 	// a square of any size: a boss may cover many tiles.
-	Radius int32
-	// Speed is how many units the character goes in a tick when it moves.
-	Speed int32
+	radius int32
+	// speed is how many units the character goes in a tick when it moves.
+	speed int32
 
-	// Cooldowns says, for each key, the first tick at which the character is free of what the
+	// cooldowns says, for each key, the first tick at which the character is free of what the
 	// key stands for. A key is a number of the register of the cooldown keys (see package action).
-	Cooldowns orderedmap.Map[CooldownKey, uint64]
+	cooldowns orderedmap.Map[CooldownKey, uint64]
 }
 
 // Clone returns a copy of the character that shares nothing with it: its cooldowns are copied,
 // because they hold a map and slices that assignment does not copy.
 func (c Character) Clone() Character {
-	c.Cooldowns = c.Cooldowns.Clone()
+	c.cooldowns = c.cooldowns.Clone()
 	return c
 }
 
@@ -58,12 +58,12 @@ func NewCharacter(
 		)
 	}
 	return Character{
-		CharacterID: characterID,
-		Name:        name,
-		Health:      maxHealth,
-		MaxHealth:   maxHealth,
-		Speed:       speed,
-		Radius:      radius,
+		characterID: characterID,
+		name:        name,
+		health:      maxHealth,
+		maxHealth:   maxHealth,
+		speed:       speed,
+		radius:      radius,
 	}, nil
 }
 
@@ -74,14 +74,14 @@ var ErrUnknownCooldownKey = errors.New("zonelayer: the number is not one of a co
 // Encode writes a character: its fields and its cooldowns, each as the number of its key and the
 // tick it ends at, in the order they were set.
 func (c Character) Encode(w *binarycodec.Writer) {
-	w.Uvarint(uint64(c.CharacterID))
-	w.String(c.Name)
-	w.Varint(int64(c.Health))
-	w.Varint(int64(c.MaxHealth))
-	w.Varint(int64(c.Radius))
-	w.Varint(int64(c.Speed))
-	w.Uvarint(uint64(c.Cooldowns.Len()))
-	for key, until := range c.Cooldowns.All() {
+	w.Uvarint(uint64(c.characterID))
+	w.String(c.name)
+	w.Varint(int64(c.health))
+	w.Varint(int64(c.maxHealth))
+	w.Varint(int64(c.radius))
+	w.Varint(int64(c.speed))
+	w.Uvarint(uint64(c.cooldowns.Len()))
+	for key, until := range c.cooldowns.All() {
 		w.Uvarint(uint64(key))
 		w.Uvarint(until)
 	}
@@ -91,12 +91,12 @@ func (c Character) Encode(w *binarycodec.Writer) {
 // of the bytes (binarycodec.ErrShort), or one that wraps ErrUnknownCooldownKey.
 func DecodeCharacter(r *binarycodec.Reader, version binarycodec.Version) (Character, error) {
 	c := Character{
-		CharacterID: state.CharacterID(r.Uvarint()),
-		Name:        r.String(),
-		Health:      int32(r.Varint()),
-		MaxHealth:   int32(r.Varint()),
-		Radius:      int32(r.Varint()),
-		Speed:       int32(r.Varint()),
+		characterID: state.CharacterID(r.Uvarint()),
+		name:        r.String(),
+		health:      int32(r.Varint()),
+		maxHealth:   int32(r.Varint()),
+		radius:      int32(r.Varint()),
+		speed:       int32(r.Varint()),
 	}
 	n := r.Uvarint()
 	for i := uint64(0); i < n && r.Err() == nil; i++ {
@@ -107,7 +107,45 @@ func DecodeCharacter(r *binarycodec.Reader, version binarycodec.Version) (Charac
 		if code > 0xffff {
 			return Character{}, fmt.Errorf("%w: %d", ErrUnknownCooldownKey, code)
 		}
-		c.Cooldowns.Set(CooldownKey(code), until)
+		c.cooldowns.Set(CooldownKey(code), until)
 	}
 	return c, r.Err()
 }
+
+// CharacterID is the ID of the character.
+func (c Character) CharacterID() state.CharacterID { return c.characterID }
+
+// Name is the name of the character.
+func (c Character) Name() string { return c.name }
+
+// Health is the health of the character; once it is in a zonelayer it is on the body.
+func (c Character) Health() int32 { return c.health }
+
+// MaxHealth is the most health of the character.
+func (c Character) MaxHealth() int32 { return c.maxHealth }
+
+// Radius is the radius of the body of the character, in units.
+func (c Character) Radius() int32 { return c.radius }
+
+// Speed is how far the character moves in a tick, in units.
+func (c Character) Speed() int32 { return c.speed }
+
+// CooldownUntil is the tick at which the character is free of what the key stands for, and false
+// when the character has no cooldown for it.
+func (c Character) CooldownUntil(key CooldownKey) (uint64, bool) {
+	return c.cooldowns.Get(key)
+}
+
+// CooldownKeys returns the keys of the cooldowns of the character, in the order they were set.
+func (c Character) CooldownKeys() []CooldownKey { return c.cooldowns.Keys() }
+
+// SetCooldown sets the tick at which the character is free of what the key stands for.
+func (c *Character) SetCooldown(key CooldownKey, until uint64) {
+	c.cooldowns.Set(key, until)
+}
+
+// SetHealth sets the health of the character, before it enters a zonelayer.
+func (c *Character) SetHealth(health int32) { c.health = health }
+
+// SetSpeed sets how far the character moves in a tick, in units.
+func (c *Character) SetSpeed(speed int32) { c.speed = speed }

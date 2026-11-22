@@ -27,8 +27,9 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## State and events
 
-- A state is data. Its methods are the only way to change it, and they write the events.
-- The events are the list of what a client should hear (`state.Events[E]` holds a `[]E`). They are not cloned or published.
+- A state is data. Every field of a state, and of every value it holds (a character, an entity, a message, an inventory slot), is private: it is read with a method and changed only by a method that the state offers, and the methods that change it write the events. A value is made by a constructor (`NewCharacter`, `NewChatMessage`, `NewPrivateChatMessage`) and its setters are for what is not yet in a state.
+- A state implements `sim.State`: `ID()`, `Type()`, `String()`, `Tick()`, `SetTick`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
+- The events are the list of what a client should hear (`sim.Events[E]` holds a `[]E`). They are not cloned or published.
 - Every event has `Audience()`:
 
 | Audience | Who receives |

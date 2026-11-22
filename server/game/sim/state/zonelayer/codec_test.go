@@ -17,14 +17,14 @@ func aStateWithEverything(t testing.TB) *zonelayer.State {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Cooldowns.Set(cooldownKey, 40+uint64(id))
+		c.SetCooldown(cooldownKey, 40+uint64(id))
 		st.AddCharacterEntity(c, state.Vec{X: 2 * tile, Y: 2 * tile})
 	}
 	st.AddItemEntity(7, 5, state.Vec{X: 3 * tile, Y: 3 * tile}, 90)
 	body, _ := st.CharacterEntityByCharacterID(1)
-	st.MoveEntity(map10x5(t), body.EntityID, state.East, 300)
-	st.DamageEntity(body.EntityID, 30)
-	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "xin chào", Tick: 4})
+	st.MoveEntity(map10x5(t), body.ID(), state.East, 300)
+	st.DamageEntity(body.ID(), 30)
+	st.SendMessage(zonelayer.NewChatMessage(1, "xin chào", 4))
 	st.SetTick(12)
 	return st
 }
@@ -43,8 +43,8 @@ func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.
 	if got.Hash() != st.Hash() {
 		t.Fatal("the state that came back has another hash")
 	}
-	if got.WorldID != 1 || got.ZoneID != 2 || got.ID != 3 {
-		t.Fatalf("the zonelayer knows zone %d and world %d", got.ZoneID, got.WorldID)
+	if got.WorldID() != 1 || got.ZoneID() != 2 || got.ID() != 3 {
+		t.Fatalf("the zonelayer knows zone %d and world %d", got.ZoneID(), got.WorldID())
 	}
 	var again binarycodec.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {

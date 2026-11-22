@@ -29,7 +29,7 @@ func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 	st := newState()
 	id := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	item, ok := st.ItemEntityByID(id)
-	if !ok || item.ItemID != 7 || item.Pos != (state.Vec{X: 3500, Y: 3500}) {
+	if !ok || item.ItemID() != 7 || item.Position() != (state.Vec{X: 3500, Y: 3500}) {
 		t.Fatalf("ItemEntityByID = %+v, %v", item, ok)
 	}
 	if _, ok := st.RemoveItemEntity(id); !ok {
@@ -55,8 +55,8 @@ func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 	if !st.MoveEntity(tiles, item, state.East, 2000) {
 		t.Fatal("an item did not move")
 	}
-	if e, _ := st.ItemEntityByID(item); e.Pos != (state.Vec{X: 5500, Y: 3500}) {
-		t.Fatalf("the item is at %+v, want the middle of tile (5,3)", e.Pos)
+	if e, _ := st.ItemEntityByID(item); e.Position() != (state.Vec{X: 5500, Y: 3500}) {
+		t.Fatalf("the item is at %+v, want the middle of tile (5,3)", e.Position())
 	}
 	if st.MoveEntity(tiles, 999, state.East, 1000) {
 		t.Fatal("an entity that does not exist moved")
@@ -77,21 +77,23 @@ func TestTheHealthOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 	if died := st.DamageEntity(id, 4); died {
 		t.Fatal("4 damage killed a character with 10 health")
 	}
-	if c, _ := st.CharacterByID(1); c.Health != 6 || c.MaxHealth != 10 {
-		t.Fatalf("health = %d of %d, want 6 of 10", c.Health, c.MaxHealth)
+	if c, _ := st.CharacterByID(1); c.Health() != 6 || c.MaxHealth() != 10 {
+		t.Fatalf("health = %d of %d, want 6 of 10", c.Health(), c.MaxHealth())
 	}
 	st.HealAllEntities(100)
-	if c, _ := st.CharacterByID(1); c.Health != 10 {
-		t.Fatalf("health after a heal = %d, want 10", c.Health)
+	if c, _ := st.CharacterByID(1); c.Health() != 10 {
+		t.Fatalf("health after a heal = %d, want 10", c.Health())
 	}
 	st.DamageEntity(id, 3)
 	out, _ := st.RemoveCharacterEntity(1)
-	if out.Health != 7 || out.MaxHealth != 10 {
-		t.Fatalf("the character left with %d of %d health, want 7 of 10", out.Health, out.MaxHealth)
+	if out.Health() != 7 || out.MaxHealth() != 10 {
+		t.Fatalf(
+			"the character left with %d of %d health, want 7 of 10", out.Health(), out.MaxHealth(),
+		)
 	}
 	back := st.AddCharacterEntity(out, state.Vec{X: 2500, Y: 2500})
-	if body, _ := st.CharacterEntityByCharacterID(1); body.EntityID != back || body.Hp != 7 {
-		t.Fatalf("the body that came back has %d health, want 7", body.Hp)
+	if body, _ := st.CharacterEntityByCharacterID(1); body.ID() != back || body.Health() != 7 {
+		t.Fatalf("the body that came back has %d health, want 7", body.Health())
 	}
 }
 
@@ -112,17 +114,17 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500})
 	st.SetCooldown(1, cooldownKey, 5)
 	st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
-	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "hi"})
+	st.SendMessage(zonelayer.NewChatMessage(1, "hi", 0))
 
 	before := st.Hash()
-	chatBefore := st.Chat.Len()
-	copied := st.Clone()
+	chatBefore := st.ChatMessageCount()
+	copied := st.Clone().(*zonelayer.State)
 
 	st.SetCooldown(1, cooldownKey, 99)
 	st.DamageEntity(1, 3)
 	st.AddItemEntity(8, 1, state.Vec{X: 4500, Y: 4500}, 0)
-	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "again"})
-	if copied.Hash() != before || copied.Chat.Len() != chatBefore {
+	st.SendMessage(zonelayer.NewChatMessage(1, "again", 0))
+	if copied.Hash() != before || copied.ChatMessageCount() != chatBefore {
 		t.Fatal("a change of the state changed its copy")
 	}
 
@@ -149,16 +151,17 @@ func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T
 	if !st.MoveEntity(walls, id, state.East, 5*tile) {
 		t.Fatal("the item did not move")
 	}
-	if e, _ := st.ItemEntityByID(id); e.Pos != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}) {
-		t.Fatalf("the item stopped at %+v, want the last unit before the wall", e.Pos)
+	want := state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2}
+	if e, _ := st.ItemEntityByID(id); e.Position() != want {
+		t.Fatalf("the item stopped at %+v, want the last unit before the wall", e.Position())
 	}
 	if !st.MoveEntity(walls, id, state.South, tile/4) {
 		t.Fatal("a move of a quarter of a tile did not move")
 	}
 	if e, _ := st.ItemEntityByID(
 		id,
-	); e.Pos != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2 + tile/4}) {
-		t.Fatalf("the item is at %+v, want it a quarter of a tile south", e.Pos)
+	); e.Position() != (state.Vec{X: 4*tile - 1, Y: 3*tile + tile/2 + tile/4}) {
+		t.Fatalf("the item is at %+v, want it a quarter of a tile south", e.Position())
 	}
 }
 
@@ -168,15 +171,15 @@ func TestTheRadiusOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 		newCharacter(1, "a", 10, 1000, 300), state.Vec{X: tile + tile/2, Y: tile + tile/2},
 	)
 	body, _ := st.CharacterEntityByCharacterID(1)
-	if body.Rad != 300 || body.ID() != id {
+	if body.Radius() != 300 || body.ID() != id {
 		t.Fatalf("body = %+v, want a radius of 300", body)
 	}
-	if c, _ := st.CharacterByID(1); c.Radius != 300 {
-		t.Fatalf("the character says a radius of %d, want 300", c.Radius)
+	if c, _ := st.CharacterByID(1); c.Radius() != 300 {
+		t.Fatalf("the character says a radius of %d, want 300", c.Radius())
 	}
 	c, _ := st.RemoveCharacterEntity(1)
-	if c.Radius != 300 {
-		t.Fatalf("the character that left has a radius of %d, want 300", c.Radius)
+	if c.Radius() != 300 {
+		t.Fatalf("the character that left has a radius of %d, want 300", c.Radius())
 	}
 }
 
@@ -191,11 +194,11 @@ func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
 	st.MoveEntity(walls, body, state.East, 9*tile)
 	p, _ := st.CharacterEntityByCharacterID(1)
 	b, _ := st.CharacterEntityByCharacterID(2)
-	if p.Pos.X != 10*tile-1 {
-		t.Fatalf("the point is at %+v, want it to pass the wall beside its path", p.Pos)
+	if p.Position().X != 10*tile-1 {
+		t.Fatalf("the point is at %+v, want it to pass the wall beside its path", p.Position())
 	}
-	if b.Pos.X != 4*tile-1-600 {
-		t.Fatalf("the body is at %+v, want it stopped by the wall beside its path", b.Pos)
+	if b.Position().X != 4*tile-1-600 {
+		t.Fatalf("the body is at %+v, want it stopped by the wall beside its path", b.Position())
 	}
 }
 
@@ -242,18 +245,18 @@ func TestACharacterWithANegativeRadiusIsAnErrorNotACharacter(t *testing.T) {
 func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 	st := newState()
 	c := newCharacter(1, "a", 10, 1000, 0)
-	c.Cooldowns.Set(cooldownKey, 5)
+	c.SetCooldown(cooldownKey, 5)
 	st.AddCharacterEntity(c, state.Vec{X: 1500, Y: 1500})
-	stored, _ := st.Characters.Get(1)
+	stored, _ := st.CharacterByID(1)
 	if err := aliasing.Disjoint(c, stored); err != nil {
 		t.Fatal(err)
 	}
 	st.SetCooldown(1, cooldownKey, 99)
-	if got, _ := c.Cooldowns.Get(cooldownKey); got != 5 || c.Cooldowns.Len() != 1 {
+	if got, _ := c.CooldownUntil(cooldownKey); got != 5 || len(c.CooldownKeys()) != 1 {
 		t.Fatalf(
 			"the state changed the character that was sent: %d, %d cooldowns",
 			got,
-			c.Cooldowns.Len(),
+			len(c.CooldownKeys()),
 		)
 	}
 }
@@ -263,10 +266,10 @@ func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 	st := newState()
 	c := newCharacter(1, "a", 10, 1000, 0)
-	c.Cooldowns.Set(cooldownKey, 5)
+	c.SetCooldown(cooldownKey, 5)
 	st.AddCharacterEntity(c, state.Vec{X: 1500, Y: 1500})
 	st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
-	st.SendMessage(zonelayer.ChatMessage{FromID: 1, Text: "hi"})
+	st.SendMessage(zonelayer.NewChatMessage(1, "hi", 0))
 	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
 		t.Fatal(err)
 	}

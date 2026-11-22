@@ -23,13 +23,13 @@ import (
 // State is the state of a zonelayer.
 type State struct {
 	// Data.
-	ID         sim.StateID
-	ZoneID     sim.StateID
-	WorldID    sim.StateID
-	Tick       uint64
-	Entities   orderedmap.Map[state.EntityID, Entity]
-	Characters orderedmap.Map[state.CharacterID, Character]
-	Chat       table.Table[ChatMessage]
+	id         sim.StateID
+	zoneID     sim.StateID
+	worldID    sim.StateID
+	tick       uint64
+	entities   orderedmap.Map[state.EntityID, Entity]
+	characters orderedmap.Map[state.CharacterID, Character]
+	chat       table.Table[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
 	bodies       bimap.BiMap[state.CharacterID, state.EntityID]
@@ -41,7 +41,7 @@ type State struct {
 
 // NewState makes the state of an empty zonelayer.
 func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
-	return &State{ID: zoneLayerID, ZoneID: zoneID, WorldID: worldID}
+	return &State{id: zoneLayerID, zoneID: zoneID, worldID: worldID}
 }
 
 // ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
@@ -52,23 +52,23 @@ type ReadOnlyZoneLayerState interface {
 
 var _ ReadOnlyZoneLayerState = (*State)(nil)
 
-// Clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
-func (s *State) Clone() *State {
+// clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
+func (s *State) clone() *State {
 	return &State{
-		ID: s.ID, ZoneID: s.ZoneID, WorldID: s.WorldID, Tick: s.Tick,
-		Entities:     s.Entities.Clone(),
-		Characters:   s.Characters.Clone(),
-		Chat:         s.Chat.Clone(),
+		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
+		entities:     s.entities.Clone(),
+		characters:   s.characters.Clone(),
+		chat:         s.chat.Clone(),
 		bodies:       s.bodies.Clone(),
 		nextEntityID: s.nextEntityID,
 	}
 }
 
 // SetTick sets the tick that the state is at.
-func (s *State) SetTick(tick uint64) { s.Tick = tick }
+func (s *State) SetTick(tick uint64) { s.tick = tick }
 
-// StateID is the ID of the zonelayer, which makes a State of it.
-func (s *State) StateID() sim.StateID { return s.ID }
+// ID is the ID of the state.
+func (s *State) ID() sim.StateID { return s.id }
 
 // Type is the type of the state of a zonelayer.
 func (s *State) Type() sim.StateType { return state.ZoneLayerType }
@@ -76,11 +76,12 @@ func (s *State) Type() sim.StateType { return state.ZoneLayerType }
 // String is the name of the type of the state of a zonelayer.
 func (s *State) String() string { return "zonelayer" }
 
-// StateTick is the tick that the state is at.
-func (s *State) StateTick() uint64 { return s.Tick }
+// Tick is the tick that the state is at.
+func (s *State) Tick() uint64 { return s.tick }
 
-// Snapshot returns a copy of the data for the other engines to read.
-func (s *State) Snapshot() sim.State { return s.Clone() }
+// Clone returns a copy of the data that shares nothing with the state, and has no event: what the
+// engine publishes for the other engines to read.
+func (s *State) Clone() sim.State { return s.clone() }
 
 // TakeEvents returns the events of the tick and empties them.
 func (s *State) TakeEvents() []sim.Event { return s.events.Take() }
@@ -94,29 +95,29 @@ func (s *State) Notice(actor any, key string, args ...any) {
 }
 
 // CharacterCount returns how many characters have a body in the zonelayer.
-func (s *State) CharacterCount() int { return s.Characters.Len() }
+func (s *State) CharacterCount() int { return s.characters.Len() }
 
 // CharacterByID returns what the zonelayer knows of a character. The health it says is the health
 // of the body of the character, which is where it lives while the character is in the zonelayer.
 func (s *State) CharacterByID(characterID state.CharacterID) (Character, bool) {
-	c, ok := s.Characters.Get(characterID)
+	c, ok := s.characters.Get(characterID)
 	if !ok {
 		return Character{}, false
 	}
 	if body, ok := s.CharacterEntityByCharacterID(characterID); ok {
-		c.Health, c.MaxHealth, c.Radius = body.Hp, body.MaxHp, body.Rad
+		c.health, c.maxHealth, c.radius = body.hp, body.maxHp, body.rad
 	}
 	return c, true
 }
 
 // EntityByID returns the entity with the ID.
 func (s *State) EntityByID(entityID state.EntityID) (Entity, bool) {
-	return s.Entities.Get(entityID)
+	return s.entities.Get(entityID)
 }
 
 // ItemEntityByID returns the entity with the ID when it is an item.
 func (s *State) ItemEntityByID(entityID state.EntityID) (ItemEntity, bool) {
-	item, ok := s.Entities.Get(entityID)
+	item, ok := s.entities.Get(entityID)
 	if !ok {
 		return ItemEntity{}, false
 	}
@@ -132,7 +133,7 @@ func (s *State) CharacterEntityByCharacterID(
 	if !ok {
 		return CharacterEntity{}, false
 	}
-	body, ok := s.Entities.Get(entityID)
+	body, ok := s.entities.Get(entityID)
 	if !ok {
 		return CharacterEntity{}, false
 	}
@@ -143,18 +144,18 @@ func (s *State) CharacterEntityByCharacterID(
 // CooldownUntil returns the first tick at which the character is free of what the key stands for,
 // or 0 when the key has no cooldown.
 func (s *State) CooldownUntil(characterID state.CharacterID, key CooldownKey) uint64 {
-	c, ok := s.Characters.Get(characterID)
+	c, ok := s.characters.Get(characterID)
 	if !ok {
 		return 0
 	}
-	until, _ := c.Cooldowns.Get(key)
+	until, _ := c.cooldowns.Get(key)
 	return until
 }
 
 // SetCooldown sets the first tick at which the character is free of what the key stands for.
 func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, until uint64) {
-	if c := s.Characters.Ptr(characterID); c != nil {
-		c.Cooldowns.Set(key, until)
+	if c := s.characters.Ptr(characterID); c != nil {
+		c.cooldowns.Set(key, until)
 	}
 }
 
@@ -162,22 +163,22 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.nextEntityID++
 	e := CharacterEntity{
-		EntityID: state.NewEntityID(s.ID, s.nextEntityID),
-		Pos:      at, Rad: c.Radius, Hp: c.Health, MaxHp: c.MaxHealth,
+		entityID: state.NewEntityID(s.id, s.nextEntityID),
+		pos:      at, rad: c.radius, hp: c.health, maxHp: c.maxHealth,
 	}
-	s.Entities.Set(e.EntityID, e)
+	s.entities.Set(e.entityID, e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
 	// (R29)
 	c = c.Clone()
-	c.Health, c.MaxHealth, c.Radius = 0, 0, 0 // from here on they are the body's
-	s.Characters.Set(c.CharacterID, c)
-	s.bodies.Link(c.CharacterID, e.EntityID)
+	c.health, c.maxHealth, c.radius = 0, 0, 0 // from here on they are the body's
+	s.characters.Set(c.characterID, c)
+	s.bodies.Link(c.characterID, e.entityID)
 	s.events.Add(
 		event.CharacterEntered{
-			EntityID: e.EntityID, CharacterID: c.CharacterID, Name: c.Name, Pos: at, Radius: e.Rad,
+			EntityID: e.entityID, CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.rad,
 		},
 	)
-	return e.EntityID
+	return e.entityID
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -188,9 +189,9 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 		return Character{}, false
 	}
 	entityID, _ := s.bodies.GetByV1(characterID)
-	body, _ := s.Entities.Get(entityID)
-	s.Entities.Delete(entityID)
-	s.Characters.Delete(characterID)
+	body, _ := s.entities.Get(entityID)
+	s.entities.Delete(entityID)
+	s.characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
 	s.events.Add(
 		event.CharacterLeft{EntityID: entityID, At: body.Position(), Radius: body.Radius()},
@@ -205,12 +206,12 @@ func (s *State) AddItemEntity(
 ) state.EntityID {
 	s.nextEntityID++
 	e := ItemEntity{
-		EntityID: state.NewEntityID(s.ID, s.nextEntityID),
-		Pos:      at, ItemID: itemID, Count: count, Expiry: expiry,
+		entityID: state.NewEntityID(s.id, s.nextEntityID),
+		pos:      at, itemID: itemID, count: count, expiry: expiry,
 	}
-	s.Entities.Set(e.EntityID, e)
-	s.events.Add(event.ItemAppeared{EntityID: e.EntityID, ItemID: itemID, Count: count, Pos: at})
-	return e.EntityID
+	s.entities.Set(e.entityID, e)
+	s.events.Add(event.ItemAppeared{EntityID: e.entityID, ItemID: itemID, Count: count, Pos: at})
+	return e.entityID
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.
@@ -219,8 +220,8 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (ItemEntity, bool) {
 	if !ok {
 		return ItemEntity{}, false
 	}
-	s.Entities.Delete(entityID)
-	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Pos})
+	s.entities.Delete(entityID)
+	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.pos})
 	return item, true
 }
 
@@ -231,7 +232,7 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (ItemEntity, bool) {
 func (s *State) MoveEntity(
 	tiles tilemap.ReadOnlyTileMap, entityID state.EntityID, dir state.Dir, distance int32,
 ) bool {
-	e, ok := s.Entities.Get(entityID)
+	e, ok := s.entities.Get(entityID)
 	if !ok {
 		return false
 	}
@@ -240,7 +241,7 @@ func (s *State) MoveEntity(
 	if to == from {
 		return false
 	}
-	s.Entities.Set(entityID, e.MovedTo(to))
+	s.entities.Set(entityID, e.MovedTo(to))
 	s.events.Add(event.EntityMoved{EntityID: entityID, From: from, To: to, Radius: e.Radius()})
 	return true
 }
@@ -248,7 +249,7 @@ func (s *State) MoveEntity(
 // DamageEntity takes health from an entity that can be damaged, never below zero, and reports
 // whether it died.
 func (s *State) DamageEntity(entityID state.EntityID, amount int32) bool {
-	e, ok := s.Entities.Get(entityID)
+	e, ok := s.entities.Get(entityID)
 	if !ok || amount <= 0 {
 		return false
 	}
@@ -257,7 +258,7 @@ func (s *State) DamageEntity(entityID state.EntityID, amount int32) bool {
 		return false
 	}
 	after := d.OnDamage(amount)
-	s.Entities.Set(entityID, after)
+	s.entities.Set(entityID, after)
 	s.events.Add(
 		event.EntityHealthChanged{
 			EntityID: entityID,
@@ -279,14 +280,14 @@ func (s *State) HealAllEntities(amount int32) {
 	if amount <= 0 {
 		return
 	}
-	for _, entityID := range s.Entities.Keys() {
-		e, _ := s.Entities.Get(entityID)
+	for _, entityID := range s.entities.Keys() {
+		e, _ := s.entities.Get(entityID)
 		d, ok := e.(DamageableEntity)
 		if !ok || d.Health() <= 0 || d.Health() >= d.MaxHealth() {
 			continue
 		}
 		after := d.OnHeal(amount)
-		s.Entities.Set(entityID, after)
+		s.entities.Set(entityID, after)
 		s.events.Add(
 			event.EntityHealthChanged{
 				EntityID: entityID,
@@ -301,9 +302,9 @@ func (s *State) HealAllEntities(amount int32) {
 
 // SendMessage records a message that was sent in the zonelayer and tells the clients.
 func (s *State) SendMessage(m ChatMessage) {
-	s.Chat.Add(m)
-	s.Chat.Trim(chatKeep)
-	s.events.Add(event.ChatMessageSent{FromID: m.FromID, Text: m.Text, Tick: m.Tick})
+	s.chat.Add(m)
+	s.chat.Trim(chatKeep)
+	s.events.Add(event.ChatMessageSent{FromID: m.fromID, Text: m.text, Tick: m.tick})
 }
 
 // NoticeToCharacter tells a character something.
@@ -313,3 +314,18 @@ func (s *State) NoticeToCharacter(characterID state.CharacterID, key string, arg
 		event.CharacterNoticed{CharacterID: characterID, Key: key, Args: slices.Clone(args)},
 	)
 }
+
+// ZoneID is the ID of the zone that the zonelayer is a copy of.
+func (s *State) ZoneID() sim.StateID { return s.zoneID }
+
+// WorldID is the ID of the world that the zonelayer is in.
+func (s *State) WorldID() sim.StateID { return s.worldID }
+
+// EntityCount is how many entities stand in the zonelayer.
+func (s *State) EntityCount() int { return s.entities.Len() }
+
+// EntityIDs returns the IDs of the entities in the zonelayer, in the order they were added.
+func (s *State) EntityIDs() []state.EntityID { return s.entities.Keys() }
+
+// ChatMessageCount is how many chat messages the zonelayer keeps.
+func (s *State) ChatMessageCount() int { return s.chat.Len() }

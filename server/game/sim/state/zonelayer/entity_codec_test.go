@@ -12,8 +12,8 @@ import (
 func everyEntity() []Entity {
 	at := state.Vec{X: -300, Y: 9000}
 	return []Entity{
-		CharacterEntity{EntityID: 3, Pos: at, Rad: 256, Hp: 80, MaxHp: 100},
-		ItemEntity{EntityID: 4, Pos: at, Rad: 8, ItemID: 7, Count: 5, Expiry: 90},
+		CharacterEntity{entityID: 3, pos: at, rad: 256, hp: 80, maxHp: 100},
+		ItemEntity{entityID: 4, pos: at, rad: 8, itemID: 7, count: 5, expiry: 90},
 	}
 }
 

@@ -107,7 +107,7 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 		t.Fatalf("the message does not carry a WorldCharacterItemAddAction: %+v", messages[0])
 	}
 	want := WorldCharacterItemAddAction{
-		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID, At: at, Expiry: 40,
+		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID(), At: at, Expiry: 40,
 	}
 	if *add != want {
 		t.Fatalf("the message is %+v, want %+v", *add, want)
@@ -136,9 +136,9 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 	}
 	put.Apply(&sim.Context{Tick: 12}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 	var found entityItem
-	for _, id := range st.Entities.Keys() {
+	for _, id := range st.EntityIDs() {
 		if item, ok := st.ItemEntityByID(id); ok {
-			found = entityItem{item.ItemID, item.Count, item.Pos}
+			found = entityItem{item.ItemID(), item.Count(), item.Position()}
 		}
 	}
 	if found != (entityItem{8, 5, at}) {

@@ -62,7 +62,7 @@ func TestTheZoneLayersTakeTheIDsAfterTheLargestOneGivenAndEveryEngineKnowsTheWor
 	var layers []sim.StateID
 	for _, l := range c.ZoneLayers() {
 		layers = append(layers, l.StateID())
-		if l.State().WorldID != 1 {
+		if l.State().WorldID() != 1 {
 			t.Fatalf("zonelayer %d does not know the world", l.StateID())
 		}
 	}
@@ -76,14 +76,15 @@ func TestTheZoneLayersTakeTheIDsAfterTheLargestOneGivenAndEveryEngineKnowsTheWor
 			"the world knows zones %v and zonelayers %v", world.ZoneIDs(), world.ZoneLayerIDs(),
 		)
 	}
-	if z := c.Zone(5).State(); z.WorldID != 1 || !slices.Equal(z.Adjacent, []sim.StateID{3}) ||
-		z.ZoneLayers.Len() != 2 {
+	z := c.Zone(5).State()
+	if z.WorldID() != 1 || !slices.Equal(z.AdjacentZones(), []sim.StateID{3}) ||
+		z.ZoneLayerCount() != 2 {
 		t.Fatalf(
 			"zone 5 knows world %d, adjacent %v, %d zonelayers",
-			z.WorldID, z.Adjacent, z.ZoneLayers.Len(),
+			z.WorldID(), z.AdjacentZones(), z.ZoneLayerCount(),
 		)
 	}
-	if c.ZoneLayer(6).State().ZoneID != 5 || c.ZoneLayer(8).State().ZoneID != 3 {
+	if c.ZoneLayer(6).State().ZoneID() != 5 || c.ZoneLayer(8).State().ZoneID() != 3 {
 		t.Fatal("a zonelayer does not know its zone")
 	}
 }

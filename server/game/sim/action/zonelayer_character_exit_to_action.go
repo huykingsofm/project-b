@@ -38,19 +38,19 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
-	if !ok || ch.Health <= 0 {
+	if !ok || ch.Health() <= 0 {
 		return
 	}
-	here, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID)
+	here, err := r.Get[zonestate.ReadOnlyZoneState](s.ZoneID())
 	if err != nil {
 		return
 	}
 	body, _ := s.CharacterEntityByCharacterID(a.CharacterID)
 	exit, found := here.ExitEntityByID(a.ExitEntityID)
-	if !found || !exit.Contains(body.Pos) {
+	if !found || !exit.Contains(body.Position()) {
 		return
 	}
-	there, err := r.Get[zonestate.ReadOnlyZoneState](exit.ToZoneID)
+	there, err := r.Get[zonestate.ReadOnlyZoneState](exit.ToZoneID())
 	if err != nil {
 		return
 	}
@@ -59,19 +59,19 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 		if layer, err := r.Get[zonelayerstate.ReadOnlyZoneLayerState](zoneLayerID); err == nil {
 			held = layer.CharacterCount()
 		}
-		if held >= int(zoneLayerSlot.Capacity) {
+		if held >= int(zoneLayerSlot.Capacity()) {
 			continue
 		}
 		character, _ := s.RemoveCharacterEntity(a.CharacterID)
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
-		selfID, back := s.ID, body.Pos
+		selfID, back := s.ID(), body.Position()
 		undo := sim.NewActionMessage[*zonelayerstate.State](
 			selfID, onfail.Drop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
 		)
 		r.Send[*zonelayerstate.State](
 			zoneLayerID, onfail.Compensate{With: undo},
-			&ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival},
+			&ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival()},
 		)
 		return
 	}

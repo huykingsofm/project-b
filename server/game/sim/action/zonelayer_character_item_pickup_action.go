@@ -41,7 +41,7 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
-	if !ok || ch.Health <= 0 {
+	if !ok || ch.Health() <= 0 {
 		return
 	}
 	body, ok := s.CharacterEntityByCharacterID(a.CharacterID)
@@ -56,22 +56,22 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 	if !reach.Intersects(body.BoundingBox()) {
 		return
 	}
-	s.RemoveItemEntity(item.EntityID)
+	s.RemoveItemEntity(item.ID())
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
-	selfID := s.ID
+	selfID := s.ID()
 	undo := sim.NewActionMessage[*zonelayerstate.State](
 		selfID,
 		onfail.Drop{},
 		&ZoneLayerItemEntityAddAction{
-			ItemID: item.ItemID, Count: item.Count, At: item.Pos, Expiry: item.Expiry,
+			ItemID: item.ItemID(), Count: item.Count(), At: item.Position(), Expiry: item.Expiry(),
 		},
 	)
 	r.Send[*worldstate.State](
-		s.WorldID, onfail.Compensate{With: undo},
+		s.WorldID(), onfail.Compensate{With: undo},
 		&WorldCharacterItemAddAction{
-			CharacterID: a.CharacterID, ItemID: item.ItemID, Count: item.Count,
-			FromZoneLayerID: selfID, At: item.Pos, Expiry: item.Expiry,
+			CharacterID: a.CharacterID, ItemID: item.ItemID(), Count: item.Count(),
+			FromZoneLayerID: selfID, At: item.Position(), Expiry: item.Expiry(),
 		},
 	)
 }

@@ -14,28 +14,28 @@ import (
 // (R18) and are not written. It returns an error, and the writer holds a partial state, when an
 // entity cannot be written.
 func (s *State) Encode(w *binarycodec.Writer) error {
-	w.Uvarint(uint64(s.ID))
-	w.Uvarint(uint64(s.ZoneID))
-	w.Uvarint(uint64(s.WorldID))
-	w.Uvarint(s.Tick)
-	w.Uvarint(uint64(s.Entities.Len()))
-	for id, e := range s.Entities.All() {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(uint64(s.zoneID))
+	w.Uvarint(uint64(s.worldID))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(s.entities.Len()))
+	for id, e := range s.entities.All() {
 		w.Uvarint(uint64(id))
 		if err := EncodeEntity(w, e); err != nil {
 			return err
 		}
 	}
-	w.Uvarint(uint64(s.Characters.Len()))
-	for id, c := range s.Characters.All() {
+	w.Uvarint(uint64(s.characters.Len()))
+	for id, c := range s.characters.All() {
 		w.Uvarint(uint64(id))
 		c.Encode(w)
 	}
-	rows := s.Chat.Rows()
+	rows := s.chat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
-		w.Uvarint(uint64(m.FromID))
-		w.String(m.Text)
-		w.Uvarint(m.Tick)
+		w.Uvarint(uint64(m.fromID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
 	}
 	w.Uvarint(uint64(s.bodies.Len()))
 	for characterID, entityID := range s.bodies.AllV1() {
@@ -62,8 +62,8 @@ func count(r *binarycodec.Reader) (uint64, error) {
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, error) {
 	s := &State{
-		ID: sim.StateID(r.Uvarint()), ZoneID: sim.StateID(r.Uvarint()),
-		WorldID: sim.StateID(r.Uvarint()), Tick: r.Uvarint(),
+		id: sim.StateID(r.Uvarint()), zoneID: sim.StateID(r.Uvarint()),
+		worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
 	}
 	n, err := count(r)
 	if err != nil {
@@ -75,7 +75,7 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		if err != nil {
 			return nil, err
 		}
-		s.Entities.Set(id, e)
+		s.entities.Set(id, e)
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		if err != nil {
 			return nil, err
 		}
-		s.Characters.Set(id, c)
+		s.characters.Set(id, c)
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -94,10 +94,10 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 	rows := make([]ChatMessage, 0, n)
 	for range n {
 		rows = append(rows, ChatMessage{
-			FromID: state.CharacterID(r.Uvarint()), Text: r.String(), Tick: r.Uvarint(),
+			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
 		})
 	}
-	s.Chat = *table.Build(rows)
+	s.chat = *table.Build(rows)
 	if n, err = count(r); err != nil {
 		return nil, err
 	}

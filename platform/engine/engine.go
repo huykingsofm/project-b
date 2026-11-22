@@ -38,7 +38,7 @@ type Engine[S sim.State] struct {
 // New makes the engine of a state. The tick is its own: the caller gives the ticks with Run or
 // calls Step.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
-	me := st.StateID()
+	me := st.ID()
 	env.ReplayLog.Describe(me, st.Type(), st.String())
 	e := &Engine[S]{
 		cell: newCell(
@@ -153,7 +153,7 @@ func (e *Engine[S]) Step() {
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.Emit(e.me, e.tick, events)
 	}
-	e.stable.Publish(e.st.Snapshot())
+	e.stable.Publish(e.st.Clone())
 	e.recordHash(cfg, e.tick, e.Hash)
 	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
@@ -235,8 +235,8 @@ func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error
 	if !ok {
 		return nil, fmt.Errorf("%d: the state is a %T, not the one asked for", id, decoded)
 	}
-	if st.StateID() != id {
-		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.StateID())
+	if st.ID() != id {
+		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.ID())
 	}
 	rest, err := readCheckpointRest[S](env.Codecs, r, version)
 	if err != nil {

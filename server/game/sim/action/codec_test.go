@@ -16,10 +16,12 @@ import (
 // everyAction has one action of every ID of the register, with every field set to something that is
 // not the zero value, private fields included: an action that waits in a scheduler is partly run.
 func everyAction() map[sim.ActionID]sim.BaseAction {
-	ch := zonelayerstate.Character{
-		CharacterID: 7, Name: "Binh", Health: 80, MaxHealth: 100, Radius: 256, Speed: 250,
+	ch, err := zonelayerstate.NewCharacter(7, "Binh", 100, 250, 256)
+	if err != nil {
+		panic(err)
 	}
-	ch.Cooldowns.Set(ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 44)
+	ch.SetHealth(80)
+	ch.SetCooldown(ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 44)
 	at := state.Vec{X: -300, Y: 9000}
 	return map[sim.ActionID]sim.BaseAction{
 		WorldChatPrivateSendActionID: &WorldChatPrivateSendAction{FromID: 1, ToID: 2, Text: "psst"},

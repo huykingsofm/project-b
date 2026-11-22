@@ -26,7 +26,7 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 		CharacterID: 1, ItemID: 7, Count: 5, FromZoneLayerID: 5, At: at, Expiry: 40,
 	}
 	more.Apply(&sim.Context{Tick: 11}, s, reg, sim.NewPlan[*worldstate.State]())
-	if got := itemsHeld(s, 1, 7); got != 20*99 {
+	if got := s.ItemsHeld(1, 7); got != 20*99 {
 		t.Fatalf("the character has %d of the item, want a full inventory of %d", got, 20*99)
 	}
 	messages := reg.Take()
@@ -42,17 +42,4 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 	if *put != want {
 		t.Fatalf("what goes back is %+v, want %+v", *put, want)
 	}
-}
-
-// itemsHeld counts the items of a kind in the slots of a character; it is for the assertions of the
-// tests.
-func itemsHeld(st *worldstate.State, characterID state.CharacterID, itemID state.ItemID) uint32 {
-	inventory, _ := st.Inventories.Get(characterID)
-	var total uint32
-	for _, inventorySlot := range inventory.Slots {
-		if inventorySlot.Count > 0 && inventorySlot.ItemID == itemID {
-			total += inventorySlot.Count
-		}
-	}
-	return total
 }

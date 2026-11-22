@@ -16,12 +16,12 @@ type toyState struct {
 	Total int64
 }
 
-func (s *toyState) StateID() sim.StateID { return s.id }
-func (*toyState) Type() sim.StateType    { return toyType }
-func (*toyState) String() string         { return "toy" }
-func (s *toyState) StateTick() uint64    { return s.tick }
-func (s *toyState) SetTick(t uint64)     { s.tick = t }
-func (s *toyState) Snapshot() sim.State  { c := *s; return &c }
+func (s *toyState) ID() sim.StateID   { return s.id }
+func (*toyState) Type() sim.StateType { return toyType }
+func (*toyState) String() string      { return "toy" }
+func (s *toyState) Tick() uint64      { return s.tick }
+func (s *toyState) SetTick(t uint64)  { s.tick = t }
+func (s *toyState) Clone() sim.State  { c := *s; return &c }
 
 func (s *toyState) TakeEvents() []sim.Event { return nil }
 func (s *toyState) Hash() uint64 {

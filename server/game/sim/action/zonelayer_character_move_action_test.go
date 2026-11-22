@@ -45,8 +45,8 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 15 {
 		t.Fatalf("the cooldown ends at %d, want 15", got)
 	}
-	if e, _ := st.CharacterEntityByCharacterID(1); e.Pos != (state.Vec{X: 2500, Y: 2500}) {
-		t.Fatalf("position = %+v, want one step east", e.Pos)
+	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 2500, Y: 2500}) {
+		t.Fatalf("position = %+v, want one step east", e.Position())
 	}
 
 	// A run that is cancelled frees the character at once.
@@ -62,8 +62,8 @@ func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
 	run.Apply(&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
-	if e, _ := st.CharacterEntityByCharacterID(1); e.Pos != (state.Vec{X: 1500, Y: 2500}) {
-		t.Fatalf("the character moved without a map: %+v", e.Pos)
+	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {
+		t.Fatalf("the character moved without a map: %+v", e.Position())
 	}
 	next, _ := reg.TakeSelf()
 	if len(next) != 1 || next[0] != sim.Action[*zonelayerstate.State](run) {
@@ -89,7 +89,7 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 	for _, speed := range []int32{250, 1000, 3000} {
 		st, reg := newMoveTestWorld(t, true)
 		ch, _ := st.RemoveCharacterEntity(1)
-		ch.Speed = speed
+		ch.SetSpeed(speed)
 		st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
 		start, _ := st.CharacterEntityByCharacterID(1)
 
@@ -98,7 +98,7 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 		run.Apply(&sim.Context{Tick: 11}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
 		end, _ := st.CharacterEntityByCharacterID(1)
-		if got := end.Pos.X - start.Pos.X; got != 2*speed {
+		if got := end.Position().X - start.Position().X; got != 2*speed {
 			t.Errorf(
 				"with a speed of %d the character went %d units in 2 ticks, want %d",
 				speed,
@@ -112,13 +112,13 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 func TestACharacterWithNoSpeedDoesNotMove(t *testing.T) {
 	st, reg := newMoveTestWorld(t, true)
 	ch, _ := st.RemoveCharacterEntity(1)
-	ch.Speed = 0
+	ch.SetSpeed(0)
 	st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
 	(&ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).Apply(
 		&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State](),
 	)
-	if e, _ := st.CharacterEntityByCharacterID(1); e.Pos != (state.Vec{X: 1500, Y: 2500}) {
-		t.Fatalf("a character with no speed moved to %+v", e.Pos)
+	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {
+		t.Fatalf("a character with no speed moved to %+v", e.Position())
 	}
 }
 

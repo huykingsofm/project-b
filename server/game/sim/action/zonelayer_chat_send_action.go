@@ -23,7 +23,7 @@ func (a *ZoneLayerChatSendAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
-	s.SendMessage(zonelayerstate.ChatMessage{FromID: a.FromID, Text: a.Text, Tick: c.Tick})
+	s.SendMessage(zonelayerstate.NewChatMessage(a.FromID, a.Text, c.Tick))
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.

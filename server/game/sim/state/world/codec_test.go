@@ -14,7 +14,7 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st := world.NewState(1)
 	st.AddItemToCharacter(3, 7, 120, 4, 99)
 	st.AddItemToCharacter(4, 8, 5, 4, 99)
-	st.SendPrivateMessage(world.PrivateChatMessage{FromID: 1, ToID: 2, Text: "psst", Tick: 5})
+	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "psst", 5))
 	st.SetTick(9)
 	st.AddZone(2)
 	st.AddZone(3)
@@ -31,8 +31,8 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
 	zones, zoneLayers := []sim.StateID{2, 3}, []sim.StateID{5}
-	if !slices.Equal(got.Zones, zones) || !slices.Equal(got.ZoneLayers, zoneLayers) {
-		t.Fatalf("the world knows zones %v and zonelayers %v", got.Zones, got.ZoneLayers)
+	if !slices.Equal(got.ZoneIDs(), zones) || !slices.Equal(got.ZoneLayerIDs(), zoneLayers) {
+		t.Fatalf("the world knows zones %v and zonelayers %v", got.ZoneIDs(), got.ZoneLayerIDs())
 	}
 	if got.Hash() != st.Hash() {
 		t.Fatal("the state that came back has another hash")

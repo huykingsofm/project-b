@@ -20,8 +20,8 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 ) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 0)
 	kept := testkit.NewCharacter(1, "An", 100, 1000, 0)
-	kept.Cooldowns.Set(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 5)
-	kept.Cooldowns.Set(action.ZoneLayerCharacterMoveActionCooldownKey, 7)
+	kept.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 5)
+	kept.SetCooldown(action.ZoneLayerCharacterMoveActionCooldownKey, 7)
 	target := testkit.NewCharacter(2, "Binh", 1000, 1000, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,23 +41,21 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 			command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 1},
 		)
 		// the caller reads what it kept, as a gateway that saves the character would
-		_ = kept.Cooldowns.Len()
-		for range kept.Cooldowns.All() {
-		}
+		_ = len(kept.CooldownKeys())
 		time.Sleep(time.Millisecond)
 	}
 	cancel()
 	wg.Wait()
 
-	if got, _ := kept.Cooldowns.Get(
+	if got, _ := kept.CooldownUntil(
 		action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey,
 	); got != 5 {
 		t.Fatalf("the engine changed the cooldown of the character that was sent: %d, want 5", got)
 	}
-	if kept.Cooldowns.Len() != 2 {
+	if len(kept.CooldownKeys()) != 2 {
 		t.Fatalf(
 			"the engine changed the cooldowns of the character that was sent: %d of them, want 2",
-			kept.Cooldowns.Len(),
+			len(kept.CooldownKeys()),
 		)
 	}
 }

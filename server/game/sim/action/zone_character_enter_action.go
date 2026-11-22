@@ -24,19 +24,19 @@ type ZoneCharacterEnterAction struct {
 
 func (a *ZoneCharacterEnterAction) ID() sim.ActionID { return ZoneCharacterEnterActionID }
 func (a *ZoneCharacterEnterAction) Priority() int16  { return PriorityIntent }
-func (a *ZoneCharacterEnterAction) Actor() any       { return a.Character.CharacterID }
+func (a *ZoneCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
 
 // Apply picks a zonelayer and sends it the character.
 func (a *ZoneCharacterEnterAction) Apply(
 	_ *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],
 	_ *sim.Plan[*zonestate.State],
 ) {
-	for zoneLayerID, zoneLayerSlot := range s.ZoneLayers.All() {
+	for zoneLayerID, zoneLayerSlot := range s.ZoneLayerSlots() {
 		held := 0
 		if layer, err := r.Get[zonelayerstate.ReadOnlyZoneLayerState](zoneLayerID); err == nil {
 			held = layer.CharacterCount()
 		}
-		if held >= int(zoneLayerSlot.Capacity) {
+		if held >= int(zoneLayerSlot.Capacity()) {
 			continue
 		}
 		r.Send[*zonelayerstate.State](

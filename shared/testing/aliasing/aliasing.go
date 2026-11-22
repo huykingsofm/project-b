@@ -146,7 +146,8 @@ func (r Rules) has(list []reflect.Type, t reflect.Type) bool {
 // that says, by the path of its fields, where it does not.
 //
 //   - A value type (numbers, bool, string, and arrays and structs of them) is copied by assignment.
-//   - Any other type must have a method Clone() T (or Clone() *T), which is trusted to copy what
+//   - Any other type must have a method Clone() T (or Clone() *T, or Clone() I for an interface I
+//     that *T implements), which is trusted to copy what
 //     the type holds. What the type holds is still looked at: a slice, a map or a pointer inside it
 //     is allowed, but the types they hold must be values or have Clone too, because a container
 //     copies them with Clone when they have it and by assignment when they have not.
@@ -162,12 +163,17 @@ type checker struct {
 	active map[reflect.Type]bool
 }
 
-// hasClone says whether the type, or its pointer, has a method Clone that returns the type or a
-// pointer to it.
+// hasClone says whether the type, or its pointer, has a method Clone that returns the type, a
+// pointer to it, or an interface that the pointer implements (a type that is copied behind an
+// interface, as a state is).
 func hasClone(t reflect.Type) bool {
-	m, ok := reflect.PointerTo(t).MethodByName("Clone")
-	return ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 &&
-		(m.Type.Out(0) == t || m.Type.Out(0) == reflect.PointerTo(t))
+	p := reflect.PointerTo(t)
+	m, ok := p.MethodByName("Clone")
+	if !ok || m.Type.NumIn() != 1 || m.Type.NumOut() != 1 {
+		return false
+	}
+	out := m.Type.Out(0)
+	return out == t || out == p || (out.Kind() == reflect.Interface && p.Implements(out))
 }
 
 // pure says whether assignment copies everything the type holds.

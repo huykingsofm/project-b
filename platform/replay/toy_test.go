@@ -13,12 +13,12 @@ const toyType sim.StateType = 1
 
 type toyState struct{ id sim.StateID }
 
-func (s *toyState) StateID() sim.StateID               { return s.id }
+func (s *toyState) ID() sim.StateID                    { return s.id }
 func (*toyState) Type() sim.StateType                  { return toyType }
 func (*toyState) String() string                       { return "toy" }
-func (*toyState) StateTick() uint64                    { return 0 }
+func (*toyState) Tick() uint64                         { return 0 }
 func (*toyState) SetTick(uint64)                       {}
-func (s *toyState) Snapshot() sim.State                { return s }
+func (s *toyState) Clone() sim.State                   { return s }
 func (*toyState) Hash() uint64                         { return 0 }
 func (*toyState) TakeEvents() []sim.Event              { return nil }
 func (s *toyState) Encode(w *binarycodec.Writer) error { w.Uvarint(uint64(s.id)); return nil }

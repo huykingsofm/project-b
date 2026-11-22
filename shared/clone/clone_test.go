@@ -63,7 +63,7 @@ func TestSliceOfValuesIsACopyAndNilAndEmptyStayWhatTheyAre(t *testing.T) {
 func BenchmarkSliceOfValues(b *testing.B) {
 	s := make([]plain, 64)
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = clone.Slice(s)
 	}
 }
@@ -71,7 +71,7 @@ func BenchmarkSliceOfValues(b *testing.B) {
 func BenchmarkSliceOfClonableValues(b *testing.B) {
 	s := make([]withValueClone, 64)
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = clone.Slice(s)
 	}
 }

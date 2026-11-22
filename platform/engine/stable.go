@@ -43,7 +43,7 @@ type StableStateStore struct {
 func NewStableStateStore() *StableStateStore { return &StableStateStore{} }
 
 // Publish makes a copy the latest of its engine.
-func (s *StableStateStore) Publish(st sim.State) { s.states.Publish(st.StateID(), st) }
+func (s *StableStateStore) Publish(st sim.State) { s.states.Publish(st.ID(), st) }
 
 // Remove forgets what an engine published.
 func (s *StableStateStore) Remove(id sim.StateID) { s.states.Remove(id) }
@@ -100,7 +100,7 @@ func (v *StableView) Read(id sim.StateID) (sim.State, error) {
 		v.states[id] = st
 		var copyTick uint64
 		if st != nil {
-			copyTick = st.StateTick()
+			copyTick = st.Tick()
 		}
 		v.replayLog.Append(v.me, v.tick, replay.StableRead{Source: id, CopyTick: copyTick})
 	}

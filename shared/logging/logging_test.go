@@ -323,8 +323,8 @@ func BenchmarkEncodePerEntry(b *testing.B) {
 		batch[i] = entry(logging.LevelInfo, "character moved", "zone", 1, "id", i)
 	}
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i += len(batch) {
+
+	for i := 0; b.Loop(); i += len(batch) {
 		_ = c.Consume(batch)
 	}
 }

@@ -15,12 +15,12 @@ type toyState struct {
 	Total int64
 }
 
-func (s *toyState) StateID() StateID  { return s.id }
-func (*toyState) Type() StateType     { return toyType }
-func (*toyState) String() string      { return "toy" }
-func (s *toyState) StateTick() uint64 { return s.tick }
-func (s *toyState) SetTick(t uint64)  { s.tick = t }
-func (s *toyState) Snapshot() State   { c := *s; return &c }
+func (s *toyState) ID() StateID      { return s.id }
+func (*toyState) Type() StateType    { return toyType }
+func (*toyState) String() string     { return "toy" }
+func (s *toyState) Tick() uint64     { return s.tick }
+func (s *toyState) SetTick(t uint64) { s.tick = t }
+func (s *toyState) Clone() State     { c := *s; return &c }
 func (s *toyState) Hash() uint64 {
 	h := NewHasher()
 	h.U64(uint64(s.id))
@@ -47,7 +47,7 @@ const otherType StateType = 2
 
 func (*otherState) Type() StateType { return otherType }
 func (*otherState) String() string  { return "other" }
-func (s *otherState) Snapshot() State {
+func (s *otherState) Clone() State {
 	c := *s
 	return &c
 }

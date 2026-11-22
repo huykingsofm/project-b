@@ -31,16 +31,16 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 
 	first := publishedAt(stable, 3)
 	view.begin(10)
-	if got := readToy(t, view, 7); got.StateTick() != first.StateTick() {
+	if got := readToy(t, view, 7); got.Tick() != first.Tick() {
 		t.Fatal("the first read did not return the latest copy")
 	}
 	publishedAt(stable, 4) // the other engine publishes while this tick runs
-	if got := readToy(t, view, 7); got.StateTick() != 3 {
+	if got := readToy(t, view, 7); got.Tick() != 3 {
 		t.Fatal("a later read in the same tick returned another copy")
 	}
 
 	view.begin(11)
-	if got := readToy(t, view, 7); got.StateTick() != 4 {
+	if got := readToy(t, view, 7); got.Tick() != 4 {
 		t.Fatal("the next tick did not read the newer copy")
 	}
 }
