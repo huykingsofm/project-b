@@ -1,0 +1,50 @@
+package entity
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+)
+
+// ErrNoCodec is returned for an entity that cannot be written: it is nil, or its kind has no
+// decoder, so what is written could not be read back.
+var ErrNoCodec = errors.New("entity: no codec for it")
+
+// ErrUnknownKind is returned when bytes name a kind of entity that is not one.
+var ErrUnknownKind = errors.New("entity: the number is not one of a kind of entity")
+
+// decoders is the table of the functions that read an entity, by its kind, each next to the Encode
+// that it reads. A test fails when a kind of the register has none.
+var decoders = map[KindID]func(r *binarycodec.Reader, version binarycodec.Version) (Entity, error){
+	CharacterKindID: decodeCharacterEntity,
+	ItemKindID:      decodeItemEntity,
+	ExitKindID:      decodeExitEntity,
+}
+
+// Encode writes an entity: its kind and then what it is made of. It writes nothing, and returns
+// ErrNoCodec, for a nil entity or one whose kind has no decoder.
+func Encode(w *binarycodec.Writer, e Entity) error {
+	if e == nil {
+		return fmt.Errorf("%w: nil", ErrNoCodec)
+	}
+	if _, ok := decoders[e.KindID()]; !ok {
+		return fmt.Errorf("%w: %T has the kind %d", ErrNoCodec, e, e.KindID())
+	}
+	w.Uvarint(uint64(e.KindID()))
+	e.Encode(w)
+	return nil
+}
+
+// Decode reads what Encode wrote, of the data version given.
+func Decode(r *binarycodec.Reader, version binarycodec.Version) (Entity, error) {
+	code := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	decode, ok := decoders[KindID(code)]
+	if !ok || code > 0xffff {
+		return nil, fmt.Errorf("%w: %d", ErrUnknownKind, code)
+	}
+	return decode(r, version)
+}

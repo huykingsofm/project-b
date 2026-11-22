@@ -1,6 +1,9 @@
 package entity
 
-import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+)
 
 // ItemEntity is an item lying on the ground of a zonelayer. It can be picked up for as long as it
 // is in the state; what removes it when its time is up is ZoneLayerItemEntityRemoveAction.
@@ -36,4 +39,25 @@ func (e ItemEntity) Hash(h *state.Hasher) {
 	h.U64(uint64(e.ItemID))
 	h.U64(uint64(e.Count))
 	h.U64(e.Expiry)
+}
+
+func (e ItemEntity) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(e.EntityID))
+	e.Pos.Encode(w)
+	w.Varint(int64(e.Rad))
+	w.Uvarint(uint64(e.ItemID))
+	w.Uvarint(uint64(e.Count))
+	w.Uvarint(e.Expiry)
+}
+
+func decodeItemEntity(r *binarycodec.Reader, version binarycodec.Version) (Entity, error) {
+	e := ItemEntity{
+		EntityID: state.EntityID(r.Uvarint()),
+		Pos:      state.DecodeVec(r, version),
+		Rad:      int32(r.Varint()),
+		ItemID:   state.ItemID(r.Uvarint()),
+		Count:    uint32(r.Uvarint()),
+		Expiry:   r.Uvarint(),
+	}
+	return e, r.Err()
 }

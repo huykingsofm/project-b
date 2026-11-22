@@ -14,6 +14,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [plan.md](plan.md) | filling a plan and finding actions in it | `sim/action` |
 | [codec.md](codec.md) | writing and reading a message with its actions | `sim/action` |
 | [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `engine/replay/runner` |
+| [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine | `engine` |
 
 ## Run
 

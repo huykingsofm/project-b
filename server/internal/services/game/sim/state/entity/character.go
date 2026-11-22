@@ -1,6 +1,9 @@
 package entity
 
-import "github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+import (
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
+)
 
 // CharacterEntity is the body of a character in a zonelayer. Which character it is the body of is
 // in the state of the zonelayer, not here.
@@ -41,4 +44,23 @@ func (e CharacterEntity) Hash(h *state.Hasher) {
 func (e CharacterEntity) MovedTo(pos state.Vec) Entity {
 	e.Pos = pos
 	return e
+}
+
+func (e CharacterEntity) Encode(w *binarycodec.Writer) {
+	w.Uvarint(uint64(e.EntityID))
+	e.Pos.Encode(w)
+	w.Varint(int64(e.Rad))
+	w.Varint(int64(e.Hp))
+	w.Varint(int64(e.MaxHp))
+}
+
+func decodeCharacterEntity(r *binarycodec.Reader, version binarycodec.Version) (Entity, error) {
+	e := CharacterEntity{
+		EntityID: state.EntityID(r.Uvarint()),
+		Pos:      state.DecodeVec(r, version),
+		Rad:      int32(r.Varint()),
+		Hp:       int32(r.Varint()),
+		MaxHp:    int32(r.Varint()),
+	}
+	return e, r.Err()
 }

@@ -2,10 +2,11 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
+	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 	"github.com/huykingsofm/project-b/server/internal/shared/logging"
-	"math/rand/v2"
 	"time"
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
@@ -27,7 +28,6 @@ type ZoneLayerEngine struct {
 	stable   StableRegistry
 	emitter  ZoneLayerEmitter
 	tick     uint64
-	rng      *rand.Rand
 }
 
 // NewZoneLayerEngine makes the engine of a zonelayer. The tick and the cron are its own: the caller
@@ -35,10 +35,12 @@ type ZoneLayerEngine struct {
 func NewZoneLayerEngine(st *zonelayerstate.State, env *Env, seed uint64) *ZoneLayerEngine {
 	me := message.ZoneLayerAddress(st.ID)
 	e := &ZoneLayerEngine{
-		cell: newCell(me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize), st: st,
+		cell: newCell(
+			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
+		), st: st,
 		commands: make(
 			chan command.ZoneLayerCommand, env.QueueSize,
-		), stable: env.Stable, emitter: env.ZoneLayerEmitter, rng: newRand(seed, me),
+		), stable: env.Stable, emitter: env.ZoneLayerEmitter,
 	}
 	e.reg.Common = action.Common{Me: me, Graph: env.Graph, Stable: e.view}
 	e.bounce.notice = func(who any, key string, args []any) {
@@ -121,7 +123,7 @@ func (e *ZoneLayerEngine) Step() {
 		e.emitter.EmitZoneLayer(e.me, e.tick, events)
 	}
 	e.stable.PublishZoneLayer(e.st.Clone())
-	e.recordHash(cfg, e.tick, e.st.Hash)
+	e.recordHash(cfg, e.tick, e.hash)
 	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
 }
@@ -172,4 +174,37 @@ func (e *ZoneLayerEngine) Run(ctx context.Context, ticks <-chan time.Time) {
 			e.Step()
 		}
 	}
+}
+
+// hash is the hash of the engine: its state and what it waits for.
+func (e *ZoneLayerEngine) hash() uint64 { return engineHash(e.st.Hash(), &e.sched, e.selfNext) }
+
+// Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
+// by the goroutine of the engine or while the engine does not run.
+func (e *ZoneLayerEngine) Checkpoint() ([]byte, error) {
+	return checkpoint(&e.cell, e.tick, e.st.Encode, &e.sched, e.selfNext)
+}
+
+// RestoreZoneLayerEngine makes the engine of a zonelayer from a checkpoint, in the environment
+// given, at the tick of the checkpoint. The crons are not in a checkpoint: the caller adds them
+// again, as it did when it made the engine the first time.
+func RestoreZoneLayerEngine(data []byte, env *Env, seed uint64) (*ZoneLayerEngine, error) {
+	r := binarycodec.NewReader(data)
+	version, address, tick, err := readCheckpointStart(r, message.ScopeZoneLayer)
+	if err != nil {
+		return nil, err
+	}
+	st, err := zonelayerstate.DecodeState(r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%v: the state: %w", address, err)
+	}
+	if message.ZoneLayerAddress(st.ID) != address {
+		return nil, fmt.Errorf("%v: the state is of the zonelayer %d", address, st.ID)
+	}
+	e := NewZoneLayerEngine(st, env, seed)
+	e.tick = tick
+	if e.selfNext, err = readCheckpointRest(r, version, &e.cell, &e.sched); err != nil {
+		return nil, fmt.Errorf("%v: %w", address, err)
+	}
+	return e, nil
 }
