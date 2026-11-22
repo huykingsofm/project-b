@@ -44,7 +44,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - Kind: made
 - Priority: `PriorityResolve`
 - Fields: `SourceID`, `VictimID` (entities), `Amount`
-- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`PlanKey{ID: ZoneLayerCharacterDamageActionID{}}`)
+- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`FindByID` with `ZoneLayerCharacterDamageActionID`)
 - Steps:
   1. Nothing if `Amount` <= 0.
   2. `DamageEntity` on the victim (a [`DamageableEntity`](../entity/entity.md#damageableentity-interface)).

@@ -11,6 +11,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [bitset.md](bitset.md) | `bitset.Array` against `[]bool` | `shared/bitset` |
 | [segmentlog.md](segmentlog.md) | appending to and reading the segment log | `shared/segmentlog` |
 | [replay_log.md](replay_log.md) | recording and reading the replay log in files | `engine/replay` |
+| [plan.md](plan.md) | filling a plan and finding actions in it | `sim/action` |
 
 ## Run
 
