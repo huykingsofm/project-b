@@ -1,6 +1,6 @@
 # World actions
 
-State: [`state/world`](../../server/internal/services/game/sim/state/world): private messages between players, inventories of characters. Registry: `WorldRegistry`. Conventions, keys and priorities: [index](index.md).
+State: [`state/world`](../../server/game/sim/state/world): private messages between players, inventories of characters. Registry: `sim.Registry[*worldstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## WorldChatPrivateSendAction
 

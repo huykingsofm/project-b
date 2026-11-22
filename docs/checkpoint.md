@@ -1,19 +1,17 @@
 # Checkpoint of an engine
 
-`engine/checkpoint.go`, with the codecs of the states (`sim/state/*/codec.go`), of the entities (`sim/state/entity/codec.go`) and of the scheduler (`sim/action/scheduler_codec.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
+`platform/engine/checkpoint.go`, with the codecs of the states (`server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity_codec.go`) and of the scheduler (`platform/sim/scheduler_codec.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
 
 ## Entry points
 
 | Call | What it does |
 |---|---|
-| `WorldEngine.Checkpoint()`, `ZoneEngine.Checkpoint()`, `ZoneLayerEngine.Checkpoint()` | writes the checkpoint of the engine; called between two ticks, by the goroutine of the engine or while it does not run |
-| `RestoreWorldEngine(data, env, seed)` | makes the engine of the world from a checkpoint, at its tick |
-| `RestoreZoneEngine(data, env, seed, tilesOf)` | the same for a zone; `tilesOf` gives the map of the zone by its ID |
-| `RestoreZoneLayerEngine(data, env, seed)` | the same for a zonelayer |
+| `Engine[S].Checkpoint()` | writes the checkpoint of the engine; called between two ticks, by the goroutine of the engine or while it does not run |
+| `engine.Restore[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
 
-- A restore registers the engine in the router of `env`, as `New...Engine` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
-- What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `ZoneLayerEngine.EnsureRegen(every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
-- A checkpoint that is cut, has a byte too many, is of another data version or of another scope is an error, never a panic.
+- A restore registers the engine in the router of `env`, as `engine.New` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
+- What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
+- A checkpoint that is cut, has a byte too many, is of another data version or of another type of state is an error, never a panic.
 
 ## What is written
 
@@ -22,7 +20,8 @@ In this order:
 | Part | Holds |
 |---|---|
 | version | the version of the data, `uvarint` (1) |
-| address | scope `u8` and ID of the engine; the restore checks it against the scope and the state |
+| state type | the `StateType`, `uvarint`; the restore checks it against the type of state it was asked for |
+| state ID | the ID of the engine, `uvarint`; the restore checks it against the state |
 | tick | the tick the engine is at |
 | state | the data of the state, by its `Encode` (below) |
 | scheduler | the last tick it gave out, and the actions set for later ticks, by tick and in order |
@@ -30,7 +29,7 @@ In this order:
 | random numbers | where the generator of the engine is (the PCG), as its own bytes |
 | `seq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |
-| `lastSeq` | the last number taken from each sender, in the order of the addresses |
+| `lastSeq` | the last number taken from each sender, in the order of the state IDs |
 | messages held | the messages the bouncer holds to send again, each written whole |
 
 ## What is not written
@@ -42,15 +41,15 @@ In this order:
 | the queues of the engine | what was not yet taken from them is in the replay log |
 | `View`, the registry of the tick, the emitters | made again by the engine |
 
-## State, by scope
+## State, by type
 
 | State | Data written |
 |---|---|
-| world | ID, tick, the private messages, the inventory of each character |
-| zone | ID, tick, its entities (the exits), the zonelayers it knows with their capacity, what was said, the next entity ID |
-| zonelayer | IDs, tick, its entities, its characters with their cooldowns, what was said, which character has which body, the next entity ID |
+| world | ID, tick, every zone and zonelayer, the private messages, the inventory of each character |
+| zone | ID, world ID, tick, the zones its exits lead to, its entities (the exits), the zonelayers it knows with their capacity, what was said, the number the next entity gets |
+| zonelayer | IDs (zonelayer, zone, world), tick, its entities, its characters with their cooldowns, what was said, which character has which body, the number the next entity gets |
 
-- An entity is written as its kind (`entity.KindID`) and then what it is made of; each kind has its decoder in `entity/codec.go`, and a test fails when a kind of the register has none.
+- An entity of a zonelayer is written as its kind (`KindID`) and then what it is made of; each kind has its decoder in `entity_codec.go`, and a test fails when a kind of the register has none. An exit of a zone is written without a kind: the zone holds only exits.
 - A count that claims more items than the bytes left can hold is refused before anything is made.
 
 ## Hash

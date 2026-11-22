@@ -6,10 +6,10 @@ Conventions and how to run: [index](index.md). Behavior: [`Plan`](../simulation.
 
 | Name | Package | Measures |
 |---|---|---|
-| `BenchmarkPlanAppend/actions=N` | `sim/action` | `Reset` and `Append` of `N` actions into a plan that is reused, as an engine does every tick |
-| `BenchmarkPlanFind/actions=N` | `sim/action` | `Find` of the damage by its ID in a plan of `N` actions: makes a slice |
-| `BenchmarkPlanFindByID/actions=N` | `sim/action` | `FindByID` over the same damage, all of it walked |
-| `BenchmarkPlanFindByIDNested/actions=N` | `sim/action` | `FindByID` of the damage and, inside it, of the regens, for the first 3 damage |
+| `BenchmarkPlanAppend/actions=N` | `platform/sim` | `Reset` and `Append` of `N` actions into a plan that is reused, as an engine does every tick |
+| `BenchmarkPlanFind/actions=N` | `platform/sim` | `Find` of the damage by its ID in a plan of `N` actions: makes a slice |
+| `BenchmarkPlanFindByID/actions=N` | `platform/sim` | `FindByID` over the same damage, all of it walked |
+| `BenchmarkPlanFindByIDNested/actions=N` | `platform/sim` | `FindByID` of the damage and, inside it, of the regens, for the first 3 damage |
 
 - The actions of a plan are moves (40%), attacks, damage and regens (20% each), the moves, attacks and regens of 200 characters; `N` is 20, 100 or 1,000.
 - A plan is as large as the actions of one tick of one engine.

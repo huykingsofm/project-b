@@ -6,8 +6,8 @@ Conventions and how to run: [index](index.md). Behavior: [replay_log](../replay_
 
 | Name | Package | Measures |
 |---|---|---|
-| `BenchmarkEncodeMessage/<message>` | `sim/action` | `EncodeMessage` into a reused buffer: the part of recording a message done by the goroutine of the engine |
-| `BenchmarkDecodeMessage/<message>` | `sim/action` | `DecodeMessage` from its bytes |
+| `BenchmarkEncodeMessage/<message>` | `server/game/sim/action` | `EncodeMessage` into a reused buffer: the part of recording a message done by the goroutine of the engine |
+| `BenchmarkDecodeMessage/<message>` | `server/game/sim/action` | `DecodeMessage` from its bytes |
 
 ## Results
 

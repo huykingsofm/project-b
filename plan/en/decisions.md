@@ -25,6 +25,7 @@
 | Observability | Not needed now; in the plan at low priority (phase 8) |
 | Deployment | docker compose |
 | Records | No ADRs in project-b; no `depguard` |
+| Platform and game | Two layers: `platform` (what any game that runs in ticks is made of: `State`, `Action[S]`, `Command[S]`, `Message`, plan, scheduler, registry, codecs, the engine `Engine[S]`, the replay log and runner) and `server/game` (this game: the world, zone and zonelayer states, their actions and commands, the cluster builder); `shared` at the root. The platform has no world, zone, zonelayer, graph or scope: every state has a `StateID` unique among all states (the address of a message and the key of a read) and a `StateType`; each state keeps the IDs of the states it needs, and the world lists them all; an `EntityID` is made of the ID of the state that holds it and a number it counted; an action reads another state with `Registry.Get[T](id)`; the codecs are registers that the game fills and puts in `Env`, and a log file is named after the name of the type of its state and the ID, with the number of the type in its meta |
 
 ## Still open
 

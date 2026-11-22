@@ -5,7 +5,7 @@
 ci: fmt fix vet lint test
 
 fmt:
-	@test -z "$$(gofmt -l server)" || { echo "gofmt needed on:"; gofmt -l server; exit 1; }
+	@test -z "$$(gofmt -l server platform shared)" || { echo "gofmt needed on:"; gofmt -l server platform shared; exit 1; }
 
 # Fails, and prints the patch, when go fix would change a file; apply it with: go fix ./...
 fix:

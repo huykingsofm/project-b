@@ -1,6 +1,6 @@
 # Entities
 
-What stands in a zonelayer. Code: [`sim/state/entity`](../../server/internal/services/game/sim/state/entity). The actions that change them are in [docs/action](../action/index.md).
+What stands in a zone or a zonelayer. Each state holds the entities of its own kinds and defines them in its own package: [`zonelayer`](../../server/game/sim/state/zonelayer) (`Entity`, `CharacterEntity`, `ItemEntity`) and [`zone`](../../server/game/sim/state/zone) (`ExitEntity`); there is no package shared between them. The actions that change them are in [docs/action](../action/index.md).
 
 ## Kinds
 
@@ -8,15 +8,16 @@ What stands in a zonelayer. Code: [`sim/state/entity`](../../server/internal/ser
 |---|---|---|---|
 | Character body | 1 | [character.md](character.md) | zonelayer |
 | Item on the ground | 2 | [item.md](item.md) | zonelayer |
-| Exit | 3 | [exit.md](exit.md) | zone (stands in every zonelayer of it) |
+| Exit | none (the zone holds nothing else) | [exit.md](exit.md) | zone (stands in every zonelayer of it) |
 
-- A `KindID` is added at the end of the list; a number is never changed or reused. 0 is no kind.
+- A `KindID` of a zonelayer entity is added at the end of the list; a number is never changed or reused. 0 is no kind.
+- An exit has no `KindID` and is not an `Entity`: the zone holds only exits, so its entities are `ExitEntity` values.
 
-## `Entity` interface
+## `Entity` interface (of a zonelayer)
 
 | Method | Returns |
 |---|---|
-| `ID()` | `state.EntityID`, unique in the scope that holds the entity (one counter per scope) |
+| `ID()` | `state.EntityID`, unique among all entities: the ID of the state that holds the entity and the number that state counted (`state.NewEntityID(owner, local)`) |
 | `KindID()` | the kind |
 | `Position()` | where it stands, in units |
 | `Radius()` | how far it reaches from its position, in units; 0 is a point |

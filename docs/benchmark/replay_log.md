@@ -6,12 +6,12 @@ Conventions and how to run: [index](index.md). Behavior: [replay_log](../replay_
 
 | Name | Package | Measures |
 |---|---|---|
-| `BenchmarkEncodeRecord/<record>` | `engine/replay` | building the bytes of one record: the part of recording done by the goroutine of the engine, with no file and no writer |
-| `BenchmarkDecodeRecord/<record>` | `engine/replay` | reading one record back |
-| `BenchmarkFileTickHot` | `engine/replay` | a tick of 20 records after another with nothing between, to a temporary directory: the least a tick can cost, with everything in the cache |
-| `BenchmarkFileTickPaced/records=N` | `engine/replay` | what an engine pays: 3,000 ticks of 20, 100 or 1,000 records with a millisecond between them, each tick timed from the engine's side |
-| `BenchmarkFileTickSaturated` | `engine/replay` | ticks of 100 records with no pause, faster than an engine can tick, so the goroutine that writes falls behind |
-| `BenchmarkFileTickManyEngines` | `engine/replay` | 12 engines on 12 goroutines, each with its own log, ticks of 100 records with no pause |
+| `BenchmarkEncodeRecord/<record>` | `platform/replay` | building the bytes of one record: the part of recording done by the goroutine of the engine, with no file and no writer |
+| `BenchmarkDecodeRecord/<record>` | `platform/replay` | reading one record back |
+| `BenchmarkFileTickHot` | `platform/replay` | a tick of 20 records after another with nothing between, to a temporary directory: the least a tick can cost, with everything in the cache |
+| `BenchmarkFileTickPaced/records=N` | `platform/replay` | what an engine pays: 3,000 ticks of 20, 100 or 1,000 records with a millisecond between them, each tick timed from the engine's side |
+| `BenchmarkFileTickSaturated` | `platform/replay` | ticks of 100 records with no pause, faster than an engine can tick, so the goroutine that writes falls behind |
+| `BenchmarkFileTickManyEngines` | `platform/replay` | 12 engines on 12 goroutines, each with its own log, ticks of 100 records with no pause |
 
 - A tick is a config read, a stable read, a hash, 5 commands and the rest inbound messages. The hash is a constant: taking a hash is the cost of the engine.
 - Segments of 64 MiB, a backlog of 64 batches and a sync every second, in a temporary directory; the numbers are of WSL2 with its page cache, so they say nothing of the speed of a disk.

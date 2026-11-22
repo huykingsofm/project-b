@@ -1,12 +1,12 @@
 # Replay log in files
 
-`engine/replay/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `replay.Log` that writes to files, and the reader of those files. What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
+`platform/replay/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `replay.Log` that writes to files, and the reader of those files. What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
 
 ## Files
 
 | Part | Where |
 |---|---|
-| a log for each engine | `<dir>/<scope>-<id>/`, for example `world-1`, `zone-2`, `zonelayer-3` |
+| a log for each engine | `<dir>/<name>-<id>/`: the name of the type of its state (`State.String()`) and its state ID, for example `world-1`, `zone-2`, `zonelayer-4` |
 | the segments of a log | `seg-<index>.log` ([segmentlog](segmentlog.md#files)) |
 | opened | by the first record of the engine; an engine that records nothing has no directory |
 
@@ -17,6 +17,7 @@
 | Method of `replay.Log` | What it does |
 |---|---|
 | `Wants(kind)` | says whether the log wants records of the kind; an engine asks before it takes a hash, which costs as much as the state is big |
+| `Describe(engine, type, name)` | told once by an engine before it records: which type of state it has and what the type is called, for the name of its directory and for the meta |
 | `Append(engine, tick, body)` | records what the engine took, sent or read at the tick |
 | `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick; a log in files hands the records to the goroutine that writes them |
 
@@ -37,10 +38,10 @@ A record is the payload `[kind u8][tick uvarint][body]`. The whole tick is in ea
 | `KindCommand` | 2 | the number of the command and its fields (below) |
 | `KindConfig` | 3 | the version of the config |
 | `KindHash` | 4 | the hash, 8 bytes |
-| `KindStableRead` | 5 | scope `u8` and ID of the engine read, the tick of the copy |
-| `KindReturned` | 6 | the header of a message the engine sent that came back (address of the sender, `Seq`), the reason `u8` (`action.Reason`) |
+| `KindStableRead` | 5 | state ID of the engine read, the tick of the copy |
+| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`), the reason `u8` (`sim.Reason`) |
 
-- Integers are `uvarint` unless a width is said. An address is the scope `u8` and the ID.
+- Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.
 - A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
 - A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
@@ -51,32 +52,34 @@ A message, in order:
 
 | Field | Written as |
 |---|---|
-| destination | address: scope `u8`, ID |
-| header | address of the sender, `Seq` |
+| type of state | the `StateType` the message is for, `uvarint`: it says which actions the message carries |
+| destination | the state ID of the engine |
+| header | state ID of the sender, `Seq` |
 | attempts | `uvarint` |
 | `OnFail` | below |
 | actions | count, then each action |
 
-An action is its ID, then its fields written by its `Encode`; its decoder is in `action.actionDecoders`, found by the ID. Private fields of an action that waits are written.
+An action is its ID, then its fields written by its `Encode`; its decoder is registered with `sim.Codecs` (`RegisterAction[S]`), found by the ID, and an action that is not an action of the type of state of its message is an error. Private fields of an action that waits are written.
 
 `OnFail` is its ID (`uvarint`) and then:
 
 | Kind | Body |
 |---|---|
 | `onfail.Retry`, `onfail.Drop` | nothing |
-| `onfail.Redirect`, `onfail.Escalate` | an address |
+| `onfail.Redirect`, `onfail.Escalate` | a state ID |
 | `onfail.Compensate` | a message, written as above, at most 8 deep |
 | `onfail.Notify` | key string, count, each argument string |
 
-- A test fails when an action ID, an `OnFail` ID or a scope has no decoder.
-- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode` or no decoder, or a nil `OnFail`; and `ErrBadValue`, and writes nothing, for messages nested more than 8 deep, which is the most that can be read back.
+- A codec refuses a number or a Go type that two kinds register, and a test fails when an action ID, a command ID or an `OnFail` ID of a register has no decoder. Writing needs no register: an action, a command or an `OnFail` writes its own ID.
+- `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode`, or a nil `OnFail`; and `ErrBadValue`, and writes nothing, for messages nested more than 8 deep, which is the most that can be read back.
 
 ## Meta of a segment
 
 | Field | Value |
 |---|---|
 | data version | `uvarint`, 1: given to every `Decode` as a `binarycodec.Version` |
-| engine | scope `u8`, ID |
+| type of state | `StateType`, `uvarint` |
+| engine | state ID |
 | seed | 8 bytes |
 | first tick | tick of the first record of the segment |
 
@@ -89,10 +92,11 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 | What | Table | Numbers |
 |---|---|---|
-| action ID | `action/id.go` (the value of the constant) | 1 to 15 |
-| `OnFail` ID | `action/onfail/onfail.go` (the value of the constant) | 1 to 6 |
-| cooldown key | `action/cooldown_key.go` (the value of the constant) | 1, 2 |
-| command ID | `command/id.go` (the value of the constant) | 1 to 9 |
+| state type | `server/game/sim/state/id.go` (the value of the constant) | 1 to 3 |
+| action ID | `server/game/sim/action/id.go` (the value of the constant) | 1 to 15 |
+| `OnFail` ID | `platform/sim/onfail/onfail.go` (the value of the constant) | 1 to 6 |
+| cooldown key | `server/game/sim/action/cooldown_key.go` (the value of the constant) | 1, 2 |
+| command ID | `server/game/sim/command/id.go` (the value of the constant) | 1 to 9 |
 
 ## Commands
 
@@ -126,7 +130,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 ## Running it
 
-- `go run ./server/cmd/world -replay-dir <dir>` runs the script of `cmd/world` with a `File` as the replay log of the cluster, closes it at the end, and reads it back to say what each engine recorded.
+- `go run ./server/cmd/world -replay-dir <dir>` runs the script of `server/cmd/world` with a `File` as the replay log of the cluster, closes it at the end, and reads it back to say what each engine recorded.
 - `TestAProcessThatIsKilledLeavesALogThatReadsAndCanBeContinued` starts a process that records on three engines as fast as it can, kills it with SIGKILL at six different moments in the same directory, and requires that each log reads, that every tick in it has all its records, and that the next process goes on from the end of the log. A kill can stop a write between two pages of the kernel, which left a tick of 43 records of 100 in the first version of the log; a batch is now all or nothing ([segmentlog](segmentlog.md)), and the tick that was being written is simply not in the log. What a crash of the machine can leave is tested by cutting the end of a file at every byte.
 
 ## Not here yet
