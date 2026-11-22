@@ -1,14 +1,14 @@
-package orderedmap_test
+package stablemap_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/orderedmap"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 func TestMapKeepsAFixedOrderAndSwapsOnDelete(t *testing.T) {
-	var m orderedmap.Map[int, string]
+	var m stablemap.Map[int, string]
 	for i, s := range []string{"a", "b", "c", "d"} {
 		m.Set(i+1, s)
 	}
@@ -29,7 +29,7 @@ func TestMapKeepsAFixedOrderAndSwapsOnDelete(t *testing.T) {
 }
 
 func TestMapCloneSharesNothing(t *testing.T) {
-	var m orderedmap.Map[int, int]
+	var m stablemap.Map[int, int]
 	m.Set(1, 10)
 	c := m.Clone()
 	m.Set(1, 11)
@@ -45,7 +45,7 @@ type slots struct{ Items []int }
 func (s slots) Clone() slots { return slots{Items: slices.Clone(s.Items)} }
 
 func TestMapCloneCopiesValuesThatHaveACloneWithTheirClone(t *testing.T) {
-	var m orderedmap.Map[string, slots]
+	var m stablemap.Map[string, slots]
 	m.Set("a", slots{Items: []int{1, 2}})
 	c := m.Clone()
 	v, _ := c.Get("a")

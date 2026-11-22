@@ -11,9 +11,6 @@ type ChatMessage struct {
 	tick   uint64
 }
 
-// Index says by which columns a message is found in a table of messages: who said it.
-func (m ChatMessage) Index() map[string]any { return map[string]any{"from": m.fromID} }
-
 // chatKeep is how many messages a zonelayer keeps of what was said in it.
 const chatKeep = 100
 

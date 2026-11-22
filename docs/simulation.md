@@ -117,8 +117,10 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 | Package | What it is |
 |---|---|
-| `shared/orderedmap` | map with fixed iteration order (R20) |
-| `shared/table` | rows that define `Index()`, dirty, `FindBy(column, value)` |
+| `shared/stablemap` | map with a stable order of visit: the same for the same calls, though not the order of insertion once a key is deleted (R20) |
+| `shared/stableset` | a set with the same stable order |
+| `shared/table` | a stablemap with columns: values found by one key, or by two (the first alone or both), kept up to date by `Set` and `Delete`; `Index`, `Index2`, `Lookup`, `LookupAs`, `LookupFirst`, `Lookup2` |
+| `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
 | `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; refuses a number or a Go type that two kinds share |
 | `shared/bimap` | two-way map (the zonelayer state links characters and bodies with it) |

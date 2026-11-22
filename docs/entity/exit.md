@@ -1,6 +1,6 @@
 # Exit
 
-`zone.ExitEntity`. Held in the state of a zone (built from the exits of its map when the zone state is made); every zonelayer of the zone has them.
+`zone/entity.ExitEntity`. Implements `state.Entity`. Held in the state of a zone (built from the exits of its map when the zone state is made); every zonelayer of the zone has them.
 
 ## Fields
 

@@ -11,7 +11,7 @@ An interface held in a state (such as `Entity`) is implemented only by value typ
 
 ## Containers
 
-`orderedmap`, `table` and `bimap` copy their elements with `Clone` when the element type has one and by assignment when it has not (package `clone`). So the element type of a container is a value or has `Clone`: a container of a type that holds a slice or a map and has no `Clone` shares it with its copy.
+`stablemap`, `stableset`, `table`, `ring` and `bimap` copy their elements with `Clone` when the element type has one and by assignment when it has not (package `clone`). So the element type of a container is a value or has `Clone`: a container of a type that holds a slice or a map and has no `Clone` shares it with its copy.
 
 ## Coming in and going out
 

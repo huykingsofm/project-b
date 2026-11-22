@@ -2,6 +2,7 @@ package game_test
 
 import (
 	"context"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"slices"
 	"testing"
 	"time"
@@ -511,11 +512,10 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 		t.Fatalf("the character got %d items that did not fit", got)
 	}
 	layer := c.ZoneLayer(testkit.Layer1).State()
-	var back []zonelayerstate.ItemEntity
-	for _, id := range layer.EntityIDs() {
-		if item, ok := layer.ItemEntityByID(id); ok {
-			back = append(back, item)
-		}
+	var back []entity.ItemEntity
+	for _, id := range layer.EntityIDsOfKind(state.ItemKindID) {
+		item, _ := layer.ItemEntityByID(id)
+		back = append(back, item)
 	}
 	if len(back) != 1 || back[0].ItemID() != 7 || back[0].Count() != 3 || back[0].Position() != at {
 		t.Fatalf("on the ground: %+v, want the stack of 3 of kind 7 where it was", back)
@@ -534,7 +534,7 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 	testkit.Steps(c, 6)
 
 	layer := c.ZoneLayer(testkit.Layer1).State()
-	items := func() (found []zonelayerstate.ItemEntity) {
+	items := func() (found []entity.ItemEntity) {
 		for _, id := range layer.EntityIDs() {
 			if item, ok := layer.ItemEntityByID(id); ok {
 				found = append(found, item)

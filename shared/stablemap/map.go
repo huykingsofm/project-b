@@ -1,10 +1,11 @@
-// Package orderedmap is a map whose elements are visited in a fixed order: the order of an
-// array, never the order of a Go map, so that two runs fed the same inputs visit the same
-// elements in the same order.
+// Package stablemap is a map whose elements are visited in a stable order: the order of an array,
+// never the order of a Go map, so that two runs fed the same inputs visit the same elements in the
+// same order. The order is not the order the keys were added in once a key was deleted, and it is
+// not the order of the keys: only that it is the same for the same sequence of calls.
 //
 // It is a library of its own that happens to be written here: it imports only the package clone
 // and knows nothing of what it is used for.
-package orderedmap
+package stablemap
 
 import (
 	"iter"
@@ -14,7 +15,7 @@ import (
 	"github.com/huykingsofm/project-b/shared/clone"
 )
 
-// Map is an ordered map made of three parts:
+// Map is a map with a stable order of visit, made of three parts:
 //
 //   - index maps a key to its position, to reach one element fast;
 //   - keys is the array of keys, to visit the elements in a fixed order;

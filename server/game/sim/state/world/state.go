@@ -9,8 +9,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
-	"github.com/huykingsofm/project-b/shared/orderedmap"
-	"github.com/huykingsofm/project-b/shared/table"
+	"github.com/huykingsofm/project-b/shared/ring"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 // PrivateChatMessage is something a player sent privately to another player. A private message is
@@ -20,12 +20,6 @@ type PrivateChatMessage struct {
 	toID   state.PlayerID
 	text   string
 	tick   uint64
-}
-
-// Index says by which columns a message is found in a table of messages: who sent it and who it is
-// for.
-func (m PrivateChatMessage) Index() map[string]any {
-	return map[string]any{"from": m.fromID, "to": m.toID}
 }
 
 // InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
@@ -57,18 +51,20 @@ type State struct {
 	// added: the world is where an engine learns which other engines there are.
 	zones       []sim.StateID
 	zoneLayers  []sim.StateID
-	privateChat table.Table[PrivateChatMessage]
+	privateChat ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
 	// (R28).
-	inventories orderedmap.Map[state.CharacterID, Inventory]
+	inventories stablemap.Map[state.CharacterID, Inventory]
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
 // NewState makes the state of an empty world.
-func NewState(worldID sim.StateID) *State { return &State{id: worldID} }
+func NewState(worldID sim.StateID) *State {
+	return &State{id: worldID, privateChat: ring.New[PrivateChatMessage](chatKeep)}
+}
 
 // ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
 // copy that another engine published, which it must never change (R26, R28).
@@ -146,7 +142,6 @@ func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) {
 // SendPrivateMessage records a private message between two players and tells the clients.
 func (s *State) SendPrivateMessage(m PrivateChatMessage) {
 	s.privateChat.Add(m)
-	s.privateChat.Trim(chatKeep)
 	s.events.Add(
 		event.PrivateChatMessageSent{FromID: m.fromID, ToID: m.toID, Text: m.text, Tick: m.tick},
 	)

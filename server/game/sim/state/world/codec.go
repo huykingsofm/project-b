@@ -6,7 +6,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/shared/binarycodec"
-	"github.com/huykingsofm/project-b/shared/table"
+	"github.com/huykingsofm/project-b/shared/ring"
 )
 
 // Encode writes the data of the state: its ID and tick, the private messages, and the inventory of
@@ -57,7 +57,10 @@ func count(r *binarycodec.Reader) (uint64, error) {
 
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
-	s := &State{id: sim.StateID(r.Uvarint()), tick: r.Uvarint()}
+	s := &State{
+		id: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
+		privateChat: ring.New[PrivateChatMessage](chatKeep),
+	}
 	n, err := count(r)
 	if err != nil {
 		return nil, err
@@ -81,7 +84,9 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 			text: r.String(), tick: r.Uvarint(),
 		})
 	}
-	s.privateChat = *table.Build(rows)
+	for _, row := range rows {
+		s.privateChat.Add(row)
+	}
 	if n, err = count(r); err != nil {
 		return nil, err
 	}

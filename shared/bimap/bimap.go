@@ -20,7 +20,7 @@ import (
 // disagree.
 //
 // The links are visited in the order they were made, except that removing one moves the last link
-// into its place (as orderedmap.Map does, so a removal costs O(1)). The order is a function of the
+// into its place (as stablemap.Map does, so a removal costs O(1)). The order is a function of the
 // sequence of Link and Unlink calls and of nothing else.
 //
 // The zero BiMap is empty and ready to use. It is not safe for concurrent use: the goroutine that

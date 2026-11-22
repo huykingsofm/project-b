@@ -13,23 +13,27 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/bimap"
-	"github.com/huykingsofm/project-b/shared/orderedmap"
+	"github.com/huykingsofm/project-b/shared/ring"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 	"github.com/huykingsofm/project-b/shared/table"
 )
 
 // State is the state of a zonelayer.
 type State struct {
 	// Data.
-	id         sim.StateID
-	zoneID     sim.StateID
-	worldID    sim.StateID
-	tick       uint64
-	entities   orderedmap.Map[state.EntityID, Entity]
-	characters orderedmap.Map[state.CharacterID, Character]
-	chat       table.Table[ChatMessage]
+	id       sim.StateID
+	zoneID   sim.StateID
+	worldID  sim.StateID
+	tick     uint64
+	entities table.Table[state.EntityID, state.Entity]
+	// entitiesByKind finds the entities of a kind
+	entitiesByKind table.Handle[state.KindID]
+	characters     stablemap.Map[state.CharacterID, Character]
+	chat           ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
 	bodies       bimap.BiMap[state.CharacterID, state.EntityID]
@@ -41,7 +45,13 @@ type State struct {
 
 // NewState makes the state of an empty zonelayer.
 func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
-	return &State{id: zoneLayerID, zoneID: zoneID, worldID: worldID}
+	s := &State{
+		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
+	}
+	s.entitiesByKind = s.entities.Index(func(e state.Entity) (state.KindID, bool) {
+		return e.KindID(), true
+	})
+	return s
 }
 
 // ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
@@ -56,7 +66,7 @@ var _ ReadOnlyZoneLayerState = (*State)(nil)
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:     s.entities.Clone(),
+		entities: s.entities.Clone(), entitiesByKind: s.entitiesByKind,
 		characters:   s.characters.Clone(),
 		chat:         s.chat.Clone(),
 		bodies:       s.bodies.Clone(),
@@ -105,39 +115,39 @@ func (s *State) CharacterByID(characterID state.CharacterID) (Character, bool) {
 		return Character{}, false
 	}
 	if body, ok := s.CharacterEntityByCharacterID(characterID); ok {
-		c.health, c.maxHealth, c.radius = body.hp, body.maxHp, body.rad
+		c.health, c.maxHealth, c.radius = body.Health(), body.MaxHealth(), body.Radius()
 	}
 	return c, true
 }
 
 // EntityByID returns the entity with the ID.
-func (s *State) EntityByID(entityID state.EntityID) (Entity, bool) {
+func (s *State) EntityByID(entityID state.EntityID) (state.Entity, bool) {
 	return s.entities.Get(entityID)
 }
 
 // ItemEntityByID returns the entity with the ID when it is an item.
-func (s *State) ItemEntityByID(entityID state.EntityID) (ItemEntity, bool) {
+func (s *State) ItemEntityByID(entityID state.EntityID) (entity.ItemEntity, bool) {
 	item, ok := s.entities.Get(entityID)
 	if !ok {
-		return ItemEntity{}, false
+		return entity.ItemEntity{}, false
 	}
-	e, ok := item.(ItemEntity)
+	e, ok := item.(entity.ItemEntity)
 	return e, ok
 }
 
 // CharacterEntityByCharacterID returns the body of a character.
 func (s *State) CharacterEntityByCharacterID(
 	characterID state.CharacterID,
-) (CharacterEntity, bool) {
+) (entity.CharacterEntity, bool) {
 	entityID, ok := s.bodies.GetByV1(characterID)
 	if !ok {
-		return CharacterEntity{}, false
+		return entity.CharacterEntity{}, false
 	}
 	body, ok := s.entities.Get(entityID)
 	if !ok {
-		return CharacterEntity{}, false
+		return entity.CharacterEntity{}, false
 	}
-	e, ok := body.(CharacterEntity)
+	e, ok := body.(entity.CharacterEntity)
 	return e, ok
 }
 
@@ -159,26 +169,25 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 	}
 }
 
-// AddCharacterEntity gives a character a body at a position, and returns the
+// AddCharacterEntity gives a character a body at a position, and returns the entity.
 func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.nextEntityID++
-	e := CharacterEntity{
-		entityID: state.NewEntityID(s.id, s.nextEntityID),
-		pos:      at, rad: c.radius, hp: c.health, maxHp: c.maxHealth,
-	}
-	s.entities.Set(e.entityID, e)
+	e := entity.NewCharacterEntity(
+		state.NewEntityID(s.id, s.nextEntityID), at, c.radius, c.health, c.maxHealth,
+	)
+	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
 	// (R29)
 	c = c.Clone()
 	c.health, c.maxHealth, c.radius = 0, 0, 0 // from here on they are the body's
 	s.characters.Set(c.characterID, c)
-	s.bodies.Link(c.characterID, e.entityID)
+	s.bodies.Link(c.characterID, e.ID())
 	s.events.Add(
 		event.CharacterEntered{
-			EntityID: e.entityID, CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.rad,
+			EntityID: e.ID(), CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.Radius(),
 		},
 	)
-	return e.entityID
+	return e.ID()
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -200,28 +209,27 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 }
 
 // AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
-// ever), and returns its
+// ever), and returns its entity.
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
 ) state.EntityID {
 	s.nextEntityID++
-	e := ItemEntity{
-		entityID: state.NewEntityID(s.id, s.nextEntityID),
-		pos:      at, itemID: itemID, count: count, expiry: expiry,
-	}
-	s.entities.Set(e.entityID, e)
-	s.events.Add(event.ItemAppeared{EntityID: e.entityID, ItemID: itemID, Count: count, Pos: at})
-	return e.entityID
+	e := entity.NewItemEntity(
+		state.NewEntityID(s.id, s.nextEntityID), at, itemID, count, expiry,
+	)
+	s.entities.Set(e.ID(), e)
+	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
+	return e.ID()
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.
-func (s *State) RemoveItemEntity(entityID state.EntityID) (ItemEntity, bool) {
+func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bool) {
 	item, ok := s.ItemEntityByID(entityID)
 	if !ok {
-		return ItemEntity{}, false
+		return entity.ItemEntity{}, false
 	}
 	s.entities.Delete(entityID)
-	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.pos})
+	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Position()})
 	return item, true
 }
 
@@ -253,7 +261,7 @@ func (s *State) DamageEntity(entityID state.EntityID, amount int32) bool {
 	if !ok || amount <= 0 {
 		return false
 	}
-	d, ok := e.(DamageableEntity)
+	d, ok := e.(state.DamageableEntity)
 	if !ok || d.Health() <= 0 {
 		return false
 	}
@@ -282,7 +290,7 @@ func (s *State) HealAllEntities(amount int32) {
 	}
 	for _, entityID := range s.entities.Keys() {
 		e, _ := s.entities.Get(entityID)
-		d, ok := e.(DamageableEntity)
+		d, ok := e.(state.DamageableEntity)
 		if !ok || d.Health() <= 0 || d.Health() >= d.MaxHealth() {
 			continue
 		}
@@ -303,7 +311,6 @@ func (s *State) HealAllEntities(amount int32) {
 // SendMessage records a message that was sent in the zonelayer and tells the clients.
 func (s *State) SendMessage(m ChatMessage) {
 	s.chat.Add(m)
-	s.chat.Trim(chatKeep)
 	s.events.Add(event.ChatMessageSent{FromID: m.fromID, Text: m.text, Tick: m.tick})
 }
 
@@ -326,6 +333,16 @@ func (s *State) EntityCount() int { return s.entities.Len() }
 
 // EntityIDs returns the IDs of the entities in the zonelayer, in the order they were added.
 func (s *State) EntityIDs() []state.EntityID { return s.entities.Keys() }
+
+// EntityIDsOfKind returns the IDs of the entities of a kind, found by the column of kinds and not
+// by walking every entity.
+func (s *State) EntityIDsOfKind(kind state.KindID) []state.EntityID {
+	var ids []state.EntityID
+	for id := range s.entities.Lookup(s.entitiesByKind, kind) {
+		ids = append(ids, id)
+	}
+	return ids
+}
 
 // ChatMessageCount is how many chat messages the zonelayer keeps.
 func (s *State) ChatMessageCount() int { return s.chat.Len() }

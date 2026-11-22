@@ -1,6 +1,6 @@
 # Entities
 
-What stands in a zone or a zonelayer. Each state holds the entities of its own kinds and defines them in its own package: [`zonelayer`](../../server/game/sim/state/zonelayer) (`Entity`, `CharacterEntity`, `ItemEntity`) and [`zone`](../../server/game/sim/state/zone) (`ExitEntity`); there is no package shared between them. The actions that change them are in [docs/action](../action/index.md).
+What stands in a zone or a zonelayer. The interface `Entity` and the list of kinds are common and are in [`state`](../../server/game/sim/state/entity.go); each state holds the entities of the kinds it chooses, and they are in a package `entity` below the state, like its `event` package: [`zonelayer/entity`](../../server/game/sim/state/zonelayer/entity) (`CharacterEntity`, `ItemEntity`) and [`zone/entity`](../../server/game/sim/state/zone/entity) (`ExitEntity`). A state may hold a kind that another state holds too, and manage it in its own way. The actions that change them are in [docs/action](../action/index.md).
 
 ## Kinds
 
@@ -8,12 +8,13 @@ What stands in a zone or a zonelayer. Each state holds the entities of its own k
 |---|---|---|---|
 | Character body | 1 | [character.md](character.md) | zonelayer |
 | Item on the ground | 2 | [item.md](item.md) | zonelayer |
-| Exit | none (the zone holds nothing else) | [exit.md](exit.md) | zone (stands in every zonelayer of it) |
+| Exit | 3 | [exit.md](exit.md) | zone (stands in every zonelayer of it) |
 
-- A `KindID` of a zonelayer entity is added at the end of the list; a number is never changed or reused. 0 is no kind.
-- An exit has no `KindID` and is not an `Entity`: the zone holds only exits, so its entities are `ExitEntity` values.
+- A `KindID` is added at the end of the list in `state/entity.go`; a number is never changed or reused. 0 is no kind. The list is of the whole game, so a kind means one thing whichever state holds it.
+- Each package `entity` has the codec of its own kinds (`entity.Encode`, `entity.Decode`), with a table of decoders by `KindID` and a test that fails when a kind it holds has none.
+- A state keeps its entities in a `table.Table` by `EntityID`; the zonelayer has a column of the `KindID`, so `EntityIDsOfKind` finds the entities of a kind without walking all of them.
 
-## `Entity` interface (of a zonelayer)
+## `Entity` interface
 
 | Method | Returns |
 |---|---|
@@ -27,7 +28,7 @@ What stands in a zone or a zonelayer. Each state holds the entities of its own k
 
 ## `DamageableEntity` interface
 
-An `Entity` with health. The state damages and heals through it and never asks the kind.
+In `state`, as `Entity` is. An `Entity` with health. The state damages and heals through it and never asks the kind.
 
 | Method | Returns |
 |---|---|
@@ -43,4 +44,4 @@ Implemented by: character body.
 - **Value type** (R29): a change builds a new value and replaces the old one in its container.
 - **Units**: positions, radii and distances are in units; an entity may stand anywhere on the map. Only the map is cut into tiles (1024 units each) and only its constructor takes tiles.
 - **Hash**: the ID, the kind and the bounding box, then the fields of the kind.
-- **Add a kind**: a type that implements `Entity`, a `KindID` at the end of the list, a document here.
+- **Add a kind**: a type that implements `state.Entity` in the package `entity` of the state that holds it, with a constructor (its fields are private), a `KindID` at the end of the list, a decoder in the table of that package, a document here.

@@ -1,6 +1,6 @@
 # Item on the ground
 
-`entity.ItemEntity`. Implements `Entity`. Held in the state of a zonelayer. A stack of one kind of item; it leaves the ground when picked up or when its expiry ends.
+`zonelayer/entity.ItemEntity`. Implements `state.Entity`. Held in the state of a zonelayer. A stack of one kind of item; it leaves the ground when picked up or when its expiry ends.
 
 ## Fields
 

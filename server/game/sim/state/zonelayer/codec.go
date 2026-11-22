@@ -5,8 +5,8 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/shared/binarycodec"
-	"github.com/huykingsofm/project-b/shared/table"
 )
 
 // Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
@@ -21,7 +21,7 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
 		w.Uvarint(uint64(id))
-		if err := EncodeEntity(w, e); err != nil {
+		if err := entity.Encode(w, e); err != nil {
 			return err
 		}
 	}
@@ -61,17 +61,17 @@ func count(r *binarycodec.Reader) (uint64, error) {
 
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, error) {
-	s := &State{
-		id: sim.StateID(r.Uvarint()), zoneID: sim.StateID(r.Uvarint()),
-		worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
-	}
+	id, zoneID := sim.StateID(r.Uvarint()), sim.StateID(r.Uvarint())
+	worldID := sim.StateID(r.Uvarint())
+	s := NewState(id, zoneID, worldID)
+	s.tick = r.Uvarint()
 	n, err := count(r)
 	if err != nil {
 		return nil, err
 	}
 	for range n {
 		id := state.EntityID(r.Uvarint())
-		e, err := DecodeEntity(r, version)
+		e, err := entity.Decode(r, version)
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +97,9 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
 		})
 	}
-	s.chat = *table.Build(rows)
+	for _, row := range rows {
+		s.chat.Add(row)
+	}
 	if n, err = count(r); err != nil {
 		return nil, err
 	}

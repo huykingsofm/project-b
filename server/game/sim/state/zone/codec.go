@@ -6,9 +6,10 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zone/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/binarycodec"
-	"github.com/huykingsofm/project-b/shared/table"
+	"github.com/huykingsofm/project-b/shared/ring"
 )
 
 // Encode writes the data of the state: its ID and tick, its entities, the zonelayers it knows, what
@@ -25,7 +26,9 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
 		w.Uvarint(uint64(id))
-		e.Encode(w)
+		if err := entity.Encode(w, e); err != nil {
+			return err
+		}
 	}
 	w.Uvarint(uint64(s.zoneLayers.Len()))
 	for id, slot := range s.zoneLayers.All() {
@@ -62,7 +65,10 @@ func DecodeState(
 	r *binarycodec.Reader, version binarycodec.Version,
 	tilesOf func(zoneID sim.StateID) *tilemap.TileMap,
 ) (*State, error) {
-	s := &State{id: sim.StateID(r.Uvarint()), worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint()}
+	s := &State{
+		id: sim.StateID(r.Uvarint()), worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
+		chat: ring.New[ChatMessage](chatKeep),
+	}
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
@@ -81,7 +87,7 @@ func DecodeState(
 	}
 	for range n {
 		id := state.EntityID(r.Uvarint())
-		e, err := decodeExitEntity(r, version)
+		e, err := entity.Decode(r, version)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +109,9 @@ func DecodeState(
 			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
 		})
 	}
-	s.chat = *table.Build(rows)
+	for _, row := range rows {
+		s.chat.Add(row)
+	}
 	s.nextEntityID = uint32(r.Uvarint())
 	return s, r.Err()
 }

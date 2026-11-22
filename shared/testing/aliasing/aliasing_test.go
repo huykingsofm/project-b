@@ -213,3 +213,17 @@ func TestACloneThatReturnsAnInterfaceTheTypeImplementsIsAClone(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSlicesOfZeroSizeValuesShareNothingEvenAtTheSameAddress(t *testing.T) {
+	a := struct {
+		Set   map[int]struct{}
+		Empty []struct{}
+	}{Empty: make([]struct{}, 3)}
+	b := struct {
+		Set   map[int]struct{}
+		Empty []struct{}
+	}{Empty: make([]struct{}, 2)}
+	if err := aliasing.Disjoint(a, b); err != nil {
+		t.Fatal(err)
+	}
+}

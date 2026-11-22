@@ -2,6 +2,7 @@ package zonelayer_test
 
 import (
 	"fmt"
+	"github.com/huykingsofm/project-b/shared/table"
 	"reflect"
 	"testing"
 
@@ -278,8 +279,12 @@ func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 	// an Entity is implemented only by value types
 	rules := aliasing.Rules{
-		Interfaces: []reflect.Type{reflect.TypeFor[zonelayer.Entity]()},
-		Skip:       []string{"zonelayer.State.events"},
+		Interfaces: []reflect.Type{reflect.TypeFor[state.Entity]()},
+		// the columns of a table are copied by its Clone, and Disjoint checks that on a real value
+		Skip: []string{
+			"zonelayer.State.events",
+			reflect.TypeFor[table.Table[state.EntityID, state.Entity]]().String() + ".columns",
+		},
 	}
 	if err := aliasing.CheckCloneable(reflect.TypeFor[zonelayer.State](), rules); err != nil {
 		t.Fatal(err)

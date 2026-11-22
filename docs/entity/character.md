@@ -1,6 +1,6 @@
 # Character body
 
-`entity.CharacterEntity`. Implements `Entity` and `DamageableEntity`. Held in the state of a zonelayer; which character it belongs to is kept there, not in the entity.
+`zonelayer/entity.CharacterEntity`. Implements `state.Entity` and `state.DamageableEntity`. Held in the state of a zonelayer; which character it belongs to is kept there, not in the entity.
 
 ## Fields
 

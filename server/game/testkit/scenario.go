@@ -63,10 +63,8 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	).Stamp(sim.Header{From: 99, Seq: 1}))
 	Steps(c, 1)
 	var itemID state.EntityID
-	for _, id := range c.ZoneLayer(Layer1).State().EntityIDs() {
-		if _, ok := c.ZoneLayer(Layer1).State().ItemEntityByID(id); ok {
-			itemID = id
-		}
+	for _, id := range c.ZoneLayer(Layer1).State().EntityIDsOfKind(state.ItemKindID) {
+		itemID = id
 	}
 
 	l := c.ZoneLayer(Layer1)

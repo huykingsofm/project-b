@@ -1,6 +1,7 @@
 package zone_test
 
 import (
+	"github.com/huykingsofm/project-b/shared/table"
 	"reflect"
 	"testing"
 
@@ -50,10 +51,17 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	}
 }
 
+// columnsOf names the field of the columns of a table, as the rules name a field to leave out.
+func columnsOf[K comparable, V any]() string {
+	return reflect.TypeFor[table.Table[K, V]]().String() + ".columns"
+}
+
 func TestTheTypesOfTheZoneStateObeyTheRuleOfData(t *testing.T) {
 	rules := aliasing.Rules{
-		Shared: []reflect.Type{reflect.TypeFor[*tilemap.TileMap]()},
-		Skip:   []string{"zone.State.events"},
+		Interfaces: []reflect.Type{reflect.TypeFor[state.Entity]()},
+		Shared:     []reflect.Type{reflect.TypeFor[*tilemap.TileMap]()},
+		// the columns of a table are copied by its Clone, and Disjoint checks that on a real value
+		Skip: []string{"zone.State.events", columnsOf[state.EntityID, state.Entity]()},
 	}
 	if err := aliasing.CheckCloneable(reflect.TypeFor[zone.State](), rules); err != nil {
 		t.Fatal(err)

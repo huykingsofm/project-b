@@ -17,9 +17,11 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zone/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zone/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/orderedmap"
+	"github.com/huykingsofm/project-b/shared/ring"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 	"github.com/huykingsofm/project-b/shared/table"
 )
 
@@ -36,9 +38,6 @@ type ChatMessage struct {
 	tick   uint64
 }
 
-// Index says by which columns a message is found in a table of messages: who said it.
-func (m ChatMessage) Index() map[string]any { return map[string]any{"from": m.fromID} }
-
 // chatKeep is how many messages a zone keeps of what was said in it.
 const chatKeep = 100
 
@@ -50,9 +49,9 @@ type State struct {
 	adjacent   []sim.StateID // the zones that the exits of this one lead to
 	tick       uint64
 	tiles      *tilemap.TileMap
-	entities   orderedmap.Map[state.EntityID, ExitEntity]
-	zoneLayers orderedmap.Map[sim.StateID, ZoneLayerSlot]
-	chat       table.Table[ChatMessage]
+	entities   table.Table[state.EntityID, state.Entity]
+	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
+	chat       ring.Ring[ChatMessage]
 
 	nextEntityID uint32
 
@@ -65,13 +64,14 @@ type State struct {
 func NewState(
 	zoneID, worldID sim.StateID, tiles *tilemap.TileMap, adjacent ...sim.StateID,
 ) *State {
-	s := &State{id: zoneID, worldID: worldID, adjacent: slices.Clone(adjacent), tiles: tiles}
+	s := &State{
+		id: zoneID, worldID: worldID, adjacent: slices.Clone(adjacent), tiles: tiles,
+		chat: ring.New[ChatMessage](chatKeep),
+	}
 	for _, exit := range tiles.Exits() {
 		s.nextEntityID++
 		id := state.NewEntityID(zoneID, s.nextEntityID)
-		s.entities.Set(id, ExitEntity{
-			entityID: id, area: exit.Area, toZoneID: exit.ToZoneID, arrival: exit.Arrival,
-		})
+		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
 	}
 	return s
 }
@@ -93,14 +93,19 @@ func (s *State) clone() *State {
 }
 
 // ExitEntityByID returns the entity with the ID when it is an exit.
-func (s *State) ExitEntityByID(entityID state.EntityID) (ExitEntity, bool) {
-	return s.entities.Get(entityID)
+func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool) {
+	e, ok := s.entities.Get(entityID)
+	if !ok {
+		return entity.ExitEntity{}, false
+	}
+	exit, ok := e.(entity.ExitEntity)
+	return exit, ok
 }
 
 // ReadOnlyZoneState is the read methods of the state of a zone: what an action may use of a copy
 // that another engine published, which it must never change (R26, R28).
 type ReadOnlyZoneState interface {
-	ExitEntityByID(entityID state.EntityID) (ExitEntity, bool)
+	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
 	WorldID() sim.StateID
 	AdjacentZones() []sim.StateID
 	TileMap() tilemap.ReadOnlyTileMap
@@ -154,7 +159,6 @@ func (s *State) AddZoneLayer(zoneLayerID sim.StateID, capacity int32) {
 // SendMessage records a message that was sent in the zone and tells the clients.
 func (s *State) SendMessage(m ChatMessage) {
 	s.chat.Add(m)
-	s.chat.Trim(chatKeep)
 	s.events.Add(event.ChatMessageSent{FromID: m.fromID, Text: m.text, Tick: m.tick})
 }
 

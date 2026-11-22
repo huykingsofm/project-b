@@ -25,8 +25,10 @@ docs/
 plan/
   rule/                             the rules (index.md)
 shared/                             libraries of our own, each a package; import nothing of the project
-  orderedmap/                       Map: index + keys + vals, fixed iteration order
-  table/                            Table: rows that define Index(), dirty, FindBy(column, value)
+  stablemap/                        Map: index + keys + vals, stable order of visit
+  stableset/                        Set on a stablemap
+  table/                            Table: a stablemap with columns of one or two keys (Index, Lookup)
+  ring/                             Ring: the last rows of a log that only grows (the chat)
   registry/                         Registry: the latest published copy under a key
   codec/                            Registry: kinds told apart by a number, each with the function that reads it
 platform/                           what any game that runs in ticks is made of; imports nothing of the game
@@ -39,8 +41,8 @@ server/
   cmd/world/                        a script that runs the whole flow
   game/                             this game: the states, actions and commands, and the builder of the cluster
     sim/
-      state/                        IDs of what lives in the states, Vec (units), Rect, Dir, Audience
-        world/ zone/ zonelayer/     the state of each scope, with its entities, and below each an event/ package of its own
+      state/                        IDs of what lives in the states, Entity and the kinds, Vec (units), Rect, Dir, Audience
+        world/ zone/ zonelayer/     the state of each scope, and below each an entity/ and an event/ package of its own
       action/                       every action (<scope>_<words, general to specific>_action.go), the registers, the priorities
       command/                      what comes from outside; translates into actions
       tilemap/                      the map of a zone: tiles, walls, spawn, and the exits (the zone state holds it and makes entities of them)

@@ -6,7 +6,7 @@ import (
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/shared/binarycodec"
-	"github.com/huykingsofm/project-b/shared/orderedmap"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 // CooldownKey names what a cooldown is for. The register of the keys, with their numbers, is in
@@ -35,7 +35,7 @@ type Character struct {
 
 	// cooldowns says, for each key, the first tick at which the character is free of what the
 	// key stands for. A key is a number of the register of the cooldown keys (see package action).
-	cooldowns orderedmap.Map[CooldownKey, uint64]
+	cooldowns stablemap.Map[CooldownKey, uint64]
 }
 
 // Clone returns a copy of the character that shares nothing with it: its cooldowns are copied,

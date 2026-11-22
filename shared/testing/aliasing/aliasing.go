@@ -97,7 +97,11 @@ func walk(v reflect.Value, path string, seen map[visit]bool, out *[]ref) {
 		if v.IsNil() {
 			return
 		}
-		add(out, v.Pointer(), v.Type().Elem().Size()*uintptr(v.Cap()), path)
+		// the elements of a slice of zero-size values (a set is a map to struct{}) take no memory,
+		// and Go gives all such slices the same address: there is nothing there to share
+		if size := v.Type().Elem().Size(); size > 0 {
+			add(out, v.Pointer(), size*uintptr(v.Cap()), path)
+		}
 		for i := range v.Len() {
 			walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i), seen, out)
 		}

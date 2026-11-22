@@ -1,4 +1,4 @@
-package zone
+package entity
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -17,6 +17,9 @@ type ExitEntity struct {
 
 // ID returns the ID of the exit.
 func (e ExitEntity) ID() state.EntityID { return e.entityID }
+
+// KindID is the kind of an exit.
+func (ExitEntity) KindID() state.KindID { return state.ExitKindID }
 
 // Position is the middle of the area.
 func (e ExitEntity) Position() state.Vec {
@@ -39,14 +42,19 @@ func (e ExitEntity) Contains(v state.Vec) bool { return e.area.Contains(v) }
 
 // Hash adds what the exit is made of to the hash.
 func (e ExitEntity) Hash(h *sim.Hasher) {
-	h.U64(uint64(e.entityID))
-	box := e.BoundingBox()
-	for _, n := range [...]int32{box.Min.X, box.Min.Y, box.Max.X, box.Max.Y} {
-		h.U64(uint64(uint32(n)))
-	}
+	state.HashEntity(h, e)
 	h.U64(uint64(e.toZoneID))
 	h.U64(uint64(uint32(e.arrival.X)))
 	h.U64(uint64(uint32(e.arrival.Y)))
+}
+
+// MovedTo returns the exit with its whole area moved so that its position is pos; the arrival
+// stays.
+func (e ExitEntity) MovedTo(pos state.Vec) state.Entity {
+	at := e.Position()
+	by := state.Vec{X: pos.X - at.X, Y: pos.Y - at.Y}
+	e.area = state.Rect{Min: e.area.Min.Add(by), Max: e.area.Max.Add(by)}
+	return e
 }
 
 // Encode writes the exit.
@@ -59,7 +67,7 @@ func (e ExitEntity) Encode(w *binarycodec.Writer) {
 }
 
 // decodeExitEntity reads what Encode wrote, of the data version given.
-func decodeExitEntity(r *binarycodec.Reader, version binarycodec.Version) (ExitEntity, error) {
+func decodeExitEntity(r *binarycodec.Reader, version binarycodec.Version) (state.Entity, error) {
 	e := ExitEntity{entityID: state.EntityID(r.Uvarint())}
 	e.area.Min = state.DecodeVec(r, version)
 	e.area.Max = state.DecodeVec(r, version)
@@ -76,3 +84,11 @@ func (e ExitEntity) ToZoneID() sim.StateID { return e.toZoneID }
 
 // Arrival is where a character comes out in that zone, in units.
 func (e ExitEntity) Arrival() state.Vec { return e.arrival }
+
+// NewExitEntity makes an exit: the area that leads to the zone toZoneID, and where a character
+// comes out there.
+func NewExitEntity(
+	id state.EntityID, area state.Rect, toZoneID sim.StateID, arrival state.Vec,
+) ExitEntity {
+	return ExitEntity{entityID: id, area: area, toZoneID: toZoneID, arrival: arrival}
+}

@@ -1,4 +1,4 @@
-package zonelayer
+package entity
 
 import (
 	"testing"
@@ -8,8 +8,8 @@ import (
 )
 
 func TestEveryKindHasItsOwnIDAndNoneIsZero(t *testing.T) {
-	all := []Entity{CharacterEntity{}, ItemEntity{}}
-	seen := map[KindID]Entity{}
+	all := []state.Entity{CharacterEntity{}, ItemEntity{}}
+	seen := map[state.KindID]state.Entity{}
 	for _, e := range all {
 		if e.KindID() == 0 {
 			t.Fatalf("%T has the kind 0", e)
@@ -33,7 +33,7 @@ func TestTheBoundingBoxComesFromThePositionAndTheRadius(t *testing.T) {
 }
 
 func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
-	hash := func(e Entity) uint64 {
+	hash := func(e state.Entity) uint64 {
 		h := sim.NewHasher()
 		e.Hash(&h)
 		return h.Sum()
@@ -44,7 +44,7 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 	if h1 != h2 {
 		t.Fatal("the same entity hashes differently")
 	}
-	for name, b := range map[string]Entity{
+	for name, b := range map[string]state.Entity{
 		"item kind":   ItemEntity{entityID: 1, pos: state.Vec{X: 1, Y: 1}, itemID: 6},
 		"position":    ItemEntity{entityID: 1, pos: state.Vec{X: 2, Y: 1}, itemID: 5},
 		"entity kind": CharacterEntity{entityID: 1, pos: state.Vec{X: 1, Y: 1}},
@@ -57,7 +57,7 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 
 func TestEveryKindCanBeMovedAndTheOriginalDoesNotChange(t *testing.T) {
 	to := state.Vec{X: 4500, Y: 4500}
-	for _, e := range []Entity{
+	for _, e := range []state.Entity{
 		CharacterEntity{pos: state.Vec{X: 1, Y: 1}},
 		ItemEntity{pos: state.Vec{X: 1, Y: 1}},
 	} {
@@ -72,7 +72,7 @@ func TestEveryKindCanBeMovedAndTheOriginalDoesNotChange(t *testing.T) {
 }
 
 func TestACharacterCanBeDamagedAndHealedWithinItsHealth(t *testing.T) {
-	var d DamageableEntity = CharacterEntity{hp: 10, maxHp: 10}
+	var d state.DamageableEntity = CharacterEntity{hp: 10, maxHp: 10}
 	hurt := d.OnDamage(4)
 	if hurt.Health() != 6 || d.Health() != 10 {
 		t.Fatalf("after 4 damage: %d (original %d), want 6 and 10", hurt.Health(), d.Health())

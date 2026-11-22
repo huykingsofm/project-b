@@ -1,4 +1,4 @@
-package zonelayer
+package entity
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -22,21 +22,21 @@ type ItemEntity struct {
 	expiry uint64
 }
 
-func (e ItemEntity) ID() state.EntityID  { return e.entityID }
-func (e ItemEntity) KindID() KindID      { return ItemKindID }
-func (e ItemEntity) Position() state.Vec { return e.pos }
-func (e ItemEntity) Radius() int32       { return e.rad }
+func (e ItemEntity) ID() state.EntityID   { return e.entityID }
+func (e ItemEntity) KindID() state.KindID { return state.ItemKindID }
+func (e ItemEntity) Position() state.Vec  { return e.pos }
+func (e ItemEntity) Radius() int32        { return e.rad }
 func (e ItemEntity) BoundingBox() state.Rect {
-	return boundingBoxAround(e.pos, e.rad)
+	return state.BoundingBoxAround(e.pos, e.rad)
 }
 
-func (e ItemEntity) MovedTo(pos state.Vec) Entity {
+func (e ItemEntity) MovedTo(pos state.Vec) state.Entity {
 	e.pos = pos
 	return e
 }
 
 func (e ItemEntity) Hash(h *sim.Hasher) {
-	hashCommon(h, e)
+	state.HashEntity(h, e)
 	h.U64(uint64(e.itemID))
 	h.U64(uint64(e.count))
 	h.U64(e.expiry)
@@ -51,7 +51,7 @@ func (e ItemEntity) Encode(w *binarycodec.Writer) {
 	w.Uvarint(e.expiry)
 }
 
-func decodeItemEntity(r *binarycodec.Reader, version binarycodec.Version) (Entity, error) {
+func decodeItemEntity(r *binarycodec.Reader, version binarycodec.Version) (state.Entity, error) {
 	e := ItemEntity{
 		entityID: state.EntityID(r.Uvarint()),
 		pos:      state.DecodeVec(r, version),
@@ -71,3 +71,11 @@ func (e ItemEntity) Count() uint32 { return e.count }
 
 // Expiry is the tick at which the item is removed, or 0 for never.
 func (e ItemEntity) Expiry() uint64 { return e.expiry }
+
+// NewItemEntity makes a stack of count items of a kind on the ground, which is removed at the tick
+// expiry (0 for never).
+func NewItemEntity(
+	id state.EntityID, pos state.Vec, itemID state.ItemID, count uint32, expiry uint64,
+) ItemEntity {
+	return ItemEntity{entityID: id, pos: pos, itemID: itemID, count: count, expiry: expiry}
+}

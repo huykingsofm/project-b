@@ -1,6 +1,6 @@
 // Package clone is the one contract for copying data that is kept in a state: a type is either a
 // value, which assignment copies whole, or has a Clone method that copies everything it holds. The
-// containers (orderedmap, table, bimap) use it, so their Clone is right for both kinds of element
+// containers (stablemap, table, bimap) use it, so their Clone is right for both kinds of element
 // without the caller choosing. It imports nothing of the project.
 package clone
 

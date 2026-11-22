@@ -1,201 +1,188 @@
-// Package table is a list of rows kept in memory, that rows are found in by the value of a
-// column, and that remembers which rows changed.
+// Package table is a stablemap that can also find its values by something other than the key:
+// by one or two columns of the value, which the table keeps up to date as values are set and
+// deleted. It is what a state uses to find an entity by its kind, or by its owner and then its
+// kind, without walking all of them.
 //
-// It is a library of its own that happens to be written here: it imports only the package clone
-// and knows nothing of what it is used for.
+// A column is declared with Index or Index2, which give a Handle, and read with Lookup and the
+// methods after it. A column is a function of the value: a value is indexed by what it is when it
+// is set, so a value is only changed by setting it again (there is no way to change one in place,
+// which is what lets the columns stay right). What is found is visited in a stable order, which
+// is the same for the same sequence of calls, but is neither the order the values were set in nor
+// the order of the columns.
+//
+// It is a library of its own: it imports only stablemap and stableset.
 package table
 
 import (
-	"maps"
-	"slices"
+	"iter"
 
-	"github.com/huykingsofm/project-b/shared/clone"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
-// Row is a type that a Table can hold. A row says by which columns it is found: Index returns,
-// for each column, the value of the row in it. The values must be comparable (a number, a
-// string, a struct of those), since they are used as keys of a Go map.
-type Row interface {
-	Index() map[string]any
+// Table is a stablemap of values by key, with the columns that were declared on it. The zero Table
+// is empty and ready to use. It is not safe for concurrent use: what another goroutine reads is a
+// Clone of it.
+type Table[K comparable, V any] struct {
+	data    stablemap.Map[K, V]
+	columns []column[K, V]
 }
 
-// Table holds rows in the order they were added, with:
-//
-//   - rows: the rows themselves, at fixed positions;
-//   - dirty: the positions of the rows that were added or set since the dirty record was
-//     cleared, so that only what changed is written to the store;
-//   - indexBy: for each column and each value, the positions of the rows that have that value
-//     in that column, made from the Index of each row. FindBy reads it.
-//
-// The Go maps inside are only looked up, and are never visited in an order that matters: a
-// position list is always in ascending order, so two runs fed the same inputs find the same
-// rows in the same order.
-//
-// The zero Table is empty and ready to use. A Table is not safe for concurrent use by itself;
-// what other goroutines read is a Clone of it, which they may read freely, FindBy included.
-type Table[T Row] struct {
-	rows    []T
-	dirty   map[int]bool
-	indexBy map[string]map[any][]int
+// column is what the table asks of each of its columns, whatever the type of its key.
+type column[K comparable, V any] interface {
+	add(k K, v V)
+	remove(k K, v V)
+	clone() column[K, V]
 }
 
-// Build makes a table of the rows, and indexes them. The rows are not dirty.
-func Build[T Row](rows []T) *Table[T] {
-	t := &Table[T]{rows: slices.Clone(rows)}
-	t.reindex()
-	return t
-}
+// Handle names a column of one key, made by Index. It is a number, so it stays right in a Clone of
+// the table, and it only means something to the table that made it, or to a clone of it.
+type Handle[IK comparable] struct{ pos int }
 
-// Len returns how many rows the table holds.
-func (t *Table[T]) Len() int { return len(t.rows) }
+// Handle2 names a column of two keys, made by Index2.
+type Handle2[A, B comparable] struct{ pos int }
 
-// Get returns the row at a position.
-func (t *Table[T]) Get(i int) (T, bool) {
-	if i < 0 || i >= len(t.rows) {
-		var zero T
-		return zero, false
-	}
-	return t.rows[i], true
-}
+// Len returns how many values the table holds.
+func (t *Table[K, V]) Len() int { return t.data.Len() }
 
-// Rows returns a copy of the rows, in order.
-func (t *Table[T]) Rows() []T { return clone.Slice(t.rows) }
+// Has reports whether the table holds the key.
+func (t *Table[K, V]) Has(k K) bool { return t.data.Has(k) }
 
-// Add appends a row, marks it dirty, and returns its position.
-func (t *Table[T]) Add(row T) int {
-	i := len(t.rows)
-	t.rows = append(t.rows, row)
-	t.markDirty(i)
-	t.insert(i, row)
-	return i
-}
+// Get returns the value under the key.
+func (t *Table[K, V]) Get(k K) (V, bool) { return t.data.Get(k) }
 
-// Set replaces the row at a position. It does nothing if there is no such row.
-func (t *Table[T]) Set(i int, row T) {
-	if i < 0 || i >= len(t.rows) {
-		return
-	}
-	t.remove(i, t.rows[i])
-	t.rows[i] = row
-	t.markDirty(i)
-	t.insert(i, row)
-}
+// Keys returns the keys in the stable order. The slice is a view: do not change it.
+func (t *Table[K, V]) Keys() []K { return t.data.Keys() }
 
-// Delete removes the row at a position. The rows after it move up by one, so the positions
-// of the dirty rows and of the indexes are made again: it costs as much as the table is long.
-func (t *Table[T]) Delete(i int) {
-	if i < 0 || i >= len(t.rows) {
-		return
-	}
-	t.dropFront(i, i+1)
-}
+// All walks the values in the stable order.
+func (t *Table[K, V]) All() iter.Seq2[K, V] { return t.data.All() }
 
-// Trim deletes the oldest rows until at most keep rows are left.
-func (t *Table[T]) Trim(keep int) {
-	if n := len(t.rows) - keep; n > 0 {
-		t.dropFront(0, n)
-	}
-}
-
-// dropFront removes rows[from:to] and fixes what holds positions.
-func (t *Table[T]) dropFront(from, to int) {
-	t.rows = slices.Delete(t.rows, from, to)
-	if len(t.dirty) > 0 {
-		next := make(map[int]bool, len(t.dirty))
-		for i := range t.dirty {
-			switch {
-			case i < from:
-				next[i] = true
-			case i >= to:
-				next[i-(to-from)] = true
-			}
+// Set puts a value under the key, in place of the one that was there, and brings the columns to
+// what the new value says.
+func (t *Table[K, V]) Set(k K, v V) {
+	if old, ok := t.data.Get(k); ok {
+		for _, c := range t.columns {
+			c.remove(k, old)
 		}
-		t.dirty = next
 	}
-	t.reindex()
+	t.data.Set(k, v)
+	for _, c := range t.columns {
+		c.add(k, v)
+	}
 }
 
-// FindBy returns the rows whose value in the column is value, in the order they are in the
-// table. The value must be comparable.
-func (t *Table[T]) FindBy(column string, value any) []T {
-	ids := t.indexBy[column][value]
-	out := make([]T, 0, len(ids))
-	for _, i := range ids {
-		out = append(out, t.rows[i])
+// Delete takes the key out and reports whether it was there.
+func (t *Table[K, V]) Delete(k K) bool {
+	old, ok := t.data.Get(k)
+	if !ok {
+		return false
 	}
-	return out
+	for _, c := range t.columns {
+		c.remove(k, old)
+	}
+	return t.data.Delete(k)
 }
 
-// Dirty returns the positions of the rows that were added or set since ClearDirty, in
-// ascending order.
-func (t *Table[T]) Dirty() []int { return slices.Sorted(maps.Keys(t.dirty)) }
-
-// ClearDirty forgets which rows changed.
-func (t *Table[T]) ClearDirty() { t.dirty = nil }
-
-// Clone returns a copy that shares nothing with the table: the rows are copied with their Clone
-// method when the type of the rows has one (see package clone), and by assignment otherwise, so the
-// type of the rows must be a value or have Clone. The indexes are copied too, so the copy can be
-// searched at once. It has no dirty rows.
-func (t *Table[T]) Clone() Table[T] {
-	c := Table[T]{rows: clone.Slice(t.rows)}
-	if t.indexBy != nil {
-		c.indexBy = make(map[string]map[any][]int, len(t.indexBy))
-		for column, byValue := range t.indexBy {
-			m := make(map[any][]int, len(byValue))
-			for value, ids := range byValue {
-				m[value] = slices.Clone(ids)
-			}
-			c.indexBy[column] = m
-		}
+// Clone returns a table that shares nothing with t, with the same columns, so a Handle of t is a
+// Handle of the clone. A value is copied with its Clone when it has one.
+func (t *Table[K, V]) Clone() Table[K, V] {
+	c := Table[K, V]{data: t.data.Clone(), columns: make([]column[K, V], len(t.columns))}
+	for i, col := range t.columns {
+		c.columns[i] = col.clone()
 	}
 	return c
 }
 
-func (t *Table[T]) markDirty(i int) {
-	if t.dirty == nil {
-		t.dirty = make(map[int]bool)
-	}
-	t.dirty[i] = true
+// Index declares a column of one key: keyOf says the key of a value, and false when the value is
+// not in the column. The values that are in the table already are put in it.
+func (t *Table[K, V]) Index[IK comparable](keyOf func(V) (IK, bool)) Handle[IK] {
+	col := &column1[K, V, IK]{keyOf: keyOf}
+	t.attach(col)
+	return Handle[IK]{pos: len(t.columns) - 1}
 }
 
-// reindex makes all the indexes again from the rows.
-func (t *Table[T]) reindex() {
-	t.indexBy = nil
-	for i, row := range t.rows {
-		t.insert(i, row)
-	}
+// Index2 declares a column of two keys, found by the first alone or by both.
+func (t *Table[K, V]) Index2[A, B comparable](keyOf func(V) (A, B, bool)) Handle2[A, B] {
+	col := &column2[K, V, A, B]{keyOf: keyOf}
+	t.attach(col)
+	return Handle2[A, B]{pos: len(t.columns) - 1}
 }
 
-// insert puts the position of a row under each of its values, keeping each list ascending.
-func (t *Table[T]) insert(i int, row T) {
-	for column, value := range row.Index() {
-		if t.indexBy == nil {
-			t.indexBy = make(map[string]map[any][]int)
-		}
-		byValue := t.indexBy[column]
-		if byValue == nil {
-			byValue = make(map[any][]int)
-			t.indexBy[column] = byValue
-		}
-		ids := byValue[value]
-		at, _ := slices.BinarySearch(ids, i)
-		byValue[value] = slices.Insert(ids, at, i)
+func (t *Table[K, V]) attach(col column[K, V]) {
+	t.columns = append(t.columns, col)
+	for k, v := range t.data.All() {
+		col.add(k, v)
 	}
 }
 
-// remove takes the position of a row out of each of its values.
-func (t *Table[T]) remove(i int, row T) {
-	for column, value := range row.Index() {
-		byValue := t.indexBy[column]
-		ids := byValue[value]
-		if at, found := slices.BinarySearch(ids, i); found {
-			ids = slices.Delete(ids, at, at+1)
+// Lookup walks the values whose column has the key, in the stable order. A handle that is not a
+// column of this table finds nothing.
+func (t *Table[K, V]) Lookup[IK comparable](h Handle[IK], ik IK) iter.Seq2[K, V] {
+	col, ok := columnOf[K, V, *column1[K, V, IK]](t, h.pos)
+	if !ok {
+		return empty[K, V]
+	}
+	return t.values(col.keys(ik))
+}
+
+// LookupAs is Lookup that gives each value as a T, and leaves out the values that are not one.
+func (t *Table[K, V]) LookupAs[IK comparable, T any](h Handle[IK], ik IK) iter.Seq2[K, T] {
+	return as[K, V, T](t.Lookup(h, ik))
+}
+
+// LookupFirst walks the values whose column has the first key, whatever the second.
+func (t *Table[K, V]) LookupFirst[A, B comparable](h Handle2[A, B], a A) iter.Seq2[K, V] {
+	col, ok := columnOf[K, V, *column2[K, V, A, B]](t, h.pos)
+	if !ok {
+		return empty[K, V]
+	}
+	return t.values(col.keysOfFirst(a))
+}
+
+// Lookup2 walks the values whose column has both keys.
+func (t *Table[K, V]) Lookup2[A, B comparable](h Handle2[A, B], a A, b B) iter.Seq2[K, V] {
+	col, ok := columnOf[K, V, *column2[K, V, A, B]](t, h.pos)
+	if !ok {
+		return empty[K, V]
+	}
+	return t.values(col.keysOf(a, b))
+}
+
+// LookupFirstAs is LookupFirst that gives each value as a T, and leaves out the values that are
+// not one.
+func (t *Table[K, V]) LookupFirstAs[A, B comparable, T any](h Handle2[A, B], a A) iter.Seq2[K, T] {
+	return as[K, V, T](t.LookupFirst(h, a))
+}
+
+// values gives the value of each key that a column found. A column and the data agree, so a key
+// the data does not have is not there.
+func (t *Table[K, V]) values(keys iter.Seq[K]) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for k := range keys {
+			v, ok := t.data.Get(k)
+			if ok && !yield(k, v) {
+				return
+			}
 		}
-		if len(ids) == 0 {
-			delete(byValue, value)
-			continue
+	}
+}
+
+func columnOf[K comparable, V any, C column[K, V]](t *Table[K, V], pos int) (C, bool) {
+	var zero C
+	if pos < 0 || pos >= len(t.columns) {
+		return zero, false
+	}
+	c, ok := t.columns[pos].(C)
+	return c, ok
+}
+
+func empty[K comparable, V any](func(K, V) bool) {}
+
+func as[K comparable, V, T any](seq iter.Seq2[K, V]) iter.Seq2[K, T] {
+	return func(yield func(K, T) bool) {
+		for k, v := range seq {
+			if t, ok := any(v).(T); ok && !yield(k, t) {
+				return
+			}
 		}
-		byValue[value] = ids
 	}
 }

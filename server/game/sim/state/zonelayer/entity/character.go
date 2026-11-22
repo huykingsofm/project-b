@@ -1,4 +1,4 @@
-package zonelayer
+package entity
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -16,33 +16,33 @@ type CharacterEntity struct {
 	maxHp    int32
 }
 
-func (e CharacterEntity) ID() state.EntityID  { return e.entityID }
-func (e CharacterEntity) KindID() KindID      { return CharacterKindID }
-func (e CharacterEntity) Position() state.Vec { return e.pos }
-func (e CharacterEntity) Radius() int32       { return e.rad }
+func (e CharacterEntity) ID() state.EntityID   { return e.entityID }
+func (e CharacterEntity) KindID() state.KindID { return state.CharacterKindID }
+func (e CharacterEntity) Position() state.Vec  { return e.pos }
+func (e CharacterEntity) Radius() int32        { return e.rad }
 func (e CharacterEntity) BoundingBox() state.Rect {
-	return boundingBoxAround(e.pos, e.rad)
+	return state.BoundingBoxAround(e.pos, e.rad)
 }
 func (e CharacterEntity) Health() int32    { return e.hp }
 func (e CharacterEntity) MaxHealth() int32 { return e.maxHp }
 
-func (e CharacterEntity) OnDamage(amount int32) DamageableEntity {
+func (e CharacterEntity) OnDamage(amount int32) state.DamageableEntity {
 	e.hp = max(e.hp-amount, 0)
 	return e
 }
 
-func (e CharacterEntity) OnHeal(amount int32) DamageableEntity {
+func (e CharacterEntity) OnHeal(amount int32) state.DamageableEntity {
 	e.hp = min(e.hp+amount, e.maxHp)
 	return e
 }
 
 func (e CharacterEntity) Hash(h *sim.Hasher) {
-	hashCommon(h, e)
+	state.HashEntity(h, e)
 	h.U64(uint64(uint32(e.hp)))
 	h.U64(uint64(uint32(e.maxHp)))
 }
 
-func (e CharacterEntity) MovedTo(pos state.Vec) Entity {
+func (e CharacterEntity) MovedTo(pos state.Vec) state.Entity {
 	e.pos = pos
 	return e
 }
@@ -55,7 +55,9 @@ func (e CharacterEntity) Encode(w *binarycodec.Writer) {
 	w.Varint(int64(e.maxHp))
 }
 
-func decodeCharacterEntity(r *binarycodec.Reader, version binarycodec.Version) (Entity, error) {
+func decodeCharacterEntity(
+	r *binarycodec.Reader, version binarycodec.Version,
+) (state.Entity, error) {
 	e := CharacterEntity{
 		entityID: state.EntityID(r.Uvarint()),
 		pos:      state.DecodeVec(r, version),
@@ -64,4 +66,12 @@ func decodeCharacterEntity(r *binarycodec.Reader, version binarycodec.Version) (
 		maxHp:    int32(r.Varint()),
 	}
 	return e, r.Err()
+}
+
+// NewCharacterEntity makes the body of a character: where it stands, how far it reaches, and its
+// health.
+func NewCharacterEntity(
+	id state.EntityID, pos state.Vec, radius, health, maxHealth int32,
+) CharacterEntity {
+	return CharacterEntity{entityID: id, pos: pos, rad: radius, hp: health, maxHp: maxHealth}
 }
