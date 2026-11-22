@@ -87,20 +87,20 @@ func TestSchedulerFindsAndCancelsWhatAKeyNames(t *testing.T) {
 	mine(9, 1)
 	mine(5, 2)
 	mine(7, 1)
-	byOne := PlanKey{Actor: 1, ID: testID}
+	byOne := ActionKey{Actor: 1, ID: testID}
 	if a, ok := s.Find(byOne); !ok || a.author != 1 {
 		t.Fatalf("found %+v, %v", a, ok)
 	}
-	if _, ok := s.Find(PlanKey{Actor: 3, ID: testID}); ok {
+	if _, ok := s.Find(ActionKey{Actor: 3, ID: testID}); ok {
 		t.Fatal("an action of an actor that has none was found")
 	}
-	if _, ok := s.Find(PlanKey{ID: testID + 1}); ok {
+	if _, ok := s.Find(ActionKey{ID: testID + 1}); ok {
 		t.Fatal("an action of another ID was found")
 	}
 	if n := s.Cancel(byOne); n != 2 || s.Pending() != 1 {
 		t.Fatalf("%d cancelled, %d left, want 2 and 1", n, s.Pending())
 	}
-	if n := s.Cancel(PlanKey{ID: testID}); n != 1 || s.Pending() != 0 {
+	if n := s.Cancel(ActionKey{ID: testID}); n != 1 || s.Pending() != 0 {
 		t.Fatalf("a key with no actor names every action of the ID: %d cancelled", n)
 	}
 }
@@ -112,7 +112,7 @@ func TestACancelTakesAwayWhatWaitedAndWhatWasSetBeforeItAndNotWhatWasSetAfter(t 
 	}
 	s.At(8, of(1, "waited"))
 	s.At(9, of(2, "waited of another"))
-	key := PlanKey{Actor: 1, ID: testID}
+	key := ActionKey{Actor: 1, ID: testID}
 	next := []*authoredAction{of(1, "next before"), of(1, "next after"), of(2, "next of another")}
 	later := []Timed[*authoredAction]{
 		{At: 12, Action: of(1, "later before")}, {At: 13, Action: of(1, "later after")},
@@ -141,7 +141,7 @@ func TestACancelTakesAwayWhatWaitedAndWhatWasSetBeforeItAndNotWhatWasSetAfter(t 
 func TestACancelMadeByAnActionTakesEffectOnWhatWasSetBeforeIt(t *testing.T) {
 	var reg ZoneLayerRegistry
 	reg.ToSelf(&ZoneLayerCharacterRegenAction{})
-	reg.CancelWaiting(PlanKey{ID: ZoneLayerCharacterRegenActionID})
+	reg.CancelWaiting(ActionKey{ID: ZoneLayerCharacterRegenActionID})
 	reg.ToSelf(&ZoneLayerCharacterRegenAction{Every: 5}) // set after: it stays
 	next, later := reg.TakeSelf()
 	var s Scheduler[ZoneLayerAction]

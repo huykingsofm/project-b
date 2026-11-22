@@ -361,7 +361,7 @@ func BenchmarkCloneZoneLayer(b *testing.B) {
 func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *testing.T) {
 	c := aWorldToCheckpoint(t) // the builder asked for healing every 10 ticks
 	l := c.ZoneLayer(1)
-	key := action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID}
+	key := action.ActionKey{ID: action.ZoneLayerCharacterRegenActionID}
 	regen, ok := action.FindWaiting(&l.sched, l.selfNext, key)
 	if !ok || regen.(*action.ZoneLayerCharacterRegenAction).Every != 10 {
 		t.Fatalf("the zonelayer does not wait for the heal that was asked for: %v, %v", regen, ok)
@@ -391,7 +391,7 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 	}
 
 	none := aWorldToCheckpoint(t).ZoneLayer(1)
-	none.sched.Cancel(action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID})
+	none.sched.Cancel(action.ActionKey{ID: action.ZoneLayerCharacterRegenActionID})
 	if err := none.EnsureRegen(0); err != nil || none.sched.Pending() != 0 {
 		t.Fatalf("no healing asked, none waiting: error %v, %d waiting", err, none.sched.Pending())
 	}

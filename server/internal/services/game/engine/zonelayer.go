@@ -207,7 +207,7 @@ func RestoreZoneLayerEngine(data []byte, env *Env, seed uint64) (*ZoneLayerEngin
 // error, because a period that changed while the cluster ran would change what a replay makes, and
 // so is one that waits when the period is 0, which means no healing.
 func (e *ZoneLayerEngine) EnsureRegen(every uint64) error {
-	key := action.PlanKey{ID: action.ZoneLayerCharacterRegenActionID}
+	key := action.ActionKey{ID: action.ZoneLayerCharacterRegenActionID}
 	waiting, found := action.FindWaiting(&e.sched, e.selfNext, key)
 	if !found {
 		if every > 0 {

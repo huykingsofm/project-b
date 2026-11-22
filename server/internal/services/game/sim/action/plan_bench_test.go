@@ -64,7 +64,7 @@ func BenchmarkPlanFind(b *testing.B) {
 			p := filledPlan(n)
 			b.ReportAllocs()
 			for b.Loop() {
-				if len(p.Find(PlanKey{ID: ZoneLayerCharacterDamageActionID})) == 0 {
+				if len(p.Find(ActionKey{ID: ZoneLayerCharacterDamageActionID})) == 0 {
 					b.Fatal("no damage found")
 				}
 			}

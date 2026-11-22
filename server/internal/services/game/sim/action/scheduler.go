@@ -38,21 +38,8 @@ func (s *Scheduler[A]) Pending() int {
 	return n
 }
 
-// Names reports whether the action is one that the key names: of its ID, and, when the key has an
-// actor, performed by that actor.
-func (k PlanKey) Names(a Action) bool {
-	if a.ID() != k.ID {
-		return false
-	}
-	if k.Actor == nil {
-		return true
-	}
-	who, ok := a.(Acting)
-	return ok && who.Actor() == k.Actor
-}
-
 // Find returns the action that the key names and that waits for the earliest tick.
-func (s *Scheduler[A]) Find(key PlanKey) (A, bool) {
+func (s *Scheduler[A]) Find(key ActionKey) (A, bool) {
 	var found A
 	var foundAt uint64
 	ok := false
@@ -69,7 +56,7 @@ func (s *Scheduler[A]) Find(key PlanKey) (A, bool) {
 
 // Cancel takes away the actions that the key names and that wait for a later tick, and returns how
 // many.
-func (s *Scheduler[A]) Cancel(key PlanKey) int {
+func (s *Scheduler[A]) Cancel(key ActionKey) int {
 	n := 0
 	for tick, actions := range s.at {
 		kept := actions[:0:0]
@@ -91,7 +78,7 @@ func (s *Scheduler[A]) Cancel(key PlanKey) int {
 
 // FindWaiting returns the action that the key names among what the engine set for the next tick
 // and what waits in the scheduler. What was set for the next tick is looked at first.
-func FindWaiting[A Action](s *Scheduler[A], next []A, key PlanKey) (A, bool) {
+func FindWaiting[A Action](s *Scheduler[A], next []A, key ActionKey) (A, bool) {
 	for _, a := range next {
 		if key.Names(a) {
 			return a, true
@@ -106,7 +93,7 @@ func FindWaiting[A Action](s *Scheduler[A], next []A, key PlanKey) (A, bool) {
 // later tick); what is set after the cancel is not touched, so an action can cancel what waits and
 // set another in its place.
 type Cancel struct {
-	Key         PlanKey
+	Key         ActionKey
 	Next, Later int
 }
 

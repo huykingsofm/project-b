@@ -60,7 +60,7 @@ func TestAPlanThatWasPutBackHoldsNoAction(t *testing.T) {
 	p.Append(&poolTestAction{})
 	p.Append(&poolTestAction{})
 	pool.Put(p)
-	if p.Len() != 0 || len(p.Find(action.PlanKey{ID: poolTestID})) != 0 {
+	if p.Len() != 0 || len(p.Find(action.ActionKey{ID: poolTestID})) != 0 {
 		t.Fatal("a plan that was put back still holds an action")
 	}
 }

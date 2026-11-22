@@ -105,7 +105,7 @@ func (b *self[A]) take() ([]A, []Timed[A]) {
 
 // cancelWaiting records a cancel of what the key names, with how much was set so far in this tick:
 // what is set after it is not cancelled.
-func (b *self[A]) cancelWaiting(key PlanKey) {
+func (b *self[A]) cancelWaiting(key ActionKey) {
 	b.cancels = append(b.cancels, Cancel{Key: key, Next: len(b.next), Later: len(b.later)})
 }
 
@@ -134,7 +134,7 @@ func (r *ZoneLayerRegistry) ToSelfAt(tick uint64, a ZoneLayerAction) { r.toSelfA
 // later tick, or for the next one), are not to run: an action that must stop an action that
 // sets itself again, a passive skill of a character that left for example, cancels it. It
 // takes effect when the tick is over, on what was set before it.
-func (r *ZoneLayerRegistry) CancelWaiting(key PlanKey) { r.cancelWaiting(key) }
+func (r *ZoneLayerRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the zonelayer cancelled in this tick.
 func (r *ZoneLayerRegistry) TakeCancels() []Cancel { return r.takeCancels() }
@@ -160,7 +160,7 @@ func (r *ZoneRegistry) ToSelfAt(tick uint64, a ZoneAction) { r.toSelfAt(r.Tick, 
 // tick, or for the next one), are not to run: an action that must stop an action that sets itself
 // again, a passive skill of a character that left for example, cancels it. It takes effect when the
 // tick is over, on what was set before it.
-func (r *ZoneRegistry) CancelWaiting(key PlanKey) { r.cancelWaiting(key) }
+func (r *ZoneRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the zone cancelled in this tick.
 func (r *ZoneRegistry) TakeCancels() []Cancel { return r.takeCancels() }
@@ -184,7 +184,7 @@ func (r *WorldRegistry) ToSelfAt(tick uint64, a WorldAction) { r.toSelfAt(r.Tick
 // tick, or for the next one), are not to run: an action that must stop an action that sets itself
 // again, a passive skill of a character that left for example, cancels it. It takes effect when the
 // tick is over, on what was set before it.
-func (r *WorldRegistry) CancelWaiting(key PlanKey) { r.cancelWaiting(key) }
+func (r *WorldRegistry) CancelWaiting(key ActionKey) { r.cancelWaiting(key) }
 
 // TakeCancels returns what the world cancelled in this tick.
 func (r *WorldRegistry) TakeCancels() []Cancel { return r.takeCancels() }
