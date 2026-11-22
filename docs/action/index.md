@@ -76,7 +76,7 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | `sim/action` | the actions, and the messages that carry them (`MessageToZoneLayer`, `MessageToZone`, `MessageToWorld`) |
 
 - `message.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `message.Bouncer`.
-- `onfail.Retry` and `onfail.Redirect` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
+- `onfail.Retry`, `onfail.Redirect` and `onfail.Escalate` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
 - A message with no `OnFail` is dropped, and logged.
 
 ### What an action that repeats and a cancel each decide

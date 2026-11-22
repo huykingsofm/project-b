@@ -76,6 +76,16 @@ func TestWhatAMessageSaysToDoWhenItIsNotDeliveredIsDoneByItsOwnKind(t *testing.T
 			t.Fatalf("to send: %+v", b.pending)
 		}
 	})
+	t.Run("escalate sends it on, once more tried, up to the most", func(t *testing.T) {
+		b, _, m := bounced(onfail.Escalate{To: other}, 0, false)
+		if len(b.pending) != 1 || b.pending[0].Attempts() != m.Attempts()+1 {
+			t.Fatalf("to send: %+v", b.pending)
+		}
+		b, _, _ = bounced(onfail.Escalate{To: other}, max, false)
+		if b.dropped != 1 || len(b.pending) != 0 {
+			t.Fatalf("at %d attempts: %d dropped, %d to send", max, b.dropped, len(b.pending))
+		}
+	})
 	t.Run("escalate gives it to the other engine, and not while stopping", func(t *testing.T) {
 		b, _, _ := bounced(onfail.Escalate{To: other}, 0, false)
 		if len(b.pending) != 1 || b.pending[0].Dest() != other {

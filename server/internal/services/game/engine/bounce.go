@@ -15,15 +15,23 @@ type bouncer struct {
 	notice   func(actor any, key string, args []any)
 	stopping bool
 	dropped  uint64
-	cfg      *config.Snapshot // of the tick: how many attempts a message may have
 }
 
-var _ message.Bouncer = (*bouncer)(nil)
+// bouncerAt is the bouncer as the kinds of OnFail see it in a tick: with the configuration of the
+// tick, which says how many times a message is tried.
+type bouncerAt struct {
+	*bouncer
+	cfg *config.Snapshot
+}
+
+var _ message.Bouncer = bouncerAt{}
+
+// MaxAttempts is how many times a message is tried.
+func (b bouncerAt) MaxAttempts() int { return action.MaxAttempts.Get(b.cfg) }
 
 // handle runs what the message says to do about the failure. A message with no OnFail is dropped
 // and logged.
 func (b *bouncer) handle(cfg *config.Snapshot, m message.Message, r message.Reason) {
-	b.cfg = cfg
 	onFail := m.OnFail()
 	if onFail == nil {
 		logging.Error(
@@ -33,7 +41,7 @@ func (b *bouncer) handle(cfg *config.Snapshot, m message.Message, r message.Reas
 		b.Drop()
 		return
 	}
-	onFail.Handle(b, m, r)
+	onFail.Handle(bouncerAt{b, cfg}, m, r)
 }
 
 // Resend keeps a message to be sent at the next flush.
@@ -57,9 +65,6 @@ func (b *bouncer) Drop() { b.dropped++ }
 
 // Stopping reports whether the engine is stopping.
 func (b *bouncer) Stopping() bool { return b.stopping }
-
-// MaxAttempts is how many times a message is tried.
-func (b *bouncer) MaxAttempts() int { return action.MaxAttempts.Get(b.cfg) }
 
 // take returns the messages that are to be sent again, and forgets them.
 func (b *bouncer) take() []message.Message {

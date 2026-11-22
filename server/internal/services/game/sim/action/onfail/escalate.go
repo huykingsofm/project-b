@@ -10,13 +10,12 @@ type Escalate struct{ To message.Address }
 
 func (Escalate) ID() message.OnFailID { return EscalateID }
 
-// Handle gives it to the other engine, unless the engine stops.
-func (f Escalate) Handle(b message.Bouncer, m message.Message, _ message.Reason) {
-	if b.Stopping() {
-		b.Drop()
-		return
+// Handle gives it to the other engine, once more tried, unless the engine stops or the message was
+// tried too often: two engines that escalate to each other would send it back and forth for ever.
+func (f Escalate) Handle(b message.Bouncer, m message.Message, r message.Reason) {
+	if resendable(b, m, r) {
+		b.Resend(m.Redirected(f.To).Again())
 	}
-	b.Resend(m.Redirected(f.To))
 }
 
 func (f Escalate) Encode(w *binarycodec.Writer) error {
