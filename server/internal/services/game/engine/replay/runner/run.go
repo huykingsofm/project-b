@@ -8,100 +8,56 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
-	worldstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world"
-	zonestate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone"
-	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
 )
 
 type replayRun struct {
 	cluster *engine.Cluster
 	engines map[message.Address]Engine
 	order   []message.Address
-	byTick  map[message.Address]map[uint64][]replay.Record
 	last    map[message.Address]uint64
 	cur     map[message.Address]uint64
-	needs   map[message.Address]map[uint64][]replayNeed
+	cursors map[message.Address]*cursor
+	windows map[message.Address]*tickWindow
 	version map[message.Address]uint64
 	configs map[uint64]*config.Snapshot
 	opts    Options
 	router  *replayRouter
+	stable  *replayStable
 	cfg     *replayConfig
 	verify  *verifyLog
 	div     *divergences
 }
 
 func newReplayRun(b *engine.ClusterBuilder, logs Logs, opts Options) (*replayRun, error) {
+	idx, err := buildIndex(logs, b.Seed(), b.QueueSize())
+	if err != nil {
+		return nil, err
+	}
 	div := &divergences{}
 	r := &replayRun{
 		engines: map[message.Address]Engine{},
-		byTick:  map[message.Address]map[uint64][]replay.Record{},
-		last:    map[message.Address]uint64{},
+		last:    idx.last,
 		cur:     map[message.Address]uint64{},
-		needs:   map[message.Address]map[uint64][]replayNeed{},
+		cursors: map[message.Address]*cursor{},
+		windows: map[message.Address]*tickWindow{},
 		version: map[message.Address]uint64{},
 		configs: map[uint64]*config.Snapshot{},
 		opts:    opts,
 		cfg:     &replayConfig{snap: config.Defaults()},
 		div:     div,
 	}
-	reads := map[readKey]uint64{}
-	need := map[message.Address]map[uint64]bool{}
-	router := &replayRouter{
-		Router: engine.NewRouter(), want: map[msgKey]message.Message{}, returned: map[msgKey]bool{},
+	r.router = &replayRouter{
+		Router: engine.NewRouter(), want: idx.want, returned: idx.returned,
 		sent: map[msgKey]message.Message{}, refuse: map[msgKey]message.Reason{}, div: div,
 	}
-	queue := b.QueueSize()
-	for address, records := range logs {
-		perTick := map[uint64][]replay.Record{}
-		counts := map[uint64]int{}
-		for _, rec := range records {
-			perTick[rec.Tick] = append(perTick[rec.Tick], rec)
-			r.last[address] = max(r.last[address], rec.Tick)
-			switch body := rec.Body.(type) {
-			case replay.Inbound:
-				router.want[keyOf(body.Message.Head())] = body.Message
-				counts[rec.Tick]++
-			case replay.Command:
-				counts[rec.Tick]++
-			case replay.Returned:
-				router.returned[keyOf(body.Header)] = true
-				counts[rec.Tick]++
-			case replay.StableRead:
-				reads[readKey{address, rec.Tick, body.Source}] = body.CopyTick
-				if need[body.Source] == nil {
-					need[body.Source] = map[uint64]bool{}
-				}
-				need[body.Source][body.CopyTick] = true
-				r.last[body.Source] = max(r.last[body.Source], body.CopyTick)
-				if body.CopyTick > 0 {
-					r.needs[address] = nonNil(r.needs[address])
-					r.needs[address][rec.Tick] = append(
-						r.needs[address][rec.Tick], replayNeed{body.Source, body.CopyTick},
-					)
-				}
-			}
-		}
-		for _, n := range counts {
-			queue = max(queue, n+1) // the messages of a tick are all in the queue before it runs
-		}
-		r.byTick[address] = perTick
-	}
-	stable := &replayStable{
-		worldID: b.WorldID(), reads: reads, need: need,
-		world:      map[uint64]*worldstate.State{},
-		zones:      map[state.ZoneID]map[uint64]*zonestate.State{},
-		zonelayers: map[state.ZoneLayerID]map[uint64]*zonelayerstate.State{},
-	}
-	r.verify = &verifyLog{want: logs, pos: map[message.Address]int{}, div: div}
-	r.router = router
+	r.stable = newReplayStable(b.WorldID(), idx.uses)
+	r.verify = &verifyLog{windows: r.windows, pos: map[message.Address]int{}, div: div}
 	env := &engine.Env{
-		Router: router, Cfg: r.cfg, ReplayLog: r.verify, Stable: stable,
-		Graph: engine.NewWorldGraph(b.WorldID()), QueueSize: queue,
+		Router: r.router, Cfg: r.cfg, ReplayLog: r.verify, Stable: r.stable,
+		Graph: engine.NewWorldGraph(b.WorldID()), QueueSize: idx.queue,
 		WorldEmitter: engine.NopEmitter{}, ZoneEmitter: engine.NopEmitter{},
 		ZoneLayerEmitter: engine.NopEmitter{},
 	}
-	var err error
 	if r.cluster, err = b.BuildIn(env); err != nil {
 		return nil, err
 	}
@@ -109,31 +65,68 @@ func newReplayRun(b *engine.ClusterBuilder, logs Logs, opts Options) (*replayRun
 		r.engines[e.Address()] = e
 		r.order = append(r.order, e.Address())
 	}
-	for address := range logs {
+	for _, address := range logs.Engines() {
 		if _, ok := r.engines[address]; !ok {
 			return nil, fmt.Errorf(
 				"the log of %v is not the log of an engine of the cluster", address,
 			)
 		}
+		src, err := logs.Open(address)
+		if err != nil {
+			r.close()
+			return nil, fmt.Errorf("the log of %v: %w", address, err)
+		}
+		r.cursors[address] = newCursor(src)
 	}
 	return r, nil
 }
 
-func nonNil[K comparable, V any](m map[K]V) map[K]V {
-	if m == nil {
-		return map[K]V{}
+// close lets go of the logs.
+func (r *replayRun) close() {
+	for _, c := range r.cursors {
+		c.close()
 	}
-	return m
+}
+
+// load reads the records of the tick that an engine is about to run, once, and tells the registry
+// which copy each read among them will find.
+func (r *replayRun) load(e message.Address, tick uint64) (*tickWindow, error) {
+	if w := r.windows[e]; w != nil && w.tick == tick {
+		return w, nil
+	}
+	w := &tickWindow{tick: tick}
+	if c := r.cursors[e]; c != nil {
+		records, err := c.take(tick)
+		if err != nil {
+			return nil, fmt.Errorf("the log of %v: %w", e, err)
+		}
+		w.records = records
+	}
+	for _, rec := range w.records {
+		if read, ok := rec.Body.(replay.StableRead); ok {
+			r.stable.expect(readKey{e, tick, read.Source}, read.CopyTick)
+			if read.CopyTick > 0 {
+				w.needs = append(w.needs, replayNeed{read.Source, read.CopyTick})
+			}
+		}
+	}
+	r.windows[e] = w
+	r.verify.pos[e] = 0
+	return w, nil
 }
 
 // ready reports whether the engine can run its tick: every copy that tick read exists.
-func (r *replayRun) ready(e message.Address, tick uint64) bool {
-	for _, n := range r.needs[e][tick] {
+func (r *replayRun) ready(e message.Address, tick uint64) (bool, error) {
+	w, err := r.load(e, tick)
+	if err != nil {
+		return false, err
+	}
+	for _, n := range w.needs {
 		if _, ok := r.engines[n.source]; ok && r.cur[n.source] < n.copyTick {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 // play runs the engines until each has run to its last tick.
@@ -141,7 +134,14 @@ func (r *replayRun) play() error {
 	for {
 		progressed, done := false, true
 		for _, e := range r.order {
-			for r.cur[e] < r.last[e] && r.ready(e, r.cur[e]+1) {
+			for r.cur[e] < r.last[e] {
+				ok, err := r.ready(e, r.cur[e]+1)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					break
+				}
 				if err := r.stepEngine(e, r.cur[e]+1); err != nil {
 					return err
 				}
@@ -186,7 +186,11 @@ func (r *replayRun) snapshotOf(e message.Address, version uint64) *config.Snapsh
 // stepEngine gives an engine what its log says it was given at the tick, and runs the tick.
 func (r *replayRun) stepEngine(e message.Address, tick uint64) error {
 	eng := r.engines[e]
-	for _, rec := range r.byTick[e][tick] {
+	w, err := r.load(e, tick)
+	if err != nil {
+		return err
+	}
+	for _, rec := range w.records {
 		switch body := rec.Body.(type) {
 		case replay.ConfigRead:
 			r.version[e] = body.Version
@@ -212,15 +216,4 @@ func (r *replayRun) stepEngine(e message.Address, tick uint64) error {
 	eng.Step()
 	r.cur[e] = tick
 	return nil
-}
-
-// finish reports what the log has that the replay did not make.
-func (r *replayRun) finish() {
-	for _, e := range r.order {
-		records, i := r.verify.want[e], r.verify.pos[e]
-		if i < len(records) {
-			r.div.add(e, "tick %d: the log has a %T that the replay did not make",
-				records[i].Tick, records[i].Body)
-		}
-	}
 }

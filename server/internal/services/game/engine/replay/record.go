@@ -7,6 +7,7 @@ import (
 
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
+	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
 	"github.com/huykingsofm/project-b/server/internal/shared/binarycodec"
 )
 
@@ -175,6 +176,19 @@ func SameMessage(a, b message.Message) bool {
 		return false
 	}
 	return bytes.Equal(x.B, y.B)
+}
+
+// HashMessage is a number that depends on what a message is written as, so that a replay can keep
+// that of each message it will compare later instead of the message. It is 0 for a message that
+// cannot be written.
+func HashMessage(m message.Message) uint64 {
+	var w binarycodec.Writer
+	if action.EncodeMessage(&w, m) != nil {
+		return 0
+	}
+	h := state.NewHasher()
+	h.Bytes(w.B)
+	return h.Sum()
 }
 
 // decoders is the table of the functions that read a body, by its kind. A test fails when a kind of

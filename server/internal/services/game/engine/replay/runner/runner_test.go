@@ -2,6 +2,7 @@ package runner_test
 
 import (
 	"context"
+	"errors"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/enginetest"
 	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay/runner"
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
@@ -17,16 +18,32 @@ import (
 	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
 )
 
+// readAll reads the files of a log into memory, to count what they hold.
+func readAll(t *testing.T, dir string) runner.MemoryLogs {
+	t.Helper()
+	engines, err := replay.Engines(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := runner.MemoryLogs{}
+	for _, e := range engines {
+		if logs[e], err = replay.ReadAll(dir, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return logs
+}
+
 // logsOf groups the records of a memory log by engine.
-func logsOf(mem *replay.MemLog) runner.Logs {
-	logs := runner.Logs{}
+func logsOf(mem *replay.MemLog) runner.MemoryLogs {
+	logs := runner.MemoryLogs{}
 	for _, r := range mem.Records {
 		logs[r.Engine] = append(logs[r.Engine], r)
 	}
 	return logs
 }
 
-func countKind(logs runner.Logs, k replay.Kind) int {
+func countKind(logs runner.MemoryLogs, k replay.Kind) int {
 	n := 0
 	for _, records := range logs {
 		for _, r := range records {
@@ -52,17 +69,18 @@ func TestAReplayOfAWholeClusterRunMatchesItsLogFromMemoryAndFromFiles(t *testing
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	fromFiles, err := runner.ReadLogs(dir)
+	fromFiles, err := runner.FileLogs(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	counted := map[string]runner.MemoryLogs{"memory": logsOf(mem), "files": readAll(t, dir)}
 	sources := map[string]runner.Logs{"memory": logsOf(mem), "files": fromFiles}
 	for name, logs := range sources {
 		for _, kind := range []replay.Kind{
 			replay.KindInbound, replay.KindCommand, replay.KindConfig, replay.KindHash,
 			replay.KindStableRead,
 		} {
-			if countKind(logs, kind) == 0 {
+			if countKind(counted[name], kind) == 0 {
 				t.Fatalf("%s: the scenario recorded no record of kind %d", name, kind)
 			}
 		}
@@ -78,7 +96,7 @@ func TestAReplayOfAWholeClusterRunMatchesItsLogFromMemoryAndFromFiles(t *testing
 			t.Fatalf("%s: in the replay the character that crossed to zone 2 is not there", name)
 		}
 		for _, e := range enginetest.ClusterEngines {
-			if len(logs[e]) > 0 && result.Ticks[e] == 0 {
+			if len(counted[name][e]) > 0 && result.Ticks[e] == 0 {
 				t.Fatalf("%s: %v was not replayed", name, e)
 			}
 		}
@@ -282,4 +300,122 @@ func BenchmarkReplayCluster(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(ticks), "engine-ticks/op")
+}
+
+// countingLogs counts how many sources of the logs were opened and closed, and can make one of
+// them fail.
+type countingLogs struct {
+	runner.Logs
+	opened, closed int
+	opens          map[message.Address]int
+	failOn         message.Address
+	failOnOpen     int // fail the source that is opened for this time (1: indexing, 2: running)
+	failAt         int // at this record
+}
+
+func (c *countingLogs) Open(e message.Address) (runner.Source, error) {
+	src, err := c.Logs.Open(e)
+	if err != nil {
+		return nil, err
+	}
+	c.opened++
+	if c.opens == nil {
+		c.opens = map[message.Address]int{}
+	}
+	c.opens[e]++
+	fail := 0
+	if e == c.failOn && c.opens[e] == c.failOnOpen {
+		fail = c.failAt
+	}
+	return &countingSource{Source: src, logs: c, failAt: fail}, nil
+}
+
+type countingSource struct {
+	runner.Source
+	logs   *countingLogs
+	failAt int
+	n      int
+}
+
+func (s *countingSource) Next() bool {
+	s.n++
+	if s.failAt > 0 && s.n >= s.failAt {
+		return false
+	}
+	return s.Source.Next()
+}
+
+func (s *countingSource) Err() error {
+	if s.failAt > 0 && s.n >= s.failAt {
+		return errors.New("the disk went away")
+	}
+	return s.Source.Err()
+}
+
+func (s *countingSource) Close() error { s.logs.closed++; return s.Source.Close() }
+
+func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *testing.T) {
+	c, _, mem, cfg := enginetest.NewWorld(t, 7, 10)
+	enginetest.RunScenario(t, c, cfg, enginetest.Sender{T: t})
+	logs := logsOf(mem)
+
+	counting := &countingLogs{Logs: logs}
+	result, err := runner.Run(enginetest.WorldBuilder(t, 7, 10), counting, theConfigOfTheScenario)
+	if err != nil || len(result.Divergences) != 0 {
+		t.Fatalf("%v %v", err, result.Divergences)
+	}
+	if want := 2 * len(logs); counting.opened != want || counting.closed != want {
+		t.Fatalf("%d logs opened and %d closed, want %d of each: one pass to index, one to run",
+			counting.opened, counting.closed, want)
+	}
+
+	for _, open := range []int{1, 2} { // the failure is met while indexing, and while running
+		failing := &countingLogs{
+			Logs: logs, failOn: message.ZoneLayerAddress(1), failOnOpen: open, failAt: 5,
+		}
+		_, err = runner.Run(enginetest.WorldBuilder(t, 7, 10), failing, theConfigOfTheScenario)
+		if err == nil || !strings.Contains(err.Error(), "the disk went away") {
+			t.Fatalf("a log that fails at the record 5 of its open number %d: %v", open, err)
+		}
+		if failing.closed != failing.opened {
+			t.Fatalf("open %d: %d logs opened and %d closed", open, failing.opened, failing.closed)
+		}
+	}
+}
+
+func TestALogWhoseRecordsAreNotInTheOrderOfTheirTicksIsAnError(t *testing.T) {
+	c, _, mem, cfg := enginetest.NewWorld(t, 7, 10)
+	enginetest.RunScenario(t, c, cfg, enginetest.Sender{T: t})
+	logs := logsOf(mem)
+	layer := message.ZoneLayerAddress(1)
+	records := slices.Clone(logs[layer])
+	last := len(records) - 1
+	records[0], records[last] = records[last], records[0] // the last tick first
+	logs[layer] = records
+	builder := enginetest.WorldBuilder(t, 7, 10)
+	if _, err := runner.Run(builder, logs, theConfigOfTheScenario); err == nil {
+		t.Fatal("a log out of the order of its ticks was replayed")
+	}
+}
+
+// The files of a log say which seed the run had; a replay with another is not a replay of it.
+func TestFilesMadeWithAnotherSeedThanTheBuilderHasAreRefused(t *testing.T) {
+	dir := t.TempDir()
+	c, _, file, cfg := enginetest.NewTeeWorld(t, dir)
+	enginetest.RunScenario(t, c, cfg, enginetest.Sender{T: t})
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := runner.FileLogs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runner.Run(enginetest.WorldBuilder(t, 8, 10), logs, theConfigOfTheScenario)
+	if err == nil || !strings.Contains(err.Error(), "seed") {
+		t.Fatalf("files made with the seed 7 and a builder with 8: %v", err)
+	}
+	result, err := runner.Run(enginetest.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	if err != nil || len(result.Divergences) != 0 {
+		t.Fatalf("the same seed: %v %v", err, result.Divergences)
+	}
 }

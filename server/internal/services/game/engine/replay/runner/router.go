@@ -20,7 +20,7 @@ func keyOf(h message.Header) msgKey { return msgKey{h.From, h.Seq} }
 // back, so that it can be given back at the tick the log says.
 type replayRouter struct {
 	*engine.Router
-	want     map[msgKey]message.Message // the messages as the receivers recorded them
+	want     map[msgKey]uint64          // the hash of each message as the receiver recorded it
 	returned map[msgKey]bool            // the messages that the log says came back
 	sent     map[msgKey]message.Message // the messages of those that were sent
 	refuse   map[msgKey]message.Reason  // what the router answers at once, in the tick of the send
@@ -30,7 +30,7 @@ type replayRouter struct {
 func (r *replayRouter) Deliver(m message.Message) (message.Reason, bool) {
 	h := m.Head()
 	key := keyOf(h)
-	if want, ok := r.want[key]; ok && !replay.SameMessage(want, m) {
+	if want, ok := r.want[key]; ok && want != replay.HashMessage(m) {
 		r.div.add(h.From, "the message %d it sends is not the one that %v recorded as taken", h.Seq,
 			m.Dest())
 	}

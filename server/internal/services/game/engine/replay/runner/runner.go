@@ -50,9 +50,9 @@ func Run(
 	if err != nil {
 		return nil, err
 	}
+	defer run.close()
 	if err := run.play(); err != nil {
 		return nil, err
 	}
-	run.finish()
 	return &Result{Cluster: run.cluster, Ticks: run.cur, Divergences: run.div.list()}, nil
 }
