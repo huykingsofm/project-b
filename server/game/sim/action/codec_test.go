@@ -63,7 +63,7 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 func codecs(t testing.TB) *sim.Codecs {
 	t.Helper()
 	c := sim.NewCodecs()
-	if err := errs.Errors(onfail.Register(c), Register(c)); err != nil {
+	if err := errs.Join(onfail.Register(c), Register(c)); err != nil {
 		t.Fatal(err)
 	}
 	return c

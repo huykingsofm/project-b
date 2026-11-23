@@ -153,7 +153,7 @@ func decodeToyEnter(r *binary.Reader, _ codec.Version) (toyEnter, error) {
 
 func toyCodecs() *sim.Codecs {
 	c := sim.NewCodecs()
-	err := errs.Errors(
+	err := errs.Join(
 		c.RegisterState(decodeToyState),
 		c.RegisterAction(decodeToyMoveAction),
 		c.RegisterAction(decodeToyChatAction),

@@ -9,7 +9,7 @@ import (
 // a command that is read back is a command of that state and of no other. A number or a type that
 // two commands share is an error.
 func Register(c *sim.Codecs) error {
-	return errs.Errors(
+	return errs.Join(
 		c.RegisterCommand(decodeWorldChatPrivateSendCommand),
 		c.RegisterCommand(decodeZoneCharacterEnterCommand),
 		c.RegisterCommand(decodeZoneChatSendCommand),

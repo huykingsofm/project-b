@@ -149,7 +149,7 @@ func decodeReadAction(
 
 func toyCodecs() (*sim.Codecs, error) {
 	c := sim.NewCodecs()
-	return c, errs.Errors(
+	return c, errs.Join(
 		c.RegisterState(decodeToyState),
 		c.RegisterAction(decodeToyAction),
 		c.RegisterAction(decodeForwardAction),

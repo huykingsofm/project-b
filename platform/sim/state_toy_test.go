@@ -171,7 +171,7 @@ func nameOf(a Action[*toyState]) string {
 // toyCodecs are codecs with the toy state, its actions and its command registered.
 func toyCodecs() (*Codecs, error) {
 	c := NewCodecs()
-	return c, errs.Errors(
+	return c, errs.Join(
 		c.RegisterState(decodeToyState),
 		c.RegisterState(decodeOtherState),
 		c.RegisterAction(decodeAnonymousAction),

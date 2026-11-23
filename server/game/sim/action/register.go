@@ -9,7 +9,7 @@ import (
 // an action that is read back is an action of that state and of no other. A number or a type that
 // two actions share is an error.
 func Register(c *sim.Codecs) error {
-	return errs.Errors(
+	return errs.Join(
 		c.RegisterAction(decodeWorldChatPrivateSendAction),
 		c.RegisterAction(decodeWorldCharacterItemAddAction),
 		c.RegisterAction(decodeZoneChatSendAction),

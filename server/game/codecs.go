@@ -19,7 +19,7 @@ import (
 // gives the map of the zone with an ID when a zone is read.
 func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, error) {
 	c := sim.NewCodecs()
-	err := errs.Errors(
+	err := errs.Join(
 		c.RegisterState(worldstate.DecodeState),
 		c.RegisterState(
 			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {

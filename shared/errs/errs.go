@@ -4,5 +4,5 @@ package errs
 
 import "errors"
 
-// Errors joins what registering many kinds returned, so that a game registers all and reports once.
-func Errors(errs ...error) error { return errors.Join(errs...) }
+// Join joins what registering many kinds returned, so that a game registers all and reports once.
+func Join(errs ...error) error { return errors.Join(errs...) }
