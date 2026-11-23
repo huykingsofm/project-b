@@ -64,6 +64,17 @@ type engineLog struct {
 	frame   binary.Writer // the frame, while it is handed over
 	tick    uint64        // the tick of the records so far
 	started bool          // whether there are records of the tick so far
+
+	handed handedTicks // the ticks of the frames handed over
+	opened uint64      // the tick of the last frame that was in the log when it was opened
+}
+
+// Durable is the tick up to which what the engine recorded is on the disk.
+func (l *engineLog) Durable() uint64 {
+	if l.w == nil {
+		return 0
+	}
+	return max(l.opened, l.handed.Durable(l.w.Synced()))
 }
 
 // OpenError is why the log of the engine could not be opened, or nil.
@@ -117,7 +128,11 @@ func (l *engineLog) End(tick uint64) error {
 	if err := l.w.Append(l.frame.B); err != nil {
 		return err
 	}
-	return l.w.Commit()
+	if err := l.w.Commit(); err != nil {
+		return err
+	}
+	l.handed.Add(tick)
+	return nil
 }
 
 // NewFileLog makes a replay log that writes under dir. Nothing is created until an engine records.
@@ -194,6 +209,13 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		},
 	})
 	l := &engineLog{w: w, openErr: err}
+	if err == nil {
+		// what is in the log already is on the disk, and the engine goes on after it
+		if l.opened, err = lastFrameTickOf(logDir); err != nil {
+			l.w.Close()
+			l.w, l.openErr = nil, err
+		}
+	}
 	f.engines.Store(engine, l)
 	// reported here, once: record does not report it again for each record
 	if err != nil && f.failure == nil {

@@ -23,6 +23,15 @@
 
 - The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
 
+## Which tick is on the disk
+
+| Call | Answer |
+|---|---|
+| `FileLog.Durable(engine)` | the tick of the last frame that is on the disk, so a crash loses nothing at or before it; the last tick of the log that was there when it was opened counts; 0 for an engine with no log |
+
+- A frame is a batch, so the number of batches that the segment log says are on the disk (`Synced`) is a count of frames. The log keeps the ticks of the frames it handed over, in order, and answers the tick of the last one that is counted. That holds across a gap, such as an engine that was removed and came back at a later tick.
+- The answer is a lower bound: it is behind the tick that was last written by up to what one `SyncEvery` holds, and it never goes back. It reads an atomic and a short list under a mutex, and is safe to call from any goroutine, an engine that does not tick any more included.
+
 ## Records
 
 What an engine writes in a tick is one frame, which is one record of the segment log and so one batch of it:

@@ -321,3 +321,52 @@ func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachReco
 		t.Fatal("Close did not return the error")
 	}
 }
+
+func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
+	dir := t.TempDir()
+	engine := sim.StateID(21)
+	o := testFileLogOptions
+	o.SyncEvery = 5 * time.Millisecond
+	log := NewFileLog(dir, o)
+	if got := log.Durable(engine); got != 0 {
+		t.Fatalf("Durable of an engine with no log = %d", got)
+	}
+	for tick := uint64(1); tick <= 7; tick++ {
+		log.Append(engine, tick, ConfigRead{Version: tick})
+		log.EndTick(engine, tick)
+		if got := log.Durable(engine); got > tick {
+			t.Fatalf("Durable = %d at the tick %d", got, tick)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for log.Durable(engine) != 7 {
+		if time.Now().After(deadline) {
+			t.Fatalf("Durable = %d after a while, want 7", log.Durable(engine))
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// another process opens the log: what is there is on the disk
+	again := NewFileLog(dir, o)
+	defer again.Close()
+	if got := again.Durable(engine); got != 7 {
+		t.Fatalf("Durable of a log that was there = %d, want 7", got)
+	}
+}
+
+func TestDurableFollowsTheTicksOfTheFramesAcrossAGap(t *testing.T) {
+	var h handedTicks
+	for _, tick := range []uint64{1, 2, 10, 11} { // an engine that was removed and came back at 10
+		h.Add(tick)
+	}
+	for synced, want := range []uint64{0, 1, 2, 10, 11} {
+		if got := h.Durable(uint64(synced)); got != want {
+			t.Fatalf("Durable with %d batches on the disk = %d, want %d", synced, got, want)
+		}
+	}
+	if got := h.Durable(2); got != 11 {
+		t.Fatalf("Durable went back to %d", got)
+	}
+}
