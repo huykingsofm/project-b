@@ -40,7 +40,9 @@ type Engine[S sim.State] struct {
 var ErrTickMismatch = errors.New("the tick of the state is not the tick of the engine")
 
 // New makes the engine of a state, at the tick the state is at. The tick is its own: the caller
-// gives the ticks with Run or calls Step.
+// gives the ticks with Run or calls Step. The state of a state ID that was given before is made at
+// the last tick of its log (replay.Log.Last), so that a tick of an ID is never the tick of two
+// lives: the log refuses a frame that does not follow its last.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
 	e := &Engine[S]{
@@ -57,6 +59,18 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 		)
 	}
 	return e
+}
+
+// Remove ends the engine for good, as opposed to stopping it with the context of Run: its log gets
+// a last frame, of the tick after the last it ran, that holds that it was removed; what it
+// published is forgotten, nothing more is delivered to it, and what is waiting in its queue comes
+// back to its senders. The engine is not used after.
+func (e *Engine[S]) Remove() {
+	e.tick++
+	e.replayLog.Append(e.me, e.tick, replay.Retired{})
+	e.replayLog.EndTick(e.me, e.tick)
+	e.stable.Remove(e.me)
+	e.retire()
 }
 
 // Send gives the engine a command, without waiting. It reports false when the queue is full.

@@ -28,3 +28,6 @@ func (j *MemLog) EndTick(sim.StateID, uint64) {}
 
 // Safe says every tick is: a MemLog is for tests, which have no crash to lose a tick to.
 func (j *MemLog) Safe(sim.StateID) uint64 { return ^uint64(0) }
+
+// Last says there is no frame: a MemLog keeps records, not frames.
+func (j *MemLog) Last(sim.StateID) uint64 { return 0 }

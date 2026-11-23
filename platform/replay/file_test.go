@@ -473,3 +473,30 @@ func TestACloseSettlesWhatIsSafeOfEveryEngine(t *testing.T) {
 		t.Fatalf("after Close Safe(a) = %d, Safe(b) = %d, want 1, 1", log.Safe(a), log.Safe(b))
 	}
 }
+
+func TestAFrameMustFollowTheLastOfTheLogAndLastSaysWhichThatIs(t *testing.T) {
+	dir := t.TempDir()
+	engine := sim.StateID(21)
+	log := NewFileLog(dir, testFileLogOptions)
+	if log.Last(engine) != 0 {
+		t.Fatalf("Last of an engine with no frame = %d", log.Last(engine))
+	}
+	log.Append(engine, 4, ConfigRead{Version: 1}) // a log may begin at any tick
+	log.EndTick(engine, 4)
+	log.EndTick(engine, 5)
+	if log.Last(engine) != 5 || log.Err() != nil {
+		t.Fatalf("Last = %d, error %v", log.Last(engine), log.Err())
+	}
+	log.Append(engine, 7, ConfigRead{Version: 2})
+	log.EndTick(engine, 7) // not the tick after 5: it is not written
+	if log.Err() == nil || log.Last(engine) != 5 {
+		t.Fatalf("a frame that does not follow was accepted: Last = %d, error %v",
+			log.Last(engine), log.Err())
+	}
+	log.Close()
+	again := NewFileLog(dir, testFileLogOptions)
+	defer again.Close()
+	if got := again.Last(engine); got != 5 {
+		t.Fatalf("Last of a log that was there = %d, want 5", got)
+	}
+}

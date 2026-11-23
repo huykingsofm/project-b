@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/replay"
@@ -236,5 +238,67 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	}
 	if restored.State().Total != 7 {
 		t.Fatalf("the restored b has %d, want 7", restored.State().Total)
+	}
+}
+
+func TestAnEngineThatIsRemovedEndsItsLogAndAnIDThatIsGivenAgainGoesOnCountingTicks(t *testing.T) {
+	dir := t.TempDir()
+	env := newToyEnv(t)
+	log := replay.NewFileLog(dir, replay.FileLogOptions{
+		SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
+	})
+	env.ReplayLog = log
+	c := NewCluster(env)
+	first := New(&toyState{id: 1}, env, 1)
+	c.Add(first)
+	for range 3 {
+		first.Send(toyCommand{N: 1})
+		c.Step()
+	}
+	if !c.Remove(1) || len(c.Engines()) != 0 {
+		t.Fatal("the engine was not removed")
+	}
+	if reason, ok := env.Router.Deliver(toMessage(1, 1)); ok || reason != sim.Retired {
+		t.Fatalf("a message to the engine that was removed bounced as %v, %v", reason, ok)
+	}
+	// the ID is given again: its state begins at the last tick of its log
+	second := New(&toyState{id: 1, tick: log.Last(1)}, env, 1)
+	c.Add(second)
+	if second.Tick() != 4 {
+		t.Fatalf("the engine of an ID that was given again is at the tick %d, want 4: the tick of "+
+			"the frame that says the first was removed", second.Tick())
+	}
+	for range 2 {
+		second.Send(toyCommand{N: 1})
+		c.Step()
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	codecs, err := toyCodecs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := replay.ReadFileLog(dir, 1, 0, codecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	var ticks []uint64
+	var retiredAt uint64
+	for r.Next() {
+		rec := r.Record()
+		if rec.Kind() == replay.KindRetired {
+			retiredAt = rec.Tick
+		}
+		if rec.Kind() == replay.KindCommand || rec.Kind() == replay.KindRetired {
+			ticks = append(ticks, rec.Tick)
+		}
+	}
+	if r.Err() != nil {
+		t.Fatal(r.Err())
+	}
+	if want := []uint64{1, 2, 3, 4, 5, 6}; !reflect.DeepEqual(ticks, want) || retiredAt != 4 {
+		t.Fatalf("the ticks are %v, the removal at %d; want %v and 4", ticks, retiredAt, want)
 	}
 }

@@ -20,6 +20,9 @@ func (t teeLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 
 // Safe is the tick that both logs say is safe.
 func (t teeLog) Safe(e sim.StateID) uint64 { return min(t.a.Safe(e), t.b.Safe(e)) }
+
+// Last is the later of the two.
+func (t teeLog) Last(e sim.StateID) uint64 { return max(t.a.Last(e), t.b.Last(e)) }
 func (t teeLog) EndTick(e sim.StateID, tick uint64) {
 	t.a.EndTick(e, tick)
 	t.b.EndTick(e, tick)

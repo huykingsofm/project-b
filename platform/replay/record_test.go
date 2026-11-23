@@ -10,9 +10,9 @@ import (
 func TestEveryKindOfTheRegisterHasADecoderAndABodyThatReturnsIt(t *testing.T) {
 	bodies := []Body{
 		Inbound{Message: benchMessage(1)}, Command{Command: toyChat{}},
-		ConfigRead{}, Hash{}, StableRead{}, Returned{},
+		ConfigRead{}, Hash{}, StableRead{}, Returned{}, Retired{},
 	}
-	for kind := KindInbound; kind <= KindReturned; kind++ { // the last kind of the register
+	for kind := KindInbound; kind <= KindRetired; kind++ { // the last kind of the register
 		if _, ok := decoders[kind]; !ok {
 			t.Errorf("the kind %d has no decoder", kind)
 		}

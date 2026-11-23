@@ -79,6 +79,7 @@ type engineLog struct {
 	dependencies dependencyList        // what the engine depends on, at the ticks not safe yet
 	tickDeps     []sim.StateDependency // what it depends on at the tick that is being recorded
 	safe         atomic.Uint64         // see FileLog.Safe
+	last         atomic.Uint64         // the tick of the last frame; see FileLog.Last
 }
 
 // Durable is the tick up to which what the engine recorded is on the disk.
@@ -136,6 +137,11 @@ func (l *engineLog) End(tick uint64) error {
 		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
 		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
 	}
+	if last := l.last.Load(); last != 0 && tick != last+1 {
+		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
+		return fmt.Errorf("the tick %d does not follow the tick %d, the last of the log",
+			tick, last)
+	}
 	l.frame.B = l.frame.B[:0]
 	l.frame.Uvarint(tick)
 	l.frame.B = append(l.frame.B, l.records.B...)
@@ -147,6 +153,7 @@ func (l *engineLog) End(tick uint64) error {
 		return err
 	}
 	l.handed.Add(tick)
+	l.last.Store(tick)
 	if len(l.tickDeps) > 0 {
 		l.dependencies.Add(tick, l.tickDeps)
 		l.tickDeps = nil
@@ -240,6 +247,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		}
 	}
 	l.safe.Store(l.opened)
+	l.last.Store(l.opened)
 	f.engines.Store(engine, l)
 	f.started.Do(func() {
 		f.running = true
@@ -342,4 +350,14 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 		FirstTick: r.Uvarint(),
 	}
 	return info, r.Err()
+}
+
+// Last is the tick of the last frame of the log of the engine, whether it is on the disk or not, or
+// 0 when it has none.
+func (f *FileLog) Last(engine sim.StateID) uint64 {
+	l, err := f.log(engine)
+	if err != nil {
+		return 0
+	}
+	return l.last.Load()
 }

@@ -28,11 +28,26 @@ type Env struct {
 	Acks *AckBoard
 }
 
+// Remove ends the engine with the state ID for good, and forgets it: see Engine.Remove. It reports
+// whether the cluster had one.
+func (c *Cluster) Remove(id sim.StateID) bool {
+	for i, e := range c.engines {
+		if e.StateID() == id {
+			e.Remove()
+			c.engines = slices.Delete(c.engines, i, i+1)
+			return true
+		}
+	}
+	return false
+}
+
 // Stepper is what a cluster needs of an engine, whatever its state is: to run a tick, to run on
 // its own, and to say which engine it is.
 type Stepper interface {
 	Step() error
 	Run(ctx context.Context, ticks <-chan time.Time) error
+	// Remove ends the engine for good: see Engine.Remove.
+	Remove()
 	StateID() sim.StateID
 	Type() sim.StateType
 	// TypeName is the name of the type of the state of the engine, for a message to a person.

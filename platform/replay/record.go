@@ -21,6 +21,7 @@ const (
 	KindHash
 	KindStableRead
 	KindReturned
+	KindRetired
 )
 
 // Body is what a record holds besides the engine that made it and the tick it was made at. Each
@@ -200,6 +201,21 @@ func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, err
 	return Returned{Header: header, Reason: sim.Reason(r.Uint8())}, r.Err()
 }
 
+// Retired says that the engine was removed for good: it is the only record of the last frame of
+// its log, which comes after the last tick it ran. A log that ends with it is of an engine that
+// does not go on, and a state ID that is given again goes on counting ticks after it.
+type Retired struct{}
+
+func (Retired) Kind() Kind { return KindRetired }
+
+func (Retired) Encode(*binary.Writer) error { return nil }
+
+func (Retired) Same(other Body) bool { _, ok := other.(Retired); return ok }
+
+func decodeRetired(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
+	return Retired{}, r.Err()
+}
+
 // SameMessage reports whether two messages are the same one, by what they are written as: that is
 // what the log holds, and it does not tell a nil list from an empty one.
 func SameMessage(a, b sim.Message) bool {
@@ -234,6 +250,7 @@ var decoders = map[Kind]func(
 	KindHash:       decodeHash,
 	KindStableRead: decodeStableRead,
 	KindReturned:   decodeReturned,
+	KindRetired:    decodeRetired,
 }
 
 // payloadTick is the tick of the frame that a payload holds: a frame starts with its tick.
