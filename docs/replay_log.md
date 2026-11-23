@@ -46,6 +46,18 @@
 - A tick that depends on an engine whose log is not opened yet waits for it, and a tick whose dependencies are all safe stays safe, so a dependency is looked at once.
 - An engine whose log was there before it was opened is safe up to the last tick of that log: what is in a log is what a restart goes on from.
 
+## Recovery line
+
+| Call | What it does |
+|---|---|
+| `replay.RecoveryLine(dir, codecs)` | the last tick of each log under `dir` that a recovery keeps |
+| `replay.CutToRecoveryLine(dir, codecs)` | cuts each log to that tick (`segmentlog.CutAfter`, so what is cut is kept next to the segments) and returns the ticks; no log may be open for writing |
+
+- An engine starts at the last tick of its log and is cut before the first tick that depends (`Record.Dependency()`) on a tick of another engine that is cut away, or of an engine that has no log (its limit is 0). This is repeated until nothing changes, since an engine that was cut may be what another depends on. A tick is cut whole, with the commands of the clients that it took, and with everything after it.
+- What is left is a state of the cluster in which no engine took a message that its sender did not send, or read a copy that its source did not publish. Each engine can be made again from its own log, with no other: the logs that are left replay with no divergence (`runner.Run`), which a test checks on a cluster whose first zonelayer lost its tail.
+- It is the same rule as `Safe`, from the other side: `Safe` is what the line is while the cluster runs, and the line is what `Safe` was when it stopped, or less.
+- Not here yet: checkpoint files, so that an engine is made from one and run to its limit instead of from tick 0, and the engines that go on live after it ([roadmap](../plan/en/roadmap.md)).
+
 ## Records
 
 What an engine writes in a tick is one frame, which is one record of the segment log and so one batch of it:

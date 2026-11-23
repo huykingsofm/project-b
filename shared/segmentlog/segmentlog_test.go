@@ -784,3 +784,65 @@ func TestASegmentThatIsClosedSyncsItsBatches(t *testing.T) {
 		t.Fatalf("Synced = %d, want 40", w.Synced())
 	}
 }
+
+// keepUpTo keeps the records of the ticks up to one, which are the first 8 bytes of their payload.
+func keepUpTo(last uint64) func([]byte) bool {
+	return func(p []byte) bool { return binary.LittleEndian.Uint64(p) <= last }
+}
+
+func TestCutAfterKeepsTheTicksUpToOneAndWhatIsCutIsKept(t *testing.T) {
+	for _, last := range []uint64{0, 1, 17, 18, 59, 60, 100} { // across and at the ends of segments
+		dir := t.TempDir()
+		o := opts
+		o.SegmentBytes = 200 // a few batches in a segment
+		w := open(t, dir, o)
+		write(t, w, 1, 61)
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := segmentlog.CutAfter(dir, keepUpTo(last)); err != nil {
+			t.Fatalf("a cut after %d: %v", last, err)
+		}
+		got, err := readAll(t, dir, 0)
+		if err != nil {
+			t.Fatalf("a cut after %d: %v", last, err)
+		}
+		if want := min(last, 60); uint64(len(got)) != want {
+			t.Fatalf("a cut after %d leaves %d records, want %d", last, len(got), want)
+		}
+		wantTicks(t, got, 1, 1+uint64(len(got)))
+		// what was cut is in a file that the log does not see, and the log is written on after it
+		if last < 60 {
+			if matches, _ := filepath.Glob(filepath.Join(dir, "*.discarded-*")); len(matches) == 0 {
+				t.Fatalf("a cut after %d kept nothing of what it cut", last)
+			}
+		}
+		w2 := open(t, dir, o)
+		write(t, w2, last+1, last+4)
+		if err := w2.Close(); err != nil {
+			t.Fatal(err)
+		}
+		again, err := readAll(t, dir, 0)
+		if err != nil || uint64(len(again)) != min(last, 60)+3 && last < 60 {
+			t.Fatalf("after a cut after %d and 3 more: %d records, error %v", last, len(again), err)
+		}
+	}
+}
+
+func TestCutAfterThatCutsNothingChangesNothing(t *testing.T) {
+	dir := t.TempDir()
+	w := open(t, dir, opts)
+	write(t, w, 1, 11)
+	w.Close()
+	before, _ := os.ReadDir(dir)
+	if err := segmentlog.CutAfter(dir, keepUpTo(1000)); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadDir(dir)
+	if len(before) != len(after) {
+		t.Fatalf("%d files before and %d after", len(before), len(after))
+	}
+	if err := segmentlog.CutAfter(filepath.Join(dir, "nothing"), keepUpTo(1)); err != nil {
+		t.Fatalf("a log that does not exist: %v", err)
+	}
+}

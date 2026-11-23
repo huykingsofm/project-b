@@ -61,6 +61,15 @@ One directory for each log. A segment is `seg-<index>.log`, the index in 20 digi
 - The last segment is read up to the end of its last whole batch: a record cut off, a commit that is missing or wrong, and the records before it are the end of the log, not an error. Anywhere else it is an error that wraps `ErrCorrupt`.
 - A last segment whose header was not finished when a crash came is not in the log.
 
+## Cut
+
+| Call | What it does |
+|---|---|
+| `CutAfter(dir, keep)` | cuts the log after the last batch whose records `keep` accepts: the first record that `keep` refuses, and all after it, go; the log must not be open for writing |
+
+- The segment that holds the first refused record is cut at the start of its batch; the segments after it are taken out of the log. Nothing is thrown away: the bytes that were cut are in `<segment>.discarded-<offset>`, a segment taken out whole is renamed `<segment>.discarded-0`, which `Segments` does not see, and a warning says so.
+- A log in which `keep` refuses nothing is not changed, and a log that does not exist is empty.
+
 ## Repair
 
 `Open` makes the last segment whole after a crash; the others are not touched.

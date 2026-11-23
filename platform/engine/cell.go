@@ -151,7 +151,8 @@ func (c *cell) seenBefore(h sim.Header) bool {
 		return false
 	}
 	if h.Seq <= c.lastSeq[h.From] {
-		logging.Warn(
+		// a sender sends a message again until it is acked, so a copy is what to expect
+		logging.Debug(
 			"message dropped: it was already taken", "from", h.From, "seq", h.Seq, "engine", c.me,
 		)
 		return true
