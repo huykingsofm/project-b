@@ -239,8 +239,8 @@ func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) 
 func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
 	var r Registry[*toyState]
 	other := NewStateID(otherType, 9)
-	r.Send[*otherState](other, testDrop{}, &otherAction{})
-	r.Send[*toyState](5, testDrop{}, &addAction{N: 1})
+	r.Send(other, testDrop{}, &otherAction{})
+	r.Send(5, testDrop{}, &addAction{N: 1})
 	sent := r.Take()
 	if len(sent) != 2 || sent[0].Dest() != other || sent[1].Dest() != 5 || r.Take() != nil {
 		t.Fatalf("the outbox held %+v", sent)
