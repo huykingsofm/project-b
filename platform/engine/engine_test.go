@@ -20,6 +20,7 @@ func newToyEnv(t testing.TB) *Env {
 	return &Env{
 		Router: NewRouter(), Cfg: config.NewStore(), ReplayLog: &replay.MemLog{},
 		Stable: NewStableStateStore(), Codecs: codecs, QueueSize: 16, Emitter: NopEmitter{},
+		Acks: NewAckBoard(),
 	}
 }
 
@@ -226,9 +227,15 @@ func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
 		t.Fatal("the last number taken from a sender is not in the hash")
 	}
 	before = e.Hash()
-	e.bounce.pending = append(e.bounce.pending, sim.NewActionMessage[*toyState](1, onfail.Drop{}))
+	e.out.AddUnsent(sim.NewActionMessage[*toyState](1, onfail.Drop{}))
 	if e.Hash() == before {
 		t.Fatal("a message held to be sent again is not in the hash")
+	}
+	before = e.Hash()
+	e.out.SetSent([]sim.Message{sim.NewActionMessage[*toyState](2, onfail.Drop{})})
+	if e.Hash() != before {
+		t.Fatal("a message that was sent and is not acked is in the hash: when it is acked " +
+			"depends on when the log of its receiver is synced, which a replay does not repeat")
 	}
 }
 
@@ -239,10 +246,14 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 	e := engines[0]
 	e.cell.seq = 41
 	e.cell.lastSeq[99] = 1
-	e.bounce.pending = []sim.Message{
+	e.out.SetUnsent([]sim.Message{
 		sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 1}).
 			Stamp(sim.Header{From: 1, Seq: 40}),
-	}
+	})
+	e.out.SetSent([]sim.Message{
+		sim.NewActionMessage(3, onfail.Retry{}, &toyAction{N: 2}).
+			Stamp(sim.Header{From: 1, Seq: 39, Tick: 6}),
+	})
 	data, err := e.Checkpoint()
 	if err != nil {
 		t.Fatal(err)
@@ -251,8 +262,12 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.cell.seq != 41 || len(r.bounce.pending) != 1 || r.cell.lastSeq[99] != 1 ||
-		r.Hash() != e.Hash() {
-		t.Fatalf("seq %d, %d held, last %v", r.cell.seq, len(r.bounce.pending), r.cell.lastSeq)
+	if r.cell.seq != 41 || len(r.out.Unsent()) != 1 || len(r.out.Sent()) != 1 ||
+		r.cell.lastSeq[99] != 1 || r.Hash() != e.Hash() {
+		t.Fatalf("seq %d, %d to go, %d sent, last %v",
+			r.cell.seq, len(r.out.Unsent()), len(r.out.Sent()), r.cell.lastSeq)
+	}
+	if got := r.out.Sent()[0].Head(); got.Seq != 39 || got.Tick != 6 {
+		t.Fatalf("the message that was sent came back as %+v, want its number and tick", got)
 	}
 }

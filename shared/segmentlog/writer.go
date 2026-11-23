@@ -26,6 +26,10 @@ type Options struct {
 	// tick, say), and it is called by the goroutine of the Writer, so it must not use what the
 	// caller changes. Nil means an empty meta. A meta is at most 64 KiB; a longer one is cut.
 	SegmentMeta func(first []byte) []byte
+	// OnSync is called, by the goroutine of the Writer, after batches were forced to disk, so that
+	// whoever waits for them (see Synced) need not look again and again. It must not wait. Nil
+	// means none.
+	OnSync func()
 }
 
 // batch is the records of one Commit.
@@ -202,6 +206,9 @@ func (w *Writer) run() {
 			w.fail(err)
 		} else {
 			w.synced.Store(written)
+			if w.opts.OnSync != nil {
+				w.opts.OnSync()
+			}
 		}
 		dirty = false
 	}

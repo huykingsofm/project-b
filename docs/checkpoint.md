@@ -28,7 +28,7 @@ In this order:
 | `seq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |
 | `lastSeq` | the last number taken from each sender, in the order of the state IDs |
-| messages held | the messages the bouncer holds to send again, each written whole |
+| outbox | the messages that are to go, and the messages that went and were not acked, each written whole ([outbox](outbox.md)) |
 
 ## What is not written
 
@@ -58,7 +58,7 @@ In this order:
 |---|---|
 | state | the hash of the state |
 | scheduler, self list | each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it |
-| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `seq`, `lastSeq`, the version of the configuration, the messages held |
+| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `seq`, `lastSeq`, the version of the configuration, the messages that are to go |
 
 - A restore that differs from the engine it came from in any of them has another hash, and a replay finds it.
 

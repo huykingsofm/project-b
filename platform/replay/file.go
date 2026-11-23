@@ -6,6 +6,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -49,6 +50,13 @@ type FileLog struct {
 	mu      sync.Mutex // protects opening a log; the logs of the engines are then read without it
 	engines sync.Map   // sim.StateID -> *engineLog
 	failure error      // protected by mu
+
+	synced   chan struct{} // a log has synced: what is safe is worked out again
+	stop     chan struct{}
+	watching chan struct{} // closed when the goroutine that works out what is safe ends
+	started  sync.Once
+	running  bool // whether that goroutine was started; protected by mu
+	closed   sync.Once
 }
 
 // engineLog is the log of one engine: the frame of the tick that is being recorded, and the writer
@@ -67,6 +75,10 @@ type engineLog struct {
 
 	handed handedTicks // the ticks of the frames handed over
 	opened uint64      // the tick of the last frame that was in the log when it was opened
+
+	dependencies dependencyList        // what the engine depends on, at the ticks not safe yet
+	tickDeps     []sim.StateDependency // what it depends on at the tick that is being recorded
+	safe         atomic.Uint64         // see FileLog.Safe
 }
 
 // Durable is the tick up to which what the engine recorded is on the disk.
@@ -111,6 +123,9 @@ func (l *engineLog) Add(tick uint64, body Body) error {
 	}
 	l.records.Bytes(l.scratch.B)
 	l.tick, l.started = tick, true
+	if dep, ok := (Record{Body: body}).Dependency(); ok {
+		l.tickDeps = append(l.tickDeps, dep)
+	}
 	return nil
 }
 
@@ -118,7 +133,7 @@ func (l *engineLog) Add(tick uint64, body Body) error {
 // one record of the segment log and one batch. The frame is empty when nothing was recorded.
 func (l *engineLog) End(tick uint64) error {
 	if l.started && tick != l.tick {
-		l.records.B, l.started = l.records.B[:0], false
+		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
 		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
 	}
 	l.frame.B = l.frame.B[:0]
@@ -132,12 +147,19 @@ func (l *engineLog) End(tick uint64) error {
 		return err
 	}
 	l.handed.Add(tick)
+	if len(l.tickDeps) > 0 {
+		l.dependencies.Add(tick, l.tickDeps)
+		l.tickDeps = nil
+	}
 	return nil
 }
 
 // NewFileLog makes a replay log that writes under dir. Nothing is created until an engine records.
 func NewFileLog(dir string, opts FileLogOptions) *FileLog {
-	return &FileLog{dir: dir, opts: opts}
+	return &FileLog{
+		dir: dir, opts: opts,
+		synced: make(chan struct{}, 1), stop: make(chan struct{}), watching: make(chan struct{}),
+	}
 }
 
 // engineDirName is the name of the directory of the log of an engine: the name of the type of its
@@ -207,6 +229,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		SegmentMeta: func(first []byte) []byte {
 			return segmentMeta(engine, f.opts.Seed, first)
 		},
+		OnSync: f.wake,
 	})
 	l := &engineLog{w: w, openErr: err}
 	if err == nil {
@@ -216,7 +239,12 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 			l.w, l.openErr = nil, err
 		}
 	}
+	l.safe.Store(l.opened)
 	f.engines.Store(engine, l)
+	f.started.Do(func() {
+		f.running = true
+		go f.watch()
+	})
 	// reported here, once: record does not report it again for each record
 	if err != nil && f.failure == nil {
 		f.failure = err
@@ -262,6 +290,16 @@ func (f *FileLog) Close() error {
 			errs = append(errs, err)
 		}
 		return true
+	})
+	f.closed.Do(func() {
+		close(f.stop)
+		f.mu.Lock()
+		running := f.running
+		f.mu.Unlock()
+		if running {
+			<-f.watching
+		}
+		f.settle() // every log is on the disk now
 	})
 	if err := f.Err(); err != nil {
 		errs = append(errs, err)

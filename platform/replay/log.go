@@ -31,6 +31,11 @@ type Log interface {
 	// EndTick says that the engine has recorded all it will record for the tick. A log that writes
 	// to a file hands what it has kept for the tick to the goroutine that writes it.
 	EndTick(engine sim.StateID, tick uint64)
+	// Safe says up to which tick of the engine what it recorded and what it depends on is on the
+	// disk, so that a crash does not take it back: all of what it did at a tick up to it, and at
+	// the ticks of the engines it depends on that it took, is kept. A log that records nothing says
+	// every tick is, since nothing it could do would make it more so.
+	Safe(engine sim.StateID) uint64
 }
 
 // NopLog records nothing.
@@ -38,3 +43,6 @@ type NopLog struct{}
 
 func (NopLog) Append(sim.StateID, uint64, Body) {}
 func (NopLog) EndTick(sim.StateID, uint64)      {}
+
+// Safe says every tick is: a log that records nothing cannot make a tick more safe.
+func (NopLog) Safe(sim.StateID) uint64 { return ^uint64(0) }

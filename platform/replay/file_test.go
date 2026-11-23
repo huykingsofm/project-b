@@ -370,3 +370,106 @@ func TestDurableFollowsTheTicksOfTheFramesAcrossAGap(t *testing.T) {
 		t.Fatalf("Durable went back to %d", got)
 	}
 }
+
+// settled waits until what the log says is safe for the engine is the tick, or fails the test.
+func settled(t *testing.T, log *FileLog, engine sim.StateID, tick uint64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for log.Safe(engine) != tick {
+		if time.Now().After(deadline) {
+			t.Fatalf("Safe(%v) = %d after a while, want %d", engine, log.Safe(engine), tick)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func aMessageFrom(from sim.StateID, seq, tick uint64) sim.Message {
+	return benchMessage(1).Stamp(sim.Header{From: from, Seq: seq, Tick: tick})
+}
+
+func TestATickThatTookAMessageIsNotSafeUntilTheTickOfItsSenderIs(t *testing.T) {
+	dir := t.TempDir()
+	a, b := sim.StateID(1), sim.StateID(2)
+	quick := testFileLogOptions
+	quick.SyncEvery = 2 * time.Millisecond
+	log := NewFileLog(dir, quick)
+	defer log.Close()
+	// b takes at its tick 2 the message that a sent at its tick 3; b syncs often and a does not
+	// write at all yet
+	log.Append(b, 1, ConfigRead{Version: 1})
+	log.EndTick(b, 1)
+	log.Append(b, 2, Inbound{Message: aMessageFrom(a, 1, 3)})
+	log.EndTick(b, 2)
+	log.EndTick(b, 3)
+	if got := log.Durable(b); got > 3 {
+		t.Fatalf("Durable(b) = %d", got)
+	}
+	settled(t, log, b, 1) // b is durable up to 3, and safe only before the tick that depends on a
+	// a has written and synced its ticks 1 to 3: b is safe up to its own durable tick
+	for tick := uint64(1); tick <= 3; tick++ {
+		log.EndTick(a, tick)
+	}
+	settled(t, log, a, 3)
+	settled(t, log, b, 3)
+}
+
+func TestWhatIsSafeWaitsAcrossAChainOfDependencies(t *testing.T) {
+	dir := t.TempDir()
+	a, b, c := sim.StateID(1), sim.StateID(2), sim.StateID(3)
+	quick := testFileLogOptions
+	quick.SyncEvery = 2 * time.Millisecond
+	log := NewFileLog(dir, quick)
+	defer log.Close()
+	// c took a message of b from b's tick 2, and b took at its tick 2 a copy of a that a took at 4
+	log.Append(c, 1, Inbound{Message: aMessageFrom(b, 1, 2)})
+	log.EndTick(c, 1)
+	log.EndTick(b, 1)
+	log.Append(b, 2, StableRead{Source: a, CopyTick: 4})
+	log.EndTick(b, 2)
+	settled(t, log, c, 0)
+	settled(t, log, b, 1)
+	for tick := uint64(1); tick <= 3; tick++ {
+		log.EndTick(a, tick)
+	}
+	settled(t, log, a, 3)
+	settled(t, log, b, 1) // a is safe only up to 3: b waits for its tick 4
+	log.EndTick(a, 4)
+	settled(t, log, a, 4)
+	settled(t, log, b, 2)
+	settled(t, log, c, 1) // c was durable up to 1, and its message was b's at tick 2, which is safe
+}
+
+func TestAnEngineWhoseLogWasThereBeforeIsSafeUpToItsLastTick(t *testing.T) {
+	dir := t.TempDir()
+	engine := sim.StateID(1)
+	first := NewFileLog(dir, testFileLogOptions)
+	for tick := uint64(1); tick <= 5; tick++ {
+		first.EndTick(engine, tick)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second := NewFileLog(dir, testFileLogOptions)
+	defer second.Close()
+	if got := second.Safe(engine); got != 5 {
+		t.Fatalf("Safe = %d, want 5: what is in the log is what a restart goes on from", got)
+	}
+}
+
+func TestACloseSettlesWhatIsSafeOfEveryEngine(t *testing.T) {
+	dir := t.TempDir()
+	a, b := sim.StateID(1), sim.StateID(2)
+	log := NewFileLog(dir, testFileLogOptions) // a sync every hour: only Close syncs
+	log.EndTick(a, 1)
+	log.Append(b, 1, Inbound{Message: aMessageFrom(a, 1, 1)})
+	log.EndTick(b, 1)
+	if log.Safe(b) != 0 {
+		t.Fatalf("Safe(b) = %d before any sync", log.Safe(b))
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if log.Safe(a) != 1 || log.Safe(b) != 1 {
+		t.Fatalf("after Close Safe(a) = %d, Safe(b) = %d, want 1, 1", log.Safe(a), log.Safe(b))
+	}
+}

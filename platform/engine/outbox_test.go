@@ -1,0 +1,240 @@
+package engine
+
+import (
+	"testing"
+
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
+)
+
+func toMessage(to sim.StateID, seq uint64) sim.Message {
+	return sim.NewActionMessage[*toyState](to, onfail.Drop{}, &toyAction{N: 1}).
+		Stamp(sim.Header{From: 1, Seq: seq, Tick: seq})
+}
+
+func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *testing.T) {
+	var o outbox
+	cfg := config.Defaults()
+	o.MarkSent(toMessage(2, 1), 5, cfg)
+	o.MarkSent(toMessage(3, 2), 5, cfg)
+	o.MarkSent(toMessage(2, 3), 5, cfg)
+	o.MarkSent(toMessage(2, 4), 5, cfg)
+	if got := o.Receivers(); len(got) != 2 || got[0] != 2 || got[1] != 3 {
+		t.Fatalf("Receivers = %v, want 2 and 3 once each, in order", got)
+	}
+	o.Ack(2, 3)
+	if got := o.Sent(); len(got) != 2 || got[0].Head().Seq != 2 || got[1].Head().Seq != 4 {
+		t.Fatalf("after an ack of 2 up to 3 the messages are %v: want numbers 2 and 4", got)
+	}
+	o.Ack(3, 1)  // not up to its message
+	o.Ack(9, 99) // a receiver it has no message for
+	if o.Len() != 2 {
+		t.Fatalf("Len = %d, want 2", o.Len())
+	}
+}
+
+func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *testing.T) {
+	var o outbox
+	cfg := config.Defaults()
+	first := uint64(outboxResendFirst.Get(cfg))
+	step := uint64(outboxResendStep.Get(cfg))
+	most := uint64(outboxResendMost.Get(cfg))
+	o.MarkSent(toMessage(2, 1), 100, cfg)
+	if len(o.Due(100+first-1)) != 0 || len(o.Due(100+first)) != 1 {
+		t.Fatalf("it is not due at %d and due at %d", 100+first-1, 100+first)
+	}
+	now := 100 + first
+	want := first
+	for range 40 { // far more than it takes to reach the most
+		o.Reschedule(0, now, cfg)
+		want = min(want+step, most)
+		if len(o.Due(now+want-1)) != 0 || len(o.Due(now+want)) != 1 {
+			t.Fatalf("the next wait is not %d ticks", want)
+		}
+		now += want
+	}
+	if want != most {
+		t.Fatalf("the wait stopped at %d, want the most, %d", want, most)
+	}
+}
+
+func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testing.T) {
+	var o outbox
+	cfg := config.Defaults()
+	for seq := uint64(1); seq <= 5; seq++ {
+		o.MarkSent(toMessage(2, seq), 0, cfg)
+	}
+	o.Remove([]int{1, 3})
+	got := o.Sent()
+	if len(got) != 3 || got[0].Head().Seq != 1 || got[1].Head().Seq != 3 || got[2].Head().Seq != 5 {
+		t.Fatalf("the messages are %v", got)
+	}
+}
+
+func TestTheOutboxComesBackFromItsBytesWithTheMessagesThatWentSentAgainAtOnce(t *testing.T) {
+	codecs, err := toyCodecs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var o outbox
+	o.AddUnsent(sim.NewActionMessage[*toyState](2, onfail.Retry{}, &toyAction{N: 3}))
+	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
+	var w binary.Writer
+	if err := o.Encode(&w, true); err != nil {
+		t.Fatal(err)
+	}
+	r := binary.NewReader(w.B)
+	got, err := decodeOutbox(codecs, r, 1)
+	if err != nil || r.Left() != 0 {
+		t.Fatalf("error %v, %d bytes left", err, r.Left())
+	}
+	if len(got.Unsent()) != 1 || len(got.Sent()) != 1 || got.Sent()[0].Head().Seq != 7 {
+		t.Fatalf("it came back as %v and %v", got.Unsent(), got.Sent())
+	}
+	if len(got.Due(0)) != 1 {
+		t.Fatal("a message that went is not sent again at once after a restore")
+	}
+	for n := range w.B { // every proper prefix
+		if _, err := decodeOutbox(codecs, binary.NewReader(w.B[:n]), 1); err == nil {
+			t.Fatalf("%d of %d bytes were read", n, len(w.B))
+		}
+	}
+	var withoutSent binary.Writer
+	if err := o.Encode(&withoutSent, false); err != nil || len(withoutSent.B) >= len(w.B) {
+		t.Fatalf("what the hash is given is not smaller: %d and %d, %v",
+			len(withoutSent.B), len(w.B), err)
+	}
+}
+
+func TestTheBoardOnlyGoesUp(t *testing.T) {
+	b := NewAckBoard()
+	slot := b.Slot(2, 1)
+	raise(slot, 5)
+	raise(slot, 3)
+	if got := b.Slot(2, 1).Load(); got != 5 {
+		t.Fatalf("the slot holds %d, want 5", got)
+	}
+	if b.Slot(1, 2).Load() != 0 {
+		t.Fatal("the slot of another pair holds a number")
+	}
+}
+
+// aLogThatSaysWhatIsSafe is a replay log for the tests of acks: what it says is safe is set by the
+// test.
+type aLogThatSaysWhatIsSafe struct {
+	replay.MemLog
+	safe map[sim.StateID]uint64
+}
+
+func (l *aLogThatSaysWhatIsSafe) Safe(engine sim.StateID) uint64 { return l.safe[engine] }
+
+func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engine[*toyState],
+	*aLogThatSaysWhatIsSafe) {
+	t.Helper()
+	env := newToyEnv(t)
+	log := &aLogThatSaysWhatIsSafe{safe: map[sim.StateID]uint64{}}
+	env.ReplayLog = log
+	c := NewCluster(env)
+	a, b := New(&toyState{id: 1}, env, 1), New(&toyState{id: 2}, env, 1)
+	c.Add(a)
+	c.Add(b)
+	return c, a, b, log
+}
+
+func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t *testing.T) {
+	c, a, b, log := twoToysThatAckWhatIsSafe(t)
+	first := uint64(outboxResendFirst.Get(config.Defaults()))
+	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	c.Step()
+	if b.State().Total != 7 || a.out.Len() != 1 {
+		t.Fatalf("b has %d and a holds %d messages, want 7 and 1", b.State().Total, a.out.Len())
+	}
+	sent := a.out.Sent()[0].Head()
+	if sent.From != 1 || sent.Tick != 1 {
+		t.Fatalf("the message went with the header %+v", sent)
+	}
+	for a.Tick() < first+2 { // b has not said it is safe: a sends the message again
+		c.Step()
+	}
+	if b.State().Total != 7 {
+		t.Fatalf("b took a second copy: it has %d", b.State().Total)
+	}
+	if a.out.Len() != 1 || a.out.Sent()[0].Head() != sent {
+		t.Fatalf("a holds %d messages, and the first has the header %+v, want it unchanged",
+			a.out.Len(), a.out.Sent()[0].Head())
+	}
+	log.safe[2] = b.Tick() // the tick at which b took it is safe
+	c.Step()               // b says it
+	c.Step()               // a reads it
+	if a.out.Len() != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", a.out.Len())
+	}
+}
+
+func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
+	c, a, b, log := twoToysThatAckWhatIsSafe(t)
+	for _, tick := range []uint64{1, 4, 7} {
+		a.ScheduleAt(tick, &forwardAction{To: 2, N: 1})
+	}
+	for range 8 {
+		c.Step()
+	}
+	if a.out.Len() != 3 || b.State().Total != 3 {
+		t.Fatalf("a holds %d messages and b has %d, want 3 and 3", a.out.Len(), b.State().Total)
+	}
+	log.safe[2] = 5 // b took the messages at the ticks 1 and 4, which are safe, not the one at 7
+	c.Step()
+	c.Step()
+	if a.out.Len() != 1 || a.out.Sent()[0].Head().Tick != 7 {
+		t.Fatalf("a holds %d messages: want only the one that b took at tick 7", a.out.Len())
+	}
+}
+
+func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
+	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
+	first := uint64(outboxResendFirst.Get(config.Defaults()))
+	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	c.Step()
+	c.Env.Router.Retire(b.StateID())
+	for a.Tick() < first+3 {
+		c.Step()
+	}
+	if a.out.Len() != 0 {
+		t.Fatalf("a still holds %d messages for a receiver that is gone", a.out.Len())
+	}
+	returned := 0
+	for _, r := range c.Env.ReplayLog.(*aLogThatSaysWhatIsSafe).Records {
+		if r.Kind() == replay.KindReturned && r.Engine == 1 {
+			returned++
+		}
+	}
+	if returned != 1 {
+		t.Fatalf("%d messages came back, want 1", returned)
+	}
+}
+
+func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T) {
+	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
+	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	c.Step()
+	data, err := b.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := newToyEnv(t)
+	restored, err := Restore[*toyState](data, env, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the state of b was restored from the checkpoint: what it took is in a place that no crash
+	// takes back, so a sender is told of it without waiting
+	if got := env.Acks.Slot(2, 1).Load(); got != a.out.Sent()[0].Head().Seq {
+		t.Fatalf("a restored b acks %d to a, want the number of the message it took", got)
+	}
+	if restored.State().Total != 7 {
+		t.Fatalf("the restored b has %d, want 7", restored.State().Total)
+	}
+}

@@ -25,3 +25,6 @@ func (j *MemLog) Append(a sim.StateID, t uint64, body Body) {
 
 // EndTick does nothing: a MemLog has already kept every record.
 func (j *MemLog) EndTick(sim.StateID, uint64) {}
+
+// Safe says every tick is: a MemLog is for tests, which have no crash to lose a tick to.
+func (j *MemLog) Safe(sim.StateID) uint64 { return ^uint64(0) }

@@ -17,6 +17,9 @@ func (t teeLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 	t.a.Append(e, tick, body)
 	t.b.Append(e, tick, body)
 }
+
+// Safe is the tick that both logs say is safe.
+func (t teeLog) Safe(e sim.StateID) uint64 { return min(t.a.Safe(e), t.b.Safe(e)) }
 func (t teeLog) EndTick(e sim.StateID, tick uint64) {
 	t.a.EndTick(e, tick)
 	t.b.EndTick(e, tick)

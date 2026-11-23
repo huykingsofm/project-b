@@ -54,7 +54,8 @@ The simulation core touches nothing outside: no gateway, no database, no network
 4. Tell the actions that were cancelled; put what the actions set for the engine in the scheduler.
 5. Hand the events to the emitter.
 6. Publish a `Clone` of the state (other engines read the latest copy).
-7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`.
+7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`; send again the ones that went and were not acked ([outbox](outbox.md));
+8. Write the hash when it is due, and close the tick for the replay log; say to the senders what is safe.
 
 | When a tick fails | What happens |
 |---|---|

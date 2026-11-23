@@ -32,6 +32,18 @@
 - A frame is a batch, so the number of batches that the segment log says are on the disk (`Synced`) is a count of frames. The log keeps the ticks of the frames it handed over, in order, and answers the tick of the last one that is counted. That holds across a gap, such as an engine that was removed and came back at a later tick.
 - The answer is a lower bound: it is behind the tick that was last written by up to what one `SyncEvery` holds, and it never goes back. It reads an atomic and a short list under a mutex, and is safe to call from any goroutine, an engine that does not tick any more included.
 
+## Which tick is safe
+
+| Call | Answer |
+|---|---|
+| `Log.Safe(engine)` | the tick of the engine up to which a crash takes back nothing it did and nothing it took |
+| `FileLog.Safe(engine)` | it is `Durable`, but before the first tick that depends on a tick of another engine that is not safe: a message that the engine took, or a copy of another engine that it read, says what that engine did |
+| `NopLog`, `MemLog`, the log of a replay | every tick: a log that records nothing cannot make a tick more safe |
+
+- What a tick depends on is made by its records (`Record.Dependency()`): the log of each engine keeps it, tick by tick, for the ticks that are not safe yet. A goroutine of the `FileLog` works out again what is safe for every engine each time a log has synced (`segmentlog.Options.OnSync`), until none changes, and `Close` does it once more when every log is on the disk.
+- A tick that depends on an engine whose log is not opened yet waits for it, and a tick whose dependencies are all safe stays safe, so a dependency is looked at once.
+- An engine whose log was there before it was opened is safe up to the last tick of that log: what is in a log is what a restart goes on from.
+
 ## Records
 
 What an engine writes in a tick is one frame, which is one record of the segment log and so one batch of it:

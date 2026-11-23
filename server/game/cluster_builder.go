@@ -231,7 +231,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 	env := &engine.Env{
 		Router: engine.NewRouter(), Cfg: b.cfg, ReplayLog: b.replayLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
-		Emitter: b.emitter,
+		Emitter: b.emitter, Acks: engine.NewAckBoard(),
 	}
 	return b.assemble(env)
 }

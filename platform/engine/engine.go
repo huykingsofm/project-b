@@ -45,7 +45,7 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
 	e := &Engine[S]{
 		cell: newCell(
-			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
+			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed, env.Acks,
 		), st: st, tick: st.Tick(),
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, plans: planPoolOf[S](),

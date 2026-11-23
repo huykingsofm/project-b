@@ -8,9 +8,10 @@ import (
 
 // bouncer is what a message that could not be delivered asks of the engine that sent it: the
 // message says itself what a failed delivery means (its OnFail), and runs on the bouncer through
-// the interface sim.Bouncer. What it makes is kept to be sent at the next flush.
+// the interface sim.Bouncer. What it makes is put in the outbox of the engine, to be sent at the
+// next flush.
 type bouncer struct {
-	pending  []sim.Message
+	out      *outbox
 	notice   func(actor any, key string, args []any)
 	stopping bool
 	dropped  uint64
@@ -44,7 +45,7 @@ func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.Reason) {
 }
 
 // Resend keeps a message to be sent at the next flush.
-func (b *bouncer) Resend(m sim.Message) { b.pending = append(b.pending, m) }
+func (b *bouncer) Resend(m sim.Message) { b.out.AddUnsent(m) }
 
 // Tell tells an actor something. An actor that is nil, or an engine that has no one to tell, tells
 // nothing.
@@ -65,23 +66,9 @@ func (b *bouncer) Drop() { b.dropped++ }
 // Stopping reports whether the engine is stopping.
 func (b *bouncer) Stopping() bool { return b.stopping }
 
-// Pending is the messages that are to be sent again, in the order they will be. The list is a view:
-// do not change it.
-func (b *bouncer) Pending() []sim.Message { return b.pending }
-
-// SetPending sets the messages that are to be sent again, as a checkpoint says.
-func (b *bouncer) SetPending(messages []sim.Message) { b.pending = messages }
-
 // Stop makes the engine stopping: from now on nothing is sent again.
 func (b *bouncer) Stop() { b.stopping = true }
 
 // SetNotice sets what tells an actor something: what a notice of a message that could not be
 // delivered is given to.
 func (b *bouncer) SetNotice(notice func(actor any, key string, args []any)) { b.notice = notice }
-
-// take returns the messages that are to be sent again, and forgets them.
-func (b *bouncer) take() []sim.Message {
-	out := b.pending
-	b.pending = nil
-	return out
-}

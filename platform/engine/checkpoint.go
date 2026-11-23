@@ -39,7 +39,7 @@ func (c *cell) engineHash[S sim.State](
 // checkpoint writes for it, so that the hash covers exactly what the checkpoint carries.
 func (c *cell) hashInto(h *sim.Hasher) {
 	var w binary.Writer
-	if err := c.encode(&w); err != nil {
+	if err := c.encode(&w, false); err != nil {
 		h.String("a cell that cannot be written") // the hash still tells it from another
 		return
 	}
@@ -60,7 +60,7 @@ func (c *cell) checkpoint[S sim.State](
 	if err := sched.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: the scheduler: %w", c.me, err)
 	}
-	if err := c.encode(&w); err != nil {
+	if err := c.encode(&w, true); err != nil {
 		return nil, fmt.Errorf("%v: %w", c.me, err)
 	}
 	return w.B, nil
@@ -106,7 +106,7 @@ type restoredCell struct {
 	seq            uint64
 	cfgVersionSeen uint64
 	lastSeq        map[sim.StateID]uint64
-	pending        []sim.Message
+	outbox         outbox
 }
 
 // PCG is where the random numbers of the engine were.
@@ -121,8 +121,8 @@ func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
 // LastSeq is the last number that the engine took from each sender.
 func (rc restoredCell) LastSeq() map[sim.StateID]uint64 { return rc.lastSeq }
 
-// Pending is the messages that the engine held to send again.
-func (rc restoredCell) Pending() []sim.Message { return rc.pending }
+// Outbox is what the engine had sent or was to send.
+func (rc restoredCell) Outbox() outbox { return rc.outbox }
 
 // Scheduler is what the engine waited for.
 func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }
@@ -151,8 +151,10 @@ func (env *Env) readCheckpointRest[S sim.State](
 
 // encode writes what every engine knows besides its state: the place of its random numbers, the
 // number of its messages and the last that it took from each sender, the version of the
-// configuration it read, and the messages that it holds to send again.
-func (c *cell) encode(w *binary.Writer) error {
+// configuration it read, and its outbox: the messages that are to go and, with withSent, the ones
+// that went and were not acked. The hash leaves out the second: when a message is acked depends on
+// when the log of its receiver is synced, which a replay does not repeat.
+func (c *cell) encode(w *binary.Writer, withSent bool) error {
 	random, err := c.pcg.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("its random numbers: %w", err)
@@ -170,14 +172,7 @@ func (c *cell) encode(w *binary.Writer) error {
 		w.Uvarint(uint64(sender))
 		w.Uvarint(c.lastSeq[sender])
 	}
-	pending := c.bounce.Pending()
-	w.Uvarint(uint64(len(pending)))
-	for _, m := range pending {
-		if err := sim.EncodeMessage(w, m); err != nil {
-			return fmt.Errorf("a message it holds to send again: %w", err)
-		}
-	}
-	return nil
+	return c.out.Encode(w, withSent)
 }
 
 // decodeCell reads what encode wrote.
@@ -202,19 +197,9 @@ func decodeCell(
 		sender := r.Uint[sim.StateID]()
 		rc.lastSeq[sender] = r.Uvarint()
 	}
-	n = r.Uvarint()
-	if err := r.Err(); err != nil {
+	var err error
+	if rc.outbox, err = decodeOutbox(c, r, version); err != nil {
 		return restoredCell{}, err
-	}
-	if n > uint64(r.Left()) { // a message takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
-	}
-	for range n {
-		m, err := c.DecodeMessage(r, version)
-		if err != nil {
-			return restoredCell{}, fmt.Errorf("a message it holds to send again: %w", err)
-		}
-		rc.pending = append(rc.pending, m)
 	}
 	return rc, r.Err()
 }
@@ -225,5 +210,15 @@ func (c *cell) restore(rc restoredCell) {
 	*c.pcg = *rc.PCG()
 	c.seq, c.cfgVersionSeen = rc.Seq(), rc.CfgVersionSeen()
 	c.lastSeq = rc.LastSeq()
-	c.bounce.SetPending(rc.Pending())
+	held := rc.Outbox()
+	c.out.SetUnsent(held.Unsent())
+	c.out.SetSent(held.Sent())
+	// what the checkpoint says it took is in a place that no crash takes back: the state was
+	// restored from it
+	for sender, seq := range c.lastSeq {
+		c.acked[sender] = seq
+		if c.acks != nil {
+			c.ack(sender, seq)
+		}
+	}
 }

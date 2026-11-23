@@ -23,6 +23,9 @@ type Env struct {
 	Codecs    *sim.Codecs
 	QueueSize int
 	Emitter   Emitter
+	// Acks is where the engines say what they hold safe and read what their receivers hold. An
+	// engine with none holds no message for an ack: a replay has none.
+	Acks *AckBoard
 }
 
 // Stepper is what a cluster needs of an engine, whatever its state is: to run a tick, to run on

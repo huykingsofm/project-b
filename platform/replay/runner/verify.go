@@ -46,6 +46,9 @@ func (v *verifyLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 }
 
 // EndTick checks that the engine made every record that the log has for the tick.
+// Safe says every tick is: a replay compares records and keeps none.
+func (v *verifyLog) Safe(sim.StateID) uint64 { return ^uint64(0) }
+
 func (v *verifyLog) EndTick(e sim.StateID, _ uint64) {
 	w := v.windows[e]
 	if w == nil {
