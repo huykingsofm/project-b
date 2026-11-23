@@ -8,6 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
+	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 	"github.com/huykingsofm/project-b/shared/testing/must"
 )
@@ -145,5 +146,37 @@ func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
 		if st.RemoveZoneLayer(id) {
 			t.Errorf("%s was removed", name)
 		}
+	}
+}
+
+func TestTheWorldSaysWhatAStateIDIsOfTheStatesOfItsCluster(t *testing.T) {
+	st := world.NewState(sim.NewStateID(state.WorldType, 1), 5)
+	zone := sim.NewStateID(state.ZoneType, 1)
+	st.AddZone(zone)
+	layer := must.Ok(st.AddZoneLayer())
+	gone := must.Ok(st.AddZoneLayer())
+	st.RemoveZoneLayer(gone)
+	for name, tc := range map[string]struct {
+		id   sim.StateID
+		want ids.Status
+	}{
+		"the world":                 {sim.NewStateID(state.WorldType, 1), ids.Live},
+		"another world":             {sim.NewStateID(state.WorldType, 2), ids.NotGiven},
+		"a zone that it knows":      {zone, ids.Live},
+		"a zone that it does not":   {sim.NewStateID(state.ZoneType, 2), ids.NotGiven},
+		"a zonelayer":               {layer, ids.Live},
+		"a zonelayer that was gone": {gone, ids.InGrave},
+		"a zonelayer never given":   {sim.NewStateID(state.ZoneLayerType, 9), ids.NotGiven},
+		"a type that is no state's": {sim.NewStateID(200, 1), ids.NotGiven},
+	} {
+		if got := st.StateStatus(tc.id); got != tc.want {
+			t.Errorf("%s: %v, want %v", name, got, tc.want)
+		}
+	}
+	for range 5 {
+		st.NextTick() // the grave takes a step at each tick
+	}
+	if got := st.StateStatus(gone); got != ids.NotGiven {
+		t.Errorf("a zonelayer that left the grave: %v, want not given", got)
 	}
 }

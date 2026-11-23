@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -23,6 +24,9 @@ type MessageRouter interface {
 
 var _ MessageRouter = (*Router)(nil)
 
+// Directory is what a router asks why a message has no engine to go to: see sim.StateDirectory.
+type Directory = sim.StateDirectory
+
 type routerData struct {
 	chans   map[sim.StateID]OutgoingChannel
 	retired map[sim.StateID]bool
@@ -36,7 +40,16 @@ type Router struct {
 	data     atomic.Pointer[routerData]
 	stopping atomic.Bool
 	dropped  atomic.Uint64
+	// directory says what an ID with no engine is: NotStarted for a state that exists, Retired for
+	// one in the grave, and NotGiven for any other ID. A router with none says Retired for an
+	// engine that was retired and NotStarted for any other ID.
+	directory atomic.Pointer[Directory]
 }
+
+// SetDirectory sets the directory that the router asks. With one, what a message to an ID with no
+// engine bounces as is decided by what the directory says the ID is, and the router remembers no
+// engine that was retired.
+func (rt *Router) SetDirectory(d Directory) { rt.directory.Store(&d) }
 
 // NewRouter makes an empty router.
 func NewRouter() *Router {
@@ -73,9 +86,12 @@ func (rt *Router) Register(o OutgoingChannel) {
 
 // Retire makes an engine unreachable for good: a message to it bounces as Retired.
 func (rt *Router) Retire(a sim.StateID) {
+	remember := rt.directory.Load() == nil
 	rt.update(func(n *routerData) {
 		delete(n.chans, a)
-		n.retired[a] = true
+		if remember {
+			n.retired[a] = true
+		}
 	})
 }
 
@@ -90,15 +106,29 @@ func (rt *Router) Deliver(l sim.Message) (sim.Reason, bool) {
 	data := rt.data.Load()
 	ch, ok := data.chans[l.Dest()]
 	if !ok {
-		if data.retired[l.Dest()] {
-			return sim.Retired, false
-		}
-		return sim.NotBuilt, false
+		return rt.whyNoEngine(data, l.Dest()), false
 	}
 	if !ch.Send(l) {
 		return sim.Full, false
 	}
 	return 0, true
+}
+
+// whyNoEngine says why a message to an ID with no engine cannot be delivered.
+func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.Reason {
+	if d := rt.directory.Load(); d != nil {
+		switch (*d).StateStatus(id) {
+		case ids.Live:
+			return sim.NotStarted
+		case ids.InGrave:
+			return sim.Retired
+		}
+		return sim.NotGiven
+	}
+	if data.retired[id] {
+		return sim.Retired
+	}
+	return sim.NotStarted
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that

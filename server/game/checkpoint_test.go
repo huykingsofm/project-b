@@ -185,7 +185,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 		if _, err := engine.Restore[*zonelayerstate.State](data[:n], env, 7); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
-		if reason, ok := env.Router.Deliver(say); ok || reason != sim.NotBuilt {
+		if reason, ok := env.Router.Deliver(say); ok || reason != sim.NotStarted {
 			t.Fatalf("a checkpoint cut at %d of %d bytes registered an engine: %v, %v",
 				n, len(data), reason, ok)
 		}

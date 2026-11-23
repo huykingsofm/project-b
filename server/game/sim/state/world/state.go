@@ -9,6 +9,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
+	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
@@ -79,7 +80,12 @@ type ReadOnlyWorldState interface {
 	Hash() uint64
 	ZoneIDs() []sim.StateID
 	ZoneLayerIDs() []sim.StateID
+	StateDirectory
 }
+
+// StateDirectory is what the world says of the IDs of the states of its cluster: see
+// sim.StateDirectory.
+type StateDirectory = sim.StateDirectory
 
 var _ ReadOnlyWorldState = (*State)(nil)
 
@@ -142,6 +148,25 @@ func (s *State) AddZoneLayer() (sim.StateID, bool) {
 	}
 	s.zoneLayers = append(s.zoneLayers, id)
 	return id, true
+}
+
+// StateStatus says what a state ID is, of a state of the cluster of the world: the world and its
+// zones are live as long as it knows them, a zonelayer is live, in the grave or not given, and any
+// other ID is not given.
+func (s *State) StateStatus(id sim.StateID) ids.Status {
+	switch id.Type() {
+	case state.WorldType:
+		if id == s.id {
+			return ids.Live
+		}
+	case state.ZoneType:
+		if slices.Contains(s.zones, id) {
+			return ids.Live
+		}
+	case state.ZoneLayerType:
+		return s.stateIDAllocators.Status(id)
+	}
+	return ids.NotGiven
 }
 
 // RemoveZoneLayer makes the world forget a zonelayer, and gives its number back: it is given again

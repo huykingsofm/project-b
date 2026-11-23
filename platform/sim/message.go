@@ -46,31 +46,43 @@ type Reason uint8
 const (
 	// Retired: the engine was removed.
 	Retired Reason = iota + 1
-	// NotBuilt: the engine does not exist yet, or the ID names none.
-	NotBuilt
+	// NotStarted: the engine exists, or its ID is given to a state, but it does not run yet.
+	NotStarted
 	// Moved: what the message is about has gone to another engine.
 	Moved
 	// Stopping: the engine, or the cluster, is stopping.
 	Stopping
 	// Full: the inbox of the engine is full.
 	Full
+	// NotGiven: the ID names no state: it was never given, or it was given to a state that was
+	// removed so long ago that it has left the grave of its IDs. To an action it is a state that is
+	// gone, as Retired is, but it says that the ID is not one of a state, and not that a state was
+	// removed. It is the last of the numbers, because a number is never changed or reused.
+	NotGiven
 )
 
 func (r Reason) String() string {
 	switch r {
 	case Retired:
 		return "retired"
-	case NotBuilt:
-		return "not built"
+	case NotStarted:
+		return "not started"
 	case Moved:
 		return "moved"
 	case Stopping:
 		return "stopping"
 	case Full:
 		return "full"
+	case NotGiven:
+		return "not given"
 	}
 	return "unknown"
 }
+
+// Gone reports whether a message that could not be delivered for this reason will not be delivered
+// by sending it again: the state it is for was removed, or never was. Sending it again fails the
+// same way, so it is for its OnFail to say what that means, once.
+func (r Reason) Gone() bool { return r == Retired || r == NotGiven }
 
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bouncer handle messages and do not know which type of state one is
