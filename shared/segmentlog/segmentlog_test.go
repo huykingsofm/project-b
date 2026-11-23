@@ -734,3 +734,53 @@ func TestTheLastSegmentIsReadOnlyUpToItsLastWholeBatchAndTheOthersAreReadWhole(t
 		}
 	}
 }
+
+func TestSyncedCountsTheBatchesThatAreOnTheDisk(t *testing.T) {
+	o := opts
+	o.SyncEvery = 5 * time.Millisecond
+	w := open(t, t.TempDir(), o)
+	write(t, w, 0, 5)
+	if err := w.Commit(); err != nil { // nothing was appended: not a batch
+		t.Fatal(err)
+	}
+	if w.Handed() != 5 {
+		t.Fatalf("Handed = %d, want 5", w.Handed())
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for w.Synced() != 5 {
+		if time.Now().After(deadline) {
+			t.Fatalf("Synced = %d after a while, want 5", w.Synced())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCloseSyncsWhatIsLeftAndSyncedSaysSo(t *testing.T) {
+	w := open(t, t.TempDir(), opts) // a sync every hour: only Close syncs
+	write(t, w, 0, 3)
+	if w.Synced() > w.Handed() {
+		t.Fatalf("Synced %d is more than Handed %d", w.Synced(), w.Handed())
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if w.Synced() != 3 || w.Handed() != 3 {
+		t.Fatalf("Synced = %d and Handed = %d, want 3 and 3", w.Synced(), w.Handed())
+	}
+}
+
+func TestASegmentThatIsClosedSyncsItsBatches(t *testing.T) {
+	o := opts
+	o.SegmentBytes = 64 // a segment holds a few batches
+	w := open(t, t.TempDir(), o)
+	write(t, w, 0, 40)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if w.Synced() != 40 {
+		t.Fatalf("Synced = %d, want 40", w.Synced())
+	}
+}

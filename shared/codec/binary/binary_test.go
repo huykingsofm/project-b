@@ -128,3 +128,21 @@ func TestUintAndIntFailOnANumberThatDoesNotFitInsteadOfCuttingIt(t *testing.T) {
 		t.Fatalf("int32 of -1<<40 = %d, err %v, want a bad value", got, r.Err())
 	}
 }
+
+func TestBytesComeBackAsAViewAndAShortCountIsAnError(t *testing.T) {
+	var w binary.Writer
+	w.Bytes([]byte("abc"))
+	w.Bytes(nil)
+	w.Uvarint(9) // a count that the bytes left cannot hold
+	w.Uint8(1)
+	r := binary.NewReader(w.B)
+	if got := r.Bytes(); string(got) != "abc" {
+		t.Fatalf("Bytes = %q", got)
+	}
+	if got := r.Bytes(); len(got) != 0 {
+		t.Fatalf("Bytes = %q, want none", got)
+	}
+	if got := r.Bytes(); got != nil || !errors.Is(r.Err(), binary.ErrShort) {
+		t.Fatalf("Bytes = %q, err = %v", got, r.Err())
+	}
+}
