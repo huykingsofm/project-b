@@ -18,9 +18,6 @@ func (j *MemLog) add(r Record) {
 	j.mu.Unlock()
 }
 
-// Wants reports true for every kind: a MemLog keeps what it is given.
-func (j *MemLog) Wants(Kind) bool { return true }
-
 // Append keeps a record.
 func (j *MemLog) Append(a sim.StateID, t uint64, body Body) {
 	j.add(Record{Engine: a, Tick: t, Body: body})

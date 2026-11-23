@@ -13,7 +13,6 @@ import (
 // teeLog gives every record to two replay logs.
 type teeLog struct{ a, b replay.Log }
 
-func (t teeLog) Wants(k replay.Kind) bool { return t.a.Wants(k) || t.b.Wants(k) }
 func (t teeLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 	t.a.Append(e, tick, body)
 	t.b.Append(e, tick, body)

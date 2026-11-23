@@ -162,9 +162,6 @@ func (f *FileLog) record(engine sim.StateID, r Record) {
 	}
 }
 
-// Wants reports true for every kind: a FileLog writes what it is given.
-func (f *FileLog) Wants(Kind) bool { return true }
-
 func (f *FileLog) Append(engine sim.StateID, tick uint64, body Body) {
 	f.record(engine, Record{Tick: tick, Body: body})
 }

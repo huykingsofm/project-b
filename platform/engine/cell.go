@@ -77,12 +77,12 @@ func (c *cell) snapshot(tick uint64) *config.Snapshot {
 
 // recordHash writes the hash of the state to the replay log at every replayLogHashEvery-th tick.
 // Where the count starts depends on the ID of the engine, so that the engines of a cluster do not
-// all hash in the same tick and make a peak of work there. hash is only called when
-// the log wants a hash.
+// all hash in the same tick and make a peak of work there. A log that records nothing is given the
+// hash all the same: it is a place holder, and what it is given costs nothing it could save.
 func (c *cell) recordHash(cfg *config.Snapshot, tick uint64, hash func() uint64) {
 	every := uint64(replayLogHashEvery.Get(cfg))
 	offset := uint64(c.me)
-	if (tick+offset)%every == 0 && c.replayLog.Wants(replay.KindHash) {
+	if (tick+offset)%every == 0 {
 		c.replayLog.Append(c.me, tick, replay.Hash{Value: hash()})
 	}
 }

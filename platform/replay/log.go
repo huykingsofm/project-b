@@ -21,10 +21,6 @@ import "github.com/huykingsofm/project-b/platform/sim"
 // follows from the state and the inputs and is made again by the replay. Randomness comes from the
 // seed of the engine and time from its tick count.
 type Log interface {
-	// Wants reports whether the log wants records of the kind. A kind that costs something to
-	// make is made only when it is: a hash costs as much as the state is big, so an engine asks
-	// before it takes one, and a log that records nothing is not made to.
-	Wants(kind Kind) bool
 	// Append records what the engine took, sent or read at the tick: a message in full (Inbound),
 	// one of its own that came back undelivered (Returned), a command of a client (Command), the
 	// version of the configuration it first read (ConfigRead), the hash of its state (Hash), or
@@ -39,8 +35,6 @@ type Log interface {
 
 // NopLog records nothing.
 type NopLog struct{}
-
-func (NopLog) Wants(Kind) bool { return false }
 
 func (NopLog) Append(sim.StateID, uint64, Body) {}
 func (NopLog) EndTick(sim.StateID, uint64)      {}
