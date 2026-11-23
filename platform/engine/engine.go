@@ -121,7 +121,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.sched.At(tick, 
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
-//  7. send the messages that the actions put in the outbox.
+//  7. send the messages that the actions put in the outbox;
+//  8. write the hash of the engine, when it is due, and close the tick for the replay log.
 //
 // It first takes the state to the next tick, and returns an error, having done nothing else, when
 // the state does not then say the tick that the engine is at: a state whose NextTick is wrong can
@@ -172,9 +173,8 @@ func (e *Engine[S]) Step() error {
 		e.emitter.Emit(e.me, e.tick, events)
 	}
 	e.stable.Publish(e.st.Clone())
-	e.recordHash(cfg, e.tick, e.Hash)
 	e.flush(cfg, e.tick, e.reg.Take())
-	e.endTick(e.tick)
+	e.endTick(cfg, e.tick, e.Hash)
 	return nil
 }
 

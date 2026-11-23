@@ -75,20 +75,20 @@ func (c *cell) snapshot(tick uint64) *config.Snapshot {
 	return s
 }
 
-// recordHash writes the hash of the state to the replay log at every replayLogHashEvery-th tick.
-// Where the count starts depends on the ID of the engine, so that the engines of a cluster do not
-// all hash in the same tick and make a peak of work there. A log that records nothing is given the
-// hash all the same: it is a place holder, and what it is given costs nothing it could save.
-func (c *cell) recordHash(cfg *config.Snapshot, tick uint64, hash func() uint64) {
+// endTick closes the tick for the replay log: it writes the hash of the state, at every
+// replayLogHashEvery-th tick, as the last record of the tick, and tells the log that the engine has
+// recorded all it will for the tick. Where the count starts depends on the ID of the engine, so
+// that the engines of a cluster do not all hash in the same tick and make a peak of work there. A
+// log that records nothing is given the hash all the same: it is a place holder, and what it is
+// given costs nothing it could save.
+func (c *cell) endTick(cfg *config.Snapshot, tick uint64, hash func() uint64) {
 	every := uint64(replayLogHashEvery.Get(cfg))
 	offset := uint64(c.me)
 	if (tick+offset)%every == 0 {
 		c.replayLog.Append(c.me, tick, replay.Hash{Value: hash()})
 	}
+	c.replayLog.EndTick(c.me, tick)
 }
-
-// endTick tells the replay log that the engine has recorded all it will for the tick.
-func (c *cell) endTick(tick uint64) { c.replayLog.EndTick(c.me, tick) }
 
 // settle takes what came back undelivered since the last tick and runs what each says to do.
 func (c *cell) settle(cfg *config.Snapshot, tick uint64) {

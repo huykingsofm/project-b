@@ -206,31 +206,30 @@ var decoders = map[Kind]func(
 	KindReturned:   decodeReturned,
 }
 
-// payloadTick is the tick of the record that a payload holds.
+// payloadTick is the tick of the frame that a payload holds: a frame starts with its tick.
 func payloadTick(payload []byte) (uint64, error) {
 	r := binary.NewReader(payload)
-	r.Uint8()
 	tick := r.Uvarint()
 	return tick, r.Err()
 }
 
-// encodeRecord writes a record: its kind, its tick and then its body. The engine is not in it: it
-// is the engine of the log the record is written to.
-func encodeRecord(w *binary.Writer, r Record) error {
-	if r.Body == nil {
+// encodeRecord writes a record: its kind and then its body. The tick is the one of the frame the
+// record is in, and the engine the one of the log it is written to.
+func encodeRecord(w *binary.Writer, body Body) error {
+	if body == nil {
 		return fmt.Errorf("the record has no body")
 	}
-	w.Uint8(uint8(r.Body.Kind()))
-	w.Uvarint(r.Tick)
-	return r.Body.Encode(w)
+	w.Uint8(uint8(body.Kind()))
+	return body.Encode(w)
 }
 
-// decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
+// decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine
+// and a frame of a tick.
 func decodeRecord(
-	c *sim.Codecs, engine sim.StateID, version codec.Version, payload []byte,
+	c *sim.Codecs, engine sim.StateID, version codec.Version, tick uint64, data []byte,
 ) (Record, error) {
-	r := binary.NewReader(payload)
-	kind, tick := Kind(r.Uint8()), r.Uvarint()
+	r := binary.NewReader(data)
+	kind := Kind(r.Uint8())
 	if err := r.Err(); err != nil {
 		return Record{}, err
 	}

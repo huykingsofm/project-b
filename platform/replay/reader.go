@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/huykingsofm/project-b/platform/sim"
-
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
@@ -19,6 +19,8 @@ type FileLogReader struct {
 	r         *segmentlog.Reader
 	fromTick  uint64
 	rec       Record
+	frame     *binary.Reader // what is left of the frame that the current record is in
+	frameTick uint64
 	info      segmentInfo // of the segment of the current record
 	infoIndex uint64
 	haveInfo  bool
@@ -44,9 +46,29 @@ func ReadFileLog(
 }
 
 // Next moves to the next record and reports whether there is one. It reports false at the end of
-// the log, and when there is an error, which Err returns.
+// the log, and when there is an error, which Err returns. A tick with no record has a frame and no
+// record, so it is passed over.
 func (l *FileLogReader) Next() bool {
-	for l.err == nil && l.r.Next() {
+	for l.err == nil {
+		if l.frame != nil && l.frame.Left() > 0 {
+			data := l.frame.Bytes()
+			if err := l.frame.Err(); err != nil {
+				l.err = fmt.Errorf(
+					"segment %d: the frame of the tick %d: %w", l.infoIndex, l.frameTick, err,
+				)
+				return false
+			}
+			rec, err := decodeRecord(l.codecs, l.engine, l.info.Version, l.frameTick, data)
+			if err != nil {
+				l.err = fmt.Errorf("segment %d: the tick %d: %w", l.infoIndex, l.frameTick, err)
+				return false
+			}
+			l.rec = rec
+			return true
+		}
+		if !l.r.Next() {
+			break
+		}
 		if index := l.r.SegmentIndex(); !l.haveInfo || index != l.infoIndex {
 			info, err := parseSegmentMeta(l.r.Meta())
 			if err != nil {
@@ -61,16 +83,16 @@ func (l *FileLogReader) Next() bool {
 			}
 			l.info, l.infoIndex, l.haveInfo = info, index, true
 		}
-		rec, err := decodeRecord(l.codecs, l.engine, l.info.Version, l.r.Payload())
-		if err != nil {
-			l.err = fmt.Errorf("segment %d: %w", l.r.SegmentIndex(), err)
+		frame := binary.NewReader(l.r.Payload())
+		tick := frame.Uvarint()
+		if err := frame.Err(); err != nil {
+			l.err = fmt.Errorf("segment %d: a frame with no tick: %w", l.infoIndex, err)
 			return false
 		}
-		if rec.Tick < l.fromTick {
+		if tick < l.fromTick {
 			continue
 		}
-		l.rec = rec
-		return true
+		l.frame, l.frameTick = frame, tick
 	}
 	if l.err == nil {
 		l.err = l.r.Err()

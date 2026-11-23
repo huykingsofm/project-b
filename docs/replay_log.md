@@ -8,7 +8,7 @@
 |---|---|
 | a log for each engine | `<dir>/<name>-<n>/`: the name of the type of its state (`StateType.String()`, see below) and the number of the state among the states of its type, for example `world-1`, `zone-2`, `zonelayer-1`; the meta of the segments holds the whole ID |
 | the segments of a log | `seg-<index>.log` ([segmentlog](segmentlog.md#files)) |
-| opened | by the first record of the engine; an engine that records nothing has no directory |
+| opened | by the first tick of the engine: every tick has a frame, an empty one when the engine recorded nothing |
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
 - A log writes what it is given: `NopLog` is a place holder that takes everything and keeps nothing, and the engine works out a hash at its period whatever the log is.
@@ -18,12 +18,21 @@
 
 | Method of `replay.Log` | What it does |
 |---|---|
-| `Append(engine, tick, body)` | records what the engine took, sent or read at the tick |
-| `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick; a log in files hands the records to the goroutine that writes them |
+| `Append(engine, tick, body)` | records what the engine took, sent or read at the tick: it is encoded into the buffer of the tick |
+| `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick, the hash of its state included when it is due; a log in files hands the frame of the tick to the goroutine that writes it |
+
+- The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
 
 ## Records
 
-A record is the payload `[kind u8][tick uvarint][body]`. The whole tick is in each record, so a record does not depend on its segment. The engine is not in it: it is the engine of the log.
+What an engine writes in a tick is one frame, which is one record of the segment log and so one batch of it:
+
+| Part | Layout |
+|---|---|
+| frame (the payload of a segment log record) | `[tick uvarint]` and then the records of the tick, in the order they were appended |
+| record | `[length uvarint][kind u8][body]`, the length being that of the kind and the body |
+
+The tick is once in the frame, and a record does not carry it. A tick with no record has a frame that holds its tick and nothing else, so the batches of a log are its ticks one by one, and the number of batches that are on the disk (`segmentlog.Writer.Synced`) says up to which tick nothing is lost. The engine is not in a record: it is the engine of the log. The meta of a segment holds the format, the engine, the seed and the tick of its first frame; the format is 2.
 
 | In code | What it is |
 |---|---|

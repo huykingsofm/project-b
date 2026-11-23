@@ -15,7 +15,7 @@ import (
 )
 
 // formatVersion is the version of the records and of the meta of a segment of the replay log.
-const formatVersion codec.Version = 1
+const formatVersion codec.Version = 2
 
 // FileLogOptions are the settings of a FileLog.
 type FileLogOptions struct {
@@ -38,9 +38,10 @@ type FileLogOptions struct {
 // written, and the log is marked as failed: Err returns the first error, which is also logged. A
 // log that failed is not enough to replay from.
 //
-// Records are the bytes `[kind][tick][body]`, with the whole tick in each so that a record does not
-// depend on the segment it is in. The meta of a segment is the version, the engine, the
-// seed and the tick of its first record.
+// What an engine writes in a tick is one frame, which is one record of the segment log and so one
+// batch: `[tick][record]...`, a record being `[length][kind][body]`. Every tick has a frame, an
+// empty one when the engine recorded nothing, so the batches of a log are its ticks one by one.
+// The meta of a segment is the version, the engine, the seed and the tick of its first frame.
 type FileLog struct {
 	dir  string
 	opts FileLogOptions
@@ -50,12 +51,73 @@ type FileLog struct {
 	failure error      // protected by mu
 }
 
-// engineLog is the log of one engine.
+// engineLog is the log of one engine: the frame of the tick that is being recorded, and the writer
+// that the frames go to.
 type engineLog struct {
 	w *segmentlog.Writer // nil when the log of the engine could not be opened
 	// why it could not: the engine does not try again, as a writer that failed does not
-	err     error
-	scratch binary.Writer // used by the goroutine of the engine only
+	openErr error
+
+	// The next fields are used by the goroutine of the engine only.
+	records binary.Writer // the records of the tick, each with its length
+	scratch binary.Writer // one record, while it is written
+	frame   binary.Writer // the frame, while it is handed over
+	tick    uint64        // the tick of the records so far
+	started bool          // whether there are records of the tick so far
+}
+
+// OpenError is why the log of the engine could not be opened, or nil.
+func (l *engineLog) OpenError() error { return l.openErr }
+
+// Usable reports whether the log of the engine was opened.
+func (l *engineLog) Usable() bool { return l.w != nil }
+
+// WriteError is the first error that writing the log has had, or nil.
+func (l *engineLog) WriteError() error {
+	if l.w == nil {
+		return nil
+	}
+	return l.w.Err()
+}
+
+// Close writes and syncs what was handed over.
+func (l *engineLog) Close() error {
+	if l.w == nil {
+		return nil
+	}
+	return l.w.Close()
+}
+
+// Add puts a record in the frame of the tick. A record that cannot be encoded is left out, and the
+// error says why.
+func (l *engineLog) Add(tick uint64, body Body) error {
+	if l.started && tick != l.tick {
+		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", tick, l.tick)
+	}
+	l.scratch.B = l.scratch.B[:0]
+	if err := encodeRecord(&l.scratch, body); err != nil {
+		return err
+	}
+	l.records.Bytes(l.scratch.B)
+	l.tick, l.started = tick, true
+	return nil
+}
+
+// End hands the frame of the tick to the goroutine that writes: the tick and then the records, as
+// one record of the segment log and one batch. The frame is empty when nothing was recorded.
+func (l *engineLog) End(tick uint64) error {
+	if l.started && tick != l.tick {
+		l.records.B, l.started = l.records.B[:0], false
+		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
+	}
+	l.frame.B = l.frame.B[:0]
+	l.frame.Uvarint(tick)
+	l.frame.B = append(l.frame.B, l.records.B...)
+	l.records.B, l.started = l.records.B[:0], false
+	if err := l.w.Append(l.frame.B); err != nil {
+		return err
+	}
+	return l.w.Commit()
 }
 
 // NewFileLog makes a replay log that writes under dir. Nothing is created until an engine records.
@@ -81,11 +143,11 @@ func (f *FileLog) Err() error {
 	var err error
 	f.engines.Range(func(_, v any) bool {
 		l := v.(*engineLog)
-		if l.err != nil {
-			err = l.err
+		if e := l.OpenError(); e != nil {
+			err = e
 			return false
 		}
-		if e := l.w.Err(); e != nil {
+		if e := l.WriteError(); e != nil {
 			err = e
 			return false
 		}
@@ -116,13 +178,13 @@ func (f *FileLog) fail(engine sim.StateID, err error) {
 func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 	if v, ok := f.engines.Load(engine); ok {
 		l := v.(*engineLog)
-		return l, l.err
+		return l, l.OpenError()
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if v, ok := f.engines.Load(engine); ok {
 		l := v.(*engineLog)
-		return l, l.err
+		return l, l.OpenError()
 	}
 	logDir := filepath.Join(f.dir, engineDirName(engine))
 	w, err := segmentlog.Open(logDir, segmentlog.Options{
@@ -131,7 +193,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 			return segmentMeta(engine, f.opts.Seed, first)
 		},
 	})
-	l := &engineLog{w: w, err: err}
+	l := &engineLog{w: w, openErr: err}
 	f.engines.Store(engine, l)
 	// reported here, once: record does not report it again for each record
 	if err != nil && f.failure == nil {
@@ -147,36 +209,24 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 	return l, err
 }
 
-// record appends one record to the buffer of the tick of the engine.
-func (f *FileLog) record(engine sim.StateID, r Record) {
+// Append puts a record in the frame of the tick of the engine.
+func (f *FileLog) Append(engine sim.StateID, tick uint64, body Body) {
 	l, err := f.log(engine)
 	if err != nil {
 		return // the log of the engine could not be opened; log() reported it
 	}
-	l.scratch.B = l.scratch.B[:0]
-	if err = encodeRecord(&l.scratch, r); err == nil {
-		err = l.w.Append(l.scratch.B)
-	}
-	if err != nil {
+	if err = l.Add(tick, body); err != nil {
 		f.fail(engine, err)
 	}
 }
 
-func (f *FileLog) Append(engine sim.StateID, tick uint64, body Body) {
-	f.record(engine, Record{Tick: tick, Body: body})
-}
-
-// EndTick hands the records of the tick to the goroutine that writes them.
-func (f *FileLog) EndTick(engine sim.StateID, _ uint64) {
-	v, ok := f.engines.Load(engine)
-	if !ok {
-		return // the engine recorded nothing yet
+// EndTick hands the frame of the tick to the goroutine that writes it.
+func (f *FileLog) EndTick(engine sim.StateID, tick uint64) {
+	l, err := f.log(engine)
+	if err != nil {
+		return // the log of the engine could not be opened; log() reported it
 	}
-	l := v.(*engineLog)
-	if l.w == nil {
-		return // the log of the engine could not be opened, and the failure was reported
-	}
-	if err := l.w.Commit(); err != nil {
+	if err = l.End(tick); err != nil {
 		f.fail(engine, err)
 	}
 }
@@ -186,10 +236,7 @@ func (f *FileLog) Close() error {
 	var errs []error
 	f.engines.Range(func(_, v any) bool {
 		l := v.(*engineLog)
-		if l.w == nil {
-			return true
-		}
-		if err := l.w.Close(); err != nil && !errors.Is(err, segmentlog.ErrClosed) {
+		if err := l.Close(); err != nil && !errors.Is(err, segmentlog.ErrClosed) {
 			errs = append(errs, err)
 		}
 		return true

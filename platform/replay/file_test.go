@@ -217,15 +217,53 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 	}
 }
 
-func TestAnEndOfTickBeforeAnyRecordCreatesNothing(t *testing.T) {
+func TestATickWithNoRecordIsAFrameWithOnlyItsTick(t *testing.T) {
 	dir := t.TempDir()
+	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.EndTick(sim.StateID(21), 1)
+	log.EndTick(engine, 1)
+	log.Append(engine, 2, ConfigRead{Version: 3})
+	log.EndTick(engine, 2)
+	log.EndTick(engine, 3)
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-		t.Fatalf("%d entries in the directory", len(entries))
+	got, err := readLog(t, dir, engine, 0)
+	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (ConfigRead{Version: 3}) {
+		t.Fatalf("records %v, error %v; want the one of tick 2", got, err)
+	}
+	r, err := segmentlog.OpenReader(engineDir(dir, engine), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	var ticks []uint64
+	for r.Next() {
+		tick, err := payloadTick(r.Payload())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ticks = append(ticks, tick)
+	}
+	if !reflect.DeepEqual(ticks, []uint64{1, 2, 3}) {
+		t.Fatalf("the frames are of the ticks %v, want one for each of 1, 2 and 3", ticks)
+	}
+}
+
+func TestRecordsOfAnotherTickAreAnErrorAndAreNotWritten(t *testing.T) {
+	dir := t.TempDir()
+	engine := sim.StateID(21)
+	log := NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 5, ConfigRead{Version: 1})
+	log.Append(engine, 6, ConfigRead{Version: 2}) // not the tick of the frame
+	if log.Err() == nil {
+		t.Fatal("a record of another tick was not refused")
+	}
+	log.EndTick(engine, 5)
+	log.Close()
+	got, _ := readLog(t, dir, engine, 0)
+	if len(got) != 1 || got[0].Tick != 5 {
+		t.Fatalf("records %v, want only the one of tick 5", got)
 	}
 }
 
@@ -247,13 +285,13 @@ func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 		{},
 		{99},
 		{byte(KindInbound)},
-		{byte(KindInbound), 1, 3, 1, 1, 2, 5},
-		{byte(KindReturned), 1, 1},
-		{byte(KindHash), 1, 1, 2},
-		{byte(KindCommand), 1, 0xff, 0xff, 0x7f},
-		{byte(KindConfig), 1, 1, 9},
+		{byte(KindInbound), 3, 1, 1, 2, 5},
+		{byte(KindReturned), 1},
+		{byte(KindHash), 1, 2},
+		{byte(KindCommand), 0xff, 0xff, 0x7f},
+		{byte(KindConfig), 1, 9},
 	} {
-		if _, err := decodeRecord(toyCodecs(), engine, formatVersion, p); err == nil {
+		if _, err := decodeRecord(toyCodecs(), engine, formatVersion, 1, p); err == nil {
 			t.Errorf("%v was read", p)
 		}
 	}
