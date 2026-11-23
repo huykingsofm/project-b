@@ -21,7 +21,6 @@ type toyState struct {
 
 func (s *toyState) ID() StateID   { return s.id }
 func (*toyState) Type() StateType { return toyType }
-func (*toyState) String() string  { return "toy" }
 func (s *toyState) Tick() uint64  { return s.tick }
 func (s *toyState) NextTick()     { s.tick++ }
 func (s *toyState) Clone() State  { c := *s; return &c }
@@ -50,7 +49,6 @@ type otherState struct{ toyState }
 const otherType StateType = 1
 
 func (*otherState) Type() StateType { return otherType }
-func (*otherState) String() string  { return "other" }
 func (s *otherState) Clone() State {
 	c := *s
 	return &c

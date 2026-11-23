@@ -16,6 +16,16 @@ const (
 	ZoneLayerType
 )
 
+func init() {
+	for t, name := range map[sim.StateType]string{
+		WorldType: "world", ZoneType: "zone", ZoneLayerType: "zonelayer",
+	} {
+		if err := sim.MapStateTypeToName(t, name); err != nil {
+			panic(err) // a name that is wrong is found when the program starts
+		}
+	}
+}
+
 // CharacterID names a character: a figure in the game. A character is not always played by a
 // person. PlayerID names a player: the person who plays. A character may be linked to a player
 // or not.

@@ -2,6 +2,8 @@ package sim
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
@@ -31,6 +33,47 @@ func (id StateID) Local() uint32 { return uint32(id) & (1<<24 - 1) }
 // write it.
 type StateType uint8
 
+var (
+	typeNamesMu sync.RWMutex
+	typeNames   = map[StateType]string{}
+	namedTypes  = map[string]StateType{}
+)
+
+// MapStateTypeToName gives a type of state its name, in letters, for a file or a log: a log names
+// the directory of an engine after it. It is called where the type is defined, once for each type.
+// A type has one name and a name belongs to one type, and neither is ever changed, because what is
+// written to the disk carries the name; it reports an error for a second name of a type, or a name
+// that another type has.
+func MapStateTypeToName(t StateType, name string) error {
+	if name == "" {
+		return fmt.Errorf("the state type %d is given no name", t)
+	}
+	typeNamesMu.Lock()
+	defer typeNamesMu.Unlock()
+	if old, ok := typeNames[t]; ok {
+		return fmt.Errorf(
+			"the state type %d is called %q already, and cannot be called %q", t, old, name,
+		)
+	}
+	if other, ok := namedTypes[name]; ok {
+		return fmt.Errorf("the name %q is the name of the state type %d already", name, other)
+	}
+	typeNames[t] = name
+	namedTypes[name] = t
+	return nil
+}
+
+// String is the name that MapStateTypeToName gave the type, or "state type" and its number when
+// it was given none.
+func (t StateType) String() string {
+	typeNamesMu.RLock()
+	defer typeNamesMu.RUnlock()
+	if name, ok := typeNames[t]; ok {
+		return name
+	}
+	return fmt.Sprintf("state type %d", uint8(t))
+}
+
 // Event is something that happened in a state in a tick, for the clients. What an event is made of
 // belongs to the game; the engine only hands the events of a tick to its emitter.
 type Event any
@@ -47,9 +90,6 @@ type State interface {
 	// Type is the type of the state. It must return the same number for every value, including a
 	// nil pointer, because the type of a state is asked of its Go type alone (see StateTypeOf).
 	Type() StateType
-	// String is the name of the type of the state, in letters, for a file or a log. It does not
-	// include the ID.
-	String() string
 	// Tick is the tick that the state is at.
 	Tick() uint64
 	// NextTick takes the state to the next tick, one more than the one it is at, at the start of

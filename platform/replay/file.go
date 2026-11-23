@@ -47,7 +47,6 @@ type FileLog struct {
 
 	mu      sync.Mutex // protects opening a log; the logs of the engines are then read without it
 	engines sync.Map   // sim.StateID -> *engineLog
-	names   sync.Map   // sim.StateID -> string
 	failure error      // protected by mu
 }
 
@@ -65,22 +64,11 @@ func NewFileLog(dir string, opts FileLogOptions) *FileLog {
 }
 
 // engineDirName is the name of the directory of the log of an engine: the name of the type of its
-// state and the number of the state among the states of its type. The full ID is in the meta of
-// the segments, which is what tells two states of different types with the same number apart.
-func engineDirName(name string, engine sim.StateID) string {
-	return fmt.Sprintf("%s-%d", name, engine.Local())
-}
-
-// Describe tells the log what the type of the state of an engine is called.
-func (f *FileLog) Describe(engine sim.StateID, name string) { f.names.Store(engine, name) }
-
-// nameOf is what the engine told the log the type of its state is called. An engine that told
-// nothing is called "engine".
-func (f *FileLog) nameOf(engine sim.StateID) string {
-	if v, ok := f.names.Load(engine); ok {
-		return v.(string)
-	}
-	return "engine"
+// state (see sim.MapStateTypeToName) and the number of the state among the states of its type. The
+// full ID is in the meta of the segments, which is what tells two states of different types with
+// the same number apart.
+func engineDirName(engine sim.StateID) string {
+	return fmt.Sprintf("%s-%d", engine.Type(), engine.Local())
 }
 
 // Err is the first error that the log has had, or nil.
@@ -136,7 +124,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		l := v.(*engineLog)
 		return l, l.err
 	}
-	logDir := filepath.Join(f.dir, engineDirName(f.nameOf(engine), engine))
+	logDir := filepath.Join(f.dir, engineDirName(engine))
 	w, err := segmentlog.Open(logDir, segmentlog.Options{
 		SegmentBytes: f.opts.SegmentBytes, SyncEvery: f.opts.SyncEvery, Backlog: f.opts.Backlog,
 		SegmentMeta: func(first []byte) []byte {

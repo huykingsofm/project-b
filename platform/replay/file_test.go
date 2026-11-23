@@ -15,7 +15,7 @@ import (
 
 // engineDir is the directory of the log of an engine that did not describe itself to the log.
 func engineDir(dir string, engine sim.StateID) string {
-	return filepath.Join(dir, engineDirName("engine", engine))
+	return filepath.Join(dir, engineDirName(engine))
 }
 
 var testFileLogOptions = FileLogOptions{
@@ -136,7 +136,7 @@ func TestAnEngineWritesOnlyToItsOwnLogAndTheMetaSaysWhichAndTheSeed(t *testing.T
 			}
 		}
 	}
-	for _, name := range []string{"engine-1", "engine-21"} {
+	for _, name := range []string{"toy-1", "toy-21"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Fatalf("no directory %s: %v", name, err)
 		}

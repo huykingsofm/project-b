@@ -137,9 +137,6 @@ func (s *State) ID() sim.StateID { return s.id }
 // Type is the type of the state of a zone.
 func (s *State) Type() sim.StateType { return state.ZoneType }
 
-// String is the name of the type of the state of a zone.
-func (s *State) String() string { return "zone" }
-
 // Tick is the tick that the state is at.
 func (s *State) Tick() uint64 { return s.tick }
 

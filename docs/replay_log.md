@@ -6,18 +6,18 @@
 
 | Part | Where |
 |---|---|
-| a log for each engine | `<dir>/<name>-<n>/`: the name of the type of its state (`State.String()`) and the number of the state among the states of its type, for example `world-1`, `zone-2`, `zonelayer-1`; the meta of the segments holds the whole ID |
+| a log for each engine | `<dir>/<name>-<n>/`: the name of the type of its state (`StateType.String()`, see below) and the number of the state among the states of its type, for example `world-1`, `zone-2`, `zonelayer-1`; the meta of the segments holds the whole ID |
 | the segments of a log | `seg-<index>.log` ([segmentlog](segmentlog.md#files)) |
 | opened | by the first record of the engine; an engine that records nothing has no directory |
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
+- The name of a type of state is set where the type is defined, with `sim.MapStateTypeToName(type, name)`: a type has one name, a name belongs to one type, and neither is ever changed, because the name is in the path of a log on the disk. A second name for a type, or a name that another type has, is an error that is found when the program starts. A type that was given none is called `state type <number>`.
 
 ## Writing
 
 | Method of `replay.Log` | What it does |
 |---|---|
 | `Wants(kind)` | says whether the log wants records of the kind; an engine asks before it takes a hash, which costs as much as the state is big |
-| `Describe(engine, type, name)` | told once by an engine before it records: which type of state it has and what the type is called, for the name of its directory and for the meta |
 | `Append(engine, tick, body)` | records what the engine took, sent or read at the tick |
 | `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick; a log in files hands the records to the goroutine that writes them |
 

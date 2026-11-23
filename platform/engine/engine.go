@@ -43,7 +43,6 @@ var ErrTickMismatch = errors.New("the tick of the state is not the tick of the e
 // gives the ticks with Run or calls Step.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
-	env.ReplayLog.Describe(me, st.String())
 	e := &Engine[S]{
 		cell: newCell(
 			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
@@ -100,7 +99,7 @@ func (e *Engine[S]) Tick() uint64 { return e.tick }
 func (e *Engine[S]) Type() sim.StateType { return sim.StateTypeOf[S]() }
 
 // TypeName is the name of the type of the state of the engine.
-func (e *Engine[S]) TypeName() string { return e.st.String() }
+func (e *Engine[S]) TypeName() string { return e.Type().String() }
 
 // Scheduler returns what the engine waits for, to be read: the actions set for a tick to come, the
 // next one included. It is read between two ticks, by the goroutine of the engine or while the

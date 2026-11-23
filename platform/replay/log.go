@@ -25,10 +25,6 @@ type Log interface {
 	// make is made only when it is: a hash costs as much as the state is big, so an engine asks
 	// before it takes one, and a log that records nothing is not made to.
 	Wants(kind Kind) bool
-	// Describe tells the log, once, what the type of the state of an engine is called, before the
-	// engine records anything: a log that writes to a file names a directory after the name and the
-	// number of the state.
-	Describe(engine sim.StateID, name string)
 	// Append records what the engine took, sent or read at the tick: a message in full (Inbound),
 	// one of its own that came back undelivered (Returned), a command of a client (Command), the
 	// version of the configuration it first read (ConfigRead), the hash of its state (Hash), or
@@ -45,9 +41,6 @@ type Log interface {
 type NopLog struct{}
 
 func (NopLog) Wants(Kind) bool { return false }
-
-// Describe does nothing.
-func (NopLog) Describe(sim.StateID, string) {}
 
 func (NopLog) Append(sim.StateID, uint64, Body) {}
 func (NopLog) EndTick(sim.StateID, uint64)      {}

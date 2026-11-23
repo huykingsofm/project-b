@@ -14,11 +14,16 @@ import (
 // the toy state is of the type 0, so a plain number is the ID of a toy state
 const toyType sim.StateType = 0
 
+func init() {
+	if err := sim.MapStateTypeToName(toyType, "toy"); err != nil {
+		panic(err)
+	}
+}
+
 type toyState struct{ id sim.StateID }
 
 func (s *toyState) ID() sim.StateID               { return s.id }
 func (*toyState) Type() sim.StateType             { return toyType }
-func (*toyState) String() string                  { return "toy" }
 func (*toyState) Tick() uint64                    { return 0 }
 func (*toyState) NextTick()                       {}
 func (s *toyState) Clone() sim.State              { return s }

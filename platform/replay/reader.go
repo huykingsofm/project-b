@@ -106,7 +106,7 @@ func engineDirs(dir string) (map[sim.StateID]string, error) {
 			continue
 		}
 		info, ok := firstSegmentInfo(filepath.Join(dir, e.Name()))
-		if !ok || e.Name() != engineDirName(e.Name()[:dash], info.Engine) {
+		if !ok || e.Name() != engineDirName(info.Engine) {
 			continue
 		}
 		out[info.Engine] = e.Name()
@@ -128,18 +128,10 @@ func firstSegmentInfo(logDir string) (segmentInfo, bool) {
 	return info, err == nil
 }
 
-// findEngineDir returns the directory of the log of an engine under dir. An engine that has no log
-// has no directory, and the path it would have is returned, which reads as an empty log.
+// findEngineDir returns the directory of the log of an engine under dir, which its ID names. An
+// engine that has no log has no directory, which reads as an empty log.
 func findEngineDir(dir string, engine sim.StateID) string {
-	dirs, err := engineDirs(dir)
-	if err != nil {
-		return filepath.Join(dir, engineDirName("engine", engine))
-	}
-	name, ok := dirs[engine]
-	if !ok {
-		return filepath.Join(dir, engineDirName("engine", engine))
-	}
-	return filepath.Join(dir, name)
+	return filepath.Join(dir, engineDirName(engine))
 }
 
 // Engines returns the engines that have a log under dir, in the order of their IDs. A directory

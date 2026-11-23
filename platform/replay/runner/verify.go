@@ -43,9 +43,6 @@ func (v *verifyLog) expect(engine sim.StateID, got replay.Record) {
 // Wants reports true for every kind: the replay works out a hash to compare it.
 func (v *verifyLog) Wants(replay.Kind) bool { return true }
 
-// Describe does nothing: a replay compares records and writes none.
-func (v *verifyLog) Describe(sim.StateID, string) {}
-
 // Append checks what the engine records against the next record of its log.
 func (v *verifyLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 	v.expect(e, replay.Record{Tick: tick, Body: body})
