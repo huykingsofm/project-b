@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
@@ -74,6 +75,25 @@ func TestAMessageToAnotherEngineIsTakenAtItsNextTickAndACopyIsNeverTakenTwice(t 
 	c.Step()
 	if b.State().Total != 7 {
 		t.Fatalf("a second copy of a message was taken: %d", b.State().Total)
+	}
+}
+
+func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T) {
+	c, engines := toyCluster(t, 1, 2)
+	a := engines[0]
+	a.ScheduleAt(3, &forwardAction{To: 2, N: 7})
+	c.Step()
+	c.Step()
+	c.Step() // a sends at its tick 3: b takes the message in the same step
+	mem := c.Env.ReplayLog.(*replay.MemLog)
+	var deps []sim.StateDependency
+	for _, r := range mem.Records {
+		if dep, ok := r.Dependency(); ok && r.Engine == 2 {
+			deps = append(deps, dep)
+		}
+	}
+	if want := []sim.StateDependency{{Source: 1, Tick: 3}}; !reflect.DeepEqual(deps, want) {
+		t.Fatalf("the dependencies of b are %v, want %v", deps, want)
 	}
 }
 

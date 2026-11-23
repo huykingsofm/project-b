@@ -57,11 +57,12 @@ The tick is once in the frame, and a record does not carry it. A tick with no re
 | `KindConfig` | 3 | the version of the config |
 | `KindHash` | 4 | the hash, 8 bytes |
 | `KindStableRead` | 5 | state ID of the engine read, the tick of the copy |
-| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`), the reason `u8` (`sim.Reason`) |
+| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.Reason`) |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.
 - A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
+- A message carries the tick of its sender when it was sent (`Header.Tick`, set when the engine sends it). An `Inbound` record makes the engine depend on that tick of the sender, and a `StableRead` record, which has the tick of the copy it read, makes it depend on that tick of the source: `Record.Dependency()` says which as a `sim.StateDependency{Source, Tick}`, or false when a record depends on nothing (a message with no tick, a read that found no copy, any other kind).
 - A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
 
 ## Messages and actions
@@ -71,7 +72,7 @@ A message, in order:
 | Field | Written as |
 |---|---|
 | destination | the state ID of the engine; its type says which actions the message carries |
-| header | state ID of the sender, `Seq` |
+| header | state ID of the sender, `Seq`, the tick of the sender at which it sent the message |
 | attempts | `uvarint` |
 | `OnFail` | below |
 | actions | count, then each action |

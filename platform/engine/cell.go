@@ -152,7 +152,7 @@ func (c *cell) receivedActions[S sim.State](tick uint64) []sim.Action[S] {
 func (c *cell) flush(cfg *config.Snapshot, tick uint64, outbox []sim.Message) {
 	for _, m := range append(c.bounce.take(), outbox...) {
 		c.seq++
-		m = m.Stamp(sim.Header{From: c.me, Seq: c.seq})
+		m = m.Stamp(sim.Header{From: c.me, Seq: c.seq, Tick: tick})
 		if reason, ok := c.router.Deliver(m); !ok {
 			c.replayLog.Append(c.me, tick, replay.Returned{Header: m.Head(), Reason: reason})
 			c.bounce.handle(cfg, m, reason)

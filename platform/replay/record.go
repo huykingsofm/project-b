@@ -42,6 +42,23 @@ type Record struct {
 	Body   Body
 }
 
+// Dependent is what a body says when what an engine recorded makes it depend on another engine.
+type Dependent interface {
+	// Dependency is the engine and the tick that the body depends on, and false when it depends on
+	// none.
+	Dependency() (sim.StateDependency, bool)
+}
+
+// Dependency is what the record makes the engine depend on, or false when it makes it depend on
+// nothing: a message depends on the tick at which its sender sent it, and a read of a copy of the
+// state of another engine on the tick of the copy.
+func (r Record) Dependency() (sim.StateDependency, bool) {
+	if d, ok := r.Body.(Dependent); ok {
+		return d.Dependency()
+	}
+	return sim.StateDependency{}, false
+}
+
 // Kind is the kind of the body of the record, or 0 when there is none.
 func (r Record) Kind() Kind {
 	if r.Body == nil {
@@ -56,6 +73,13 @@ type Inbound struct{ Message sim.Message }
 func (Inbound) Kind() Kind { return KindInbound }
 
 func (b Inbound) Encode(w *binary.Writer) error { return sim.EncodeMessage(w, b.Message) }
+
+// Dependency is the sender of the message and the tick at which it sent it; a message that was not
+// stamped has none.
+func (b Inbound) Dependency() (sim.StateDependency, bool) {
+	h := b.Message.Head()
+	return sim.StateDependency{Source: h.From, Tick: h.Tick}, h.Tick > 0
+}
 
 func (b Inbound) Same(other Body) bool {
 	o, ok := other.(Inbound)
@@ -135,6 +159,12 @@ type StableRead struct {
 }
 
 func (StableRead) Kind() Kind { return KindStableRead }
+
+// Dependency is the engine that was read and the tick of the copy; a read that found no copy (a
+// tick of 0) depends on nothing.
+func (b StableRead) Dependency() (sim.StateDependency, bool) {
+	return sim.StateDependency{Source: b.Source, Tick: b.CopyTick}, b.CopyTick > 0
+}
 
 func (b StableRead) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(b.Source))

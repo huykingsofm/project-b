@@ -17,22 +17,26 @@ var ErrUnknownCode = errors.New(
 	"sim: the number is not one of an action, a command, a state or an OnFail",
 )
 
-// Header says who sent a message and which message of its sender it was, so that a replay can put
-// the messages of an engine back in the order they came and a receiver can tell two messages apart.
+// Header says who sent a message, which message of its sender it was, and at which tick of its
+// sender it was sent. The first two let a replay put the messages of an engine back in the order
+// they came and a receiver tell two messages apart; the tick says which tick of the sender the
+// receiver depends on once it takes the message (see StateDependency).
 type Header struct {
 	From StateID
 	Seq  uint64
+	Tick uint64 // the tick of the sender at which it sent the message; 0 for one that was not sent
 }
 
 // Encode writes a header.
 func (h Header) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(h.From))
 	w.Uvarint(h.Seq)
+	w.Uvarint(h.Tick)
 }
 
 // DecodeHeader reads what Header.Encode wrote.
 func DecodeHeader(r *binary.Reader) Header {
-	return Header{From: r.Uint[StateID](), Seq: r.Uvarint()}
+	return Header{From: r.Uint[StateID](), Seq: r.Uvarint(), Tick: r.Uvarint()}
 }
 
 // Reason says why a message could not be delivered.
