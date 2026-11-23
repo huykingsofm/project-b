@@ -320,6 +320,40 @@ func (c *Codecs) DecodeOnFail(
 	return c.decodeOnFail(r, version, nested)
 }
 
+// EncodeActions writes a list of actions: how many, and each. It returns an error, and the writer
+// holds a partial list, when an action cannot be written.
+func EncodeActions[S State](w *binary.Writer, actions []Action[S]) error {
+	w.Uvarint(uint64(len(actions)))
+	for _, a := range actions {
+		if err := EncodeAction(w, a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Actions adds a list of actions to the hash: each as the bytes it is written as, which say
+// everything it holds, the parts that only it knows included. An action that cannot be written adds
+// its type, so the hash still tells it from another.
+func (h *Hasher) Actions[S State](actions []Action[S]) {
+	var w binary.Writer
+	h.actionsWith(actions, &w)
+}
+
+// actionsWith is Actions with the bytes to write each action to, which a caller that hashes
+// many lists makes once.
+func (h *Hasher) actionsWith[S State](actions []Action[S], w *binary.Writer) {
+	h.U64(uint64(len(actions)))
+	for _, a := range actions {
+		w.B = w.B[:0]
+		if EncodeAction(w, a) != nil {
+			h.String(fmt.Sprintf("%T", a))
+			continue
+		}
+		h.Bytes(w.B)
+	}
+}
+
 // DecodeActions reads a list of actions of the states of type S, as EncodeActions wrote it. An
 // action that is not an Action[S] is an error.
 func (c *Codecs) DecodeActions[S State](

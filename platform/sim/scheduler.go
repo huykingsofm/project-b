@@ -1,5 +1,13 @@
 package sim
 
+import (
+	"fmt"
+	"slices"
+
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
+)
+
 // Scheduler keeps what an engine runs at a later tick: the actions that were set for one tick. What
 // must happen again and again is an action that sets itself again when it runs (R7), so there is
 // nothing else for the scheduler to keep: all that the engine will do on its own waits here, or in
@@ -128,4 +136,76 @@ func (s *Scheduler[S]) Settle(
 		}
 	}
 	return kept
+}
+
+// Encode writes what the scheduler waits for: the last tick it gave out, and the actions
+// set for a later tick, by tick and in the order they were set. An action that sets itself again
+// is among them, so what the engine does again and again is written with the rest.
+func (s *Scheduler[S]) Encode(w *binary.Writer) error {
+	w.Uvarint(s.last)
+	ticks := make([]uint64, 0, len(s.at))
+	for tick, actions := range s.at {
+		if len(actions) > 0 {
+			ticks = append(ticks, tick)
+		}
+	}
+	slices.Sort(ticks)
+	w.Uvarint(uint64(len(ticks)))
+	for _, tick := range ticks {
+		w.Uvarint(tick)
+		if err := EncodeActions(w, s.at[tick]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Decode reads what Encode wrote, of the data version given, and makes it what
+// the scheduler waits for.
+func (s *Scheduler[S]) Decode(
+	c *Codecs, r *binary.Reader, version codec.Version,
+) error {
+	last := r.Uvarint()
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return err
+	}
+	if n > uint64(r.Left()) { // a tick takes at least one byte
+		return fmt.Errorf("%w: %d ticks", binary.ErrShort, n)
+	}
+	at := make(map[uint64][]Action[S], n)
+	for range n {
+		tick := r.Uvarint()
+		if _, dup := at[tick]; dup {
+			return fmt.Errorf("%w: the tick %d is twice", binary.ErrBadValue, tick)
+		}
+		actions, err := c.DecodeActions[S](r, version)
+		if err != nil {
+			return err
+		}
+		at[tick] = actions
+	}
+	if err := r.Err(); err != nil {
+		return err
+	}
+	s.last, s.at = last, at
+	return nil
+}
+
+// Hash adds what the scheduler waits for to the hash: the last tick, and the actions of
+// each tick that has any, in the order of the ticks.
+func (s *Scheduler[S]) Hash(h *Hasher) {
+	h.U64(s.last)
+	ticks := make([]uint64, 0, len(s.at))
+	for tick, actions := range s.at {
+		if len(actions) > 0 {
+			ticks = append(ticks, tick)
+		}
+	}
+	slices.Sort(ticks)
+	var w binary.Writer
+	for _, tick := range ticks {
+		h.U64(tick)
+		h.actionsWith(s.at[tick], &w)
+	}
 }
