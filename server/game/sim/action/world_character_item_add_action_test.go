@@ -10,7 +10,7 @@ import (
 )
 
 func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
-	s := worldstate.NewState(1)
+	s := worldstate.NewState(1, 1000)
 	reg := &sim.Registry[*worldstate.State]{}
 	at := state.Vec{X: 2500, Y: 2500}
 	// The defaults are 20 slots of 99, so 20 slots of 99 fill it.

@@ -43,7 +43,7 @@ In this order:
 
 | State | Data written |
 |---|---|
-| world | ID, tick, every zone and zonelayer, the private messages, the inventory of each character |
+| world | ID, tick, every zone and zonelayer, the IDs it gives its zonelayers (see [ids](ids.md)), the private messages, the inventory of each character |
 | zone | ID, world ID, tick, the zones its exits lead to, its entities (the exits), the zonelayers it knows with their capacity, what was said, the IDs it gives its entities (see [ids](ids.md)) |
 | zonelayer | IDs (zonelayer, zone, world), tick, its entities, its characters with their cooldowns, what was said, which character has which body, the IDs it gives its entities (see [ids](ids.md)) |
 

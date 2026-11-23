@@ -2,6 +2,7 @@ package world
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/state"
 )
 
 // Hash returns a number that depends on the data of the state and on nothing else.
@@ -9,6 +10,7 @@ func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
 	h.U64(uint64(s.id))
 	h.U64(s.tick)
+	state.HashIDs(&h, &s.zoneLayerIDs)
 	for _, id := range s.zones {
 		h.U64(uint64(id))
 	}

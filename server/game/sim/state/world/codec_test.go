@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
-	st := world.NewState(1)
+	st := world.NewState(1, 1000)
 	st.AddItemToCharacter(3, 7, 120, 4, 99)
 	st.AddItemToCharacter(4, 8, 5, 4, 99)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "psst", 5))
@@ -19,9 +21,9 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddZone(2)
 	st.AddZone(3)
 	st.AddZone(2) // a zone it knows is not added again
-	st.AddZoneLayer(4)
-	st.AddZoneLayer(5)
-	st.RemoveZoneLayer(4)
+	first := must.Ok(st.AddZoneLayer())
+	st.AddZoneLayer()
+	st.RemoveZoneLayer(first)
 
 	var w binary.Writer
 	st.Encode(&w)
@@ -30,7 +32,8 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
-	zones, zoneLayers := []sim.StateID{2, 3}, []sim.StateID{5}
+	zones := []sim.StateID{2, 3}
+	zoneLayers := []sim.StateID{sim.NewStateID(state.ZoneLayerType, 2)}
 	if !slices.Equal(got.ZoneIDs(), zones) || !slices.Equal(got.ZoneLayerIDs(), zoneLayers) {
 		t.Fatalf("the world knows zones %v and zonelayers %v", got.ZoneIDs(), got.ZoneLayerIDs())
 	}

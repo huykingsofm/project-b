@@ -51,6 +51,8 @@ type ClusterBuilder struct {
 	// entityGraveSteps is how many ticks an entity ID waits after its entity left, before it is
 	// given again: longer than anything that can still name the entity.
 	entityGraveSteps uint64
+	// zoneLayerGraveSteps is the same for the ID of a zonelayer that was removed.
+	zoneLayerGraveSteps uint64
 
 	world      *WorldParams
 	zones      []ZoneParams
@@ -59,7 +61,7 @@ type ClusterBuilder struct {
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
 // seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
-// discards, and entity IDs that wait 12000 ticks before they are given again.
+// discards, and entity IDs and zonelayer IDs that wait 12000 ticks before they are given again.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
@@ -67,7 +69,8 @@ func NewBuilder() *ClusterBuilder {
 		replayLog: replay.NopLog{},
 		emitter:   engine.NopEmitter{},
 
-		entityGraveSteps: 12000,
+		entityGraveSteps:    12000,
+		zoneLayerGraveSteps: 12000,
 	}
 }
 
@@ -120,6 +123,14 @@ func (b *ClusterBuilder) WithEntityGraveSteps(steps uint64) *ClusterBuilder {
 
 // EntityGraveSteps is how many ticks an entity ID waits before it is given again.
 func (b *ClusterBuilder) EntityGraveSteps() uint64 { return b.entityGraveSteps }
+
+// WithZoneLayerGraveSteps sets how many ticks the ID of a zonelayer that was removed waits before
+// it is given again. It must be longer than anything that can still name the zonelayer, such as a
+// message that waits to be sent to it.
+func (b *ClusterBuilder) WithZoneLayerGraveSteps(steps uint64) *ClusterBuilder {
+	b.zoneLayerGraveSteps = steps
+	return b
+}
 
 // WithWorld sets the parameters of the world.
 func (b *ClusterBuilder) WithWorld(p WorldParams) *ClusterBuilder {
@@ -248,9 +259,7 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
 	}
-	var nextLocal uint32 // the zonelayers count from 1 among the states of their type
-
-	worldState := worldstate.NewState(b.world.ID)
+	worldState := worldstate.NewState(b.world.ID, b.zoneLayerGraveSteps)
 	var zoneEngines []*engine.Engine[*zonestate.State]
 	var layerEngines []*engine.Engine[*zonelayerstate.State]
 	for _, zp := range b.zones {
@@ -260,10 +269,11 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 		)
 		lp := layers[zp.ID]
 		for range lp.Count {
-			nextLocal++
-			layerID := sim.NewStateID(state.ZoneLayerType, nextLocal)
+			layerID, ok := worldState.AddZoneLayer()
+			if !ok {
+				return nil, errors.New("the world has no ID left to give a zonelayer")
+			}
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
-			worldState.AddZoneLayer(layerID)
 			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID, b.entityGraveSteps)
 			le := engine.New(layerState, env, b.seed)
 			if err := EnsureRegen(le, lp.RegenEvery); err != nil {

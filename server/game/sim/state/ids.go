@@ -19,8 +19,20 @@ func NewEntityIDs(graveSteps uint64) EntityIDs {
 	return ids.New[uint32](graveSteps, math.MaxUint32)
 }
 
-// HashEntityIDs works what an allocator holds into a hash.
-func HashEntityIDs(h *sim.Hasher, a *EntityIDs) {
+// ZoneLayerIDs is what the world gives the local numbers of the IDs of its zonelayers with: from 1
+// up to what the number of a state ID holds. A zonelayer that is removed gives its number back, and
+// it is given again only after the steps of the grave, which must be longer than anything that can
+// still name the state (a message that waits to be sent to it, for one).
+type ZoneLayerIDs = ids.Allocator[uint32]
+
+// NewZoneLayerIDs makes the allocator of the zonelayers of a world, with the given steps of the
+// grave.
+func NewZoneLayerIDs(graveSteps uint64) ZoneLayerIDs {
+	return ids.New[uint32](graveSteps, 1<<24-1)
+}
+
+// HashIDs works what an allocator holds into a hash.
+func HashIDs(h *sim.Hasher, a *ids.Allocator[uint32]) {
 	h.U64(a.Steps())
 	h.U64(uint64(a.Largest()))
 	h.U64(a.Clock())
@@ -45,6 +57,23 @@ func CheckEntityIDs(owner sim.StateID, a *EntityIDs, entityIDs []EntityID) error
 	for _, id := range entityIDs {
 		if id.Owner() != owner || a.Status(id.Local()) != ids.Live {
 			return fmt.Errorf("the entity %d is not a live ID of the state %d", id, owner)
+		}
+	}
+	return nil
+}
+
+// CheckZoneLayerIDs reports an error when the zonelayers that a world knows are not exactly the
+// live IDs of its allocator: a checkpoint in which they differ cannot be one that was written.
+func CheckZoneLayerIDs(a *ZoneLayerIDs, zoneLayerIDs []sim.StateID) error {
+	if a.LiveCount() != len(zoneLayerIDs) {
+		return fmt.Errorf(
+			"the world knows %d zonelayers and its IDs say %d are live",
+			len(zoneLayerIDs), a.LiveCount(),
+		)
+	}
+	for _, id := range zoneLayerIDs {
+		if id.Type() != ZoneLayerType || a.Status(id.Local()) != ids.Live {
+			return fmt.Errorf("the zonelayer %d is not a live ID of the world", id)
 		}
 	}
 	return nil

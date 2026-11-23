@@ -34,7 +34,7 @@ func TestTheEntitiesOfAStateMustBeTheLiveIDsOfItsAllocator(t *testing.T) {
 func TestTheHashOfTheIDsSeesTheGraveAndTheFreeList(t *testing.T) {
 	hash := func(a *state.EntityIDs) uint64 {
 		h := sim.NewHasher()
-		state.HashEntityIDs(&h, a)
+		state.HashIDs(&h, a)
 		return h.Sum()
 	}
 	a, b := state.NewEntityIDs(2), state.NewEntityIDs(2)
