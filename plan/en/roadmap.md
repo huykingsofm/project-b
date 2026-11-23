@@ -10,25 +10,13 @@ What has been built and what is to be built, in the order it is done. What is bu
 | Checkpoint of an engine, and an engine made from one | `done` |
 | Fixes from a review of the replay and the checkpoint | `done` |
 | The platform that runs states in ticks split from the game; the plan, the scheduler, the containers and the codecs rebuilt | `done` |
+| IDs that a state gives out, with a grave: `shared/ids`; the entities of a zonelayer and a zone, and the zonelayers of the world, use it (see [ids](../../docs/ids.md)) | `done` |
 
 ## To build
 
-Three pull requests, each on top of the one before.
+Two pull requests, each on top of the one before.
 
-### 1. IDs that a state gives out
-
-Status: `agreed`.
-
-| Piece | What it is |
-|---|---|
-| Package | `shared/ids` gives out every ID that a state gives while the game runs, `EntityID` and the `StateID` of a zonelayer the same way |
-| Grave | an ID that leaves goes to a grave, and is given again only after enough steps; `Step` takes every ID in the grave one step; the number of steps is set for each allocator and is in its checkpoint |
-| What an ID is | live, in the grave, or never given; a destroyed ID and one never given both mean that nothing can be sent to it |
-| Who steps | the state that owns the allocator, once at the start of each of its ticks |
-| Entities | `zonelayer` and `zone` give entity IDs with it and give them back when an entity leaves; a state that cannot give an ID refuses the new entity |
-| Zonelayers | the state of the world holds the allocator of the IDs of zonelayers; the builder asks it; the IDs of zones come from the content |
-
-### 2. Replay log
+### 1. Replay log
 
 Status: `agreed`.
 
@@ -41,7 +29,7 @@ Status: `agreed`.
 | Segment log | a reader that reads from bytes (`SegmentReader`), and a count of the batches that were synced |
 | Durable tick | the log says which tick of an engine is synced |
 
-### 3. Recovery of a cluster
+### 2. Recovery of a cluster
 
 Status: `agreed`.
 
