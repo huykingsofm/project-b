@@ -8,17 +8,15 @@ import (
 	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
-func none(uint32) bool { return false }
-
-func TestTheEntitiesOfAStateMustHaveIDsThatItsAllocatorGave(t *testing.T) {
+func TestTheEntitiesOfAStateMustBeTheLiveIDsOfItsAllocator(t *testing.T) {
 	ids := state.NewEntityIDs(2)
-	one := must.Ok(ids.Give(none, 0))
-	two := must.Ok(ids.Give(func(id uint32) bool { return id == one }, 1))
+	one, two := must.Ok(ids.Give()), must.Ok(ids.Give())
 	both := []state.EntityID{state.NewEntityID(5, one), state.NewEntityID(5, two)}
 	if err := state.CheckEntityIDs(5, &ids, both); err != nil {
 		t.Fatalf("an allocator and the entities it gave: %v", err)
 	}
 	for name, entities := range map[string][]state.EntityID{
+		"fewer":             both[:1],
 		"an ID never given": {both[0], state.NewEntityID(5, 9)},
 		"another owner":     {both[0], state.NewEntityID(6, two)},
 	} {
@@ -40,8 +38,8 @@ func TestTheHashOfTheIDsSeesTheGrave(t *testing.T) {
 	}
 	a, b := state.NewEntityIDs(2), state.NewEntityIDs(2)
 	for range 3 {
-		a.Give(none, 0)
-		b.Give(none, 0)
+		a.Give()
+		b.Give()
 	}
 	if hash(&a) != hash(&b) {
 		t.Fatal("the same IDs hash differently")

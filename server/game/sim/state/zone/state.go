@@ -72,7 +72,7 @@ func NewState(
 		entityIDs: state.NewEntityIDs(entityGraveSteps),
 	}
 	for _, exit := range tiles.Exits() {
-		local, ok := s.entityIDs.Give(s.entityIDInUse, s.entities.Len())
+		local, ok := s.entityIDs.Give()
 		if !ok {
 			break // a map has no more than a few exits: there is always an ID
 		}
@@ -126,12 +126,6 @@ func (s *State) TileMap() tilemap.ReadOnlyTileMap { return s.tiles }
 // ZoneLayerSlots returns the zonelayers of the zone, in order, with the room each has.
 func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 	return s.zoneLayers.All()
-}
-
-// entityIDInUse reports whether an entity of the state has the local number.
-func (s *State) entityIDInUse(local uint32) bool {
-	_, ok := s.entities.Get(state.NewEntityID(s.id, local))
-	return ok
 }
 
 // SetTick sets the tick that the state is at.
