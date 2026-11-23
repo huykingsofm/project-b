@@ -1,6 +1,6 @@
 # Actions
 
-An action is one step of a scope's plan. Each belongs to exactly one scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`sim/action`](../../server/internal/services/game/sim/action). Entities: [docs/entity](../entity/entity.md). Rules: [R25](../../plan/rule/r25-action-naming-and-files.md) (names).
+An action is one step of the plan of an engine. Each belongs to exactly one scope of this game (the state it changes) and is a `sim.Action[S]` for the state type `S` of that scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`server/game/sim/action`](../../server/game/sim/action); what an action is made of is in [`platform/sim`](../../platform/sim). Entities: [docs/entity](../entity/entity.md). Rules: [R25](../../plan/rule/r25-action-naming-and-files.md) (names).
 
 ## Naming
 
@@ -8,7 +8,7 @@ An action is one step of a scope's plan. Each belongs to exactly one scope: [wor
 |---|---|
 | Type | `<Scope><Words>Action`, words from general to specific |
 | File | `<scope>_<words>_action.go` |
-| ID | `<Type>ID`, a constant of type `ID` in the register `id.go` |
+| ID | `<Type>ID`, a constant of type `sim.ActionID` in the register `id.go` |
 | Cooldown key | `<Type>CooldownKey`, a constant of type `CooldownKey` in the register `cooldown_key.go` |
 
 ## Keys of an entry
@@ -47,14 +47,14 @@ A smaller number runs first; equal priorities run in the order they arrived.
 
 ## Registry
 
-What must happen outside a scope goes in its registry and happens after the plan.
+What must happen outside a state goes in its `sim.Registry[S]` and happens after the plan.
 
 | Call | Target |
 |---|---|
-| `ToZoneLayer`, `ToZone`, `ToWorld` | a message to that scope |
+| `Send[T](to, onFail, actions...)` | a message to the state with the ID `to`, whose actions are `sim.Action[T]` |
+| `Get[T](id)` | the latest state that the engine with the ID published, as a `T` (see [Reading other states](#reading-other-states)) |
 | `ToSelf` | this action again, next tick |
-| `ToSelfAt` | this action again, at a tick |
-| `CancelWaiting` | ends sooner the actions a key names (an ID and, if given, an actor) that wait in the scheduler or were set for the next tick, and what this tick set before the call; it takes effect when the tick is over |
+| `ToSelfAt` | this action again, at a tick (a tick that is not in the future is the next one) |
 
 ## Failed delivery
 
@@ -63,42 +63,42 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | Type (package `onfail`) | ID | What it does | Holds |
 |---|---|---|---|
 | `onfail.Retry{}` | 1 | sends the message again to the same address | nothing |
-| `onfail.Redirect{To}` | 2 | sends it again to `To`, an engine of the same scope | an address |
+| `onfail.Redirect{To}` | 2 | sends it again to `To`, another engine | a state ID |
 | `onfail.Compensate{With}` | 3 | sends `With`, the message that undoes what the first set going | a message: where it goes, its actions, its own `OnFail` |
 | `onfail.Notify{Key, Args}` | 4 | tells the actor of the message | a text key, arguments (strings) |
-| `onfail.Escalate{To}` | 5 | gives the message to `To` to decide | an address |
+| `onfail.Escalate{To}` | 5 | gives the message to `To` to decide | a state ID |
 | `onfail.Drop{}` | 6 | forgets the message and counts it | nothing |
 
 | Package | Holds |
 |---|---|
-| `sim/action/message` | `Address`, `Scope`, `Header`, `Reason`, and the interfaces `Message`, `OnFail` and `Bouncer` |
-| `sim/action/onfail` | the kinds above, each in a file of its own (`retry.go`, `redirect.go`, `compensate.go`, `notify.go`, `escalate.go`, `drop.go`), the register of their IDs, and their codec (`onfail.Encode`, `onfail.Decode`) |
-| `sim/action` | the actions, and the messages that carry them (`MessageToZoneLayer`, `MessageToZone`, `MessageToWorld`) |
+| `platform/sim` | `Header`, `Reason`, the interfaces `Message`, `OnFail` and `Bouncer`, the message that carries actions (`ActionMessage[S]`, made with `NewActionMessage` or `Registry.Send`) and the codecs |
+| `platform/sim/onfail` | the kinds above, each in a file of its own (`retry.go`, `redirect.go`, `compensate.go`, `notify.go`, `escalate.go`, `drop.go`), the register of their IDs, and `onfail.Register(codecs)` |
+| `server/game/sim/action` | the actions, and `action.Register(codecs)` |
 
-- `message.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `message.Bouncer`.
+- `sim.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `sim.Bouncer`.
 - `onfail.Retry`, `onfail.Redirect` and `onfail.Escalate` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
 - A message with no `OnFail` is dropped, and logged.
 
-### What an action that repeats and a cancel each decide
+### What ends an action that repeats
 
 | Question | Answer |
 |---|---|
 | Who ends an action that sets itself again? | the action: when its actor is no longer in the state it does nothing and does not set itself again |
-| What does `CancelWaiting` add? | it spares the ticks between: what waits for a later tick, or was set for the next one, is taken away at once |
-| Does it reach an action in the plan of this tick? | no: `Plan.Cancel` does, and it takes effect at once |
-| Does it reach what an action in the plan sets after the call? | no: whether it does depends on the order in the plan (priority, then arrival), which is why the action decides for itself |
+| What stops an action in the plan of this tick from running? | `Plan.Cancel`, which takes effect at once |
 
-## Reading other scopes
+## Reading other states
 
-- No scope keeps a copy of another's data; an action reads the latest state that scope published (`r.Stable`), which may be a few ticks old or missing.
-- What an action does when it is missing is stated in its own entry.
+- No state keeps a copy of another's data; an action reads the latest state that the engine with an ID published, with `Registry.Get[T](id)`, which may be a few ticks old or missing.
+- `T` is the Go type of the state or an interface of its read methods (`ReadOnlyZoneState`, `ReadOnlyZoneLayerState`), so an action cannot change a state that is not its own. It returns `sim.ErrStateNotFound` when nothing was published and `sim.ErrStateWrongType` when the state is not a `T`.
+- A state keeps the IDs of the states it needs to read: a zonelayer its zone and its world, a zone its world and the zones its exits lead to, the world every zone and zonelayer. What an action does when a read fails is stated in its own entry.
 
 | Read | From |
 |---|---|
-| map | `r.Stable.Zone(zoneID).TileMap()` |
-| exits | `r.Stable.Zone(zoneID).ExitEntityByID` |
-| zonelayers and capacity of a zone | `r.Stable.Zone(zoneID).ZoneLayerSlots()` |
-| characters held by a zonelayer | `r.Stable.ZoneLayer(id).CharacterCount()` |
+| map | `Get[zonestate.ReadOnlyZoneState](zoneID)`, then `TileMap()` |
+| exits | the same, then `ExitEntityByID` |
+| zonelayers and capacity of a zone | the same, then `ZoneLayerSlots()` |
+| characters held by a zonelayer | `Get[zonelayerstate.ReadOnlyZoneLayerState](id)`, then `CharacterCount()` |
+| every zone and zonelayer | `Get[worldstate.ReadOnlyWorldState](worldID)`, then `ZoneIDs()`, `ZoneLayerIDs()` |
 
 ## Cooldowns
 

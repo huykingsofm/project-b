@@ -6,8 +6,8 @@ Conventions and how to run: [index](index.md). Behavior: [replay_runner](../repl
 
 | Name | Package | Measures |
 |---|---|---|
-| `BenchmarkRunScenarioLive` | `engine/replay/runner` | building the world of the tests and running the scenario of `runScenario` (chat in each scope, a shield, an attack, a pickup, a run of movement, a new version of the config, a character that crosses to another zone, 90 ticks of each of 6 engines), with a memory replay log |
-| `BenchmarkReplayCluster` | `engine/replay/runner` | building the same world and replaying the records of that scenario with `runner.Run` |
+| `BenchmarkRunScenarioLive` | `platform/replay/runner` | building the world of the tests and running the scenario of `runScenario` (chat in each scope, a shield, an attack, a pickup, a run of movement, a new version of the config, a character that crosses to another zone, 90 ticks of each of 6 engines), with a memory replay log |
+| `BenchmarkReplayCluster` | `platform/replay/runner` | building the same world and replaying the records of that scenario with `runner.Run` |
 
 ## Results
 

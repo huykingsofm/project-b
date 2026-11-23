@@ -1,6 +1,6 @@
 # Zonelayer actions
 
-State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `ZoneLayerRegistry`. Conventions, keys and priorities: [index](index.md).
+State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `sim.Registry[*zonelayerstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## Character
 
@@ -60,7 +60,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - Steps:
   1. First run: end = this tick + `Duration`.
   2. Stops when time is up.
-  3. `Find` damage actions in the plan by ID; cancels the first aimed at its character's entity and stops.
+  3. `FindByID` damage actions in the plan by ID; cancels the first aimed at its character's entity and stops.
   4. Otherwise `ToSelf`.
 - Example: shield for 100 ticks at tick 20; at tick 24 a damage is added; the shield runs first (-50 vs 0), cancels it and ends. Health unchanged; the next damage lands.
 
@@ -69,7 +69,7 @@ State: [`state/zonelayer`](../../server/internal/services/game/sim/state/zonelay
 - Kind: system
 - Priority: `PrioritySystem`
 - Fields: `Every`, the ticks between two heals; 0 heals once
-- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is set by `ZoneLayerEngine.EnsureRegen(RegenEvery)` when the cluster is built, 0 never
+- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is set by `game.EnsureRegen(engine, RegenEvery)` when the cluster is built, 0 never
 - Steps:
   1. `HealAllEntities(1)`: every damageable entity above 0 health gets 1, up to its most; one health-changed event per change.
   2. When `Every` is more than 0, `ToSelfAt(tick + Every, itself)`.

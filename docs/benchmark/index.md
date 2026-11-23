@@ -10,10 +10,10 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [logging.md](logging.md) | a log call and the encoding of a batch | `shared/logging` |
 | [bitset.md](bitset.md) | `bitset.Array` against `[]bool` | `shared/bitset` |
 | [segmentlog.md](segmentlog.md) | appending to and reading the segment log | `shared/segmentlog` |
-| [replay_log.md](replay_log.md) | recording and reading the replay log in files | `engine/replay` |
-| [plan.md](plan.md) | filling a plan and finding actions in it | `sim/action` |
-| [codec.md](codec.md) | writing and reading a message with its actions | `sim/action` |
-| [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `engine/replay/runner` |
+| [replay_log.md](replay_log.md) | recording and reading the replay log in files | `platform/replay` |
+| [plan.md](plan.md) | filling a plan and finding actions in it | `platform/sim` |
+| [codec.md](codec.md) | writing and reading a message with its actions | `platform/sim` |
+| [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `platform/replay/runner` |
 | [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine | `engine` |
 
 ## Run
@@ -23,12 +23,12 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 
 | Benchmarks of | Directory |
 |---|---|
-| the simulation, the codec of messages | `server/internal/services/game/sim` |
-| logging | `server/internal/shared/logging` |
-| the bitset | `server/internal/shared/bitset` |
-| the segment log | `server/internal/shared/segmentlog` |
-| the replay log | `server/internal/services/game/engine/replay` |
-| the replay runner | `server/internal/services/game/engine/replay/runner` |
+| the simulation, the codec of messages | `platform/sim`, `server/game/sim` |
+| logging | `shared/logging` |
+| the bitset | `shared/bitset` |
+| the segment log | `shared/segmentlog` |
+| the replay log | `platform/replay` |
+| the replay runner | `platform/replay/runner` |
 
 - Record the median of the runs.
 

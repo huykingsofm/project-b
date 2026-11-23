@@ -15,42 +15,50 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/action/message"
 	"os"
 	"time"
 
-	"github.com/huykingsofm/project-b/server/internal/services/game/engine"
-	"github.com/huykingsofm/project-b/server/internal/services/game/engine/replay"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/command"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/state"
-	worldevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/world/event"
-	zoneevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zone/event"
-	zonelayerstate "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer"
-	zonelayerevent "github.com/huykingsofm/project-b/server/internal/services/game/sim/state/zonelayer/event"
-	"github.com/huykingsofm/project-b/server/internal/services/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/server/internal/shared/logging"
+	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game"
+	"github.com/huykingsofm/project-b/server/game/sim/command"
+	"github.com/huykingsofm/project-b/server/game/sim/state"
+	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/shared/logging"
 )
 
-// printer is the output of the engines: it shows each change with the scope that made it.
+// printer is the output of the engines: it shows each change with the engine that made it.
 type printer struct{}
 
-func show[C any](scope string, from message.Address, tick uint64, events []C) {
+func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
 	for _, c := range events {
-		fmt.Printf("    %-5s %d  t=%-3d %T %+v\n", scope, from.ID, tick, c, c)
+		fmt.Printf("    %-11s t=%-3d %T %+v\n", label(from), tick, c, c)
 	}
 }
 
-func (printer) EmitWorld(from message.Address, tick uint64, events []worldevent.Event) {
-	show("world", from, tick, events)
+// label says an engine by the type of its state and its number: "zonelayer 2".
+func label(id sim.StateID) string {
+	names := map[sim.StateType]string{
+		state.WorldType: "world", state.ZoneType: "zone", state.ZoneLayerType: "zonelayer",
+	}
+	name, ok := names[id.Type()]
+	if !ok {
+		name = fmt.Sprintf("type %d", id.Type())
+	}
+	return fmt.Sprintf("%s %d", name, id.Local())
 }
 
-func (printer) EmitZone(from message.Address, tick uint64, events []zoneevent.Event) {
-	show("zone", from, tick, events)
-}
-
-func (printer) EmitZoneLayer(from message.Address, tick uint64, events []zonelayerevent.Event) {
-	show("zonelayer", from, tick, events)
-}
+// The IDs of the states of the world. The builder gives the zonelayers the numbers 1, 2, 3 among
+// the states of their type, in the order of their zones.
+var (
+	worldID  = sim.NewStateID(state.WorldType, 1)
+	zone1ID  = sim.NewStateID(state.ZoneType, 1)
+	zone2ID  = sim.NewStateID(state.ZoneType, 2)
+	layer1ID = sim.NewStateID(state.ZoneLayerType, 1)
+	layer2ID = sim.NewStateID(state.ZoneLayerType, 2)
+	layer3ID = sim.NewStateID(state.ZoneLayerType, 3)
+)
 
 func main() {
 	replayDir := flag.String(
@@ -75,13 +83,13 @@ func main() {
 	exitEast := tilemap.ExitDefinition{
 		Min:      tilemap.Tile{X: 9, Y: 0},
 		Max:      tilemap.Tile{X: 9, Y: 4},
-		ToZoneID: 2,
+		ToZoneID: zone2ID,
 		Arrival:  tilemap.Tile{X: 1, Y: 2},
 	}
 	exitWest := tilemap.ExitDefinition{
 		Min:      tilemap.Tile{X: 0, Y: 0},
 		Max:      tilemap.Tile{X: 0, Y: 4},
-		ToZoneID: 1,
+		ToZoneID: zone1ID,
 		Arrival:  tilemap.Tile{X: 8, Y: 2},
 	}
 	spawn := tilemap.Tile{X: 1, Y: 2}
@@ -109,17 +117,19 @@ func main() {
 		replayLog = replayFile
 	}
 
-	cluster, err := engine.NewBuilder().
+	cluster, err := game.NewBuilder().
 		WithSeed(seed).
 		WithReplayLog(replayLog).
-		WithWorldEmitter(printer{}).
-		WithZoneEmitter(printer{}).
-		WithZoneLayerEmitter(printer{}).
-		WithWorld(engine.WorldParams{ID: 1}).
-		WithZone(engine.ZoneParams{ID: 1, Tiles: zone1Tiles, Adjacent: []state.ZoneID{2}}).
-		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 1, Count: 2, Capacity: 2, RegenEvery: 10}).
-		WithZone(engine.ZoneParams{ID: 2, Tiles: zone2Tiles, Adjacent: []state.ZoneID{1}}).
-		WithZoneLayers(engine.ZoneLayerParams{ZoneID: 2, Count: 1, Capacity: 4, RegenEvery: 10}).
+		WithEmitter(printer{}).
+		WithWorld(game.WorldParams{ID: worldID}).
+		WithZone(game.ZoneParams{ID: zone1ID, Tiles: zone1Tiles, Adjacent: []sim.StateID{zone2ID}}).
+		WithZoneLayers(
+			game.ZoneLayerParams{ZoneID: zone1ID, Count: 2, Capacity: 2, RegenEvery: 10},
+		).
+		WithZone(game.ZoneParams{ID: zone2ID, Tiles: zone2Tiles, Adjacent: []sim.StateID{zone1ID}}).
+		WithZoneLayers(
+			game.ZoneLayerParams{ZoneID: zone2ID, Count: 1, Capacity: 4, RegenEvery: 10},
+		).
 		Build()
 	if err != nil {
 		fail("the cluster could not be built", err)
@@ -141,7 +151,7 @@ func main() {
 			logging.Error("character does not enter", "name", c.name, "err", err)
 			continue
 		}
-		cluster.Zone(1).Send(command.ZoneCharacterEnterCommand{Character: character})
+		cluster.Zone(zone1ID).Send(command.ZoneCharacterEnterCommand{Character: character})
 	}
 	step(
 		"two characters enter zone 1: the zone places them in zonelayer 1, the zonelayer accepts "+
@@ -149,8 +159,10 @@ func main() {
 		4,
 	)
 
-	cluster.ZoneLayer(1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "hello zonelayer"})
-	cluster.Zone(1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
+	cluster.ZoneLayer(layer1ID).Send(
+		command.ZoneLayerChatSendCommand{FromID: 1, Text: "hello zonelayer"},
+	)
+	cluster.Zone(zone1ID).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
 	cluster.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
 	step(
 		"chat: a zonelayer message stays in the zonelayer, a zone message goes to every zonelayer "+
@@ -158,11 +170,11 @@ func main() {
 		4,
 	)
 
-	cluster.ZoneLayer(1).Send(
+	cluster.ZoneLayer(layer1ID).Send(
 		command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
 	)
 	step("a shield is granted to Binh: it stands in the plan from now on", 2)
-	cluster.ZoneLayer(1).Send(
+	cluster.ZoneLayer(layer1ID).Send(
 		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 	)
 	step(
@@ -170,15 +182,15 @@ func main() {
 			"blocks it",
 		3,
 	)
-	cluster.ZoneLayer(1).Send(
+	cluster.ZoneLayer(layer1ID).Send(
 		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 	)
 	step("a second attack after the cooldown: the shield is gone, health drops", 10)
 
-	cluster.ZoneLayer(1).Send(
+	cluster.ZoneLayer(layer1ID).Send(
 		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3},
 	)
-	cluster.ZoneLayer(1).Send(
+	cluster.ZoneLayer(layer1ID).Send(
 		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
 	)
 	step(
@@ -187,8 +199,10 @@ func main() {
 		10,
 	)
 
-	cluster.ZoneLayer(1).Send(
-		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1},
+	cluster.ZoneLayer(layer1ID).Send(
+		command.ZoneLayerCharacterExitToCommand{
+			CharacterID: 1, ExitEntityID: state.NewEntityID(zone1ID, 1),
+		},
 	)
 	step(
 		"An takes the east exit: the exit is optimistic, so An moves at once to a zonelayer of "+
@@ -197,21 +211,21 @@ func main() {
 	)
 
 	fmt.Printf("\ncharacters in zonelayer 1: %d, zonelayer 2: %d, zonelayer 3 (zone 2): %d\n",
-		cluster.ZoneLayer(1).State().CharacterCount(), cluster.ZoneLayer(
-			2,
-		).State().CharacterCount(), cluster.ZoneLayer(3).State().CharacterCount())
+		cluster.ZoneLayer(layer1ID).State().CharacterCount(),
+		cluster.ZoneLayer(layer2ID).State().CharacterCount(),
+		cluster.ZoneLayer(layer3ID).State().CharacterCount())
 
 	if replayFile != nil {
 		if err := replayFile.Close(); err != nil {
 			fail("the replay log could not be written", err)
 		}
-		engines := []message.Address{
-			message.WorldAddress(1), message.ZoneAddress(1), message.ZoneAddress(2),
-			message.ZoneLayerAddress(1), message.ZoneLayerAddress(2), message.ZoneLayerAddress(3),
+		engines, err := replay.Engines(*replayDir)
+		if err != nil {
+			fail("the replay log could not be listed", err)
 		}
 		fmt.Printf("\nthe replay log under %s, read back:\n", *replayDir)
 		for _, e := range engines {
-			reader, err := replay.ReadFileLog(*replayDir, e, 0)
+			reader, err := replay.ReadFileLog(*replayDir, e, 0, cluster.Env.Codecs)
 			if err != nil {
 				fail("the replay log could not be read", err)
 			}
@@ -225,9 +239,9 @@ func main() {
 			if readErr != nil {
 				fail("the replay log is damaged", readErr)
 			}
-			fmt.Printf("  %-9s %d: %d inbound, %d commands, %d config, %d hashes, %d stable "+
+			fmt.Printf("  %s: %d inbound, %d commands, %d config, %d hashes, %d stable "+
 				"reads, up to tick %d\n",
-				e.Scope, e.ID, counts[replay.KindInbound], counts[replay.KindCommand],
+				label(e), counts[replay.KindInbound], counts[replay.KindCommand],
 				counts[replay.KindConfig], counts[replay.KindHash],
 				counts[replay.KindStableRead], last)
 		}
