@@ -1,6 +1,6 @@
 # Checkpoint of an engine
 
-`platform/engine/checkpoint.go`, with the codecs of the states (`server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity_codec.go`) and of the scheduler (`platform/sim/scheduler_codec.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
+`platform/engine/checkpoint.go`, with the codecs of the states (`server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler_codec.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
 
 ## Entry points
 
@@ -48,7 +48,7 @@ In this order:
 | zone | ID, world ID, tick, the zones its exits lead to, its entities (the exits), the zonelayers it knows with their capacity, what was said, the number the next entity gets |
 | zonelayer | IDs (zonelayer, zone, world), tick, its entities, its characters with their cooldowns, what was said, which character has which body, the number the next entity gets |
 
-- An entity of a zonelayer is written as its kind (`KindID`) and then what it is made of; each kind has its decoder in `entity_codec.go`, and a test fails when a kind of the register has none. An exit of a zone is written without a kind: the zone holds only exits.
+- An entity of a zonelayer is written as its kind (`KindID`) and then what it is made of; each kind has its decoder in the `codec.go` of the `entity` package of its state, and a test fails when a kind of the register has none. An entity writes only the number its state gave it, not the whole `EntityID`: the state is the owner of all its entities and gives its own ID back when it reads them (the bodies of the characters are written the same way), and a state that holds an entity of another owner cannot be written. An entity is written once, not under a key.
 - A count that claims more items than the bytes left can hold is refused before anything is made.
 
 ## Hash
