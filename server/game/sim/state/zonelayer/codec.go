@@ -20,7 +20,9 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
-		w.Uvarint(uint64(id))
+		if id.Owner() != s.id {
+			return fmt.Errorf("the entity %d is not of the state %d", id, s.id)
+		}
 		if err := entity.Encode(w, e); err != nil {
 			return err
 		}
@@ -40,7 +42,7 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 	w.Uvarint(uint64(s.bodies.Len()))
 	for characterID, entityID := range s.bodies.AllV1() {
 		w.Uvarint(uint64(characterID))
-		w.Uvarint(uint64(entityID))
+		w.Uvarint(uint64(entityID.Local()))
 	}
 	w.Uvarint(uint64(s.nextEntityID))
 	return nil
@@ -70,12 +72,11 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		return nil, err
 	}
 	for range n {
-		id := state.EntityID(r.Uvarint())
-		e, err := entity.Decode(r, version)
+		e, err := entity.Decode(r, version, id)
 		if err != nil {
 			return nil, err
 		}
-		s.entities.Set(id, e)
+		s.entities.Set(e.ID(), e)
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -104,7 +105,8 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		return nil, err
 	}
 	for range n {
-		characterID, entityID := state.CharacterID(r.Uvarint()), state.EntityID(r.Uvarint())
+		characterID := state.CharacterID(r.Uvarint())
+		entityID := state.NewEntityID(id, uint32(r.Uvarint()))
 		s.bodies.Link(characterID, entityID)
 	}
 	s.nextEntityID = uint32(r.Uvarint())

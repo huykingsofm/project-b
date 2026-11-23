@@ -25,7 +25,9 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 	}
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
-		w.Uvarint(uint64(id))
+		if id.Owner() != s.id {
+			return fmt.Errorf("the entity %d is not of the state %d", id, s.id)
+		}
 		if err := entity.Encode(w, e); err != nil {
 			return err
 		}
@@ -86,12 +88,11 @@ func DecodeState(
 		return nil, err
 	}
 	for range n {
-		id := state.EntityID(r.Uvarint())
-		e, err := entity.Decode(r, version)
+		e, err := entity.Decode(r, version, s.id)
 		if err != nil {
 			return nil, err
 		}
-		s.entities.Set(id, e)
+		s.entities.Set(e.ID(), e)
 	}
 	if n, err = count(r); err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ Conventions and how to run: [index](index.md). Behavior: [checkpoint](../checkpo
 
 | Benchmark | ns/op | B/op | allocs/op | Size written |
 |---|---|---|---|---|
-| CheckpointZoneLayer | 45,500 | 64,300 | 19 | 14.4 KB |
+| CheckpointZoneLayer | 34,200 | 35,600 | 17 | 8.3 KB |
 | RestoreZoneLayer | 156,000 | 178,500 | 1,514 | |
 | CloneZoneLayer | 36,500 | 86,600 | 632 | |
 | HashZoneLayerWithWhatItWaitsFor | 23,600 | 13,500 | 311 | |
@@ -27,7 +27,7 @@ Conventions and how to run: [index](index.md). Behavior: [checkpoint](../checkpo
 | HashWorld | 97,400 | 160 | 7 | |
 
 - After the split of the platform and the game (the states keep their chat in a `ring`, their entities in a `table.Table` with a column of kinds): the clone of the world is 191 µs instead of 367 µs (the chat no longer copies an index), the clone of a zonelayer 36.5 µs instead of 36.0 µs (the column of kinds costs about as much as it saves), and a restore of the world is about half the time and a third of the allocations.
-- The checkpoint of a zonelayer is 14.4 KB instead of 7.6 KB: an `EntityID` is the ID of the state in the high 32 bits and a number in the low ones, so each takes 5 to 6 bytes as a varint, and a zonelayer writes each of 300 of them two or three times. The world is unchanged.
+- The checkpoint of a zonelayer is 8.3 KB, against 7.6 KB before the split. An `EntityID` is the ID of the state in the high 32 bits and a number in the low ones, which takes 5 to 6 bytes as a varint; a state that writes its entities writes only the number (it is the owner of all of them, and says so when it reads them back), writes each entity once (the key of the map is the ID of the entity), and the bodies of the characters by their number as well. This took the checkpoint from 14.4 KB and 45.5 µs to 8.3 KB and 34 µs. The world is unchanged.
 
 ## Reading
 

@@ -33,8 +33,20 @@ type printer struct{}
 
 func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
 	for _, c := range events {
-		fmt.Printf("    %-5d t=%-3d %T %+v\n", from, tick, c, c)
+		fmt.Printf("    %-11s t=%-3d %T %+v\n", label(from), tick, c, c)
 	}
+}
+
+// label says an engine by the type of its state and its number: "zonelayer 2".
+func label(id sim.StateID) string {
+	names := map[sim.StateType]string{
+		state.WorldType: "world", state.ZoneType: "zone", state.ZoneLayerType: "zonelayer",
+	}
+	name, ok := names[id.Type()]
+	if !ok {
+		name = fmt.Sprintf("type %d", id.Type())
+	}
+	return fmt.Sprintf("%s %d", name, id.Local())
 }
 
 // The IDs of the states of the world. The builder gives the zonelayers the numbers 1, 2, 3 among
@@ -227,9 +239,9 @@ func main() {
 			if readErr != nil {
 				fail("the replay log is damaged", readErr)
 			}
-			fmt.Printf("  engine %d: %d inbound, %d commands, %d config, %d hashes, %d stable "+
+			fmt.Printf("  %s: %d inbound, %d commands, %d config, %d hashes, %d stable "+
 				"reads, up to tick %d\n",
-				e, counts[replay.KindInbound], counts[replay.KindCommand],
+				label(e), counts[replay.KindInbound], counts[replay.KindCommand],
 				counts[replay.KindConfig], counts[replay.KindHash],
 				counts[replay.KindStableRead], last)
 		}

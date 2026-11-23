@@ -30,12 +30,12 @@ func TestEveryKindOfEntityHasADecoderAndComesBackAsItWas(t *testing.T) {
 			t.Fatalf("%T: %v", e, err)
 		}
 		r := binarycodec.NewReader(w.B)
-		got, err := Decode(r, 1)
+		got, err := Decode(r, 1, 0)
 		if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, e) {
 			t.Fatalf("%T came back as %+v, error %v, %d bytes left", e, got, err, r.Left())
 		}
 		for n := range w.B { // every proper prefix
-			if _, err := Decode(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+			if _, err := Decode(binarycodec.NewReader(w.B[:n]), 1, 0); err == nil {
 				t.Fatalf("%T: %d of %d bytes were read", e, n, len(w.B))
 			}
 		}
@@ -48,7 +48,7 @@ func TestANilEntityAndANumberThatIsNoKindAreRefused(t *testing.T) {
 		t.Fatalf("a nil entity: %v, %d bytes written", err, len(w.B))
 	}
 	w.Uvarint(99)
-	_, err := Decode(binarycodec.NewReader(w.B), 1)
+	_, err := Decode(binarycodec.NewReader(w.B), 1, 0)
 	if !errors.Is(err, ErrUnknownKind) {
 		t.Fatalf("the number 99: %v, want ErrUnknownKind", err)
 	}

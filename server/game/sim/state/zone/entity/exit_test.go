@@ -69,12 +69,12 @@ func TestAnExitComesBackAsItWasWrittenAndCutBytesAndOtherKindsAreAnError(t *test
 		t.Fatal(err)
 	}
 	r := binarycodec.NewReader(w.B)
-	got, err := Decode(r, 1)
+	got, err := Decode(r, 1, 0)
 	if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, anExit()) {
 		t.Fatalf("came back as %+v, error %v, %d bytes left", got, err, r.Left())
 	}
 	for n := range w.B {
-		if _, err := Decode(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+		if _, err := Decode(binarycodec.NewReader(w.B[:n]), 1, 0); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
@@ -83,7 +83,7 @@ func TestAnExitComesBackAsItWasWrittenAndCutBytesAndOtherKindsAreAnError(t *test
 	}
 	var item binarycodec.Writer
 	item.Uvarint(uint64(state.ItemKindID)) // a kind that a zone does not hold
-	if _, err := Decode(binarycodec.NewReader(item.B), 1); !errors.Is(err, ErrUnknownKind) {
+	if _, err := Decode(binarycodec.NewReader(item.B), 1, 0); !errors.Is(err, ErrUnknownKind) {
 		t.Fatalf("an item in a zone: %v", err)
 	}
 }

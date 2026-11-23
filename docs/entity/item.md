@@ -2,21 +2,24 @@
 
 `zonelayer/entity.ItemEntity`. Implements `state.Entity`. Held in the state of a zonelayer. A stack of one kind of item; it leaves the ground when picked up or when its expiry ends.
 
-## Fields
+## Data and methods
 
-| Field | Type | Meaning |
+The fields are private; the item is a value, made with `NewItemEntity(id, pos, itemID, count, expiry)`.
+
+| Method | Returns | Meaning |
 |---|---|---|
-| `EntityID` | `EntityID` | ID in the zonelayer |
-| `Pos` | `Vec` | position, in units |
-| `Rad` | `int32` | radius, in units |
-| `ItemID` | `ItemID` | the kind of item |
-| `Count` | `uint32` | how many lie together |
-| `Expiry` | `uint64` | ticks it lies on the ground before the removal; 0 never; starts again each time it is put on the ground |
+| `ID()` | `EntityID` | made of the ID of the zonelayer and the number it counted |
+| `KindID()` | `KindID` | `ItemKindID` |
+| `Position()` | `Vec` | position, in units |
+| `Radius()` | `int32` | radius, in units |
+| `BoundingBox()` | `Rect` | the square of side `2*Radius` around `Position` |
+| `ItemID()` | `ItemID` | the kind of item |
+| `Count()` | `uint32` | how many lie together |
+| `Expiry()` | `uint64` | ticks it lies on the ground before the removal; 0 never; starts again each time it is put on the ground |
+| `MovedTo(pos)` | `Entity` | the same stack at another position |
 
-## Behavior
-
-- `BoundingBox`: the square of side `2*Rad` around `Pos`.
-- Hash: common part, then `ItemID`, `Count`, `Expiry`.
+- Hash: common part, then item, count, expiry.
+- Written as the number the zonelayer counted (not the whole ID), the position, the radius, the item, the count and the expiry.
 
 ## State methods (zonelayer)
 

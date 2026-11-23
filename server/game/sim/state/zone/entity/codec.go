@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/shared/binarycodec"
 )
@@ -17,7 +18,7 @@ var ErrUnknownKind = errors.New("zone entity: the number is not one of a kind of
 
 // decoders is the table of the functions that read an entity of a zone, by its kind.
 var decoders = map[state.KindID]func(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
 ) (state.Entity, error){
 	state.ExitKindID: decodeExitEntity,
 }
@@ -36,8 +37,12 @@ func Encode(w *binarycodec.Writer, e state.Entity) error {
 	return nil
 }
 
-// Decode reads what Encode wrote, of the data version given.
-func Decode(r *binarycodec.Reader, version binarycodec.Version) (state.Entity, error) {
+// Decode reads what Encode wrote, of the data version given. An entity writes only the number its
+// state gave it, so the ID of the state that holds it, which is not in the bytes, is given as
+// owner.
+func Decode(
+	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+) (state.Entity, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return nil, err
@@ -46,5 +51,5 @@ func Decode(r *binarycodec.Reader, version binarycodec.Version) (state.Entity, e
 	if !ok || code > 0xffff {
 		return nil, fmt.Errorf("%w: %d", ErrUnknownKind, code)
 	}
-	return decode(r, version)
+	return decode(r, version, owner)
 }
