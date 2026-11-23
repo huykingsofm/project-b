@@ -11,6 +11,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // NewCodecs makes the codecs of the game: every state, action, command and kind of OnFail, so that
@@ -18,7 +19,7 @@ import (
 // gives the map of the zone with an ID when a zone is read.
 func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, error) {
 	c := sim.NewCodecs()
-	err := sim.Errors(
+	err := errs.Errors(
 		c.RegisterState(worldstate.DecodeState),
 		c.RegisterState(
 			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {

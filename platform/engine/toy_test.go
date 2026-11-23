@@ -5,6 +5,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // A toy state and action, for the tests of the mechanism: no game is needed to try an engine.
@@ -148,7 +149,7 @@ func decodeReadAction(
 
 func toyCodecs() (*sim.Codecs, error) {
 	c := sim.NewCodecs()
-	return c, sim.Errors(
+	return c, errs.Errors(
 		c.RegisterState(decodeToyState),
 		c.RegisterAction(decodeToyAction),
 		c.RegisterAction(decodeForwardAction),

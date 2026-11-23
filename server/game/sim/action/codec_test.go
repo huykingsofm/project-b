@@ -12,6 +12,7 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // everyAction has one action of every ID of the register, with every field set to something that is
@@ -62,7 +63,7 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 func codecs(t testing.TB) *sim.Codecs {
 	t.Helper()
 	c := sim.NewCodecs()
-	if err := sim.Errors(onfail.Register(c), Register(c)); err != nil {
+	if err := errs.Errors(onfail.Register(c), Register(c)); err != nil {
 		t.Fatal(err)
 	}
 	return c

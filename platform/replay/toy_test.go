@@ -5,6 +5,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // A toy state with a few actions and commands, for the tests of the log: no game is needed to write
@@ -152,7 +153,7 @@ func decodeToyEnter(r *binary.Reader, _ codec.Version) (toyEnter, error) {
 
 func toyCodecs() *sim.Codecs {
 	c := sim.NewCodecs()
-	err := sim.Errors(
+	err := errs.Errors(
 		c.RegisterState(decodeToyState),
 		c.RegisterAction(decodeToyMoveAction),
 		c.RegisterAction(decodeToyChatAction),

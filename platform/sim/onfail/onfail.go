@@ -6,6 +6,7 @@ package onfail
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/errs"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -43,7 +44,7 @@ func resendable(b sim.Bouncer, m sim.Message, r sim.Reason) bool {
 // Register registers the kinds of OnFail with the codecs, so that a message that holds one can be
 // read back.
 func Register(c *sim.Codecs) error {
-	return sim.Errors(
+	return errs.Errors(
 		c.RegisterOnFail(Retry{}, decodeRetry),
 		c.RegisterOnFail(Redirect{}, decodeRedirect),
 		c.RegisterOnFail(Compensate{}, decodeCompensate),

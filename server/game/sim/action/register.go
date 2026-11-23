@@ -2,13 +2,14 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // Register registers every action of the game with the codecs, with the type of state it is for:
 // an action that is read back is an action of that state and of no other. A number or a type that
 // two actions share is an error.
 func Register(c *sim.Codecs) error {
-	return sim.Errors(
+	return errs.Errors(
 		c.RegisterAction(decodeWorldChatPrivateSendAction),
 		c.RegisterAction(decodeWorldCharacterItemAddAction),
 		c.RegisterAction(decodeZoneChatSendAction),

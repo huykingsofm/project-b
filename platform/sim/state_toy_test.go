@@ -3,6 +3,7 @@ package sim
 import (
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // A toy game, for the tests of the mechanism: a state that counts, and the smallest actions and
@@ -170,7 +171,7 @@ func nameOf(a Action[*toyState]) string {
 // toyCodecs are codecs with the toy state, its actions and its command registered.
 func toyCodecs() (*Codecs, error) {
 	c := NewCodecs()
-	return c, Errors(
+	return c, errs.Errors(
 		c.RegisterState(decodeToyState),
 		c.RegisterState(decodeOtherState),
 		c.RegisterAction(decodeAnonymousAction),
