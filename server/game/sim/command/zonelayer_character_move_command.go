@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterMoveCommand asks to hold a direction for a number of ticks.
@@ -29,7 +30,7 @@ func (c ZoneLayerCharacterMoveCommand) Translate() []sim.Action[*zonelayerstate.
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c ZoneLayerCharacterMoveCommand) Encode(w *binarycodec.Writer) error {
+func (c ZoneLayerCharacterMoveCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	w.Uint8(uint8(c.Dir))
 	w.Uvarint(uint64(c.Ticks))
@@ -38,7 +39,7 @@ func (c ZoneLayerCharacterMoveCommand) Encode(w *binarycodec.Writer) error {
 
 // decodeZoneLayerCharacterMoveCommand reads what Encode wrote.
 func decodeZoneLayerCharacterMoveCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterMoveCommand{
 		CharacterID: r.Uint[state.CharacterID](),

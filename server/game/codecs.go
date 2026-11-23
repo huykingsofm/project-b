@@ -9,7 +9,8 @@ import (
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // NewCodecs makes the codecs of the game: every state, action, command and kind of OnFail, so that
@@ -21,7 +22,7 @@ func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, 
 		c.RegisterState[*worldstate.State](&worldstate.State{}, worldstate.DecodeState),
 		c.RegisterState[*zonestate.State](
 			&zonestate.State{},
-			func(r *binarycodec.Reader, version binarycodec.Version) (*zonestate.State, error) {
+			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {
 				return zonestate.DecodeState(r, version, tilesOf)
 			},
 		),

@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterEnterAction puts a character in the zonelayer: gives it a body at a position.
@@ -46,14 +47,14 @@ func (a *ZoneLayerCharacterEnterAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterEnterAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterEnterAction) Encode(w *binary.Writer) {
 	a.Character.Encode(w)
 	a.At.Encode(w)
 }
 
 // decodeZoneLayerCharacterEnterAction reads what Encode wrote.
 func decodeZoneLayerCharacterEnterAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	c, err := zonelayerstate.DecodeCharacter(r, version)
 	if err != nil {

@@ -1,6 +1,9 @@
 package sim
 
-import "github.com/huykingsofm/project-b/shared/binarycodec"
+import (
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
+)
 
 // A toy game, for the tests of the mechanism: a state that counts, and the smallest actions and
 // commands that the codecs and the plan can be tried on. Nothing of a real game is needed here.
@@ -28,14 +31,14 @@ func (s *toyState) Hash() uint64 {
 	return h.Sum()
 }
 func (s *toyState) TakeEvents() []Event { return nil }
-func (s *toyState) Encode(w *binarycodec.Writer) error {
+func (s *toyState) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
 	w.Varint(s.Total)
 	return nil
 }
 
-func decodeToyState(r *binarycodec.Reader, _ binarycodec.Version) (*toyState, error) {
+func decodeToyState(r *binary.Reader, _ codec.Version) (*toyState, error) {
 	s := &toyState{id: StateID(r.Uvarint()), tick: r.Uvarint(), Total: r.Varint()}
 	return s, r.Err()
 }
@@ -52,7 +55,7 @@ func (s *otherState) Clone() State {
 	return &c
 }
 
-func decodeOtherState(r *binarycodec.Reader, v binarycodec.Version) (*otherState, error) {
+func decodeOtherState(r *binary.Reader, v codec.Version) (*otherState, error) {
 	s, err := decodeToyState(r, v)
 	if err != nil {
 		return nil, err
@@ -74,13 +77,13 @@ func (a *anonymousAction) Priority() int16 { return a.priority }
 func (a *anonymousAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
 
-func (a *anonymousAction) Encode(w *binarycodec.Writer) {
+func (a *anonymousAction) Encode(w *binary.Writer) {
 	w.String(a.name)
 	w.Varint(int64(a.priority))
 }
 
 func decodeAnonymousAction(
-	r *binarycodec.Reader, _ binarycodec.Version,
+	r *binary.Reader, _ codec.Version,
 ) (Action[*toyState], error) {
 	a := &anonymousAction{name: r.String(), priority: int16(r.Varint())}
 	return a, r.Err()
@@ -104,9 +107,9 @@ func (a *addAction) Priority() int16 { return 0 }
 func (a *addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Plan[*toyState]) {
 	s.Total += a.N
 }
-func (a *addAction) Encode(w *binarycodec.Writer) { w.Varint(a.N) }
+func (a *addAction) Encode(w *binary.Writer) { w.Varint(a.N) }
 
-func decodeAddAction(r *binarycodec.Reader, _ binarycodec.Version) (Action[*toyState], error) {
+func decodeAddAction(r *binary.Reader, _ codec.Version) (Action[*toyState], error) {
 	a := &addAction{N: r.Varint()}
 	return a, r.Err()
 }
@@ -120,10 +123,10 @@ func (*otherAction) ID() ActionID    { return otherActionID }
 func (*otherAction) Priority() int16 { return 0 }
 func (*otherAction) Apply(*Context, *otherState, *Registry[*otherState], *Plan[*otherState]) {
 }
-func (*otherAction) Encode(*binarycodec.Writer) {}
+func (*otherAction) Encode(*binary.Writer) {}
 
 func decodeOtherAction(
-	_ *binarycodec.Reader, _ binarycodec.Version,
+	_ *binary.Reader, _ codec.Version,
 ) (Action[*otherState], error) {
 	return &otherAction{}, nil
 }
@@ -134,7 +137,7 @@ type addCommand struct{ N int64 }
 const addCommandID CommandID = 60000
 
 func (addCommand) ID() CommandID { return addCommandID }
-func (c addCommand) Encode(w *binarycodec.Writer) error {
+func (c addCommand) Encode(w *binary.Writer) error {
 	w.Varint(c.N)
 	return nil
 }
@@ -143,7 +146,7 @@ func (c addCommand) Translate() []Action[*toyState] {
 }
 func (c addCommand) Clone() Command[*toyState] { return c }
 
-func decodeAddCommand(r *binarycodec.Reader, _ binarycodec.Version) (Command[*toyState], error) {
+func decodeAddCommand(r *binary.Reader, _ codec.Version) (Command[*toyState], error) {
 	c := addCommand{N: r.Varint()}
 	return c, r.Err()
 }
@@ -187,10 +190,10 @@ const (
 
 func (testDrop) ID() OnFailID                          { return testDropID }
 func (testDrop) Handle(b Bouncer, _ Message, _ Reason) { b.Drop() }
-func (testDrop) Encode(*binarycodec.Writer) error      { return nil }
+func (testDrop) Encode(*binary.Writer) error           { return nil }
 
 func decodeTestDrop(
-	*binarycodec.Reader, binarycodec.Version, MessageDecoder,
+	*binary.Reader, codec.Version, MessageDecoder,
 ) (OnFail, error) {
 	return testDrop{}, nil
 }
@@ -200,7 +203,7 @@ type testCompensate struct{ With Message }
 func (testCompensate) ID() OnFailID                            { return testCompensateID }
 func (f testCompensate) Handle(b Bouncer, _ Message, _ Reason) { b.Resend(f.With) }
 func (f testCompensate) Nested() Message                       { return f.With }
-func (f testCompensate) Encode(w *binarycodec.Writer) error {
+func (f testCompensate) Encode(w *binary.Writer) error {
 	if f.With == nil {
 		return ErrNoCodec
 	}
@@ -208,7 +211,7 @@ func (f testCompensate) Encode(w *binarycodec.Writer) error {
 }
 
 func decodeTestCompensate(
-	r *binarycodec.Reader, v binarycodec.Version, nested MessageDecoder,
+	r *binary.Reader, v codec.Version, nested MessageDecoder,
 ) (OnFail, error) {
 	m, err := nested(r, v)
 	return testCompensate{With: m}, err

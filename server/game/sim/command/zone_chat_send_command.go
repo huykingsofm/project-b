@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneChatSendCommand asks to say something to the zone.
@@ -26,7 +27,7 @@ func (c ZoneChatSendCommand) Translate() []sim.Action[*zonestate.State] {
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c ZoneChatSendCommand) Encode(w *binarycodec.Writer) error {
+func (c ZoneChatSendCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.FromID))
 	w.String(c.Text)
 	return nil
@@ -34,7 +35,7 @@ func (c ZoneChatSendCommand) Encode(w *binarycodec.Writer) error {
 
 // decodeZoneChatSendCommand reads what Encode wrote.
 func decodeZoneChatSendCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*zonestate.State], error) {
 	c := ZoneChatSendCommand{FromID: r.Uint[state.CharacterID](), Text: r.String()}
 	return c, r.Err()

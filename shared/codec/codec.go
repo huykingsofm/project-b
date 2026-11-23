@@ -23,6 +23,11 @@ var ErrNoPrototype = errors.New(
 	"codec: a kind needs a prototype value and a function that reads it",
 )
 
+// Version is the version of the data that is read: how its bytes were encoded. The container of the
+// bytes (a segment header, a checkpoint header) says which, and a Decode function is given it, so
+// that it can read what an older version wrote.
+type Version uint16
+
 // Number is what tells the kinds of a family apart.
 type Number interface {
 	~uint8 | ~uint16 | ~uint32 | ~uint64

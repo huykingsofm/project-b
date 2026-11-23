@@ -2,7 +2,8 @@ package onfail
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Compensate sends the message that undoes what the first one set going: where it goes, its actions
@@ -18,7 +19,7 @@ func (f Compensate) Handle(b sim.Bouncer, _ sim.Message, _ sim.Reason) {
 
 func (f Compensate) Nested() sim.Message { return f.With }
 
-func (f Compensate) Encode(w *binarycodec.Writer) error {
+func (f Compensate) Encode(w *binary.Writer) error {
 	if f.With == nil {
 		return sim.ErrNoCodec
 	}
@@ -26,7 +27,7 @@ func (f Compensate) Encode(w *binarycodec.Writer) error {
 }
 
 func decodeCompensate(
-	r *binarycodec.Reader, version binarycodec.Version, decodeMessage sim.MessageDecoder,
+	r *binary.Reader, version codec.Version, decodeMessage sim.MessageDecoder,
 ) (sim.OnFail, error) {
 	m, err := decodeMessage(r, version)
 	return Compensate{With: m}, err

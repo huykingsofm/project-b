@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // benchMessage is a message for a zonelayer with two actions, as the engines send them.
@@ -51,7 +51,7 @@ var benchRecords = map[string]Record{
 func BenchmarkEncodeRecord(b *testing.B) {
 	for name, rec := range benchRecords {
 		b.Run(name, func(b *testing.B) {
-			var w binarycodec.Writer
+			var w binary.Writer
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				w.B = w.B[:0]
@@ -66,7 +66,7 @@ func BenchmarkEncodeRecord(b *testing.B) {
 func BenchmarkDecodeRecord(b *testing.B) {
 	engine, codecs := sim.StateID(1), toyCodecs()
 	for name, rec := range benchRecords {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := encodeRecord(&w, rec); err != nil {
 			b.Fatal(err)
 		}

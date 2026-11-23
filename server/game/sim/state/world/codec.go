@@ -5,13 +5,14 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
 // Encode writes the data of the state: its ID and tick, the private messages, and the inventory of
 // every character. The events are not data (R18) and are not written.
-func (s *State) Encode(w *binarycodec.Writer) error {
+func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(len(s.zones)))
@@ -44,19 +45,19 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
-func count(r *binarycodec.Reader) (uint64, error) {
+func count(r *binary.Reader) (uint64, error) {
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return 0, err
 	}
 	if n > uint64(r.Left()) {
-		return 0, fmt.Errorf("%w: %d items", binarycodec.ErrShort, n)
+		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
 	}
 	return n, nil
 }
 
 // DecodeState reads what State.Encode wrote, of the data version given.
-func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
+func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	s := &State{
 		id: r.Uint[sim.StateID](), tick: r.Uvarint(),
 		privateChat: ring.New[PrivateChatMessage](chatKeep),

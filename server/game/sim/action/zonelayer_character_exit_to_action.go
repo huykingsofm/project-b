@@ -6,7 +6,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterExitToAction is a character taking the exit it stands in, to a zonelayer of the
@@ -78,14 +79,14 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterExitToAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(uint64(a.ExitEntityID))
 }
 
 // decodeZoneLayerCharacterExitToAction reads what Encode wrote.
 func decodeZoneLayerCharacterExitToAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterExitToAction{
 		CharacterID:  r.Uint[state.CharacterID](),

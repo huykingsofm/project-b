@@ -4,7 +4,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // WorldChatPrivateSendAction is a private message from one player to another. It is between
@@ -31,7 +32,7 @@ func (a *WorldChatPrivateSendAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *WorldChatPrivateSendAction) Encode(w *binarycodec.Writer) {
+func (a *WorldChatPrivateSendAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.FromID))
 	w.Uvarint(uint64(a.ToID))
 	w.String(a.Text)
@@ -39,7 +40,7 @@ func (a *WorldChatPrivateSendAction) Encode(w *binarycodec.Writer) {
 
 // decodeWorldChatPrivateSendAction reads what Encode wrote.
 func decodeWorldChatPrivateSendAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*worldstate.State], error) {
 	a := &WorldChatPrivateSendAction{
 		FromID: r.Uint[state.PlayerID](),

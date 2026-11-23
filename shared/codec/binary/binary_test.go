@@ -1,15 +1,15 @@
-package binarycodec_test
+package binary_test
 
 import (
 	"errors"
 	"math"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func TestValuesComeBackAsTheyWereWritten(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uint8(200)
 	for _, v := range []uint64{0, 1, 127, 128, math.MaxUint32, math.MaxUint64} {
 		w.Uvarint(v)
@@ -21,7 +21,7 @@ func TestValuesComeBackAsTheyWereWritten(t *testing.T) {
 	w.String("")
 	w.String("héllo\n")
 
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	if r.Uint8() != 200 {
 		t.Fatal("Uint8")
 	}
@@ -47,7 +47,7 @@ func TestValuesComeBackAsTheyWereWritten(t *testing.T) {
 }
 
 func TestSmallNumbersTakeOneByte(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(100)
 	w.Varint(-60)
 	if len(w.B) != 2 {
@@ -56,75 +56,75 @@ func TestSmallNumbersTakeOneByte(t *testing.T) {
 }
 
 func TestBytesThatAreCutOffGiveAnErrorAndZeroValuesNeverAPanic(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.String("hello")
 	w.Fixed64(1)
 	full := w.B
 	for cut := range full {
-		r := binarycodec.NewReader(full[:cut])
+		r := binary.NewReader(full[:cut])
 		_, _, _, _ = r.String(), r.Fixed64(), r.Uvarint(), r.Uint8()
-		if !errors.Is(r.Err(), binarycodec.ErrShort) {
+		if !errors.Is(r.Err(), binary.ErrShort) {
 			t.Fatalf("cut at %d: error %v", cut, r.Err())
 		}
 	}
 }
 
 func TestAStringThatClaimsMoreBytesThanThereAreIsRefused(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(1 << 40)
-	r := binarycodec.NewReader(w.B)
-	if s := r.String(); s != "" || !errors.Is(r.Err(), binarycodec.ErrShort) {
+	r := binary.NewReader(w.B)
+	if s := r.String(); s != "" || !errors.Is(r.Err(), binary.ErrShort) {
 		t.Fatalf("got %q, %v", s, r.Err())
 	}
 }
 
 func TestAnIntegerOfMoreThan64BitsIsABadValue(t *testing.T) {
-	r := binarycodec.NewReader(
+	r := binary.NewReader(
 		[]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01},
 	)
-	if r.Uvarint() != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
+	if r.Uvarint() != 0 || !errors.Is(r.Err(), binary.ErrBadValue) {
 		t.Fatalf("error %v", r.Err())
 	}
 }
 
 func TestTheFirstErrorIsKept(t *testing.T) {
-	r := binarycodec.NewReader(nil)
+	r := binary.NewReader(nil)
 	r.Uint8()
 	r.Uvarint()
-	if !errors.Is(r.Err(), binarycodec.ErrShort) {
+	if !errors.Is(r.Err(), binary.ErrShort) {
 		t.Fatal(r.Err())
 	}
 }
 
 func TestABoolComesBackAndAnyOtherByteIsABadValue(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Bool(true)
 	w.Bool(false)
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	if !r.Bool() || r.Bool() || r.Err() != nil {
 		t.Fatalf("a bool did not come back: %v", r.Err())
 	}
-	bad := binarycodec.NewReader([]byte{2})
-	if bad.Bool(); !errors.Is(bad.Err(), binarycodec.ErrBadValue) {
+	bad := binary.NewReader([]byte{2})
+	if bad.Bool(); !errors.Is(bad.Err(), binary.ErrBadValue) {
 		t.Fatalf("the byte 2 is not a bool, got %v", bad.Err())
 	}
 }
 
 func TestUintAndIntFailOnANumberThatDoesNotFitInsteadOfCuttingIt(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(1 << 32)
 	w.Uvarint(7)
 	w.Varint(-1 << 40)
-	r := binarycodec.NewReader(w.B)
-	if got := r.Uint[uint32](); got != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
+	r := binary.NewReader(w.B)
+	if got := r.Uint[uint32](); got != 0 || !errors.Is(r.Err(), binary.ErrBadValue) {
 		t.Fatalf("uint32 of 1<<32 = %d, err %v, want a bad value", got, r.Err())
 	}
-	r = binarycodec.NewReader(w.B)
+	r = binary.NewReader(w.B)
 	r.Uvarint()
 	if got := r.Uint[uint8](); got != 7 || r.Err() != nil {
 		t.Fatalf("uint8 of 7 = %d, err %v", got, r.Err())
 	}
-	if got := r.Int[int32](); got != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
+	if got := r.Int[int32](); got != 0 || !errors.Is(r.Err(), binary.ErrBadValue) {
 		t.Fatalf("int32 of -1<<40 = %d, err %v, want a bad value", got, r.Err())
 	}
 }

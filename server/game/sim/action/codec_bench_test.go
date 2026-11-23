@@ -7,7 +7,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func benchMessages() map[string]sim.Message {
@@ -35,7 +35,7 @@ func benchMessages() map[string]sim.Message {
 func BenchmarkEncodeMessage(b *testing.B) {
 	for name, m := range benchMessages() {
 		b.Run(name, func(b *testing.B) {
-			var w binarycodec.Writer
+			var w binary.Writer
 			b.ReportAllocs()
 			for b.Loop() {
 				w.B = w.B[:0]
@@ -51,14 +51,14 @@ func BenchmarkDecodeMessage(b *testing.B) {
 	c := codecs(b)
 	registerStates(b, c)
 	for name, m := range benchMessages() {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeMessage(&w, m); err != nil {
 			b.Fatal(err)
 		}
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := c.DecodeMessage(binarycodec.NewReader(w.B), 1); err != nil {
+				if _, err := c.DecodeMessage(binary.NewReader(w.B), 1); err != nil {
 					b.Fatal(err)
 				}
 			}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // aStateWithEverything has characters with cooldowns, items, a body that moved and what was said.
@@ -31,11 +31,11 @@ func aStateWithEverything(t testing.TB) *zonelayer.State {
 
 func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st := aStateWithEverything(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := st.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	got, err := zonelayer.DecodeState(r, 1)
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
@@ -46,7 +46,7 @@ func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.
 	if got.WorldID() != 1 || got.ZoneID() != 2 || got.ID() != 3 {
 		t.Fatalf("the zonelayer knows zone %d and world %d", got.ZoneID(), got.WorldID())
 	}
-	var again binarycodec.Writer
+	var again binary.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {
 		t.Fatalf("the state that came back is written differently: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.
 		t.Fatalf("the next entity gets the ID %d, and %d in the original", b, a)
 	}
 	for n := range w.B { // every proper prefix
-		if _, err := zonelayer.DecodeState(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+		if _, err := zonelayer.DecodeState(binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}

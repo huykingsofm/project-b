@@ -6,7 +6,8 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ErrNoCodec is returned for an entity that cannot be written: it is nil, or its kind has no
@@ -18,14 +19,14 @@ var ErrUnknownKind = errors.New("zone entity: the number is not one of a kind of
 
 // decoders is the table of the functions that read an entity of a zone, by its kind.
 var decoders = map[state.KindID]func(
-	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error){
 	state.ExitKindID: decodeExitEntity,
 }
 
 // Encode writes an entity: its kind and then what it is made of. It writes nothing, and returns
 // ErrNoCodec, for a nil entity or one whose kind has no decoder.
-func Encode(w *binarycodec.Writer, e state.Entity) error {
+func Encode(w *binary.Writer, e state.Entity) error {
 	if e == nil {
 		return fmt.Errorf("%w: nil", ErrNoCodec)
 	}
@@ -41,7 +42,7 @@ func Encode(w *binarycodec.Writer, e state.Entity) error {
 // state gave it, so the ID of the state that holds it, which is not in the bytes, is given as
 // owner.
 func Decode(
-	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {

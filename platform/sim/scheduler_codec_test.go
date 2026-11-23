@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func aSchedulerThatWaits() *Scheduler[*toyState] {
@@ -27,19 +27,19 @@ func hashOf(s *Scheduler[*toyState]) uint64 {
 func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	c := mustCodecs(t)
 	s := aSchedulerThatWaits()
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := s.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
 	var got Scheduler[*toyState]
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	if err := got.Decode(c, r, 1); err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
 	if hashOf(&got) != hashOf(s) || got.Pending() != 4 {
 		t.Fatalf("what it waits for differs: %d actions, want 4", got.Pending())
 	}
-	var again binarycodec.Writer
+	var again binary.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {
 		t.Fatalf("it is written differently: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	}
 	for n := range w.B { // every proper prefix
 		var cut Scheduler[*toyState]
-		if err := cut.Decode(c, binarycodec.NewReader(w.B[:n]), 1); err == nil {
+		if err := cut.Decode(c, binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
@@ -82,7 +82,7 @@ func TestTheHashOfASchedulerSaysWhatItWaitsFor(t *testing.T) {
 }
 
 func TestASchedulerThatHasATickTwiceIsRefused(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(0) // the last tick
 	w.Uvarint(2) // two ticks
 	for range 2 {
@@ -90,8 +90,8 @@ func TestASchedulerThatHasATickTwiceIsRefused(t *testing.T) {
 		w.Uvarint(0) // no action
 	}
 	var s Scheduler[*toyState]
-	err := s.Decode(mustCodecs(t), binarycodec.NewReader(w.B), 1)
-	if !errors.Is(err, binarycodec.ErrBadValue) {
+	err := s.Decode(mustCodecs(t), binary.NewReader(w.B), 1)
+	if !errors.Is(err, binary.ErrBadValue) {
 		t.Fatalf("error %v, want a bad value", err)
 	}
 }

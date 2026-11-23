@@ -4,7 +4,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerItemEntityRemoveAction takes an item off the ground when its time is up. It is set by
@@ -28,13 +29,13 @@ func (a *ZoneLayerItemEntityRemoveAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerItemEntityRemoveAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerItemEntityRemoveAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.EntityID))
 }
 
 // decodeZoneLayerItemEntityRemoveAction reads what Encode wrote.
 func decodeZoneLayerItemEntityRemoveAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerItemEntityRemoveAction{EntityID: r.Uint[state.EntityID]()}
 	return a, r.Err()

@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneCharacterEnterCommand asks to put a character in the world, in this zone.
@@ -26,14 +27,14 @@ func (c ZoneCharacterEnterCommand) Translate() []sim.Action[*zonestate.State] {
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c ZoneCharacterEnterCommand) Encode(w *binarycodec.Writer) error {
+func (c ZoneCharacterEnterCommand) Encode(w *binary.Writer) error {
 	c.Character.Encode(w)
 	return nil
 }
 
 // decodeZoneCharacterEnterCommand reads what Encode wrote.
 func decodeZoneCharacterEnterCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*zonestate.State], error) {
 	ch, err := zonelayerstate.DecodeCharacter(r, version)
 	return ZoneCharacterEnterCommand{Character: ch}, err

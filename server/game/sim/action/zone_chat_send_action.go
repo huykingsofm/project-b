@@ -6,7 +6,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneChatSendAction is a message said in a zone. The zone records it and, for now, gives it to
@@ -35,14 +36,14 @@ func (a *ZoneChatSendAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneChatSendAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneChatSendAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.FromID))
 	w.String(a.Text)
 }
 
 // decodeZoneChatSendAction reads what Encode wrote.
 func decodeZoneChatSendAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonestate.State], error) {
 	a := &ZoneChatSendAction{FromID: r.Uint[state.CharacterID](), Text: r.String()}
 	return a, r.Err()

@@ -121,13 +121,13 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]` (`V` says its own priority, `Priority() P`, as a `Prioritier[P]`; the zero queue is ready): elements taken by priority and then by arrival, which remembers what it held in the round, with the same columns on all of it (`Add`, `BuildFrom`, `Next`, `All`, `Pending`) |
 | `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
-| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; refuses a number or a Go type that two kinds share |
+| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; and `Version`, the version of the data that a `Decode` reads, for the replay log; refuses a number or a Go type that two kinds share |
 | `shared/bimap` | two-way map (the zonelayer state links characters and bodies with it) |
 | `shared/channels` | `Drain` |
 | `shared/logging` | key=value log lines; a call only fills a channel ([logging](logging.md)) |
 | `shared/bitset` | K bits, the walls of a `TileMap` ([bitset](bitset.md)) |
 | `shared/segmentlog` | append-only log in segment files, under the replay log ([segmentlog](segmentlog.md)) |
-| `shared/binarycodec` | integers and strings as bytes, and `Version`, the version of the data that a `Decode` reads, for the replay log |
+| `shared/codec/binary` | integers (checked against the type they are read as) and strings as bytes: `Writer` and `Reader` |
 | `shared/clone` | the contract for copying: a value, or a type with `Clone`; the containers use it ([R29](../plan/rule/r29-clone-or-value.md)) |
 | `shared/testing/aliasing` | for tests: finds memory that two values share, and checks that a type is a value or has `Clone` |
 | `platform/config` | `Var[T]` with defaults and limits; a snapshot taken once per tick; a whole set is rejected when one value is wrong |

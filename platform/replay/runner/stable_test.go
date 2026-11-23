@@ -5,7 +5,7 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // stampState is a state that says which tick it was published at.
@@ -14,15 +14,15 @@ type stampState struct {
 	tick uint64
 }
 
-func (s *stampState) ID() sim.StateID                { return s.id }
-func (*stampState) Type() sim.StateType              { return 1 }
-func (*stampState) String() string                   { return "stamp" }
-func (s *stampState) Tick() uint64                   { return s.tick }
-func (s *stampState) SetTick(t uint64)               { s.tick = t }
-func (s *stampState) Clone() sim.State               { return s }
-func (*stampState) Hash() uint64                     { return 0 }
-func (*stampState) TakeEvents() []sim.Event          { return nil }
-func (*stampState) Encode(*binarycodec.Writer) error { return nil }
+func (s *stampState) ID() sim.StateID           { return s.id }
+func (*stampState) Type() sim.StateType         { return 1 }
+func (*stampState) String() string              { return "stamp" }
+func (s *stampState) Tick() uint64              { return s.tick }
+func (s *stampState) SetTick(t uint64)          { s.tick = t }
+func (s *stampState) Clone() sim.State          { return s }
+func (*stampState) Hash() uint64                { return 0 }
+func (*stampState) TakeEvents() []sim.Event     { return nil }
+func (*stampState) Encode(*binary.Writer) error { return nil }
 
 // The copies that a replay keeps are those that a read still to come will ask for: when the run is
 // over every read has been made, and none is kept.

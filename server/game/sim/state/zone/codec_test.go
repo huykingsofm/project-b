@@ -8,7 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T) {
@@ -19,7 +19,7 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 	st.SetTick(7)
 	tiles := st.TileMap().(*tilemap.TileMap)
 
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := st.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 		}
 		return nil
 	}
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	got, err := zone.DecodeState(r, 1, tilesOf)
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
@@ -41,17 +41,17 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 		!slices.Equal(got.AdjacentZones(), st.AdjacentZones()) {
 		t.Fatalf("the zone knows world %d and zones %v", got.WorldID(), got.AdjacentZones())
 	}
-	var again binarycodec.Writer
+	var again binary.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {
 		t.Fatalf("the state that came back is written differently: %v", err)
 	}
 	for n := range w.B { // every proper prefix
-		if _, err := zone.DecodeState(binarycodec.NewReader(w.B[:n]), 1, tilesOf); err == nil {
+		if _, err := zone.DecodeState(binary.NewReader(w.B[:n]), 1, tilesOf); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
 	none := func(sim.StateID) *tilemap.TileMap { return nil }
-	if _, err := zone.DecodeState(binarycodec.NewReader(w.B), 1, none); err == nil {
+	if _, err := zone.DecodeState(binary.NewReader(w.B), 1, none); err == nil {
 		t.Fatal("a zone with no map was read")
 	}
 }

@@ -3,7 +3,8 @@ package entity
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ExitEntity is an exit of a zone: an area of its map that leads to another zone. It stands in
@@ -58,7 +59,7 @@ func (e ExitEntity) MovedTo(pos state.Vec) state.Entity {
 }
 
 // Encode writes the exit.
-func (e ExitEntity) Encode(w *binarycodec.Writer) {
+func (e ExitEntity) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(e.entityID.Local()))
 	e.area.Min.Encode(w)
 	e.area.Max.Encode(w)
@@ -68,7 +69,7 @@ func (e ExitEntity) Encode(w *binarycodec.Writer) {
 
 // decodeExitEntity reads what Encode wrote, of the data version given.
 func decodeExitEntity(
-	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := ExitEntity{entityID: state.NewEntityID(owner, r.Uint[uint32]())}
 	e.area.Min = state.DecodeVec(r, version)

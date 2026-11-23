@@ -6,14 +6,15 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
 // said, which character has which body, and the ID the next entity gets. The events are not data
 // (R18) and are not written. It returns an error, and the writer holds a partial state, when an
 // entity cannot be written.
-func (s *State) Encode(w *binarycodec.Writer) error {
+func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.zoneID))
 	w.Uvarint(uint64(s.worldID))
@@ -50,19 +51,19 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
-func count(r *binarycodec.Reader) (uint64, error) {
+func count(r *binary.Reader) (uint64, error) {
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return 0, err
 	}
 	if n > uint64(r.Left()) {
-		return 0, fmt.Errorf("%w: %d items", binarycodec.ErrShort, n)
+		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
 	}
 	return n, nil
 }
 
 // DecodeState reads what State.Encode wrote, of the data version given.
-func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, error) {
+func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
 	worldID := r.Uint[sim.StateID]()
 	s := NewState(id, zoneID, worldID)

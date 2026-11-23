@@ -3,7 +3,8 @@ package action
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // regenAmount is the health that every living entity gets each time. It is 1 for now.
@@ -31,13 +32,13 @@ func (a *ZoneLayerCharacterRegenAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterRegenAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterRegenAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.Every)
 }
 
 // decodeZoneLayerCharacterRegenAction reads what Encode wrote.
 func decodeZoneLayerCharacterRegenAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
 	return a, r.Err()

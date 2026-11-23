@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func playedCharacter() Character {
@@ -19,9 +19,9 @@ func playedCharacter() Character {
 
 func TestACharacterComesBackAsItWasWrittenWithItsCooldownsInOrder(t *testing.T) {
 	c := playedCharacter()
-	var w binarycodec.Writer
+	var w binary.Writer
 	c.Encode(&w)
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	got, err := DecodeCharacter(r, 1)
 	if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, c) {
 		t.Fatalf("got %+v, error %v, %d left; want %+v", got, err, r.Left(), c)
@@ -32,14 +32,14 @@ func TestACharacterComesBackAsItWasWrittenWithItsCooldownsInOrder(t *testing.T) 
 }
 
 func TestACharacterCutOffOrWithAKeyTooLargeIsAnErrorAndNeverAPanic(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	playedCharacter().Encode(&w)
 	for cut := range len(w.B) {
-		if _, err := DecodeCharacter(binarycodec.NewReader(w.B[:cut]), 1); err == nil {
+		if _, err := DecodeCharacter(binary.NewReader(w.B[:cut]), 1); err == nil {
 			t.Fatalf("cut at %d of %d bytes was read", cut, len(w.B))
 		}
 	}
-	var big binarycodec.Writer
+	var big binary.Writer
 	big.Uvarint(1)
 	big.String("x")
 	for range 4 {
@@ -48,7 +48,7 @@ func TestACharacterCutOffOrWithAKeyTooLargeIsAnErrorAndNeverAPanic(t *testing.T)
 	big.Uvarint(1)
 	big.Uvarint(70000)
 	big.Uvarint(5)
-	if _, err := DecodeCharacter(binarycodec.NewReader(big.B), 1); !errors.Is(
+	if _, err := DecodeCharacter(binary.NewReader(big.B), 1); !errors.Is(
 		err, ErrUnknownCooldownKey,
 	) {
 		t.Fatalf("a key that is too large: %v", err)

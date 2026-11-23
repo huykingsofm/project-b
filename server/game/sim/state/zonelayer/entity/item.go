@@ -3,7 +3,8 @@ package entity
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ItemEntity is an item lying on the ground of a zonelayer. It can be picked up for as long as it
@@ -42,7 +43,7 @@ func (e ItemEntity) Hash(h *sim.Hasher) {
 	h.U64(e.expiry)
 }
 
-func (e ItemEntity) Encode(w *binarycodec.Writer) {
+func (e ItemEntity) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(e.entityID.Local()))
 	e.pos.Encode(w)
 	w.Varint(int64(e.rad))
@@ -52,7 +53,7 @@ func (e ItemEntity) Encode(w *binarycodec.Writer) {
 }
 
 func decodeItemEntity(
-	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := ItemEntity{
 		entityID: state.NewEntityID(owner, r.Uint[uint32]()),

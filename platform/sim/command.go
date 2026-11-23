@@ -2,7 +2,7 @@
 
 package sim
 
-import "github.com/huykingsofm/project-b/shared/binarycodec"
+import "github.com/huykingsofm/project-b/shared/codec/binary"
 
 // CommandID names a kind of command, by a number: the game keeps the register. A command returns
 // its own with its method ID(). A number is never changed or reused, because the replay log
@@ -15,7 +15,7 @@ type CommandID uint16
 type BaseCommand interface {
 	ID() CommandID
 	// Encode writes the fields of the command, not its ID: EncodeCommand writes the ID first.
-	Encode(w *binarycodec.Writer) error
+	Encode(w *binary.Writer) error
 }
 
 // Command is a command addressed to an engine whose state is of type S. A command is data. It names

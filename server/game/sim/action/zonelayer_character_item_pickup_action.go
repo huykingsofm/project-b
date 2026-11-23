@@ -7,7 +7,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 var zoneLayerCharacterItemPickupActionRadius = config.NewVar(
@@ -77,14 +78,14 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(uint64(a.ItemEntityID))
 }
 
 // decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterItemPickupAction{
 		CharacterID:  r.Uint[state.CharacterID](),

@@ -4,7 +4,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the
@@ -39,7 +40,7 @@ func (a *ZoneLayerItemEntityAddAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerItemEntityAddAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.ItemID))
 	w.Uvarint(uint64(a.Count))
 	a.At.Encode(w)
@@ -48,7 +49,7 @@ func (a *ZoneLayerItemEntityAddAction) Encode(w *binarycodec.Writer) {
 
 // decodeZoneLayerItemEntityAddAction reads what Encode wrote.
 func decodeZoneLayerItemEntityAddAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerItemEntityAddAction{
 		ItemID: r.Uint[state.ItemID](),

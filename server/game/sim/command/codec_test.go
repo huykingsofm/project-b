@@ -17,7 +17,7 @@ import (
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
@@ -71,11 +71,11 @@ func codecs(t testing.TB) *sim.Codecs {
 func TestEveryKindOfCommandComesBackAsItWasWritten(t *testing.T) {
 	codecs := codecs(t)
 	for _, c := range examples {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeCommand(&w, c); err != nil {
 			t.Fatalf("%T: %v", c, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := codecs.DecodeCommand(r, 1)
 		if err != nil || r.Left() != 0 {
 			t.Fatalf("%T: error %v, %d bytes left", c, err, r.Left())
@@ -88,13 +88,13 @@ func TestEveryKindOfCommandComesBackAsItWasWritten(t *testing.T) {
 
 func TestTheCooldownsOfACharacterKeepTheirOrder(t *testing.T) {
 	codecs := codecs(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := sim.EncodeCommand(
 		&w, ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
 	); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := codecs.DecodeCommand(binarycodec.NewReader(w.B), 1)
+	got, _ := codecs.DecodeCommand(binary.NewReader(w.B), 1)
 	ch := got.(ZoneCharacterEnterCommand).Character
 	keys := ch.CooldownKeys()
 	if len(keys) != 2 ||
@@ -106,12 +106,12 @@ func TestTheCooldownsOfACharacterKeepTheirOrder(t *testing.T) {
 func TestBytesThatAreCutOffAreAnErrorAndNeverAPanic(t *testing.T) {
 	codecs := codecs(t)
 	for _, c := range examples {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeCommand(&w, c); err != nil {
 			t.Fatal(err)
 		}
 		for cut := 0; cut < len(w.B); cut++ {
-			if _, err := codecs.DecodeCommand(binarycodec.NewReader(w.B[:cut]), 1); err == nil {
+			if _, err := codecs.DecodeCommand(binary.NewReader(w.B[:cut]), 1); err == nil {
 				t.Fatalf("%T cut at %d of %d bytes was read", c, cut, len(w.B))
 			}
 		}
@@ -122,14 +122,14 @@ func TestBytesThatAreCutOffAreAnErrorAndNeverAPanic(t *testing.T) {
 // back.
 type strangerCommand struct{}
 
-func (strangerCommand) ID() sim.CommandID                { return 60000 }
-func (strangerCommand) Encode(*binarycodec.Writer) error { return nil }
+func (strangerCommand) ID() sim.CommandID           { return 60000 }
+func (strangerCommand) Encode(*binary.Writer) error { return nil }
 
 // failingCommand is in the register but cannot be written.
 type failingCommand struct{}
 
 func (failingCommand) ID() sim.CommandID { return ZoneChatSendCommandID }
-func (failingCommand) Encode(w *binarycodec.Writer) error {
+func (failingCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(1) // some bytes before it fails
 	return errors.New("cannot write")
 }
@@ -138,7 +138,7 @@ func TestACommandThatCannotBeWrittenIsRefusedAndWritesNothingAndAnUnknownOneIsRe
 	t *testing.T,
 ) {
 	codecs := codecs(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uint8(0xee)
 	if err := sim.EncodeCommand(&w, failingCommand{}); err == nil {
 		t.Fatal("a command whose Encode failed was written")
@@ -150,11 +150,11 @@ func TestACommandThatCannotBeWrittenIsRefusedAndWritesNothingAndAnUnknownOneIsRe
 		t.Fatalf("%d bytes written by the commands that were refused, want none", len(w.B)-1)
 	}
 	// a command whose ID is not in the register is written as it says, and refused when it is read
-	var stranger binarycodec.Writer
+	var stranger binary.Writer
 	if err := sim.EncodeCommand(&stranger, strangerCommand{}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := codecs.DecodeCommand(binarycodec.NewReader(stranger.B), 1)
+	_, err := codecs.DecodeCommand(binary.NewReader(stranger.B), 1)
 	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("a command that has no codec: %v", err)
 	}
@@ -162,13 +162,13 @@ func TestACommandThatCannotBeWrittenIsRefusedAndWritesNothingAndAnUnknownOneIsRe
 
 func TestANumberThatIsNotACommandOrTooLargeForACooldownKeyIsAnError(t *testing.T) {
 	codecs := codecs(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(999)
-	_, err := codecs.DecodeCommand(binarycodec.NewReader(w.B), 1)
+	_, err := codecs.DecodeCommand(binary.NewReader(w.B), 1)
 	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("an unknown command: %v", err)
 	}
-	var w2 binarycodec.Writer
+	var w2 binary.Writer
 	w2.Uvarint(2) // ZoneCharacterEnterCommand
 	w2.Uvarint(1)
 	w2.String("x")
@@ -179,12 +179,12 @@ func TestANumberThatIsNotACommandOrTooLargeForACooldownKeyIsAnError(t *testing.T
 	w2.Uvarint(1)     // one cooldown
 	w2.Uvarint(70000) // a number that is not one of a key: it is more than 16 bits
 	w2.Uvarint(5)
-	if _, err := codecs.DecodeCommand(binarycodec.NewReader(w2.B), 1); !errors.Is(
+	if _, err := codecs.DecodeCommand(binary.NewReader(w2.B), 1); !errors.Is(
 		err, zonelayerstate.ErrUnknownCooldownKey,
 	) {
 		t.Fatalf("a cooldown key that is too large: %v", err)
 	}
-	var w3 binarycodec.Writer
+	var w3 binary.Writer
 	w3.Uvarint(2)
 	w3.Uvarint(1)
 	w3.String("x")
@@ -193,7 +193,7 @@ func TestANumberThatIsNotACommandOrTooLargeForACooldownKeyIsAnError(t *testing.T
 	w3.Varint(1)
 	w3.Varint(1)
 	w3.Uvarint(1 << 60) // a count that the bytes cannot hold
-	if _, err := codecs.DecodeCommand(binarycodec.NewReader(w3.B), 1); err == nil {
+	if _, err := codecs.DecodeCommand(binary.NewReader(w3.B), 1); err == nil {
 		t.Fatal("a count of cooldowns that the bytes cannot hold was read")
 	}
 }

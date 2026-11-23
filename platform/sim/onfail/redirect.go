@@ -2,7 +2,8 @@ package onfail
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Redirect sends the message to another engine.
@@ -18,13 +19,13 @@ func (f Redirect) Handle(b sim.Bouncer, m sim.Message, r sim.Reason) {
 	}
 }
 
-func (f Redirect) Encode(w *binarycodec.Writer) error {
+func (f Redirect) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(f.To))
 	return nil
 }
 
 func decodeRedirect(
-	r *binarycodec.Reader, version binarycodec.Version, _ sim.MessageDecoder,
+	r *binary.Reader, version codec.Version, _ sim.MessageDecoder,
 ) (sim.OnFail, error) {
 	return Redirect{To: r.Uint[sim.StateID]()}, r.Err()
 }

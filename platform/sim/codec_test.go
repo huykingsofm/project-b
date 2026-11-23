@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func mustCodecs(t testing.TB) *Codecs {
@@ -20,11 +20,11 @@ func mustCodecs(t testing.TB) *Codecs {
 func TestAnActionComesBackAsItWasWritten(t *testing.T) {
 	c := mustCodecs(t)
 	for _, a := range []BaseAction{&addAction{N: -5}, &anonymousAction{name: "x", priority: -9}} {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := EncodeAction(&w, a); err != nil {
 			t.Fatalf("%T: %v", a, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := c.DecodeAction(r, 1)
 		if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, a) {
 			t.Fatalf("%T came back as %+v, error %v, %d bytes left", a, got, err, r.Left())
@@ -68,11 +68,11 @@ func toyMessages() []Message {
 func TestAMessageComesBackWholeWithItsOnFailAndTheMessageInsideIt(t *testing.T) {
 	c := mustCodecs(t)
 	for i, m := range toyMessages() {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := EncodeMessage(&w, m); err != nil {
 			t.Fatalf("message %d: %v", i, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := c.DecodeMessage(r, 1)
 		if err != nil || r.Left() != 0 {
 			t.Fatalf("message %d: error %v, %d bytes left", i, err, r.Left())
@@ -86,26 +86,26 @@ func TestAMessageComesBackWholeWithItsOnFailAndTheMessageInsideIt(t *testing.T) 
 func TestBytesThatAreCutOffOrWrongGiveAnErrorForAMessageAndNeverAPanic(t *testing.T) {
 	c := mustCodecs(t)
 	for i, m := range toyMessages() {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := EncodeMessage(&w, m); err != nil {
 			t.Fatal(err)
 		}
 		for n := range w.B { // every proper prefix
-			if _, err := c.DecodeMessage(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+			if _, err := c.DecodeMessage(binary.NewReader(w.B[:n]), 1); err == nil {
 				t.Fatalf("message %d: %d of %d bytes were read", i, n, len(w.B))
 			}
 		}
 		for at := range w.B { // every byte made something else
 			bad := append([]byte(nil), w.B...)
 			bad[at] ^= 0xff
-			c.DecodeMessage(binarycodec.NewReader(bad), 1) // an error or a message, no panic
+			c.DecodeMessage(binary.NewReader(bad), 1) // an error or a message, no panic
 		}
 	}
 }
 
 func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) {
 	c := mustCodecs(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(1) // to: a toy state, by its type
 	w.Uvarint(0)
 	w.Uvarint(0) // the header: the sender and the number
@@ -115,7 +115,7 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 	if err := EncodeAction(&w, &otherAction{}); err != nil { // an action of the other type
 		t.Fatal(err)
 	}
-	_, err := c.DecodeMessage(binarycodec.NewReader(w.B), 1)
+	_, err := c.DecodeMessage(binary.NewReader(w.B), 1)
 	if !errors.Is(err, ErrUnknownCode) {
 		t.Fatalf("an action of another type of state: %v, want ErrUnknownCode", err)
 	}
@@ -128,26 +128,26 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 		return m
 	}
 	// 8 messages inside one another is the most that can be read back, and it is written
-	var fits binarycodec.Writer
+	var fits binary.Writer
 	if err := EncodeMessage(&fits, nested(8)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.DecodeMessage(binarycodec.NewReader(fits.B), 1); err != nil {
+	if _, err := c.DecodeMessage(binary.NewReader(fits.B), 1); err != nil {
 		t.Fatalf("messages nested 8 deep: %v", err)
 	}
 	// 9 is refused when it is written, and nothing of it is left: what is written is readable
-	var d binarycodec.Writer
+	var d binary.Writer
 	err = EncodeMessage(&d, nested(9))
-	if !errors.Is(err, binarycodec.ErrBadValue) || len(d.B) != 0 {
+	if !errors.Is(err, binary.ErrBadValue) || len(d.B) != 0 {
 		t.Fatalf("messages nested 9 deep were written: %v, %d bytes", err, len(d.B))
 	}
 	// and bytes of 9 are refused when they are read (Encode of the message does not look at depth)
-	var raw binarycodec.Writer
+	var raw binary.Writer
 	if err := nested(9).Encode(&raw); err != nil {
 		t.Fatal(err)
 	}
-	_, err = c.DecodeMessage(binarycodec.NewReader(raw.B), 1)
-	if !errors.Is(err, binarycodec.ErrBadValue) {
+	_, err = c.DecodeMessage(binary.NewReader(raw.B), 1)
+	if !errors.Is(err, binary.ErrBadValue) {
 		t.Fatalf("bytes of messages nested 9 deep: %v, want ErrBadValue", err)
 	}
 }
@@ -161,7 +161,7 @@ func (noEncodeAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*to
 }
 
 func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	err := EncodeAction(&w, noEncodeAction{})
 	if !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
@@ -177,11 +177,11 @@ func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testin
 
 func TestACommandAndAStateComeBackAsTheyWereWritten(t *testing.T) {
 	c := mustCodecs(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := EncodeCommand(&w, addCommand{N: 12}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := c.DecodeCommand(binarycodec.NewReader(w.B), 1)
+	got, err := c.DecodeCommand(binary.NewReader(w.B), 1)
 	if err != nil || got != (addCommand{N: 12}) {
 		t.Fatalf("the command came back as %+v, error %v", got, err)
 	}
@@ -192,20 +192,20 @@ func TestACommandAndAStateComeBackAsTheyWereWritten(t *testing.T) {
 		t.Fatal("the command is a command of another state")
 	}
 
-	w = binarycodec.Writer{}
+	w = binary.Writer{}
 	st := &toyState{id: 4, tick: 9, Total: -3}
 	if err := EncodeState(&w, st); err != nil {
 		t.Fatal(err)
 	}
-	read, err := c.DecodeState(binarycodec.NewReader(w.B), 1)
+	read, err := c.DecodeState(binary.NewReader(w.B), 1)
 	if err != nil || !reflect.DeepEqual(read, st) {
 		t.Fatalf("the state came back as %+v, error %v", read, err)
 	}
-	_, err = c.DecodeState(binarycodec.NewReader([]byte{99}), 1)
+	_, err = c.DecodeState(binary.NewReader([]byte{99}), 1)
 	if !errors.Is(err, ErrUnknownCode) {
 		t.Fatalf("a state of a type that is not registered: %v", err)
 	}
-	_, err = c.DecodeCommand(binarycodec.NewReader([]byte{99}), 1)
+	_, err = c.DecodeCommand(binary.NewReader([]byte{99}), 1)
 	if !errors.Is(err, ErrUnknownCode) {
 		t.Fatalf("a command that is not registered: %v", err)
 	}

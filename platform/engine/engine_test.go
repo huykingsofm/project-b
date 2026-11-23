@@ -7,7 +7,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func newToyEnv(t testing.TB) *Env {
@@ -128,8 +128,8 @@ func TestACommandOfAnotherTypeOfStateAndANilCommandAreRefused(t *testing.T) {
 // otherCommand is a command that is not one of the toy state.
 type otherCommand struct{}
 
-func (otherCommand) ID() sim.CommandID                { return 60009 }
-func (otherCommand) Encode(*binarycodec.Writer) error { return nil }
+func (otherCommand) ID() sim.CommandID           { return 60009 }
+func (otherCommand) Encode(*binary.Writer) error { return nil }
 
 // otherToy is a state of another type.
 type otherToy struct{ toyState }

@@ -8,13 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
 // formatVersion is the version of the records and of the meta of a segment of the replay log.
-const formatVersion binarycodec.Version = 1
+const formatVersion codec.Version = 1
 
 // FileLogOptions are the settings of a FileLog.
 type FileLogOptions struct {
@@ -55,7 +56,7 @@ type engineLog struct {
 	w *segmentlog.Writer // nil when the log of the engine could not be opened
 	// why it could not: the engine does not try again, as a writer that failed does not
 	err     error
-	scratch binarycodec.Writer // used by the goroutine of the engine only
+	scratch binary.Writer // used by the goroutine of the engine only
 }
 
 // NewFileLog makes a replay log that writes under dir. Nothing is created until an engine records.
@@ -217,7 +218,7 @@ func (f *FileLog) Close() error {
 // segmentMeta is the meta of a segment that starts with the payload first: the format, the ID of
 // the engine, the seed and the tick of that record.
 func segmentMeta(engine sim.StateID, seed uint64, first []byte) []byte {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(uint64(formatVersion))
 	w.Uvarint(uint64(engine))
 	w.Fixed64(seed)
@@ -228,15 +229,15 @@ func segmentMeta(engine sim.StateID, seed uint64, first []byte) []byte {
 
 // segmentInfo is what the meta of a segment says.
 type segmentInfo struct {
-	Version   binarycodec.Version // of the data of the records of the segment
+	Version   codec.Version // of the data of the records of the segment
 	Engine    sim.StateID
 	Seed      uint64
 	FirstTick uint64
 }
 
 func parseSegmentMeta(meta []byte) (segmentInfo, error) {
-	r := binarycodec.NewReader(meta)
-	version := r.Uint[binarycodec.Version]()
+	r := binary.NewReader(meta)
+	version := r.Uint[codec.Version]()
 	if r.Err() == nil && version != formatVersion {
 		return segmentInfo{}, fmt.Errorf(
 			"the replay log is of format %d, this code reads format %d", version, formatVersion,

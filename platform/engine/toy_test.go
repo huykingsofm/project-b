@@ -3,7 +3,8 @@ package engine
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // A toy state and action, for the tests of the mechanism: no game is needed to try an engine.
@@ -31,14 +32,14 @@ func (s *toyState) Hash() uint64 {
 	h.U64(uint64(s.Total))
 	return h.Sum()
 }
-func (s *toyState) Encode(w *binarycodec.Writer) error {
+func (s *toyState) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
 	w.Varint(s.Total)
 	return nil
 }
 
-func decodeToyState(r *binarycodec.Reader, _ binarycodec.Version) (*toyState, error) {
+func decodeToyState(r *binary.Reader, _ codec.Version) (*toyState, error) {
 	s := &toyState{id: sim.StateID(r.Uvarint()), tick: r.Uvarint(), Total: r.Varint()}
 	return s, r.Err()
 }
@@ -59,9 +60,9 @@ func (a *toyAction) Apply(
 ) {
 	s.Total += a.N
 }
-func (a *toyAction) Encode(w *binarycodec.Writer) { w.Varint(a.N); w.Varint(int64(a.Author)) }
+func (a *toyAction) Encode(w *binary.Writer) { w.Varint(a.N); w.Varint(int64(a.Author)) }
 
-func decodeToyAction(r *binarycodec.Reader, _ binarycodec.Version) (sim.Action[*toyState], error) {
+func decodeToyAction(r *binary.Reader, _ codec.Version) (sim.Action[*toyState], error) {
 	a := &toyAction{N: r.Varint(), Author: int(r.Varint())}
 	return a, r.Err()
 }
@@ -72,7 +73,7 @@ type toyCommand struct{ N int64 }
 const toyCommandID sim.CommandID = 60001
 
 func (toyCommand) ID() sim.CommandID { return toyCommandID }
-func (c toyCommand) Encode(w *binarycodec.Writer) error {
+func (c toyCommand) Encode(w *binary.Writer) error {
 	w.Varint(c.N)
 	return nil
 }
@@ -82,7 +83,7 @@ func (c toyCommand) Translate() []sim.Action[*toyState] {
 func (c toyCommand) Clone() sim.Command[*toyState] { return c }
 
 func decodeToyCommand(
-	r *binarycodec.Reader, _ binarycodec.Version,
+	r *binary.Reader, _ codec.Version,
 ) (sim.Command[*toyState], error) {
 	c := toyCommand{N: r.Varint()}
 	return c, r.Err()
@@ -107,14 +108,14 @@ func (a *forwardAction) Apply(
 		r.ToSelfAt(c.Tick+a.Again, a)
 	}
 }
-func (a *forwardAction) Encode(w *binarycodec.Writer) {
+func (a *forwardAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.To))
 	w.Varint(a.N)
 	w.Uvarint(a.Again)
 }
 
 func decodeForwardAction(
-	r *binarycodec.Reader, _ binarycodec.Version,
+	r *binary.Reader, _ codec.Version,
 ) (sim.Action[*toyState], error) {
 	a := &forwardAction{To: sim.StateID(r.Uvarint()), N: r.Varint(), Again: r.Uvarint()}
 	return a, r.Err()
@@ -134,10 +135,10 @@ func (a *readAction) Apply(
 		s.Total = other.Total
 	}
 }
-func (a *readAction) Encode(w *binarycodec.Writer) { w.Uvarint(uint64(a.From)) }
+func (a *readAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.From)) }
 
 func decodeReadAction(
-	r *binarycodec.Reader, _ binarycodec.Version,
+	r *binary.Reader, _ codec.Version,
 ) (sim.Action[*toyState], error) {
 	a := &readAction{From: sim.StateID(r.Uvarint())}
 	return a, r.Err()

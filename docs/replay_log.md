@@ -76,7 +76,7 @@ An action is its ID, then its fields written by its `Encode`; its decoder is reg
 
 | Field | Value |
 |---|---|
-| data version | `uvarint`, 1: given to every `Decode` as a `binarycodec.Version` |
+| data version | `uvarint`, 1: given to every `Decode` as a `codec.Version` |
 | engine | state ID, whose type is the type of its state |
 | seed | 8 bytes |
 | first tick | tick of the first record of the segment |

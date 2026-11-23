@@ -7,7 +7,7 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func anExit() ExitEntity {
@@ -64,26 +64,26 @@ func TestTheHashOfAnExitDependsOnWhereItLeadsAndWhereItArrives(t *testing.T) {
 }
 
 func TestAnExitComesBackAsItWasWrittenAndCutBytesAndOtherKindsAreAnError(t *testing.T) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := Encode(&w, anExit()); err != nil {
 		t.Fatal(err)
 	}
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	got, err := Decode(r, 1, 0)
 	if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, anExit()) {
 		t.Fatalf("came back as %+v, error %v, %d bytes left", got, err, r.Left())
 	}
 	for n := range w.B {
-		if _, err := Decode(binarycodec.NewReader(w.B[:n]), 1, 0); err == nil {
+		if _, err := Decode(binary.NewReader(w.B[:n]), 1, 0); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
-	if err := Encode(&binarycodec.Writer{}, nil); !errors.Is(err, ErrNoCodec) {
+	if err := Encode(&binary.Writer{}, nil); !errors.Is(err, ErrNoCodec) {
 		t.Fatalf("nil: %v", err)
 	}
-	var item binarycodec.Writer
+	var item binary.Writer
 	item.Uvarint(uint64(state.ItemKindID)) // a kind that a zone does not hold
-	if _, err := Decode(binarycodec.NewReader(item.B), 1, 0); !errors.Is(err, ErrUnknownKind) {
+	if _, err := Decode(binary.NewReader(item.B), 1, 0); !errors.Is(err, ErrUnknownKind) {
 		t.Fatalf("an item in a zone: %v", err)
 	}
 }

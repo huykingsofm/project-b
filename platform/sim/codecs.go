@@ -4,22 +4,22 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
 	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ActionDecoder, CommandDecoder, StateDecoder and OnFailDecoder read one kind of what the codecs
 // register, of the data version given. The decoder of an OnFail that holds a message is given the
 // function that reads one.
 type (
-	ActionDecoder  func(r *binarycodec.Reader, version binarycodec.Version) (BaseAction, error)
-	CommandDecoder func(r *binarycodec.Reader, version binarycodec.Version) (BaseCommand, error)
-	StateDecoder   func(r *binarycodec.Reader, version binarycodec.Version) (State, error)
+	ActionDecoder  func(r *binary.Reader, version codec.Version) (BaseAction, error)
+	CommandDecoder func(r *binary.Reader, version codec.Version) (BaseCommand, error)
+	StateDecoder   func(r *binary.Reader, version codec.Version) (State, error)
 	OnFailDecoder  func(
-		r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+		r *binary.Reader, version codec.Version, nested MessageDecoder,
 	) (OnFail, error)
 	messageDecoder func(
-		to StateID, r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+		to StateID, r *binary.Reader, version codec.Version, nested MessageDecoder,
 	) (Message, error)
 )
 
@@ -54,11 +54,11 @@ func NewCodecs() *Codecs {
 // reads it. It also makes the messages for the states of this type readable, which carry actions
 // of S. It is an error when the type or the Go type is already registered.
 func (c *Codecs) RegisterState[S State](
-	prototype S, decode func(r *binarycodec.Reader, version binarycodec.Version) (S, error),
+	prototype S, decode func(r *binary.Reader, version codec.Version) (S, error),
 ) error {
 	err := c.States.Register(
 		prototype,
-		func(r *binarycodec.Reader, version binarycodec.Version) (State, error) {
+		func(r *binary.Reader, version codec.Version) (State, error) {
 			s, err := decode(r, version)
 			if err != nil {
 				return nil, err
@@ -77,11 +77,11 @@ func (c *Codecs) RegisterState[S State](
 // type is already registered.
 func (c *Codecs) RegisterAction[S State](
 	prototype Action[S],
-	decode func(r *binarycodec.Reader, version binarycodec.Version) (Action[S], error),
+	decode func(r *binary.Reader, version codec.Version) (Action[S], error),
 ) error {
 	return c.Actions.Register(
 		prototype,
-		func(r *binarycodec.Reader, version binarycodec.Version) (BaseAction, error) {
+		func(r *binary.Reader, version codec.Version) (BaseAction, error) {
 			a, err := decode(r, version)
 			if err != nil {
 				return nil, err
@@ -95,11 +95,11 @@ func (c *Codecs) RegisterAction[S State](
 // type is already registered.
 func (c *Codecs) RegisterCommand[S State](
 	prototype Command[S],
-	decode func(r *binarycodec.Reader, version binarycodec.Version) (Command[S], error),
+	decode func(r *binary.Reader, version codec.Version) (Command[S], error),
 ) error {
 	return c.Commands.Register(
 		prototype,
-		func(r *binarycodec.Reader, version binarycodec.Version) (BaseCommand, error) {
+		func(r *binary.Reader, version codec.Version) (BaseCommand, error) {
 			cmd, err := decode(r, version)
 			if err != nil {
 				return nil, err
@@ -116,7 +116,7 @@ func (c *Codecs) RegisterOnFail(prototype OnFail, decode OnFailDecoder) error {
 }
 
 // EncodeAction writes an action: its ID and its fields.
-func EncodeAction(w *binarycodec.Writer, a BaseAction) error {
+func EncodeAction(w *binary.Writer, a BaseAction) error {
 	if a == nil {
 		return fmt.Errorf("%w: nil", ErrNoCodec)
 	}
@@ -131,7 +131,7 @@ func EncodeAction(w *binarycodec.Writer, a BaseAction) error {
 
 // DecodeAction reads what EncodeAction wrote, of the data version given.
 func (c *Codecs) DecodeAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (BaseAction, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {
@@ -146,7 +146,7 @@ func (c *Codecs) DecodeAction(
 
 // EncodeCommand writes a command: its ID and its fields. Nothing of a command that cannot be
 // written is left in w.
-func EncodeCommand(w *binarycodec.Writer, c BaseCommand) error {
+func EncodeCommand(w *binary.Writer, c BaseCommand) error {
 	if c == nil {
 		return fmt.Errorf("%w: nil command", ErrNoCodec)
 	}
@@ -162,7 +162,7 @@ func EncodeCommand(w *binarycodec.Writer, c BaseCommand) error {
 // DecodeCommand reads what EncodeCommand wrote, of the data version given. The command is of the
 // type that was written, which a reader that knows the engine it is for asserts to a Command[S].
 func (c *Codecs) DecodeCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (BaseCommand, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {
@@ -176,7 +176,7 @@ func (c *Codecs) DecodeCommand(
 }
 
 // EncodeState writes a state: its type and its fields.
-func EncodeState(w *binarycodec.Writer, s State) error {
+func EncodeState(w *binary.Writer, s State) error {
 	if s == nil {
 		return fmt.Errorf("%w: nil state", ErrNoCodec)
 	}
@@ -190,7 +190,7 @@ func EncodeState(w *binarycodec.Writer, s State) error {
 }
 
 // DecodeState reads what EncodeState wrote, of the data version given.
-func (c *Codecs) DecodeState(r *binarycodec.Reader, version binarycodec.Version) (State, error) {
+func (c *Codecs) DecodeState(r *binary.Reader, version codec.Version) (State, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func (c *Codecs) DecodeState(r *binarycodec.Reader, version binarycodec.Version)
 
 // DecodeStateOfType reads the fields of a state of the type, after its type was read.
 func (c *Codecs) DecodeStateOfType(
-	t StateType, r *binarycodec.Reader, version binarycodec.Version,
+	t StateType, r *binary.Reader, version codec.Version,
 ) (State, error) {
 	decode, ok := c.States.Lookup(t)
 	if !ok {
@@ -211,7 +211,7 @@ func (c *Codecs) DecodeStateOfType(
 
 // EncodeOnFail writes an OnFail: its ID and what it holds. Nothing of an OnFail that cannot be
 // written is left in w.
-func EncodeOnFail(w *binarycodec.Writer, f OnFail) error {
+func EncodeOnFail(w *binary.Writer, f OnFail) error {
 	if f == nil {
 		return fmt.Errorf("%w: nil OnFail", ErrNoCodec)
 	}
@@ -226,13 +226,13 @@ func EncodeOnFail(w *binarycodec.Writer, f OnFail) error {
 
 // EncodeMessage writes a message whole. A message whose OnFail holds a message that holds a message
 // and so on deeper than DecodeMessage reads is refused: what is written must be readable.
-func EncodeMessage(w *binarycodec.Writer, m Message) error {
+func EncodeMessage(w *binary.Writer, m Message) error {
 	if m == nil {
 		return fmt.Errorf("%w: nil message", ErrNoCodec)
 	}
 	if nesting(m) > maxNesting {
 		return fmt.Errorf(
-			"%w: messages inside messages go deeper than %d", binarycodec.ErrBadValue, maxNesting,
+			"%w: messages inside messages go deeper than %d", binary.ErrBadValue, maxNesting,
 		)
 	}
 	return m.Encode(w)
@@ -247,17 +247,17 @@ func nesting(m Message) int {
 
 // DecodeMessage reads a message that EncodeMessage wrote, of the data version given.
 func (c *Codecs) DecodeMessage(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (Message, error) {
 	return c.decodeMessage(r, version, 0)
 }
 
 func (c *Codecs) decodeMessage(
-	r *binarycodec.Reader, version binarycodec.Version, depth int,
+	r *binary.Reader, version codec.Version, depth int,
 ) (Message, error) {
 	if depth > maxNesting {
 		return nil, fmt.Errorf(
-			"%w: messages inside messages go deeper than %d", binarycodec.ErrBadValue, maxNesting,
+			"%w: messages inside messages go deeper than %d", binary.ErrBadValue, maxNesting,
 		)
 	}
 	to := r.Uint[StateID]()
@@ -269,7 +269,7 @@ func (c *Codecs) decodeMessage(
 		return nil, fmt.Errorf("%w: state type %d", ErrUnknownCode, to.Type())
 	}
 	return decode(to, r, version, func(
-		r *binarycodec.Reader, version binarycodec.Version,
+		r *binary.Reader, version codec.Version,
 	) (Message, error) {
 		return c.decodeMessage(r, version, depth+1)
 	})
@@ -277,7 +277,7 @@ func (c *Codecs) decodeMessage(
 
 // decodeActionMessage reads the rest of a message for states of type S, after its type.
 func (c *Codecs) decodeActionMessage[S State](
-	to StateID, r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+	to StateID, r *binary.Reader, version codec.Version, nested MessageDecoder,
 ) (Message, error) {
 	header := DecodeHeader(r)
 	attempts := r.Uint[uint8]()
@@ -296,7 +296,7 @@ func (c *Codecs) decodeActionMessage[S State](
 }
 
 func (c *Codecs) decodeOnFail(
-	r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+	r *binary.Reader, version codec.Version, nested MessageDecoder,
 ) (OnFail, error) {
 	code := r.Uvarint()
 	if err := r.Err(); err != nil {
@@ -312,7 +312,7 @@ func (c *Codecs) decodeOnFail(
 // DecodeOnFail reads what EncodeOnFail wrote, of the data version given. A kind that holds a
 // message reads it with nested, which may be nil for a reader that expects none.
 func (c *Codecs) DecodeOnFail(
-	r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
+	r *binary.Reader, version codec.Version, nested MessageDecoder,
 ) (OnFail, error) {
 	return c.decodeOnFail(r, version, nested)
 }
@@ -320,14 +320,14 @@ func (c *Codecs) DecodeOnFail(
 // DecodeActions reads a list of actions of the states of type S, as EncodeActions wrote it. An
 // action that is not an Action[S] is an error.
 func (c *Codecs) DecodeActions[S State](
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) ([]Action[S], error) {
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
 	if n > uint64(r.Left()) { // an action takes at least one byte
-		return nil, fmt.Errorf("%w: %d actions", binarycodec.ErrShort, n)
+		return nil, fmt.Errorf("%w: %d actions", binary.ErrShort, n)
 	}
 	var out []Action[S] // nil, not empty, when there is none, as a list made in code has it
 	for range n {

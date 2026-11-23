@@ -11,7 +11,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Sender gives the commands of a scenario to the engines as they are, or after they were written to
@@ -28,11 +28,11 @@ func (s Sender) Via[C sim.BaseCommand](c C) C {
 	if !s.RoundTrip {
 		return c
 	}
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := sim.EncodeCommand(&w, c); err != nil {
 		s.T.Fatal(err)
 	}
-	got, err := s.Codecs.DecodeCommand(binarycodec.NewReader(w.B), 1)
+	got, err := s.Codecs.DecodeCommand(binary.NewReader(w.B), 1)
 	if err != nil {
 		s.T.Fatal(err)
 	}

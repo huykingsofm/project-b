@@ -4,7 +4,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterDamageAction takes health from an entity. It is in the plan after the action
@@ -32,7 +33,7 @@ func (a *ZoneLayerCharacterDamageAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterDamageAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.SourceID))
 	w.Uvarint(uint64(a.VictimID))
 	w.Varint(int64(a.Amount))
@@ -40,7 +41,7 @@ func (a *ZoneLayerCharacterDamageAction) Encode(w *binarycodec.Writer) {
 
 // decodeZoneLayerCharacterDamageAction reads what Encode wrote.
 func decodeZoneLayerCharacterDamageAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterDamageAction{
 		SourceID: r.Uint[state.EntityID](),

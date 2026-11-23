@@ -1,6 +1,6 @@
 package sim
 
-import "github.com/huykingsofm/project-b/shared/binarycodec"
+import "github.com/huykingsofm/project-b/shared/codec/binary"
 
 // ActionID names a kind of action, by a number: the game keeps the register. An action returns its
 // own with its method ID(). A number is never changed or reused, because the replay log writes it.
@@ -13,7 +13,7 @@ type Acting interface{ Actor() any }
 
 // Encoder is what an action has to be written: its fields, without its ID.
 type Encoder interface {
-	Encode(w *binarycodec.Writer)
+	Encode(w *binary.Writer)
 }
 
 // BaseAction is what the actions of every state type have in common: an ID and a priority. The

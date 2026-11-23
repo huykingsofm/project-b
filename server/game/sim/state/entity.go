@@ -2,7 +2,7 @@ package state
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // KindID names a kind of entity, by a number. A number is never changed or reused, because
@@ -32,7 +32,7 @@ type Entity interface {
 	Hash(h *sim.Hasher)
 	// Encode writes the fields of the entity, not its kind: the codec of its package writes the
 	// kind first.
-	Encode(w *binarycodec.Writer)
+	Encode(w *binary.Writer)
 }
 
 // DamageableEntity is an Entity with health. A state damages and heals through it and never asks

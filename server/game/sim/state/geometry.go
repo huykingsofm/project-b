@@ -1,7 +1,8 @@
 package state
 
 import (
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Vec is a position or a distance, in units. Every position, radius and distance of the simulation
@@ -69,13 +70,13 @@ func (r Rect) Contains(v Vec) bool {
 }
 
 // Encode writes a vector: its two coordinates.
-func (v Vec) Encode(w *binarycodec.Writer) {
+func (v Vec) Encode(w *binary.Writer) {
 	w.Varint(int64(v.X))
 	w.Varint(int64(v.Y))
 }
 
 // DecodeVec reads what Vec.Encode wrote, of the data version given. A reader that has failed gives
 // the zero vector.
-func DecodeVec(r *binarycodec.Reader, version binarycodec.Version) Vec {
+func DecodeVec(r *binary.Reader, version codec.Version) Vec {
 	return Vec{X: r.Int[int32](), Y: r.Int[int32]()}
 }

@@ -3,7 +3,8 @@ package entity
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // CharacterEntity is the body of a character in a zonelayer. Which character it is the body of is
@@ -47,7 +48,7 @@ func (e CharacterEntity) MovedTo(pos state.Vec) state.Entity {
 	return e
 }
 
-func (e CharacterEntity) Encode(w *binarycodec.Writer) {
+func (e CharacterEntity) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(e.entityID.Local()))
 	e.pos.Encode(w)
 	w.Varint(int64(e.rad))
@@ -56,7 +57,7 @@ func (e CharacterEntity) Encode(w *binarycodec.Writer) {
 }
 
 func decodeCharacterEntity(
-	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
+	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := CharacterEntity{
 		entityID: state.NewEntityID(owner, r.Uint[uint32]()),

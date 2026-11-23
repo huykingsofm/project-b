@@ -10,7 +10,8 @@ import (
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // everyAction has one action of every ID of the register, with every field set to something that is
@@ -80,11 +81,11 @@ func TestEveryActionOfTheRegisterHasACodecAndComesBackAsItWas(t *testing.T) {
 		if !c.Actions.Has(id) {
 			t.Fatalf("%T has no decoder", a)
 		}
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeAction(&w, a); err != nil {
 			t.Fatalf("%T: %v", a, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := c.DecodeAction(r, 1)
 		if err != nil || r.Left() != 0 {
 			t.Fatalf("%T: error %v, %d bytes left", a, err, r.Left())
@@ -100,11 +101,11 @@ func TestEveryActionOfThePackageIsRegisteredForItsOwnStateType(t *testing.T) {
 	// compiler checked when it was registered
 	c := codecs(t)
 	for id, a := range everyAction() {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeAction(&w, a); err != nil {
 			t.Fatal(err)
 		}
-		decoded, err := c.DecodeAction(binarycodec.NewReader(w.B), 1)
+		decoded, err := c.DecodeAction(binary.NewReader(w.B), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,11 +175,11 @@ func TestAMessageOfEveryKindComesBackWholeAndCutBytesAreAnErrorNeverAPanic(t *te
 	c := codecs(t)
 	registerStates(t, c)
 	for i, m := range aMessageOfEveryKind() {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeMessage(&w, m); err != nil {
 			t.Fatalf("message %d: %v", i, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := c.DecodeMessage(r, 1)
 		if err != nil || r.Left() != 0 {
 			t.Fatalf("message %d: error %v, %d bytes left", i, err, r.Left())
@@ -187,20 +188,20 @@ func TestAMessageOfEveryKindComesBackWholeAndCutBytesAreAnErrorNeverAPanic(t *te
 			t.Fatalf("message %d came back as %+v, want %+v", i, got, m)
 		}
 		for n := range w.B { // every proper prefix
-			if _, err := c.DecodeMessage(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+			if _, err := c.DecodeMessage(binary.NewReader(w.B[:n]), 1); err == nil {
 				t.Fatalf("message %d: %d of %d bytes were read", i, n, len(w.B))
 			}
 		}
 		for at := range w.B { // every byte made something else
 			bad := append([]byte(nil), w.B...)
 			bad[at] ^= 0xff
-			c.DecodeMessage(binarycodec.NewReader(bad), 1) // an error or a message, no panic
+			c.DecodeMessage(binary.NewReader(bad), 1) // an error or a message, no panic
 		}
 	}
 }
 
 // decodeZoneWithNoMap reads nothing: these tests write messages, and no state.
-func decodeZoneWithNoMap(*binarycodec.Reader, binarycodec.Version) (*zonestate.State, error) {
+func decodeZoneWithNoMap(*binary.Reader, codec.Version) (*zonestate.State, error) {
 	return nil, nil
 }
 

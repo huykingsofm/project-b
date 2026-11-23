@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // WorldChatPrivateSendCommand asks to send a private message from one player to another.
@@ -27,7 +28,7 @@ func (c WorldChatPrivateSendCommand) Translate() []sim.Action[*worldstate.State]
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c WorldChatPrivateSendCommand) Encode(w *binarycodec.Writer) error {
+func (c WorldChatPrivateSendCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.FromID))
 	w.Uvarint(uint64(c.ToID))
 	w.String(c.Text)
@@ -36,7 +37,7 @@ func (c WorldChatPrivateSendCommand) Encode(w *binarycodec.Writer) error {
 
 // decodeWorldChatPrivateSendCommand reads what Encode wrote.
 func decodeWorldChatPrivateSendCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*worldstate.State], error) {
 	c := WorldChatPrivateSendCommand{
 		FromID: r.Uint[state.PlayerID](), ToID: r.Uint[state.PlayerID](), Text: r.String(),

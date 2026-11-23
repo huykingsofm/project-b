@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func registered(t *testing.T) *sim.Codecs {
@@ -33,11 +33,11 @@ func TestAKindThatHoldsNoMessageComesBackAsItWasAndCutBytesAreAnError(t *testing
 		Redirect{To: 6}, Escalate{To: 1},
 		Notify{Key: "item.gone", Args: []string{"sword", "3"}}, Notify{Key: "item.gone"},
 	} {
-		var w binarycodec.Writer
+		var w binary.Writer
 		if err := sim.EncodeOnFail(&w, f); err != nil {
 			t.Fatalf("%T: %v", f, err)
 		}
-		r := binarycodec.NewReader(w.B)
+		r := binary.NewReader(w.B)
 		got, err := c.DecodeOnFail(r, 1, nil)
 		if err != nil || r.Left() != 0 || !sameKind(got, f) {
 			t.Fatalf("%T came back as %+v, error %v, %d bytes left", f, got, err, r.Left())
@@ -46,7 +46,7 @@ func TestAKindThatHoldsNoMessageComesBackAsItWasAndCutBytesAreAnError(t *testing
 			if f.ID() == RetryID || f.ID() == DropID {
 				break // nothing but the ID, which is all of the bytes
 			}
-			if _, err := c.DecodeOnFail(binarycodec.NewReader(w.B[:n]), 1, nil); err == nil {
+			if _, err := c.DecodeOnFail(binary.NewReader(w.B[:n]), 1, nil); err == nil {
 				t.Fatalf("%T: %d of %d bytes were read", f, n, len(w.B))
 			}
 		}
@@ -70,7 +70,7 @@ func sameKind(a, b sim.OnFail) bool {
 
 func TestANilOnFailAndANumberThatIsNoKindAreRefused(t *testing.T) {
 	c := registered(t)
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := sim.EncodeOnFail(&w, nil); !errors.Is(err, sim.ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a nil OnFail: %v, %d bytes written", err, len(w.B))
 	}
@@ -78,7 +78,7 @@ func TestANilOnFailAndANumberThatIsNoKindAreRefused(t *testing.T) {
 		t.Fatalf("a compensation with no message: %v, %d bytes written", err, len(w.B))
 	}
 	w.Uvarint(99)
-	_, err := c.DecodeOnFail(binarycodec.NewReader(w.B), 1, nil)
+	_, err := c.DecodeOnFail(binary.NewReader(w.B), 1, nil)
 	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("the number 99: %v, want ErrUnknownCode", err)
 	}

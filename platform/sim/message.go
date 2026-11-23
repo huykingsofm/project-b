@@ -3,7 +3,8 @@ package sim
 import (
 	"errors"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ErrNoCodec is returned for an action, a command, a message or an OnFail that cannot be written
@@ -24,13 +25,13 @@ type Header struct {
 }
 
 // Encode writes a header.
-func (h Header) Encode(w *binarycodec.Writer) {
+func (h Header) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(h.From))
 	w.Uvarint(h.Seq)
 }
 
 // DecodeHeader reads what Header.Encode wrote.
-func DecodeHeader(r *binarycodec.Reader) Header {
+func DecodeHeader(r *binary.Reader) Header {
 	return Header{From: r.Uint[StateID](), Seq: r.Uvarint()}
 }
 
@@ -87,12 +88,12 @@ type Message interface {
 	// Encode writes the message whole: where it goes (which says the type of state it is for), who
 	// sent it, how many times it was tried, its OnFail and its actions. Nothing of a message that
 	// cannot be written is left in w.
-	Encode(w *binarycodec.Writer) error
+	Encode(w *binary.Writer) error
 }
 
 // MessageDecoder reads a message that Message.Encode wrote, of the data version given. A kind of
 // OnFail that holds a message is given one to read it with.
-type MessageDecoder func(r *binarycodec.Reader, version binarycodec.Version) (Message, error)
+type MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 
 // OnFailID names a kind of OnFail, by a number: see the register in package onfail. A kind returns
 // its own with its method ID(). A number is never changed or reused, because the replay log writes
@@ -110,7 +111,7 @@ type OnFail interface {
 	// message and why it could not be delivered.
 	Handle(b Bouncer, m Message, r Reason)
 	// Encode writes what the kind holds, not its ID: Codecs.EncodeOnFail writes the ID first.
-	Encode(w *binarycodec.Writer) error
+	Encode(w *binary.Writer) error
 }
 
 // NestedOnFail is implemented by a kind of OnFail that holds a message, so that the depth of

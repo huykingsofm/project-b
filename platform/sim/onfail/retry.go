@@ -2,7 +2,8 @@ package onfail
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Retry sends the message again to the same address.
@@ -17,10 +18,10 @@ func (Retry) Handle(b sim.Bouncer, m sim.Message, r sim.Reason) {
 	}
 }
 
-func (Retry) Encode(*binarycodec.Writer) error { return nil }
+func (Retry) Encode(*binary.Writer) error { return nil }
 
 func decodeRetry(
-	*binarycodec.Reader, binarycodec.Version, sim.MessageDecoder,
+	*binary.Reader, codec.Version, sim.MessageDecoder,
 ) (sim.OnFail, error) {
 	return Retry{}, nil
 }

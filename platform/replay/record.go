@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // Kind names a kind of record by a number: the register below. A new kind takes the next number, at
@@ -29,7 +30,7 @@ const (
 type Body interface {
 	Kind() Kind
 	// Encode writes what the body holds, not its kind: encodeRecord writes the kind first.
-	Encode(w *binarycodec.Writer) error
+	Encode(w *binary.Writer) error
 	// Same reports whether the other body is of the same kind and says the same thing.
 	Same(other Body) bool
 }
@@ -54,7 +55,7 @@ type Inbound struct{ Message sim.Message }
 
 func (Inbound) Kind() Kind { return KindInbound }
 
-func (b Inbound) Encode(w *binarycodec.Writer) error { return sim.EncodeMessage(w, b.Message) }
+func (b Inbound) Encode(w *binary.Writer) error { return sim.EncodeMessage(w, b.Message) }
 
 func (b Inbound) Same(other Body) bool {
 	o, ok := other.(Inbound)
@@ -62,7 +63,7 @@ func (b Inbound) Same(other Body) bool {
 }
 
 func decodeInbound(
-	c *sim.Codecs, r *binarycodec.Reader, version binarycodec.Version,
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error) {
 	m, err := c.DecodeMessage(r, version)
 	return Inbound{Message: m}, err
@@ -73,14 +74,14 @@ type Command struct{ Command sim.BaseCommand }
 
 func (Command) Kind() Kind { return KindCommand }
 
-func (b Command) Encode(w *binarycodec.Writer) error { return sim.EncodeCommand(w, b.Command) }
+func (b Command) Encode(w *binary.Writer) error { return sim.EncodeCommand(w, b.Command) }
 
 func (b Command) Same(other Body) bool {
 	o, ok := other.(Command)
 	if !ok {
 		return false
 	}
-	var x, y binarycodec.Writer
+	var x, y binary.Writer
 	if sim.EncodeCommand(&x, b.Command) != nil || sim.EncodeCommand(&y, o.Command) != nil {
 		return false
 	}
@@ -88,7 +89,7 @@ func (b Command) Same(other Body) bool {
 }
 
 func decodeCommand(
-	c *sim.Codecs, r *binarycodec.Reader, version binarycodec.Version,
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error) {
 	cmd, err := c.DecodeCommand(r, version)
 	return Command{Command: cmd}, err
@@ -99,14 +100,14 @@ type ConfigRead struct{ Version uint64 }
 
 func (ConfigRead) Kind() Kind { return KindConfig }
 
-func (b ConfigRead) Encode(w *binarycodec.Writer) error {
+func (b ConfigRead) Encode(w *binary.Writer) error {
 	w.Uvarint(b.Version)
 	return nil
 }
 
 func (b ConfigRead) Same(other Body) bool { o, ok := other.(ConfigRead); return ok && b == o }
 
-func decodeConfigRead(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return ConfigRead{Version: r.Uvarint()}, r.Err()
 }
 
@@ -115,14 +116,14 @@ type Hash struct{ Value uint64 }
 
 func (Hash) Kind() Kind { return KindHash }
 
-func (b Hash) Encode(w *binarycodec.Writer) error {
+func (b Hash) Encode(w *binary.Writer) error {
 	w.Fixed64(b.Value)
 	return nil
 }
 
 func (b Hash) Same(other Body) bool { o, ok := other.(Hash); return ok && b == o }
 
-func decodeHash(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+func decodeHash(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return Hash{Value: r.Fixed64()}, r.Err()
 }
 
@@ -135,7 +136,7 @@ type StableRead struct {
 
 func (StableRead) Kind() Kind { return KindStableRead }
 
-func (b StableRead) Encode(w *binarycodec.Writer) error {
+func (b StableRead) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(b.Source))
 	w.Uvarint(b.CopyTick)
 	return nil
@@ -143,7 +144,7 @@ func (b StableRead) Encode(w *binarycodec.Writer) error {
 
 func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
 
-func decodeStableRead(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+func decodeStableRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return StableRead{Source: r.Uint[sim.StateID](), CopyTick: r.Uvarint()}, r.Err()
 }
 
@@ -156,7 +157,7 @@ type Returned struct {
 
 func (Returned) Kind() Kind { return KindReturned }
 
-func (b Returned) Encode(w *binarycodec.Writer) error {
+func (b Returned) Encode(w *binary.Writer) error {
 	b.Header.Encode(w)
 	w.Uint8(uint8(b.Reason))
 	return nil
@@ -164,7 +165,7 @@ func (b Returned) Encode(w *binarycodec.Writer) error {
 
 func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok && b == o }
 
-func decodeReturned(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
+func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	header := sim.DecodeHeader(r)
 	return Returned{Header: header, Reason: sim.Reason(r.Uint8())}, r.Err()
 }
@@ -172,7 +173,7 @@ func decodeReturned(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version)
 // SameMessage reports whether two messages are the same one, by what they are written as: that is
 // what the log holds, and it does not tell a nil list from an empty one.
 func SameMessage(a, b sim.Message) bool {
-	var x, y binarycodec.Writer
+	var x, y binary.Writer
 	if sim.EncodeMessage(&x, a) != nil || sim.EncodeMessage(&y, b) != nil {
 		return false
 	}
@@ -183,7 +184,7 @@ func SameMessage(a, b sim.Message) bool {
 // that of each message it will compare later instead of the message. It is 0 for a message that
 // cannot be written.
 func HashMessage(m sim.Message) uint64 {
-	var w binarycodec.Writer
+	var w binary.Writer
 	if sim.EncodeMessage(&w, m) != nil {
 		return 0
 	}
@@ -195,7 +196,7 @@ func HashMessage(m sim.Message) uint64 {
 // decoders is the table of the functions that read a body, by its kind. A test fails when a kind of
 // the register has none.
 var decoders = map[Kind]func(
-	c *sim.Codecs, r *binarycodec.Reader, version binarycodec.Version,
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error){
 	KindInbound:    decodeInbound,
 	KindCommand:    decodeCommand,
@@ -207,7 +208,7 @@ var decoders = map[Kind]func(
 
 // payloadTick is the tick of the record that a payload holds.
 func payloadTick(payload []byte) (uint64, error) {
-	r := binarycodec.NewReader(payload)
+	r := binary.NewReader(payload)
 	r.Uint8()
 	tick := r.Uvarint()
 	return tick, r.Err()
@@ -215,7 +216,7 @@ func payloadTick(payload []byte) (uint64, error) {
 
 // encodeRecord writes a record: its kind, its tick and then its body. The engine is not in it: it
 // is the engine of the log the record is written to.
-func encodeRecord(w *binarycodec.Writer, r Record) error {
+func encodeRecord(w *binary.Writer, r Record) error {
 	if r.Body == nil {
 		return fmt.Errorf("the record has no body")
 	}
@@ -226,9 +227,9 @@ func encodeRecord(w *binarycodec.Writer, r Record) error {
 
 // decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
 func decodeRecord(
-	c *sim.Codecs, engine sim.StateID, version binarycodec.Version, payload []byte,
+	c *sim.Codecs, engine sim.StateID, version codec.Version, payload []byte,
 ) (Record, error) {
-	r := binarycodec.NewReader(payload)
+	r := binary.NewReader(payload)
 	kind, tick := Kind(r.Uint8()), r.Uvarint()
 	if err := r.Err(); err != nil {
 		return Record{}, err

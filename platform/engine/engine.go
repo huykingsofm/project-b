@@ -8,8 +8,8 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
 	"github.com/huykingsofm/project-b/shared/channels"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -217,7 +217,7 @@ func (e *Engine[S]) Checkpoint() ([]byte, error) {
 // the checkpoint. The state is read with the codecs of the environment. What the engine does again
 // and again is an action that waits in the checkpoint like any other.
 func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
-	r := binarycodec.NewReader(data)
+	r := binary.NewReader(data)
 	version, id, tick, err := readCheckpointStart(r, sim.StateTypeOf[S]())
 	if err != nil {
 		return nil, err

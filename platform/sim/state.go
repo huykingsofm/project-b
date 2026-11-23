@@ -3,7 +3,7 @@ package sim
 import (
 	"errors"
 
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // StateID names a state, whatever its type, and so names the engine that owns it and is the address
@@ -60,7 +60,7 @@ type State interface {
 	// Hash is the hash of the data of the state.
 	Hash() uint64
 	// Encode writes the state whole, but not its type: Codecs.EncodeState writes that first.
-	Encode(w *binarycodec.Writer) error
+	Encode(w *binary.Writer) error
 	// TakeEvents returns the events of the tick and empties them.
 	TakeEvents() []Event
 }

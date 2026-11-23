@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterItemPickupCommand asks to pick up an item that lies on the ground.
@@ -30,7 +31,7 @@ func (c ZoneLayerCharacterItemPickupCommand) Translate() []sim.Action[*zonelayer
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binarycodec.Writer) error {
+func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	w.Uvarint(uint64(c.ItemEntityID))
 	return nil
@@ -38,7 +39,7 @@ func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binarycodec.Writer) error
 
 // decodeZoneLayerCharacterItemPickupCommand reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterItemPickupCommand{
 		CharacterID: r.Uint[state.CharacterID](), ItemEntityID: r.Uint[state.EntityID](),

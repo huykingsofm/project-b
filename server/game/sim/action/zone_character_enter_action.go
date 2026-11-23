@@ -6,7 +6,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // zoneCharacterEnterActionArrival is the arrival position of a character that enters the world: it
@@ -51,13 +52,13 @@ func (a *ZoneCharacterEnterAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneCharacterEnterAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneCharacterEnterAction) Encode(w *binary.Writer) {
 	a.Character.Encode(w)
 }
 
 // decodeZoneCharacterEnterAction reads what Encode wrote.
 func decodeZoneCharacterEnterAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonestate.State], error) {
 	c, err := zonelayerstate.DecodeCharacter(r, version)
 	if err != nil {

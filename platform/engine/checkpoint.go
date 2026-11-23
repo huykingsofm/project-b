@@ -6,7 +6,8 @@ import (
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // A checkpoint is what an engine needs to go on from the tick it was taken at, as bytes: the start
@@ -39,7 +40,7 @@ func (c *cell) engineHash[S sim.State](
 // hashInto adds what every engine knows besides its state to a hash, as the bytes that a
 // checkpoint writes for it, so that the hash covers exactly what the checkpoint carries.
 func (c *cell) hashInto(h *sim.Hasher) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	if err := c.encode(&w); err != nil {
 		h.String("a cell that cannot be written") // the hash still tells it from another
 		return
@@ -51,7 +52,7 @@ func (c *cell) hashInto(h *sim.Hasher) {
 func (c *cell) checkpoint[S sim.State](
 	tick uint64, st S, sched *sim.Scheduler[S], self []sim.Action[S],
 ) ([]byte, error) {
-	var w binarycodec.Writer
+	var w binary.Writer
 	w.Uvarint(1) // the version of the data
 	w.Uvarint(uint64(c.me))
 	w.Uvarint(tick)
@@ -73,9 +74,9 @@ func (c *cell) checkpoint[S sim.State](
 // readCheckpointStart reads the start of a checkpoint and checks that it is the checkpoint of an
 // engine whose state is of the type.
 func readCheckpointStart(
-	r *binarycodec.Reader, want sim.StateType,
-) (binarycodec.Version, sim.StateID, uint64, error) {
-	version := r.Uint[binarycodec.Version]()
+	r *binary.Reader, want sim.StateType,
+) (codec.Version, sim.StateID, uint64, error) {
+	version := r.Uint[codec.Version]()
 	if err := r.Err(); err != nil {
 		return 0, 0, 0, err
 	}
@@ -117,7 +118,7 @@ type restoredCell struct {
 // readCheckpointRest reads what follows the state of an engine: what it waits for, what it set for
 // itself, and what only it knows.
 func (env *Env) readCheckpointRest[S sim.State](
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (*restored[S], error) {
 	var rest restored[S]
 	if err := rest.sched.Decode(env.Codecs, r, version); err != nil {
@@ -139,7 +140,7 @@ func (env *Env) readCheckpointRest[S sim.State](
 // encode writes what every engine knows besides its state: the place of its random numbers, the
 // number of its messages and the last that it took from each sender, the version of the
 // configuration it read, and the messages that it holds to send again.
-func (c *cell) encode(w *binarycodec.Writer) error {
+func (c *cell) encode(w *binary.Writer) error {
 	random, err := c.pcg.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("its random numbers: %w", err)
@@ -168,7 +169,7 @@ func (c *cell) encode(w *binarycodec.Writer) error {
 
 // decodeCell reads what encode wrote.
 func decodeCell(
-	c *sim.Codecs, r *binarycodec.Reader, version binarycodec.Version,
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (restoredCell, error) {
 	rc := restoredCell{pcg: rand.NewPCG(0, 0)}
 	if err := rc.pcg.UnmarshalBinary([]byte(r.String())); err != nil {
@@ -181,7 +182,7 @@ func decodeCell(
 		return restoredCell{}, err
 	}
 	if n > uint64(r.Left()) { // a sender takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d senders", binarycodec.ErrShort, n)
+		return restoredCell{}, fmt.Errorf("%w: %d senders", binary.ErrShort, n)
 	}
 	rc.lastSeq = make(map[sim.StateID]uint64, n)
 	for range n {
@@ -193,7 +194,7 @@ func decodeCell(
 		return restoredCell{}, err
 	}
 	if n > uint64(r.Left()) { // a message takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d messages", binarycodec.ErrShort, n)
+		return restoredCell{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
 	}
 	for range n {
 		m, err := c.DecodeMessage(r, version)

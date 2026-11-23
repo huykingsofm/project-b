@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterExitToCommand asks to take the exit, an entity of the zonelayer, that the
@@ -31,7 +32,7 @@ func (c ZoneLayerCharacterExitToCommand) Translate() []sim.Action[*zonelayerstat
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
-func (c ZoneLayerCharacterExitToCommand) Encode(w *binarycodec.Writer) error {
+func (c ZoneLayerCharacterExitToCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	w.Uvarint(uint64(c.ExitEntityID))
 	return nil
@@ -39,7 +40,7 @@ func (c ZoneLayerCharacterExitToCommand) Encode(w *binarycodec.Writer) error {
 
 // decodeZoneLayerCharacterExitToCommand reads what Encode wrote.
 func decodeZoneLayerCharacterExitToCommand(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterExitToCommand{
 		CharacterID: r.Uint[state.CharacterID](), ExitEntityID: r.Uint[state.EntityID](),

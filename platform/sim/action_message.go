@@ -1,6 +1,6 @@
 package sim
 
-import "github.com/huykingsofm/project-b/shared/binarycodec"
+import "github.com/huykingsofm/project-b/shared/codec/binary"
 
 // ActionMessage is a list of actions for one engine, whose state is of type S, that are put in its
 // plan together, with what a failed delivery means. A message is delivered whole or bounced whole.
@@ -63,7 +63,7 @@ func (m *ActionMessage[S]) Redirected(to StateID) Message {
 
 // Encode writes the message whole: where it goes (its ID says the type of state it is for), who
 // sent it, how many times it was tried, its OnFail and its actions.
-func (m *ActionMessage[S]) Encode(w *binarycodec.Writer) error {
+func (m *ActionMessage[S]) Encode(w *binary.Writer) error {
 	start := len(w.B)
 	w.Uvarint(uint64(m.To))
 	m.Header.Encode(w)

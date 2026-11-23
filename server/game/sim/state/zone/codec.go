@@ -8,14 +8,15 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zone/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
 // Encode writes the data of the state: its ID and tick, its entities, the zonelayers it knows, what
 // was said, and the ID the next entity gets. The map is not written: it never changes and the ID of
 // the zone finds it. The events are not data (R18) and are not written.
-func (s *State) Encode(w *binarycodec.Writer) error {
+func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.worldID))
 	w.Uvarint(s.tick)
@@ -50,13 +51,13 @@ func (s *State) Encode(w *binarycodec.Writer) error {
 
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
-func count(r *binarycodec.Reader) (uint64, error) {
+func count(r *binary.Reader) (uint64, error) {
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return 0, err
 	}
 	if n > uint64(r.Left()) {
-		return 0, fmt.Errorf("%w: %d items", binarycodec.ErrShort, n)
+		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
 	}
 	return n, nil
 }
@@ -64,7 +65,7 @@ func count(r *binarycodec.Reader) (uint64, error) {
 // DecodeState reads what State.Encode wrote, of the data version given. The map of the zone is the
 // one that tilesOf gives for its ID.
 func DecodeState(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 	tilesOf func(zoneID sim.StateID) *tilemap.TileMap,
 ) (*State, error) {
 	s := &State{

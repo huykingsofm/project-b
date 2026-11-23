@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
@@ -73,7 +74,7 @@ var ErrUnknownCooldownKey = errors.New("zonelayer: the number is not one of a co
 
 // Encode writes a character: its fields and its cooldowns, each as the number of its key and the
 // tick it ends at, in the order they were set.
-func (c Character) Encode(w *binarycodec.Writer) {
+func (c Character) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(c.characterID))
 	w.String(c.name)
 	w.Varint(int64(c.health))
@@ -88,8 +89,8 @@ func (c Character) Encode(w *binarycodec.Writer) {
 }
 
 // DecodeCharacter reads what Character.Encode wrote, of the data version given. It returns an error
-// of the bytes (binarycodec.ErrShort), or one that wraps ErrUnknownCooldownKey.
-func DecodeCharacter(r *binarycodec.Reader, version binarycodec.Version) (Character, error) {
+// of the bytes (binary.ErrShort), or one that wraps ErrUnknownCooldownKey.
+func DecodeCharacter(r *binary.Reader, version codec.Version) (Character, error) {
 	c := Character{
 		characterID: r.Uint[state.CharacterID](),
 		name:        r.String(),

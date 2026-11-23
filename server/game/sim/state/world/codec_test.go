@@ -7,7 +7,7 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
@@ -23,9 +23,9 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddZoneLayer(5)
 	st.RemoveZoneLayer(4)
 
-	var w binarycodec.Writer
+	var w binary.Writer
 	st.Encode(&w)
-	r := binarycodec.NewReader(w.B)
+	r := binary.NewReader(w.B)
 	got, err := world.DecodeState(r, 1)
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
@@ -37,13 +37,13 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	if got.Hash() != st.Hash() {
 		t.Fatal("the state that came back has another hash")
 	}
-	var again binarycodec.Writer
+	var again binary.Writer
 	got.Encode(&again)
 	if !bytes.Equal(again.B, w.B) {
 		t.Fatal("the state that came back is written differently")
 	}
 	for n := range w.B { // every proper prefix
-		if _, err := world.DecodeState(binarycodec.NewReader(w.B[:n]), 1); err == nil {
+		if _, err := world.DecodeState(binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}

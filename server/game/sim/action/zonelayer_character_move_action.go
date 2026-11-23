@@ -5,7 +5,8 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterMoveAction is a run of movement: a character holds a direction for a number of
@@ -81,7 +82,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyCancel(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterMoveAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterMoveAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uint8(uint8(a.Dir))
 	w.Uvarint(uint64(a.Ticks))
@@ -90,7 +91,7 @@ func (a *ZoneLayerCharacterMoveAction) Encode(w *binarycodec.Writer) {
 
 // decodeZoneLayerCharacterMoveAction reads what Encode wrote.
 func decodeZoneLayerCharacterMoveAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterMoveAction{
 		CharacterID: r.Uint[state.CharacterID](),

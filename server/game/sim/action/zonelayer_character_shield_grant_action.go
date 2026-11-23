@@ -4,7 +4,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/binarycodec"
+	"github.com/huykingsofm/project-b/shared/codec"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // ZoneLayerCharacterShieldGrantAction is a standing action: it stands in the plan at every tick, by
@@ -52,7 +53,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binarycodec.Writer) {
+func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(a.Duration)
 	w.Bool(a.started)
@@ -61,7 +62,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binarycodec.Writer) {
 
 // decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
 func decodeZoneLayerCharacterShieldGrantAction(
-	r *binarycodec.Reader, version binarycodec.Version,
+	r *binary.Reader, version codec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterShieldGrantAction{
 		CharacterID: r.Uint[state.CharacterID](),
