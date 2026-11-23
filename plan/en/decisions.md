@@ -87,3 +87,18 @@ How it runs:
 | Randomness and replay | All AI randomness from the seeded RNG of the engine, so a replay reproduces it without logging decisions | Replay and the hash (R20) |
 | Lag and fairness | How far an NPC attack waits for the client's own timing (R16) | How fights feel at high latency |
 | Debugging | A way to see why an NPC did what it did (state, scores, target) | Tools (phase 8) |
+
+### The map of a zone and the checkpoint (for later, near the phase of the replay of the cluster)
+
+Today the checkpoint of a zone does not hold its map, and `zone.DecodeState` takes a function `tilesOf(zoneID)` that gives the map back. The owner does not like it: the decoder of this one state has a signature of its own, the closure in `NewCodecs`, a `ClusterBuilder` that holds the zones only to make that function, and a checkpoint that is read with a map that may have changed since it was written, with no one telling.
+
+| Way | What it is | Gives | Costs |
+|---|---|---|---|
+| Write the map in the checkpoint | `Encode` writes the map, `DecodeState(r, version)` is like every other | no `tilesOf`, no zones held by the builder, and the map goes with the checkpoint | the size of the map for each checkpoint of each zone: about 60 a hour, so 7.5 MB an hour for a map of 1,000 by 1,000 tiles before any compression; fine for a small map |
+| Write the map in compressed runs | the same, with the blocked tiles as runs | most of the cost of the first way is gone | a codec of runs for the bitset |
+| Separate static data from the state | the map is not a field of the state: the engine holds it, as it holds the configuration, and an action reads it through the context | the right model; every state is read by `DecodeState(r, version)` | the platform has to carry data of the game; `NewState` and every action that reads `TileMap()` change |
+| A reference in the log (the way the owner proposed) | a format for reading by reference, `KindRef`: a file name and the number of a record in it; the reader opens that file at that record and takes out a record of its own kind and body, as usual | generic: any big body (a map, a message sent many times, a copy that many engines read) is written once; the log and the checkpoint stay small | a record can be reached by its number (an index of `segmentlog`, which is read in order today); the target is written and committed before the reference; a reference to a reference is refused or its depth is limited; what is referenced is never deleted; `Body.Same` compares what a reference gives |
+
+- **Where a reference is read:** the checkpoint is not a record of the log, so the format has to be under both: `binary.Writer.Ref(file, n)` and a `binary.Reader` that is given a function that resolves a reference. Then `DecodeState(r, version)` keeps one signature, and what loads the map is the reader, not the decoder of the zone.
+- **Not decided:** who writes the map once and gives its address (file and record) to the state at `Encode`; this needs a place where the cluster registers its assets when it starts.
+- **Decision:** not made. The size of the real maps decides between the first ways and the last two.
