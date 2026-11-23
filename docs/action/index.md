@@ -54,8 +54,7 @@ What must happen outside a state goes in its `sim.Registry[S]` and happens after
 | `Send[T](to, onFail, actions...)` | a message to the state with the ID `to`, whose actions are `sim.Action[T]` |
 | `Get[T](id)` | the latest state that the engine with the ID published, as a `T` (see [Reading other states](#reading-other-states)) |
 | `ToSelf` | this action again, next tick |
-| `ToSelfAt` | this action again, at a tick |
-| `CancelWaiting` | ends sooner the actions a key names (an ID and, if given, an actor) that wait in the scheduler or were set for the next tick, and what this tick set before the call; it takes effect when the tick is over |
+| `ToSelfAt` | this action again, at a tick (a tick that is not in the future is the next one) |
 
 ## Failed delivery
 
@@ -80,14 +79,12 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 - `onfail.Retry`, `onfail.Redirect` and `onfail.Escalate` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
 - A message with no `OnFail` is dropped, and logged.
 
-### What an action that repeats and a cancel each decide
+### What ends an action that repeats
 
 | Question | Answer |
 |---|---|
 | Who ends an action that sets itself again? | the action: when its actor is no longer in the state it does nothing and does not set itself again |
-| What does `CancelWaiting` add? | it spares the ticks between: what waits for a later tick, or was set for the next one, is taken away at once |
-| Does it reach an action in the plan of this tick? | no: `Plan.Cancel` does, and it takes effect at once |
-| Does it reach what an action in the plan sets after the call? | no: whether it does depends on the order in the plan (priority, then arrival), which is why the action decides for itself |
+| What stops an action in the plan of this tick from running? | `Plan.Cancel`, which takes effect at once |
 
 ## Reading other states
 

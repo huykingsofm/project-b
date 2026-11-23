@@ -48,9 +48,9 @@ The simulation core touches nothing outside: no gateway, no database, no network
 `platform/engine/engine.go`, `Engine[S].Step`:
 
 1. Take the configuration once; decide on what came back undelivered.
-2. Build the plan: what the engine set for itself, what was scheduled for this tick, the messages of other engines, the commands.
+2. Build the plan: what was scheduled for this tick (what the engine set for itself in the last tick included), the messages of other engines, the commands.
 3. Run the plan, one action after another, on the state, in place.
-4. Settle the actions that were cancelled; take what the actions set for the engine.
+4. Tell the actions that were cancelled; put what the actions set for the engine in the scheduler.
 5. Hand the events to the emitter.
 6. Publish a `Clone` of the state (other engines read the latest copy).
 7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`.
@@ -110,7 +110,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - The plan is a `table.PriorityQueue` of its entries: priority (smaller first), then arrival; a running pointer; a column by ID. An engine makes it in one go with `Build` from the actions a tick starts with, and an action that runs adds what it makes with `Append`, which is ordered among the entries still to run and never before the one that runs. `FindByID` walks the actions of an ID as a type, lazily and with no allocation; `Find` returns a slice. Both give the entries that ran or were cancelled as well as the ones to run, and whoever changes an action checks `Status()` of the entry (`EntryPending`, `EntryRan`, `EntryCancelled`, `EntryCut`). `Cancel` of an entry that is pending sets its status and lists it in `Cancelled`, which the engine reads to call `ApplyCancel`; `Next` passes over what is not pending.
 - A depth limit on chains of actions.
-- A scheduler (an action set for a tick). What repeats is an action that sets itself again; the scheduler finds and cancels what waits by a key (the ID of the action and its actor), and an action cancels through its registry (`CancelWaiting`), which takes effect when the tick is over.
+- A scheduler (an action set for a tick). What repeats is an action that sets itself again; what an action sets for the next tick waits in it as well. Outside the engine, `Engine.Scheduler()` is a `sim.ReadOnlyScheduler`: it finds the action of an ID that waits for the earliest tick (`FindByID`) and says how many wait (`Pending`); only the engine changes it.
 - Messages with `OnFail`.
 
 ## Shared libraries and configuration

@@ -85,7 +85,7 @@ func aFreshEnv(c *game.Cluster) *engine.Env {
 func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
 	l := c.ZoneLayer(theLayer)
-	if _, waits := l.Waiting(sim.ActionKey{ID: action.ZoneLayerCharacterRegenActionID}); !waits {
+	if _, waits := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); !waits {
 		t.Fatal("the zonelayer waits for no heal: the test checks nothing")
 	}
 	data, err := l.Checkpoint()
@@ -202,8 +202,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *testing.T) {
 	c := aWorldToCheckpoint(t) // the builder asked for healing every 10 ticks
 	l := c.ZoneLayer(theLayer)
-	key := sim.ActionKey{ID: action.ZoneLayerCharacterRegenActionID}
-	regen, ok := l.Waiting(key)
+	regen, ok := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID)
 	if !ok || regen.(*action.ZoneLayerCharacterRegenAction).Every != 10 {
 		t.Fatalf("the zonelayer does not wait for the heal that was asked for: %v, %v", regen, ok)
 	}
@@ -243,7 +242,7 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 		t.Fatal(err)
 	}
 	none := noHeal.ZoneLayer(theLayer)
-	if _, waits := none.Waiting(key); waits {
+	if _, waits := none.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); waits {
 		t.Fatal("a zonelayer that heals every 0 ticks waits for a heal")
 	}
 	if err := game.EnsureRegen(none, 0); err != nil {
@@ -252,7 +251,7 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 	if err := game.EnsureRegen(none, 5); err != nil {
 		t.Fatalf("healing asked, none waiting: %v", err)
 	}
-	if _, waits := none.Waiting(key); !waits {
+	if _, waits := none.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); !waits {
 		t.Fatal("asking for healing set no heal")
 	}
 }

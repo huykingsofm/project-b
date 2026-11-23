@@ -16,7 +16,7 @@ func TestAddingAnItemSetsItsRemovalAtTheEndOfItsExpiry(t *testing.T) {
 	}).
 		Apply(&sim.Context{Tick: 30}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
-	_, later := reg.TakeSelf()
+	later := reg.TakeSelf()
 	if len(later) != 1 {
 		t.Fatalf("%d actions were set for later, want 1", len(later))
 	}
@@ -60,7 +60,7 @@ func TestAnItemWithNoExpiryIsNeverRemoved(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	(&ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: state.Vec{X: 2500, Y: 2500}}).
 		Apply(&sim.Context{Tick: 30}, st, reg, sim.NewPlan[*zonelayerstate.State]())
-	if _, later := reg.TakeSelf(); len(later) != 0 {
+	if later := reg.TakeSelf(); len(later) != 0 {
 		t.Fatalf("%d removals were set, want none", len(later))
 	}
 }

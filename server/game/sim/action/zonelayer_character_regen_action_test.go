@@ -25,15 +25,15 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 	if health() != 71 {
 		t.Fatalf("health %d after the heal, want 71", health())
 	}
-	next, later := reg.TakeSelf()
-	if len(next) != 0 || len(later) != 1 || later[0].At != 17 ||
+	later := reg.TakeSelf()
+	if len(later) != 1 || later[0].At != 17 ||
 		later[0].Action != sim.Action[*zonelayerstate.State](a) {
-		t.Fatalf("it set %v for the next tick and %v for later, want itself at 17", next, later)
+		t.Fatalf("it set %v, want itself at 17", later)
 	}
 
 	once := &ZoneLayerCharacterRegenAction{}
 	once.Apply(&sim.Context{Tick: 17}, st, &reg, sim.NewPlan[*zonelayerstate.State]())
-	if next, later := reg.TakeSelf(); health() != 72 || len(next)+len(later) != 0 {
-		t.Fatalf("a period of 0 healed to %d and set %d again", health(), len(next)+len(later))
+	if later := reg.TakeSelf(); health() != 72 || len(later) != 0 {
+		t.Fatalf("a period of 0 healed to %d and set %d again", health(), len(later))
 	}
 }

@@ -40,9 +40,7 @@ type Registry[S State] struct {
 	// Stable reads the states of the other engines.
 	Stable StableReader
 
-	next    []Action[S]
-	later   []Timed[S]
-	cancels []Cancel
+	self []Timed[S]
 }
 
 // Begin sets the tick that the registry is used at.
@@ -74,40 +72,19 @@ func (r *Registry[S]) Get[T any](id StateID) (T, error) {
 }
 
 // ToSelf sets an action to run in the next tick of the engine. It is not sent through a channel:
-// the engine reads it when the next tick begins.
-func (r *Registry[S]) ToSelf(a Action[S]) { r.next = append(r.next, a) }
+// the engine puts it in its scheduler when the tick is over.
+func (r *Registry[S]) ToSelf(a Action[S]) { r.ToSelfAt(r.Tick+1, a) }
 
 // ToSelfAt sets an action to run at a tick of the engine. An action that knows when it may run, a
 // wait for a later moment, is set for exactly that tick and not tried again at every tick
-// in between.
+// in between. A tick that is not in the future is the next one.
 func (r *Registry[S]) ToSelfAt(tick uint64, a Action[S]) {
-	if tick <= r.Tick {
-		r.next = append(r.next, a)
-		return
-	}
-	r.later = append(r.later, Timed[S]{At: tick, Action: a})
+	r.self = append(r.self, Timed[S]{At: tick, Action: a})
 }
 
-// CancelWaiting ends sooner what waits in the engine: the actions the key names that wait for a
-// later tick, or for the next one, and what this tick set before the call. It takes effect when
-// the tick is over. It does not reach an action that is in the plan of this tick (Plan.Cancel
-// does), nor what such an action sets again after the call, so it is not what stops an action
-// that sets itself again: that action decides for itself, from the state, whether it still does
-// anything and whether it sets itself again, and a cancel only spares the ticks in between.
-func (r *Registry[S]) CancelWaiting(key ActionKey) {
-	r.cancels = append(r.cancels, Cancel{Key: key, Next: len(r.next), Later: len(r.later)})
-}
-
-// TakeSelf returns what the engine set for itself in this tick.
-func (r *Registry[S]) TakeSelf() ([]Action[S], []Timed[S]) {
-	next, later := r.next, r.later
-	r.next, r.later = nil, nil
-	return next, later
-}
-
-// TakeCancels returns what the engine cancelled in this tick.
-func (r *Registry[S]) TakeCancels() []Cancel {
-	cancels := r.cancels
-	r.cancels = nil
-	return cancels
+// TakeSelf returns what the engine set for itself in this tick, in the order it was set.
+func (r *Registry[S]) TakeSelf() []Timed[S] {
+	self := r.self
+	r.self = nil
+	return self
 }

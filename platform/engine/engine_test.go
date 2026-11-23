@@ -187,7 +187,7 @@ func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.
 	if err != nil || string(again) != string(data) {
 		t.Fatalf("a restored engine writes another checkpoint: %v", err)
 	}
-	if pending, _ := r.Waiting(sim.ActionKey{ID: forwardActionID}); pending == nil {
+	if pending, _ := r.Scheduler().FindByID(forwardActionID); pending == nil {
 		t.Fatal("what the engine waited for is gone")
 	}
 }

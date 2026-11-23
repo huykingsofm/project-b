@@ -63,78 +63,19 @@ func TestSchedulerRunsAnActionForAPastTickAtTheNextOne(t *testing.T) {
 	}
 }
 
-func TestSchedulerFindsAndCancelsWhatAKeyNames(t *testing.T) {
+func TestSchedulerFindsTheActionOfAnIDThatWaitsForTheEarliestTick(t *testing.T) {
 	var s Scheduler[*toyState]
-	mine := func(tick uint64, author int) {
-		s.At(tick, &authoredAction{name: "x", author: author})
+	s.At(9, &authoredAction{name: "late", author: 1})
+	s.At(5, &authoredAction{name: "early", author: 2})
+	s.At(5, &authoredAction{name: "early too", author: 3})
+	if a, ok := s.FindByID(testID); !ok || nameOf(a) != "early" {
+		t.Fatalf("found %v, %v, want the first of the earliest tick", a, ok)
 	}
-	mine(9, 1)
-	mine(5, 2)
-	mine(7, 1)
-	byOne := ActionKey{Actor: 1, ID: testID}
-	if a, ok := s.Find(byOne); !ok || a.(*authoredAction).author != 1 {
-		t.Fatalf("found %+v, %v", a, ok)
-	}
-	if _, ok := s.Find(ActionKey{Actor: 3, ID: testID}); ok {
-		t.Fatal("an action of an actor that has none was found")
-	}
-	if _, ok := s.Find(ActionKey{ID: testID + 1}); ok {
+	if _, ok := s.FindByID(testID + 1); ok {
 		t.Fatal("an action of another ID was found")
 	}
-	if n := s.Cancel(byOne); n != 2 || s.Pending() != 1 {
-		t.Fatalf("%d cancelled, %d left, want 2 and 1", n, s.Pending())
-	}
-	if n := s.Cancel(ActionKey{ID: testID}); n != 1 || s.Pending() != 0 {
-		t.Fatalf("a key with no actor names every action of the ID: %d cancelled", n)
-	}
-}
-
-func TestACancelTakesAwayWhatWaitedAndWhatWasSetBeforeItAndNotWhatWasSetAfter(t *testing.T) {
-	var s Scheduler[*toyState]
-	of := func(author int, name string) Action[*toyState] {
-		return &authoredAction{name: name, author: author}
-	}
-	s.At(8, of(1, "waited"))
-	s.At(9, of(2, "waited of another"))
-	key := ActionKey{Actor: 1, ID: testID}
-	next := []Action[*toyState]{of(1, "next before"), of(1, "next after"), of(2, "next of another")}
-	later := []Timed[*toyState]{
-		{At: 12, Action: of(1, "later before")}, {At: 13, Action: of(1, "later after")},
-	}
-	cancels := []Cancel{{Key: key, Next: 1, Later: 1}} // the cancel came after the first of each
-
-	kept := s.Settle(next, later, cancels)
-	var names []string
-	for _, a := range kept {
-		names = append(names, nameOf(a))
-	}
-	if !slices.Equal(names, []string{"next after", "next of another"}) {
-		t.Fatalf("kept for the next tick: %v", names)
-	}
-	var waiting []string
-	for tick := uint64(1); tick <= 13; tick++ {
-		for _, a := range s.Due(tick) {
-			waiting = append(waiting, nameOf(a))
-		}
-	}
-	if !slices.Equal(waiting, []string{"waited of another", "later after"}) {
-		t.Fatalf("waiting in the scheduler: %v", waiting)
-	}
-}
-
-func TestACancelMadeByAnActionTakesEffectOnWhatWasSetBeforeIt(t *testing.T) {
-	var reg Registry[*toyState]
-	reg.ToSelf(&addAction{})
-	reg.CancelWaiting(ActionKey{ID: addID})
-	reg.ToSelf(&addAction{N: 5}) // set after: it stays
-	next, later := reg.TakeSelf()
-	var s Scheduler[*toyState]
-	kept := s.Settle(next, later, reg.TakeCancels())
-	if len(kept) != 1 || kept[0].(*addAction).N != 5 {
-		t.Fatalf("kept %+v, want only the action set after the cancel", kept)
-	}
-	if more := reg.TakeCancels(); more != nil {
-		t.Fatal("the cancels were not taken")
+	if s.Pending() != 3 {
+		t.Fatalf("%d waiting, want 3", s.Pending())
 	}
 }
 

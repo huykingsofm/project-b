@@ -15,8 +15,7 @@ import (
 // error, because a period that changed while the cluster ran would change what a replay makes, and
 // so is one that waits when the period is 0, which means no healing.
 func EnsureRegen(e *engine.Engine[*zonelayerstate.State], every uint64) error {
-	key := sim.ActionKey{ID: action.ZoneLayerCharacterRegenActionID}
-	waiting, found := e.Waiting(key)
+	waiting, found := e.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID)
 	if !found {
 		if every > 0 {
 			e.ScheduleAt(e.Tick()+every, &action.ZoneLayerCharacterRegenAction{Every: every})

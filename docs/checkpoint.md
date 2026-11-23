@@ -23,8 +23,7 @@ In this order:
 | state ID | the ID of the engine, `uvarint`; its high 8 bits are the type of the state, which the restore checks against the type it was asked for, and the ID against the state |
 | tick | the tick the engine is at |
 | state | the data of the state, by its `Encode` (below) |
-| scheduler | the last tick it gave out, and the actions set for later ticks, by tick and in order |
-| self list | what the engine set for itself for the next tick |
+| scheduler | the last tick it gave out, and the actions set for the ticks to come (the next one included), by tick and in order |
 | random numbers | where the generator of the engine is (the PCG), as its own bytes |
 | `seq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |

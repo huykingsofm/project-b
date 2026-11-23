@@ -27,7 +27,6 @@ type Engine[S sim.State] struct {
 	st       S
 	sched    sim.Scheduler[S]
 	reg      sim.Registry[S]
-	selfNext []sim.Action[S]
 	start    []sim.Action[S] // what the plan of a tick starts with, kept for the next tick
 	commands chan sim.Command[S]
 	stable   StableStore
@@ -99,12 +98,10 @@ func (e *Engine[S]) Type() sim.StateType { return sim.StateTypeOf[S]() }
 // TypeName is the name of the type of the state of the engine.
 func (e *Engine[S]) TypeName() string { return e.st.String() }
 
-// Waiting returns the action that the key names among what the engine set for the next tick and
-// what waits for a later one. It is called between two ticks, by the goroutine of the engine or
-// while the engine does not run.
-func (e *Engine[S]) Waiting(key sim.ActionKey) (sim.Action[S], bool) {
-	return e.sched.FindWaiting(e.selfNext, key)
-}
+// Scheduler returns what the engine waits for, to be read: the actions set for a tick to come, the
+// next one included. It is read between two ticks, by the goroutine of the engine or while the
+// engine does not run.
+func (e *Engine[S]) Scheduler() sim.ReadOnlyScheduler[S] { return &e.sched }
 
 // ScheduleAt sets an action to run at a tick of the engine. It is called between two ticks, by the
 // goroutine of the engine or while the engine does not run.
@@ -113,8 +110,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.sched.At(tick, 
 // Step runs one tick of the engine:
 //
 //  1. read the configuration, once, and handle what came back undelivered;
-//  2. build the plan, in one go: what the engine set for itself, what was scheduled for this
-//     tick, the messages of other engines, the commands;
+//  2. build the plan, in one go: what was scheduled for this tick (what the engine
+//     set for itself included), the messages of other engines, the commands;
 //  3. run the plan, one action after another, on the state;
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
@@ -130,7 +127,6 @@ func (e *Engine[S]) Step() {
 	e.settle(cfg, e.tick)
 
 	e.start = e.start[:0]
-	e.planSelf()
 	e.planScheduled()
 	e.planMessages()
 	e.planCommands()
@@ -152,8 +148,9 @@ func (e *Engine[S]) Step() {
 			c.ApplyCancel(ctx, e.st, &e.reg)
 		}
 	}
-	next, later := e.reg.TakeSelf()
-	e.selfNext = e.sched.Settle(next, later, e.reg.TakeCancels())
+	for _, t := range e.reg.TakeSelf() {
+		e.sched.At(t.At, t.Action)
+	}
 
 	if events := e.st.TakeEvents(); len(events) > 0 {
 		e.emitter.Emit(e.me, e.tick, events)
@@ -164,13 +161,8 @@ func (e *Engine[S]) Step() {
 	e.endTick(e.tick)
 }
 
-// planSelf adds to what the plan starts with what the engine set for itself in the last tick.
-func (e *Engine[S]) planSelf() {
-	e.start = append(e.start, e.selfNext...)
-	e.selfNext = nil
-}
-
-// planScheduled adds the actions that were scheduled for this tick.
+// planScheduled adds the actions that were scheduled for this tick, among them what the engine set
+// for itself in the last tick.
 func (e *Engine[S]) planScheduled() {
 	e.start = append(e.start, e.sched.Due(e.tick)...)
 }
@@ -205,13 +197,13 @@ func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) {
 // Hash is the hash of the engine: its state, what it waits for, and what only the engine knows (see
 // engineHash). A replay compares it with the one the log holds.
 func (e *Engine[S]) Hash() uint64 {
-	return e.cell.engineHash(e.st.Hash(), &e.sched, e.selfNext)
+	return e.cell.engineHash(e.st.Hash(), &e.sched)
 }
 
 // Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
 // by the goroutine of the engine or while the engine does not run.
 func (e *Engine[S]) Checkpoint() ([]byte, error) {
-	return e.cell.checkpoint(e.tick, e.st, &e.sched, e.selfNext)
+	return e.cell.checkpoint(e.tick, e.st, &e.sched)
 }
 
 // Restore makes the engine of a state from a checkpoint, in the environment given, at the tick of
@@ -240,7 +232,7 @@ func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error
 	}
 	e := New(st, env, seed)
 	e.tick = tick
-	e.sched, e.selfNext = rest.sched, rest.self
+	e.sched = rest.sched
 	e.cell.restore(rest.cell)
 	return e, nil
 }

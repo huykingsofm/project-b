@@ -21,18 +21,16 @@ import (
 // there is nothing else to write for it.
 
 // engineHash is the hash of an engine: of everything a checkpoint of it holds that the engine goes
-// on from: its state, what it waits for (the scheduler and the actions it set for itself for the
-// next tick), and what only it knows (the place of its random numbers, the number of its messages
-// and the last it took from each sender, the version of the configuration it read, and the
-// messages it holds to send again). A restore that differs from the engine it came from in any of
-// them has another hash, and a replay finds it.
+// on from: its state, what it waits for (the scheduler), and what only it knows (the place of its
+// random numbers, the number of its messages and the last it took from each sender, the version of
+// the configuration it read, and the messages it holds to send again). A restore that differs
+// from the engine it came from in any of them has another hash, and a replay finds it.
 func (c *cell) engineHash[S sim.State](
-	stateHash uint64, sched *sim.Scheduler[S], self []sim.Action[S],
+	stateHash uint64, sched *sim.Scheduler[S],
 ) uint64 {
 	h := sim.NewHasher()
 	h.U64(stateHash)
 	sched.Hash(&h)
-	h.Actions(self)
 	c.hashInto(&h)
 	return h.Sum()
 }
@@ -50,7 +48,7 @@ func (c *cell) hashInto(h *sim.Hasher) {
 
 // checkpoint writes the checkpoint of an engine, given its state.
 func (c *cell) checkpoint[S sim.State](
-	tick uint64, st S, sched *sim.Scheduler[S], self []sim.Action[S],
+	tick uint64, st S, sched *sim.Scheduler[S],
 ) ([]byte, error) {
 	var w binary.Writer
 	w.Uvarint(1) // the version of the data
@@ -61,9 +59,6 @@ func (c *cell) checkpoint[S sim.State](
 	}
 	if err := sched.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: the scheduler: %w", c.me, err)
-	}
-	if err := sim.EncodeActions(&w, self); err != nil {
-		return nil, fmt.Errorf("%v: what it set for itself: %w", c.me, err)
 	}
 	if err := c.encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: %w", c.me, err)
@@ -102,7 +97,6 @@ func readCheckpointStart(
 // all of the checkpoint has been read.
 type restored[S sim.State] struct {
 	sched sim.Scheduler[S]
-	self  []sim.Action[S]
 	cell  restoredCell
 }
 
@@ -115,8 +109,8 @@ type restoredCell struct {
 	pending        []sim.Message
 }
 
-// readCheckpointRest reads what follows the state of an engine: what it waits for, what it set for
-// itself, and what only it knows.
+// readCheckpointRest reads what follows the state of an engine: what it waits for, and what only it
+// knows.
 func (env *Env) readCheckpointRest[S sim.State](
 	r *binary.Reader, version codec.Version,
 ) (*restored[S], error) {
@@ -125,9 +119,6 @@ func (env *Env) readCheckpointRest[S sim.State](
 		return nil, fmt.Errorf("the scheduler: %w", err)
 	}
 	var err error
-	if rest.self, err = env.Codecs.DecodeActions[S](r, version); err != nil {
-		return nil, fmt.Errorf("what it set for itself: %w", err)
-	}
 	if rest.cell, err = decodeCell(env.Codecs, r, version); err != nil {
 		return nil, err
 	}

@@ -65,8 +65,8 @@ func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {
 		t.Fatalf("the character moved without a map: %+v", e.Position())
 	}
-	next, _ := reg.TakeSelf()
-	if len(next) != 1 || next[0] != sim.Action[*zonelayerstate.State](run) {
+	self := reg.TakeSelf()
+	if len(self) != 1 || self[0].Action != sim.Action[*zonelayerstate.State](run) {
 		t.Fatal("the run did not set itself for the next tick")
 	}
 	if run.Ticks != 3 {
