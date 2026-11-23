@@ -2,6 +2,7 @@ package sim
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/huykingsofm/project-b/shared/binarycodec"
@@ -77,5 +78,20 @@ func TestTheHashOfASchedulerSaysWhatItWaitsFor(t *testing.T) {
 	e.At(30, &anonymousAction{name: "b"})
 	if hashOf(d) == hashOf(e) {
 		t.Fatal("a field of the action did not change the hash")
+	}
+}
+
+func TestASchedulerThatHasATickTwiceIsRefused(t *testing.T) {
+	var w binarycodec.Writer
+	w.Uvarint(0) // the last tick
+	w.Uvarint(2) // two ticks
+	for range 2 {
+		w.Uvarint(5) // the same tick
+		w.Uvarint(0) // no action
+	}
+	var s Scheduler[*toyState]
+	err := s.Decode(mustCodecs(t), binarycodec.NewReader(w.B), 1)
+	if !errors.Is(err, binarycodec.ErrBadValue) {
+		t.Fatalf("error %v, want a bad value", err)
 	}
 }

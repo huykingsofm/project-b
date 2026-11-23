@@ -236,7 +236,7 @@ type segmentInfo struct {
 
 func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 	r := binarycodec.NewReader(meta)
-	version := binarycodec.Version(r.Uvarint())
+	version := r.Uint[binarycodec.Version]()
 	if r.Err() == nil && version != formatVersion {
 		return segmentInfo{}, fmt.Errorf(
 			"the replay log is of format %d, this code reads format %d", version, formatVersion,
@@ -244,7 +244,7 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 	}
 	info := segmentInfo{
 		Version:   version,
-		Engine:    sim.StateID(r.Uvarint()),
+		Engine:    r.Uint[sim.StateID](),
 		Seed:      r.Fixed64(),
 		FirstTick: r.Uvarint(),
 	}

@@ -11,6 +11,9 @@ import (
 type column[K comparable, V any] interface {
 	add(k K, v V)
 	remove(k K, v V)
+	// change is remove of the old value and add of the new one, and nothing when the new value has
+	// the same keys as the old one: the key stays where it is in its buckets.
+	change(k K, old, v V)
 	clone() column[K, V]
 	reset()
 }
@@ -63,6 +66,16 @@ func (c *column1[K, V, IK]) remove(k K, v V) {
 			c.buckets.Delete(ik)
 		}
 	}
+}
+
+func (c *column1[K, V, IK]) change(k K, old, v V) {
+	oldKey, oldOK := c.keyOf(old)
+	newKey, newOK := c.keyOf(v)
+	if oldOK == newOK && (!oldOK || oldKey == newKey) {
+		return
+	}
+	c.remove(k, old)
+	c.add(k, v)
 }
 
 func (c *column1[K, V, IK]) reset() { c.buckets.Clear() }
@@ -131,6 +144,16 @@ func (c *column2[K, V, A, B]) remove(k K, v V) {
 	if len(n.all) == 0 {
 		c.byA.Delete(a)
 	}
+}
+
+func (c *column2[K, V, A, B]) change(k K, old, v V) {
+	oldA, oldB, oldOK := c.keyOf(old)
+	newA, newB, newOK := c.keyOf(v)
+	if oldOK == newOK && (!oldOK || (oldA == newA && oldB == newB)) {
+		return
+	}
+	c.remove(k, old)
+	c.add(k, v)
 }
 
 func (c *column2[K, V, A, B]) reset() { c.byA.Clear() }

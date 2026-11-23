@@ -41,7 +41,7 @@ func decodeZoneLayerCharacterItemPickupCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterItemPickupCommand{
-		CharacterID: state.CharacterID(r.Uvarint()), ItemEntityID: state.EntityID(r.Uvarint()),
+		CharacterID: r.Uint[state.CharacterID](), ItemEntityID: r.Uint[state.EntityID](),
 	}
 	return c, r.Err()
 }

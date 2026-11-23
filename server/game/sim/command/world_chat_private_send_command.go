@@ -39,7 +39,7 @@ func decodeWorldChatPrivateSendCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*worldstate.State], error) {
 	c := WorldChatPrivateSendCommand{
-		FromID: state.PlayerID(r.Uvarint()), ToID: state.PlayerID(r.Uvarint()), Text: r.String(),
+		FromID: r.Uint[state.PlayerID](), ToID: r.Uint[state.PlayerID](), Text: r.String(),
 	}
 	return c, r.Err()
 }

@@ -93,9 +93,9 @@ func decodeZoneLayerCharacterMoveAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterMoveAction{
-		CharacterID: state.CharacterID(r.Uvarint()),
+		CharacterID: r.Uint[state.CharacterID](),
 		Dir:         state.Dir(r.Uint8()),
-		Ticks:       uint32(r.Uvarint()),
+		Ticks:       r.Uint[uint32](),
 		reserved:    r.Bool(),
 	}
 	return a, r.Err()

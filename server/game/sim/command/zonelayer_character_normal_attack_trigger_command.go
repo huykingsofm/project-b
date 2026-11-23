@@ -46,7 +46,7 @@ func decodeZoneLayerCharacterNormalAttackTriggerCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterNormalAttackTriggerCommand{
-		CharacterID: state.CharacterID(r.Uvarint()), TargetID: state.CharacterID(r.Uvarint()),
+		CharacterID: r.Uint[state.CharacterID](), TargetID: r.Uint[state.CharacterID](),
 	}
 	return c, r.Err()
 }

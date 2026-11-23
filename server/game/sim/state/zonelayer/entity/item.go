@@ -55,11 +55,11 @@ func decodeItemEntity(
 	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := ItemEntity{
-		entityID: state.NewEntityID(owner, uint32(r.Uvarint())),
+		entityID: state.NewEntityID(owner, r.Uint[uint32]()),
 		pos:      state.DecodeVec(r, version),
-		rad:      int32(r.Varint()),
-		itemID:   state.ItemID(r.Uvarint()),
-		count:    uint32(r.Uvarint()),
+		rad:      r.Int[int32](),
+		itemID:   r.Uint[state.ItemID](),
+		count:    r.Uint[uint32](),
 		expiry:   r.Uvarint(),
 	}
 	return e, r.Err()

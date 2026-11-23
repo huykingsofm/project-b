@@ -126,6 +126,27 @@ func (r *Reader) Varint() int64 {
 	return v
 }
 
+// Uint reads what Writer.Uvarint wrote as a T. A number that does not fit in T is a bad value: the
+// data is wrong, and it is not cut down to the low bits.
+func (r *Reader) Uint[T ~uint8 | ~uint16 | ~uint32 | ~uint64]() T {
+	v := r.Uvarint()
+	if t := T(v); uint64(t) != v {
+		r.fail(ErrBadValue)
+		return 0
+	}
+	return T(v)
+}
+
+// Int reads what Writer.Varint wrote as a T. A number that does not fit in T is a bad value.
+func (r *Reader) Int[T ~int8 | ~int16 | ~int32 | ~int64]() T {
+	v := r.Varint()
+	if t := T(v); int64(t) != v {
+		r.fail(ErrBadValue)
+		return 0
+	}
+	return T(v)
+}
+
 // Fixed64 reads what Writer.Fixed64 wrote.
 func (r *Reader) Fixed64() uint64 {
 	if len(r.b) < 8 {

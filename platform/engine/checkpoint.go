@@ -75,14 +75,14 @@ func (c *cell) checkpoint[S sim.State](
 func readCheckpointStart(
 	r *binarycodec.Reader, want sim.StateType,
 ) (binarycodec.Version, sim.StateID, uint64, error) {
-	version := binarycodec.Version(r.Uvarint())
+	version := r.Uint[binarycodec.Version]()
 	if err := r.Err(); err != nil {
 		return 0, 0, 0, err
 	}
 	if version != 1 {
 		return 0, 0, 0, fmt.Errorf("the checkpoint is of the data version %d", version)
 	}
-	id := sim.StateID(r.Uvarint())
+	id := r.Uint[sim.StateID]()
 	tick := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return 0, 0, 0, err
@@ -185,7 +185,7 @@ func decodeCell(
 	}
 	rc.lastSeq = make(map[sim.StateID]uint64, n)
 	for range n {
-		sender := sim.StateID(r.Uvarint())
+		sender := r.Uint[sim.StateID]()
 		rc.lastSeq[sender] = r.Uvarint()
 	}
 	n = r.Uvarint()

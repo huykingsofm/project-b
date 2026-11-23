@@ -44,6 +44,6 @@ func (a *ZoneChatSendAction) Encode(w *binarycodec.Writer) {
 func decodeZoneChatSendAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*zonestate.State], error) {
-	a := &ZoneChatSendAction{FromID: state.CharacterID(r.Uvarint()), Text: r.String()}
+	a := &ZoneChatSendAction{FromID: r.Uint[state.CharacterID](), Text: r.String()}
 	return a, r.Err()
 }

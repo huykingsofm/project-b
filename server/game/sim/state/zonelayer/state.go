@@ -333,7 +333,8 @@ func (s *State) WorldID() sim.StateID { return s.worldID }
 // EntityCount is how many entities stand in the zonelayer.
 func (s *State) EntityCount() int { return s.entities.Len() }
 
-// EntityIDs returns the IDs of the entities in the zonelayer, in the order they were added.
+// EntityIDs returns the IDs of the entities in the zonelayer, in the stable order of the table,
+// which is not the order they were added in.
 func (s *State) EntityIDs() []state.EntityID { return s.entities.Keys() }
 
 // EntityIDsOfKind returns the IDs of the entities of a kind, found by the column of kinds and not

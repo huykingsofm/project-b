@@ -27,6 +27,12 @@ func (cs *columns[K, V]) remove(k K, v V) {
 	}
 }
 
+func (cs *columns[K, V]) change(k K, old, v V) {
+	for _, c := range cs.list {
+		c.change(k, old, v)
+	}
+}
+
 func (cs *columns[K, V]) reset() {
 	for _, c := range cs.list {
 		c.reset()

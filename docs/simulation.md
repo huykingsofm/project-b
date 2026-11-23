@@ -118,7 +118,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | Package | What it is |
 |---|---|
 | `shared/stablemap` | map with a stable order of visit: the same for the same calls, though not the order of insertion once a key is deleted (R20) |
-| `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]`: elements taken by priority and then by arrival, which remembers what it held in the round, with the same columns on all of it (`Add`, `BuildFrom`, `Next`, `All`, `Pending`) |
+| `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]` (`V` says its own priority, `Priority() P`, as a `Prioritier[P]`; the zero queue is ready): elements taken by priority and then by arrival, which remembers what it held in the round, with the same columns on all of it (`Add`, `BuildFrom`, `Next`, `All`, `Pending`) |
 | `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
 | `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; refuses a number or a Go type that two kinds share |

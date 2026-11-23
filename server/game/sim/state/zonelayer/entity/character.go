@@ -59,11 +59,11 @@ func decodeCharacterEntity(
 	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := CharacterEntity{
-		entityID: state.NewEntityID(owner, uint32(r.Uvarint())),
+		entityID: state.NewEntityID(owner, r.Uint[uint32]()),
 		pos:      state.DecodeVec(r, version),
-		rad:      int32(r.Varint()),
-		hp:       int32(r.Varint()),
-		maxHp:    int32(r.Varint()),
+		rad:      r.Int[int32](),
+		hp:       r.Int[int32](),
+		maxHp:    r.Int[int32](),
 	}
 	return e, r.Err()
 }

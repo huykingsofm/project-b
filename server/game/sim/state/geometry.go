@@ -77,5 +77,5 @@ func (v Vec) Encode(w *binarycodec.Writer) {
 // DecodeVec reads what Vec.Encode wrote, of the data version given. A reader that has failed gives
 // the zero vector.
 func DecodeVec(r *binarycodec.Reader, version binarycodec.Version) Vec {
-	return Vec{X: int32(r.Varint()), Y: int32(r.Varint())}
+	return Vec{X: r.Int[int32](), Y: r.Int[int32]()}
 }

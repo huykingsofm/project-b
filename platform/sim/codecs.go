@@ -260,7 +260,7 @@ func (c *Codecs) decodeMessage(
 			"%w: messages inside messages go deeper than %d", binarycodec.ErrBadValue, maxNesting,
 		)
 	}
-	to := StateID(r.Uvarint())
+	to := r.Uint[StateID]()
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func (c *Codecs) decodeActionMessage[S State](
 	to StateID, r *binarycodec.Reader, version binarycodec.Version, nested MessageDecoder,
 ) (Message, error) {
 	header := DecodeHeader(r)
-	attempts := r.Uvarint()
+	attempts := r.Uint[uint8]()
 	onFail, err := c.decodeOnFail(r, version, nested)
 	if err != nil {
 		return nil, err

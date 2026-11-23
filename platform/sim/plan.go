@@ -30,6 +30,9 @@ type PlanEntry[S State] struct {
 // Action returns the action of the entry.
 func (e *PlanEntry[S]) Action() Action[S] { return e.action }
 
+// Priority is the priority of the action of the entry, which orders the entry in the plan.
+func (e *PlanEntry[S]) Priority() int16 { return e.action.Priority() }
+
 // Status returns where the entry stands. Find and FindByID give the entries that ran or were
 // cancelled as well as the ones to run, so whoever walks them checks the status of each.
 func (e *PlanEntry[S]) Status() EntryStatus { return e.status }
@@ -57,7 +60,7 @@ type Plan[S State] struct {
 // NewPlan returns an empty plan, with the default configuration until Reset gives it one.
 func NewPlan[S State]() *Plan[S] {
 	p := &Plan[S]{
-		queue: table.NewPriorityQueue(func(e *PlanEntry[S]) int16 { return e.action.Priority() }),
+		queue: &table.PriorityQueue[*PlanEntry[S], int16]{},
 		cfg:   config.Defaults(),
 	}
 	// the columns: by the ID of the action, and by the actor and the ID of an action that has one

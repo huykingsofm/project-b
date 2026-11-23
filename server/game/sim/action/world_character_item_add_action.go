@@ -74,10 +74,10 @@ func decodeWorldCharacterItemAddAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*worldstate.State], error) {
 	a := &WorldCharacterItemAddAction{
-		CharacterID:     state.CharacterID(r.Uvarint()),
-		ItemID:          state.ItemID(r.Uvarint()),
-		Count:           uint32(r.Uvarint()),
-		FromZoneLayerID: sim.StateID(r.Uvarint()),
+		CharacterID:     r.Uint[state.CharacterID](),
+		ItemID:          r.Uint[state.ItemID](),
+		Count:           r.Uint[uint32](),
+		FromZoneLayerID: r.Uint[sim.StateID](),
 		At:              state.DecodeVec(r, version),
 		Expiry:          r.Uvarint(),
 	}

@@ -44,7 +44,7 @@ func decodeZoneLayerCharacterShieldGrantCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterShieldGrantCommand{
-		CharacterID: state.CharacterID(r.Uvarint()), Duration: r.Uvarint(),
+		CharacterID: r.Uint[state.CharacterID](), Duration: r.Uvarint(),
 	}
 	return c, r.Err()
 }

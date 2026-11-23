@@ -42,7 +42,7 @@ func decodeZoneLayerCharacterExitToCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
 	c := ZoneLayerCharacterExitToCommand{
-		CharacterID: state.CharacterID(r.Uvarint()), ExitEntityID: state.EntityID(r.Uvarint()),
+		CharacterID: r.Uint[state.CharacterID](), ExitEntityID: r.Uint[state.EntityID](),
 	}
 	return c, r.Err()
 }

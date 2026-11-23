@@ -31,7 +31,7 @@ func (h Header) Encode(w *binarycodec.Writer) {
 
 // DecodeHeader reads what Header.Encode wrote.
 func DecodeHeader(r *binarycodec.Reader) Header {
-	return Header{From: StateID(r.Uvarint()), Seq: r.Uvarint()}
+	return Header{From: r.Uint[StateID](), Seq: r.Uvarint()}
 }
 
 // Reason says why a message could not be delivered.

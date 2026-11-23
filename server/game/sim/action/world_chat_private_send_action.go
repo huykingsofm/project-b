@@ -42,8 +42,8 @@ func decodeWorldChatPrivateSendAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*worldstate.State], error) {
 	a := &WorldChatPrivateSendAction{
-		FromID: state.PlayerID(r.Uvarint()),
-		ToID:   state.PlayerID(r.Uvarint()),
+		FromID: r.Uint[state.PlayerID](),
+		ToID:   r.Uint[state.PlayerID](),
 		Text:   r.String(),
 	}
 	return a, r.Err()

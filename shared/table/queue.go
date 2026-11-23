@@ -13,6 +13,11 @@ type slot[P cmp.Ordered] struct {
 	p   P
 }
 
+// Prioritier is what an element of a PriorityQueue says of itself: its priority, the smaller the
+// sooner. It is read once, when the element is added, and the element must not change its answer
+// after that: the queue does not see it.
+type Prioritier[P cmp.Ordered] interface{ Priority() P }
+
 // PriorityQueue is a list of elements that are taken one by one, the one with the smallest priority
 // first, and the ones of the same priority in the order they came. It remembers every element it
 // held in this round until Reset, the ones that were taken and the ones still to be taken, and
@@ -26,20 +31,13 @@ type slot[P cmp.Ordered] struct {
 // Add, or all at once with BuildFrom, which orders them once instead of at each Add.
 //
 // The key of an element is a number that the queue gives it, in the order they were added, from 0
-// after each Reset. The zero PriorityQueue is not ready: make one with NewPriorityQueue. It is not
-// safe for concurrent use. Do not Add while a Pending or a Lookup is being walked.
-type PriorityQueue[V any, P cmp.Ordered] struct {
-	vals     []V // by key
-	cols     columns[int64, V]
-	priority func(V) P
-	order    []slot[P] // every element, from the first to the last it will be taken
-	next     int       // the position in order of the element that is taken next
-}
-
-// NewPriorityQueue makes an empty queue. priorityOf says the priority of an element: the smaller
-// is taken first.
-func NewPriorityQueue[V any, P cmp.Ordered](priorityOf func(V) P) *PriorityQueue[V, P] {
-	return &PriorityQueue[V, P]{priority: priorityOf}
+// after each Reset. The zero PriorityQueue is empty and ready to use. It is not safe for concurrent
+// use. Do not Add while a Pending or a Lookup is being walked.
+type PriorityQueue[V Prioritier[P], P cmp.Ordered] struct {
+	vals  []V // by key
+	cols  columns[int64, V]
+	order []slot[P] // every element, from the first to the last it will be taken
+	next  int       // the position in order of the element that is taken next
 }
 
 // Len returns how many elements the queue holds, the ones taken included.
@@ -68,7 +66,7 @@ func (q *PriorityQueue[V, P]) add(v V) slot[P] {
 	key := int64(len(q.vals))
 	q.vals = append(q.vals, v)
 	q.cols.add(key, v)
-	return slot[P]{key: key, p: q.priority(v)}
+	return slot[P]{key: key, p: v.Priority()}
 }
 
 // Add puts an element in the queue, in its place among the elements still to be taken, and returns

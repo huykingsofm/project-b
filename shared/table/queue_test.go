@@ -7,6 +7,8 @@ import (
 	"github.com/huykingsofm/project-b/shared/table"
 )
 
+func (j job) Priority() int { return j.priority }
+
 type job struct {
 	name     string
 	priority int
@@ -15,7 +17,7 @@ type job struct {
 
 func newJobs(t testing.TB) *table.PriorityQueue[job, int] {
 	t.Helper()
-	q := table.NewPriorityQueue(func(j job) int { return j.priority })
+	q := &table.PriorityQueue[job, int]{}
 	if err := q.Index(func(j job) (kind, bool) { return kind(j.kind), true }); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +144,7 @@ func BenchmarkQueueBuildFromAndTakeAll(b *testing.B) {
 	for i := range jobs {
 		jobs[i] = job{priority: i % 5, kind: "x"}
 	}
-	q := table.NewPriorityQueue(func(j job) int { return j.priority })
+	q := &table.PriorityQueue[job, int]{}
 	b.ReportAllocs()
 	for b.Loop() {
 		q.BuildFrom(jobs)

@@ -88,8 +88,8 @@ func decodeZoneLayerCharacterExitToAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterExitToAction{
-		CharacterID:  state.CharacterID(r.Uvarint()),
-		ExitEntityID: state.EntityID(r.Uvarint()),
+		CharacterID:  r.Uint[state.CharacterID](),
+		ExitEntityID: r.Uint[state.EntityID](),
 	}
 	return a, r.Err()
 }

@@ -36,6 +36,6 @@ func (c ZoneLayerChatSendCommand) Encode(w *binarycodec.Writer) error {
 func decodeZoneLayerChatSendCommand(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Command[*zonelayerstate.State], error) {
-	c := ZoneLayerChatSendCommand{FromID: state.CharacterID(r.Uvarint()), Text: r.String()}
+	c := ZoneLayerChatSendCommand{FromID: r.Uint[state.CharacterID](), Text: r.String()}
 	return c, r.Err()
 }

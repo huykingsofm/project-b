@@ -43,9 +43,9 @@ func decodeZoneLayerCharacterDamageAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerCharacterDamageAction{
-		SourceID: state.EntityID(r.Uvarint()),
-		VictimID: state.EntityID(r.Uvarint()),
-		Amount:   int32(r.Varint()),
+		SourceID: r.Uint[state.EntityID](),
+		VictimID: r.Uint[state.EntityID](),
+		Amount:   r.Int[int32](),
 	}
 	return a, r.Err()
 }

@@ -45,12 +45,15 @@ func (t *Table[K, V]) Keys() []K { return t.data.Keys() }
 func (t *Table[K, V]) All() iter.Seq2[K, V] { return t.data.All() }
 
 // Set puts a value under the key, in place of the one that was there, and brings the columns to
-// what the new value says.
+// what the new value says: a column whose keys the new value has the same as the old one is left
+// as it is, and costs nothing.
 func (t *Table[K, V]) Set(k K, v V) {
-	if old, ok := t.data.Get(k); ok {
-		t.cols.remove(k, old)
-	}
+	old, had := t.data.Get(k)
 	t.data.Set(k, v)
+	if had {
+		t.cols.change(k, old, v)
+		return
+	}
 	t.cols.add(k, v)
 }
 

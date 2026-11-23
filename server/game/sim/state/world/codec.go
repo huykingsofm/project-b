@@ -58,7 +58,7 @@ func count(r *binarycodec.Reader) (uint64, error) {
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 	s := &State{
-		id: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
+		id: r.Uint[sim.StateID](), tick: r.Uvarint(),
 		privateChat: ring.New[PrivateChatMessage](chatKeep),
 	}
 	n, err := count(r)
@@ -66,13 +66,13 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 		return nil, err
 	}
 	for range n {
-		s.zones = append(s.zones, sim.StateID(r.Uvarint()))
+		s.zones = append(s.zones, r.Uint[sim.StateID]())
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
 	}
 	for range n {
-		s.zoneLayers = append(s.zoneLayers, sim.StateID(r.Uvarint()))
+		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 	rows := make([]PrivateChatMessage, 0, n)
 	for range n {
 		rows = append(rows, PrivateChatMessage{
-			fromID: state.PlayerID(r.Uvarint()), toID: state.PlayerID(r.Uvarint()),
+			fromID: r.Uint[state.PlayerID](), toID: r.Uint[state.PlayerID](),
 			text: r.String(), tick: r.Uvarint(),
 		})
 	}
@@ -91,7 +91,7 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 		return nil, err
 	}
 	for range n {
-		characterID := state.CharacterID(r.Uvarint())
+		characterID := r.Uint[state.CharacterID]()
 		slots, err := count(r)
 		if err != nil {
 			return nil, err
@@ -100,7 +100,7 @@ func DecodeState(r *binarycodec.Reader, _ binarycodec.Version) (*State, error) {
 		for range slots {
 			inventory.slots = append(
 				inventory.slots,
-				InventorySlot{itemID: state.ItemID(r.Uvarint()), count: uint32(r.Uvarint())},
+				InventorySlot{itemID: r.Uint[state.ItemID](), count: r.Uint[uint32]()},
 			)
 		}
 		s.inventories.Set(characterID, inventory)

@@ -68,7 +68,7 @@ func DecodeState(
 	tilesOf func(zoneID sim.StateID) *tilemap.TileMap,
 ) (*State, error) {
 	s := &State{
-		id: sim.StateID(r.Uvarint()), worldID: sim.StateID(r.Uvarint()), tick: r.Uvarint(),
+		id: r.Uint[sim.StateID](), worldID: r.Uint[sim.StateID](), tick: r.Uvarint(),
 		chat: ring.New[ChatMessage](chatKeep),
 	}
 	if err := r.Err(); err != nil {
@@ -82,7 +82,7 @@ func DecodeState(
 		return nil, err
 	}
 	for range n {
-		s.adjacent = append(s.adjacent, sim.StateID(r.Uvarint()))
+		s.adjacent = append(s.adjacent, r.Uint[sim.StateID]())
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -98,8 +98,8 @@ func DecodeState(
 		return nil, err
 	}
 	for range n {
-		id := sim.StateID(r.Uvarint())
-		s.zoneLayers.Set(id, ZoneLayerSlot{id: id, capacity: int32(r.Varint())})
+		id := r.Uint[sim.StateID]()
+		s.zoneLayers.Set(id, ZoneLayerSlot{id: id, capacity: r.Int[int32]()})
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
@@ -107,12 +107,12 @@ func DecodeState(
 	rows := make([]ChatMessage, 0, n)
 	for range n {
 		rows = append(rows, ChatMessage{
-			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
+			fromID: r.Uint[state.CharacterID](), text: r.String(), tick: r.Uvarint(),
 		})
 	}
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	s.nextEntityID = uint32(r.Uvarint())
+	s.nextEntityID = r.Uint[uint32]()
 	return s, r.Err()
 }

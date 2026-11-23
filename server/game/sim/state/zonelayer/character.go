@@ -91,12 +91,12 @@ func (c Character) Encode(w *binarycodec.Writer) {
 // of the bytes (binarycodec.ErrShort), or one that wraps ErrUnknownCooldownKey.
 func DecodeCharacter(r *binarycodec.Reader, version binarycodec.Version) (Character, error) {
 	c := Character{
-		characterID: state.CharacterID(r.Uvarint()),
+		characterID: r.Uint[state.CharacterID](),
 		name:        r.String(),
-		health:      int32(r.Varint()),
-		maxHealth:   int32(r.Varint()),
-		radius:      int32(r.Varint()),
-		speed:       int32(r.Varint()),
+		health:      r.Int[int32](),
+		maxHealth:   r.Int[int32](),
+		radius:      r.Int[int32](),
+		speed:       r.Int[int32](),
 	}
 	n := r.Uvarint()
 	for i := uint64(0); i < n && r.Err() == nil; i++ {

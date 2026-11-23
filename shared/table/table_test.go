@@ -2,6 +2,7 @@ package table_test
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 
@@ -208,5 +209,32 @@ func BenchmarkCloneWithColumns(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = tb.Clone()
+	}
+}
+
+func TestSetOfAValueWithTheSameKeysLeavesTheColumnsAsTheyWereAndOneWithOthersMovesIt(t *testing.T) {
+	type tag string
+	type row struct{ name, tag string }
+	var tb table.Table[int, row]
+	if err := tb.Index(func(r row) (tag, bool) { return tag(r.tag), r.tag != "" }); err != nil {
+		t.Fatal(err)
+	}
+	tb.Set(1, row{"a", "x"})
+	tb.Set(2, row{"b", "x"})
+	tb.Set(1, row{"a2", "x"}) // same key: stays first in its bucket
+	var got []int
+	for k := range tb.Lookup(tag("x")) {
+		got = append(got, k)
+	}
+	if !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("x = %v, want [1 2]", got)
+	}
+	tb.Set(1, row{"a3", "y"})
+	tb.Set(2, row{"b2", ""})
+	if n := len(slices.Collect(maps.Keys(maps.Collect(tb.Lookup(tag("x")))))); n != 0 {
+		t.Fatalf("x has %d, want 0", n)
+	}
+	if n := len(slices.Collect(maps.Keys(maps.Collect(tb.Lookup(tag("y")))))); n != 1 {
+		t.Fatalf("y has %d, want 1", n)
 	}
 }

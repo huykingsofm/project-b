@@ -70,10 +70,10 @@ func (e ExitEntity) Encode(w *binarycodec.Writer) {
 func decodeExitEntity(
 	r *binarycodec.Reader, version binarycodec.Version, owner sim.StateID,
 ) (state.Entity, error) {
-	e := ExitEntity{entityID: state.NewEntityID(owner, uint32(r.Uvarint()))}
+	e := ExitEntity{entityID: state.NewEntityID(owner, r.Uint[uint32]())}
 	e.area.Min = state.DecodeVec(r, version)
 	e.area.Max = state.DecodeVec(r, version)
-	e.toZoneID = sim.StateID(r.Uvarint())
+	e.toZoneID = r.Uint[sim.StateID]()
 	e.arrival = state.DecodeVec(r, version)
 	return e, r.Err()
 }

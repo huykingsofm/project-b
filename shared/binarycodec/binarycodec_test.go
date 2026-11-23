@@ -109,3 +109,22 @@ func TestABoolComesBackAndAnyOtherByteIsABadValue(t *testing.T) {
 		t.Fatalf("the byte 2 is not a bool, got %v", bad.Err())
 	}
 }
+
+func TestUintAndIntFailOnANumberThatDoesNotFitInsteadOfCuttingIt(t *testing.T) {
+	var w binarycodec.Writer
+	w.Uvarint(1 << 32)
+	w.Uvarint(7)
+	w.Varint(-1 << 40)
+	r := binarycodec.NewReader(w.B)
+	if got := r.Uint[uint32](); got != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
+		t.Fatalf("uint32 of 1<<32 = %d, err %v, want a bad value", got, r.Err())
+	}
+	r = binarycodec.NewReader(w.B)
+	r.Uvarint()
+	if got := r.Uint[uint8](); got != 7 || r.Err() != nil {
+		t.Fatalf("uint8 of 7 = %d, err %v", got, r.Err())
+	}
+	if got := r.Int[int32](); got != 0 || !errors.Is(r.Err(), binarycodec.ErrBadValue) {
+		t.Fatalf("int32 of -1<<40 = %d, err %v, want a bad value", got, r.Err())
+	}
+}

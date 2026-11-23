@@ -26,5 +26,5 @@ func (f Escalate) Encode(w *binarycodec.Writer) error {
 func decodeEscalate(
 	r *binarycodec.Reader, version binarycodec.Version, _ sim.MessageDecoder,
 ) (sim.OnFail, error) {
-	return Escalate{To: sim.StateID(r.Uvarint())}, r.Err()
+	return Escalate{To: r.Uint[sim.StateID]()}, r.Err()
 }

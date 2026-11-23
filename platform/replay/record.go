@@ -144,7 +144,7 @@ func (b StableRead) Encode(w *binarycodec.Writer) error {
 func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
 
 func decodeStableRead(_ *sim.Codecs, r *binarycodec.Reader, _ binarycodec.Version) (Body, error) {
-	return StableRead{Source: sim.StateID(r.Uvarint()), CopyTick: r.Uvarint()}, r.Err()
+	return StableRead{Source: r.Uint[sim.StateID](), CopyTick: r.Uvarint()}, r.Err()
 }
 
 // Returned says that a message the engine sent came back undelivered, and why: the header of the

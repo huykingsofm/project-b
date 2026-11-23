@@ -63,8 +63,8 @@ func count(r *binarycodec.Reader) (uint64, error) {
 
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, error) {
-	id, zoneID := sim.StateID(r.Uvarint()), sim.StateID(r.Uvarint())
-	worldID := sim.StateID(r.Uvarint())
+	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
+	worldID := r.Uint[sim.StateID]()
 	s := NewState(id, zoneID, worldID)
 	s.tick = r.Uvarint()
 	n, err := count(r)
@@ -82,7 +82,7 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		return nil, err
 	}
 	for range n {
-		id := state.CharacterID(r.Uvarint())
+		id := r.Uint[state.CharacterID]()
 		c, err := DecodeCharacter(r, version)
 		if err != nil {
 			return nil, err
@@ -95,7 +95,7 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 	rows := make([]ChatMessage, 0, n)
 	for range n {
 		rows = append(rows, ChatMessage{
-			fromID: state.CharacterID(r.Uvarint()), text: r.String(), tick: r.Uvarint(),
+			fromID: r.Uint[state.CharacterID](), text: r.String(), tick: r.Uvarint(),
 		})
 	}
 	for _, row := range rows {
@@ -105,10 +105,10 @@ func DecodeState(r *binarycodec.Reader, version binarycodec.Version) (*State, er
 		return nil, err
 	}
 	for range n {
-		characterID := state.CharacterID(r.Uvarint())
-		entityID := state.NewEntityID(id, uint32(r.Uvarint()))
+		characterID := r.Uint[state.CharacterID]()
+		entityID := state.NewEntityID(id, r.Uint[uint32]())
 		s.bodies.Link(characterID, entityID)
 	}
-	s.nextEntityID = uint32(r.Uvarint())
+	s.nextEntityID = r.Uint[uint32]()
 	return s, r.Err()
 }

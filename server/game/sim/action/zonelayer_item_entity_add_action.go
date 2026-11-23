@@ -51,8 +51,8 @@ func decodeZoneLayerItemEntityAddAction(
 	r *binarycodec.Reader, version binarycodec.Version,
 ) (sim.Action[*zonelayerstate.State], error) {
 	a := &ZoneLayerItemEntityAddAction{
-		ItemID: state.ItemID(r.Uvarint()),
-		Count:  uint32(r.Uvarint()),
+		ItemID: r.Uint[state.ItemID](),
+		Count:  r.Uint[uint32](),
 		At:     state.DecodeVec(r, version),
 		Expiry: r.Uvarint(),
 	}

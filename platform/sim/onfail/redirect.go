@@ -26,5 +26,5 @@ func (f Redirect) Encode(w *binarycodec.Writer) error {
 func decodeRedirect(
 	r *binarycodec.Reader, version binarycodec.Version, _ sim.MessageDecoder,
 ) (sim.OnFail, error) {
-	return Redirect{To: sim.StateID(r.Uvarint())}, r.Err()
+	return Redirect{To: r.Uint[sim.StateID]()}, r.Err()
 }

@@ -79,6 +79,9 @@ func (s *Scheduler[S]) Decode(
 	at := make(map[uint64][]Action[S], n)
 	for range n {
 		tick := r.Uvarint()
+		if _, dup := at[tick]; dup {
+			return fmt.Errorf("%w: the tick %d is twice", binarycodec.ErrBadValue, tick)
+		}
 		actions, err := c.DecodeActions[S](r, version)
 		if err != nil {
 			return err
