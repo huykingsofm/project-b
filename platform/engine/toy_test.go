@@ -100,6 +100,7 @@ const forwardActionID sim.ActionID = 60002
 
 func (*forwardAction) ID() sim.ActionID { return forwardActionID }
 func (*forwardAction) Priority() int16  { return 0 }
+func (*forwardAction) Actor() any       { return nil }
 func (a *forwardAction) Apply(
 	c *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
@@ -128,6 +129,7 @@ const readActionID sim.ActionID = 60003
 
 func (*readAction) ID() sim.ActionID { return readActionID }
 func (*readAction) Priority() int16  { return 0 }
+func (*readAction) Actor() any       { return nil }
 func (a *readAction) Apply(
 	_ *sim.Context, s *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {

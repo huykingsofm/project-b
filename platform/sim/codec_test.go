@@ -155,6 +155,7 @@ type noEncodeAction struct{}
 
 func (noEncodeAction) ID() ActionID    { return addID }
 func (noEncodeAction) Priority() int16 { return 0 }
+func (noEncodeAction) Actor() any      { return nil }
 func (noEncodeAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
 

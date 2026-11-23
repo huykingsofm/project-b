@@ -19,6 +19,7 @@ func (a *ZoneLayerItemEntityRemoveAction) ID() sim.ActionID {
 	return ZoneLayerItemEntityRemoveActionID
 }
 func (a *ZoneLayerItemEntityRemoveAction) Priority() int16 { return PriorityResolve }
+func (a *ZoneLayerItemEntityRemoveAction) Actor() any      { return nil }
 
 // Apply removes the item if it is still on the ground.
 func (a *ZoneLayerItemEntityRemoveAction) Apply(

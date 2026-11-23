@@ -125,7 +125,7 @@ Goal: a client that works from end to end (client to server and back to client) 
 **Progress:** not started
 
 - The effect framework: the `Effect` interface, a registry by ID, standing actions by scope (the owner acts, the owner is acted on, around the owner, in the zone, on the whole server). (pending approval)
-- Plan indexes by kind and target when a benchmark requires it (`FindByID` and `Find` exist).
+- Plan indexes by kind and target when a benchmark requires it (`FindByID` exists).
 - 10 sample abilities covering all three scopes; an activated ability stays in the state until it expires. (pending approval)
 - Ability secrecy: recognized through `observe`, with a no-leak test.
 - **Performance gate:** one full layer of 150 entities and 4 layers in parallel, each entity with one effect ability, p99 of a tick under 45 ms per layer. If it is not met, stop and fix the effect design before building further. (agreed)

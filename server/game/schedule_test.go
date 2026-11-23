@@ -14,6 +14,7 @@ type cancelHeal struct{ priority int16 }
 
 func (a *cancelHeal) ID() sim.ActionID { return 60010 }
 func (a *cancelHeal) Priority() int16  { return a.priority }
+func (a *cancelHeal) Actor() any       { return nil }
 func (a *cancelHeal) Apply(
 	_ *sim.Context, _ *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],

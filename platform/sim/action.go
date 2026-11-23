@@ -6,21 +6,20 @@ import "github.com/huykingsofm/project-b/shared/codec/binary"
 // own with its method ID(). A number is never changed or reused, because the replay log writes it.
 type ActionID uint16
 
-// Acting is implemented by an action that has an author: the actor that performs it. The actor can
-// be compared with ==, because a plan keeps a column of its actions by it: an actor of a type that
-// cannot be compared (a slice, a map, a func) makes the plan panic.
-type Acting interface{ Actor() any }
-
 // Encoder is what an action has to be written: its fields, without its ID.
 type Encoder interface {
 	Encode(w *binary.Writer)
 }
 
-// BaseAction is what the actions of every state type have in common: an ID and a priority. The
-// codecs, which do not know the type of state an action is for, hold actions by it.
+// BaseAction is what the actions of every state type have in common: an ID, a priority and an
+// actor. The codecs, which do not know the type of state an action is for, hold actions by it.
 type BaseAction interface {
 	ID() ActionID
 	Priority() int16
+	// Actor is the author of the action, the actor that performs it (a character, a player), or nil
+	// for an action that has none. It is compared with ==, as an ActionKey does, so it is of a type
+	// that can be compared: a slice, a map or a func makes the comparison panic.
+	Actor() any
 }
 
 // Action is an action of a state of type S: code that is told what to do, changes the state only

@@ -19,6 +19,7 @@ type ZoneLayerCharacterRegenAction struct {
 
 func (a *ZoneLayerCharacterRegenAction) ID() sim.ActionID { return ZoneLayerCharacterRegenActionID }
 func (a *ZoneLayerCharacterRegenAction) Priority() int16  { return PrioritySystem }
+func (a *ZoneLayerCharacterRegenAction) Actor() any       { return nil }
 
 // Apply heals everyone and sets the action again.
 func (a *ZoneLayerCharacterRegenAction) Apply(

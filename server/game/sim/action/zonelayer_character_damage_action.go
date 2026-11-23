@@ -20,6 +20,7 @@ func (a *ZoneLayerCharacterDamageAction) ID() sim.ActionID {
 	return ZoneLayerCharacterDamageActionID
 }
 func (a *ZoneLayerCharacterDamageAction) Priority() int16 { return PriorityResolve }
+func (a *ZoneLayerCharacterDamageAction) Actor() any      { return nil }
 
 // Apply hurts the victim.
 func (a *ZoneLayerCharacterDamageAction) Apply(

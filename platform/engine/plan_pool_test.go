@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/sim"
 )
 
 func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) {
@@ -53,7 +52,11 @@ func TestAPlanThatWasPutBackHoldsNoAction(t *testing.T) {
 	p.Append(&toyAction{})
 	p.Append(&toyAction{})
 	pool.Put(p)
-	if p.Len() != 0 || len(p.Find(sim.ActionKey{ID: toyActionID})) != 0 {
+	found := 0
+	for range p.FindByID[*toyAction](toyActionID) {
+		found++
+	}
+	if p.Len() != 0 || found != 0 {
 		t.Fatal("a plan that was put back still holds an action")
 	}
 }

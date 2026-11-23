@@ -33,7 +33,7 @@ func (e *PlanEntry[S]) Action() Action[S] { return e.action }
 // Priority is the priority of the action of the entry, which orders the entry in the plan.
 func (e *PlanEntry[S]) Priority() int16 { return e.action.Priority() }
 
-// Status returns where the entry stands. Find and FindByID give the entries that ran or were
+// Status returns where the entry stands. FindByID gives the entries that ran or were
 // cancelled as well as the ones to run, so whoever walks them checks the status of each.
 func (e *PlanEntry[S]) Status() EntryStatus { return e.status }
 
@@ -41,9 +41,9 @@ func (e *PlanEntry[S]) Status() EntryStatus { return e.status }
 // equal priorities, by arrival. It is a table.PriorityQueue: whatever is added while it runs goes
 // after the entry that runs, so what has run is never disturbed.
 //
-// An action that runs can look at the other actions of the plan (Find), the ones that ran and were
-// cancelled as well as the ones to run, and cancel those that are still to run (Cancel). The queue
-// has a column for the ID of its actions and a column for the actor that performs them, so finding
+// An action that runs can look at the other actions of the plan (FindByID), the ones that ran and
+// were cancelled as well as the ones to run, and cancel those that are still to run (Cancel). The
+// queue has a column for the ID of its actions, so finding
 // "the damage in this tick" does not walk the whole plan: this is the pattern that every effect
 // that reacts to another action uses. What a plan adds to the queue is the depth of a chain of
 // actions, and the entries that were cut because it went too deep.
@@ -63,17 +63,8 @@ func NewPlan[S State]() *Plan[S] {
 		queue: &table.PriorityQueue[*PlanEntry[S], int16]{},
 		cfg:   config.Defaults(),
 	}
-	// the columns: by the ID of the action, and by the actor and the ID of an action that has one
+	// the column: by the ID of the action
 	err := p.queue.Index(func(e *PlanEntry[S]) (ActionID, bool) { return e.action.ID(), true })
-	if err == nil {
-		err = p.queue.Index(func(e *PlanEntry[S]) (ActionKey, bool) {
-			who, ok := any(e.action).(Acting)
-			if !ok {
-				return ActionKey{}, false
-			}
-			return ActionKey{Actor: who.Actor(), ID: e.action.ID()}, true
-		})
-	}
 	if err != nil {
 		logging.Error("plan: the columns were not declared", "err", err)
 	}
@@ -155,23 +146,6 @@ func (p *Plan[S]) Next() (*PlanEntry[S], bool) {
 		p.current = e
 		return e, true
 	}
-}
-
-// Find returns the entries under the key, in the order they were added to the plan: the ones that
-// ran and the ones that were cancelled as well as the ones still to run (see Status). A key with no
-// actor names all the actions of its ID.
-func (p *Plan[S]) Find(k ActionKey) []*PlanEntry[S] {
-	var out []*PlanEntry[S]
-	if k.Actor == nil {
-		for _, e := range p.queue.Lookup(k.ID) {
-			out = append(out, e)
-		}
-		return out
-	}
-	for _, e := range p.queue.Lookup(k) {
-		out = append(out, e)
-	}
-	return out
 }
 
 // FindByID returns the entries of the actions of one ID, in the order they were added to the plan,

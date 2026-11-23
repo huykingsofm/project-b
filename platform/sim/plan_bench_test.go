@@ -125,21 +125,6 @@ func BenchmarkPlanBuildAndRun(b *testing.B) {
 	}
 }
 
-// BenchmarkPlanFind looks the damage up by its ID with Find, which makes a slice.
-func BenchmarkPlanFind(b *testing.B) {
-	for _, n := range planSizes {
-		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
-			p := filledPlan(n)
-			b.ReportAllocs()
-			for b.Loop() {
-				if len(p.Find(ActionKey{ID: benchDamageID})) == 0 {
-					b.Fatal("no damage found")
-				}
-			}
-		})
-	}
-}
-
 // BenchmarkPlanFindByID walks all the damage with FindByID: what a shield does for each shield
 // when no damage is for its character.
 func BenchmarkPlanFindByID(b *testing.B) {

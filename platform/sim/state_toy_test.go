@@ -74,6 +74,7 @@ type anonymousAction struct {
 
 func (a *anonymousAction) ID() ActionID    { return testID }
 func (a *anonymousAction) Priority() int16 { return a.priority }
+func (a *anonymousAction) Actor() any      { return nil }
 func (a *anonymousAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
 
@@ -104,6 +105,7 @@ const addID ActionID = 60002
 
 func (a *addAction) ID() ActionID    { return addID }
 func (a *addAction) Priority() int16 { return 0 }
+func (a *addAction) Actor() any      { return nil }
 func (a *addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Plan[*toyState]) {
 	s.Total += a.N
 }
@@ -121,6 +123,7 @@ const otherActionID ActionID = 60003
 
 func (*otherAction) ID() ActionID    { return otherActionID }
 func (*otherAction) Priority() int16 { return 0 }
+func (*otherAction) Actor() any      { return nil }
 func (*otherAction) Apply(*Context, *otherState, *Registry[*otherState], *Plan[*otherState]) {
 }
 func (*otherAction) Encode(*binary.Writer) {}

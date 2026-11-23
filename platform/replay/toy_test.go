@@ -36,6 +36,7 @@ type toyMoveAction struct {
 
 func (*toyMoveAction) ID() sim.ActionID { return 60001 }
 func (*toyMoveAction) Priority() int16  { return 0 }
+func (*toyMoveAction) Actor() any       { return nil }
 func (*toyMoveAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
@@ -59,6 +60,7 @@ type toyChatAction struct {
 
 func (*toyChatAction) ID() sim.ActionID { return 60002 }
 func (*toyChatAction) Priority() int16  { return 0 }
+func (*toyChatAction) Actor() any       { return nil }
 func (*toyChatAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
@@ -75,6 +77,7 @@ type toyRegenAction struct{}
 
 func (*toyRegenAction) ID() sim.ActionID { return 60003 }
 func (*toyRegenAction) Priority() int16  { return 0 }
+func (*toyRegenAction) Actor() any       { return nil }
 func (*toyRegenAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {

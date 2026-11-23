@@ -60,7 +60,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Steps:
   1. First run: end = this tick + `Duration`.
   2. Stops when time is up.
-  3. `Find` damage actions in the plan by ID; cancels the first aimed at its character's entity and stops.
+  3. `FindByID` damage actions in the plan by ID; cancels the first aimed at its character's entity and stops.
   4. Otherwise `ToSelf`.
 - Example: shield for 100 ticks at tick 20; at tick 24 a damage is added; the shield runs first (-50 vs 0), cancels it and ends. Health unchanged; the next damage lands.
 

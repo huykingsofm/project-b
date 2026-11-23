@@ -225,12 +225,12 @@ func registerStates(t testing.TB, c *sim.Codecs) {
 func TestTheActorOfEveryActionThatHasOneCanBeCompared(t *testing.T) {
 	n := 0
 	for id, a := range everyAction() {
-		who, ok := a.(sim.Acting)
-		if !ok {
+		actor := a.Actor()
+		if actor == nil {
 			continue
 		}
 		n++
-		if actor := who.Actor(); actor == nil || !reflect.TypeOf(actor).Comparable() {
+		if !reflect.TypeOf(actor).Comparable() {
 			t.Errorf("the actor of the action %d (%T) is a %T: it cannot be compared", id, a, actor)
 		}
 	}

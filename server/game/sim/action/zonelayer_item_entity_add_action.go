@@ -24,6 +24,7 @@ type ZoneLayerItemEntityAddAction struct {
 
 func (a *ZoneLayerItemEntityAddAction) ID() sim.ActionID { return ZoneLayerItemEntityAddActionID }
 func (a *ZoneLayerItemEntityAddAction) Priority() int16  { return PriorityResolve }
+func (a *ZoneLayerItemEntityAddAction) Actor() any       { return nil }
 
 // Apply puts the items on the ground and sets their removal.
 func (a *ZoneLayerItemEntityAddAction) Apply(

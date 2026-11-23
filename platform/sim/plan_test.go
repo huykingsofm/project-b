@@ -41,7 +41,7 @@ func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 	}
 }
 
-func TestFindByIDAndByActorAndCancel(t *testing.T) {
+func TestFindByIDAndCancel(t *testing.T) {
 	p := NewPlan[*toyState]()
 	p.Append(&authoredAction{anonymousAction{"modifier", -50}, 0})
 	p.Append(&authoredAction{anonymousAction{"by-1", 0}, 1})
@@ -51,13 +51,18 @@ func TestFindByIDAndByActorAndCancel(t *testing.T) {
 		t.Fatal("unexpected first action")
 	}
 
-	got := p.Find(ActionKey{ID: testID})
+	var got, byTwo []*PlanEntry[*toyState]
+	for e, a := range p.FindByID[*authoredAction](testID) {
+		got = append(got, e)
+		if a.Actor() == 2 {
+			byTwo = append(byTwo, e)
+		}
+	}
 	if len(got) != 4 || got[0].Status() != EntryRan || got[1].Status() != EntryPending {
 		t.Fatalf("by ID found %d, want 4: the modifier that ran, and the 3 still to run", len(got))
 	}
-	byTwo := p.Find(ActionKey{Actor: 2, ID: testID})
 	if len(byTwo) != 2 || nameOf(byTwo[0].Action()) != "by-2" {
-		t.Fatalf("by engine found %v", byTwo)
+		t.Fatalf("by actor found %v", byTwo)
 	}
 	p.Cancel(byTwo[0])
 	if byTwo[0].Status() != EntryCancelled {

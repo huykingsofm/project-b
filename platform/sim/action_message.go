@@ -23,8 +23,8 @@ func newActionMessage[S State](
 ) *ActionMessage[S] {
 	m := &ActionMessage[S]{To: to, Actions: actions, onFail: onFail}
 	for _, a := range actions {
-		if who, ok := any(a).(Acting); ok {
-			m.subject = who.Actor()
+		if actor := a.Actor(); actor != nil {
+			m.subject = actor
 			break
 		}
 	}
