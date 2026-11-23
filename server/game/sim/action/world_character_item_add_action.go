@@ -6,7 +6,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
-	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
@@ -53,7 +52,7 @@ func (a *WorldCharacterItemAddAction) Apply(
 	if left == 0 {
 		return
 	}
-	r.Send[*zonelayerstate.State](
+	r.Send(
 		a.FromZoneLayerID,
 		onfail.Drop{},
 		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},

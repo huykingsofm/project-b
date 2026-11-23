@@ -2,9 +2,6 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
-	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
-	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 )
 
 // Register registers every action of the game with the codecs, with the type of state it is for:
@@ -12,48 +9,48 @@ import (
 // two actions share is an error.
 func Register(c *sim.Codecs) error {
 	return sim.Errors(
-		c.RegisterAction[*worldstate.State](
+		c.RegisterAction(
 			&WorldChatPrivateSendAction{}, decodeWorldChatPrivateSendAction,
 		),
-		c.RegisterAction[*worldstate.State](
+		c.RegisterAction(
 			&WorldCharacterItemAddAction{}, decodeWorldCharacterItemAddAction,
 		),
-		c.RegisterAction[*zonestate.State](&ZoneChatSendAction{}, decodeZoneChatSendAction),
-		c.RegisterAction[*zonestate.State](
+		c.RegisterAction(&ZoneChatSendAction{}, decodeZoneChatSendAction),
+		c.RegisterAction(
 			&ZoneCharacterEnterAction{}, decodeZoneCharacterEnterAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerChatSendAction{}, decodeZoneLayerChatSendAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterEnterAction{}, decodeZoneLayerCharacterEnterAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterMoveAction{}, decodeZoneLayerCharacterMoveAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterNormalAttackTriggerAction{},
 			decodeZoneLayerCharacterNormalAttackTriggerAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterDamageAction{}, decodeZoneLayerCharacterDamageAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterShieldGrantAction{}, decodeZoneLayerCharacterShieldGrantAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterRegenAction{}, decodeZoneLayerCharacterRegenAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterExitToAction{}, decodeZoneLayerCharacterExitToAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerCharacterItemPickupAction{}, decodeZoneLayerCharacterItemPickupAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerItemEntityAddAction{}, decodeZoneLayerItemEntityAddAction,
 		),
-		c.RegisterAction[*zonelayerstate.State](
+		c.RegisterAction(
 			&ZoneLayerItemEntityRemoveAction{}, decodeZoneLayerItemEntityRemoveAction,
 		),
 	)

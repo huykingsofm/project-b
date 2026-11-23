@@ -16,9 +16,9 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/bimap"
 	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
+	"github.com/huykingsofm/project-b/shared/stablebimap"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 	"github.com/huykingsofm/project-b/shared/table"
 )
@@ -35,7 +35,7 @@ type State struct {
 	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
-	bodies       bimap.BiMap[state.CharacterID, state.EntityID]
+	bodies       stablebimap.BiMap[state.CharacterID, state.EntityID]
 	nextEntityID uint32
 
 	// Events: not data, never cloned.

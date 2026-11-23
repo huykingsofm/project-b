@@ -40,7 +40,7 @@ func (a *ZoneCharacterEnterAction) Apply(
 		if held >= int(zoneLayerSlot.Capacity()) {
 			continue
 		}
-		r.Send[*zonelayerstate.State](
+		r.Send(
 			zoneLayerID,
 			onfail.Drop{},
 			&ZoneLayerCharacterEnterAction{

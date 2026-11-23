@@ -68,7 +68,7 @@ func TestAMessageToAnotherEngineIsTakenAtItsNextTickAndACopyIsNeverTakenTwice(t 
 	if b.State().Total != 7 {
 		t.Fatalf("b has %d, want 7", b.State().Total)
 	}
-	dup := sim.NewActionMessage[*toyState](2, onfail.Drop{}, &toyAction{N: 100}).
+	dup := sim.NewActionMessage(2, onfail.Drop{}, &toyAction{N: 100}).
 		Stamp(sim.Header{From: 1, Seq: 1}) // the first message of a had the number 1
 	c.Env.Router.Deliver(dup)
 	c.Step()
@@ -220,7 +220,7 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 	e.cell.seq = 41
 	e.cell.lastSeq[99] = 1
 	e.bounce.pending = []sim.Message{
-		sim.NewActionMessage[*toyState](2, onfail.Retry{}, &toyAction{N: 1}).
+		sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 1}).
 			Stamp(sim.Header{From: 1, Seq: 40}),
 	}
 	data, err := e.Checkpoint()

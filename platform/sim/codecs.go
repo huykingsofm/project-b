@@ -12,6 +12,7 @@ import (
 // register, of the data version given. The decoder of an OnFail that holds a message is given the
 // function that reads one.
 type (
+	MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 	ActionDecoder  func(r *binary.Reader, version codec.Version) (BaseAction, error)
 	CommandDecoder func(r *binary.Reader, version codec.Version) (BaseCommand, error)
 	StateDecoder   func(r *binary.Reader, version codec.Version) (State, error)

@@ -5,7 +5,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -61,14 +60,14 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
 	selfID := s.ID()
-	undo := sim.NewActionMessage[*zonelayerstate.State](
+	undo := sim.NewActionMessage(
 		selfID,
 		onfail.Drop{},
 		&ZoneLayerItemEntityAddAction{
 			ItemID: item.ItemID(), Count: item.Count(), At: item.Position(), Expiry: item.Expiry(),
 		},
 	)
-	r.Send[*worldstate.State](
+	r.Send(
 		s.WorldID(), onfail.Compensate{With: undo},
 		&WorldCharacterItemAddAction{
 			CharacterID: a.CharacterID, ItemID: item.ItemID(), Count: item.Count(),

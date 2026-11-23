@@ -19,14 +19,14 @@ import (
 func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, error) {
 	c := sim.NewCodecs()
 	err := sim.Errors(
-		c.RegisterState[*worldstate.State](&worldstate.State{}, worldstate.DecodeState),
-		c.RegisterState[*zonestate.State](
+		c.RegisterState(&worldstate.State{}, worldstate.DecodeState),
+		c.RegisterState(
 			&zonestate.State{},
 			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {
 				return zonestate.DecodeState(r, version, tilesOf)
 			},
 		),
-		c.RegisterState[*zonelayerstate.State](&zonelayerstate.State{}, zonelayerstate.DecodeState),
+		c.RegisterState(&zonelayerstate.State{}, zonelayerstate.DecodeState),
 		onfail.Register(c),
 		action.Register(c),
 		command.Register(c),

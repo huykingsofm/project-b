@@ -1,14 +1,14 @@
-package bimap_test
+package stablebimap_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/huykingsofm/project-b/shared/bimap"
+	"github.com/huykingsofm/project-b/shared/stablebimap"
 )
 
 func TestALinkIsReadFromBothSides(t *testing.T) {
-	var b bimap.BiMap[string, int]
+	var b stablebimap.BiMap[string, int]
 	b.Link("a", 1)
 	b.Link("b", 2)
 	if v, ok := b.GetByV1("a"); !ok || v != 1 {
@@ -29,7 +29,7 @@ func TestALinkIsReadFromBothSides(t *testing.T) {
 }
 
 func TestLinkingAKeyAgainReplacesItsValueOnBothSides(t *testing.T) {
-	var b bimap.BiMap[string, int]
+	var b stablebimap.BiMap[string, int]
 	b.Link("a", 1)
 	b.Link("a", 5)
 	if v, _ := b.GetByV1("a"); v != 5 {
@@ -44,7 +44,7 @@ func TestLinkingAKeyAgainReplacesItsValueOnBothSides(t *testing.T) {
 }
 
 func TestLinkingAValueAgainTakesItFromItsOldKey(t *testing.T) {
-	var b bimap.BiMap[string, int]
+	var b stablebimap.BiMap[string, int]
 	b.Link("a", 1)
 	b.Link("b", 1) // the value 1 now belongs to "b"
 	if _, ok := b.GetByV1("a"); ok {
@@ -59,7 +59,7 @@ func TestLinkingAValueAgainTakesItFromItsOldKey(t *testing.T) {
 }
 
 func TestUnlinkRemovesBothSides(t *testing.T) {
-	var b bimap.BiMap[string, int]
+	var b stablebimap.BiMap[string, int]
 	b.Link("a", 1)
 	if !b.UnlinkByV1("a") {
 		t.Fatal("Unlink reported no link")
@@ -79,7 +79,7 @@ func TestUnlinkRemovesBothSides(t *testing.T) {
 }
 
 func TestLinksAreVisitedInTheOrderTheyWereMade(t *testing.T) {
-	var b bimap.BiMap[int, int]
+	var b stablebimap.BiMap[int, int]
 	for _, k := range []int{5, 3, 9, 1} {
 		b.Link(k, k*10)
 	}
@@ -93,7 +93,7 @@ func TestLinksAreVisitedInTheOrderTheyWereMade(t *testing.T) {
 }
 
 func TestRemovingALinkFromTheMiddleKeepsTheOthersReadableFromBothSides(t *testing.T) {
-	var b bimap.BiMap[int, string]
+	var b stablebimap.BiMap[int, string]
 	for i, s := range []string{"a", "b", "c", "d"} {
 		b.Link(i+1, s)
 	}
@@ -122,7 +122,7 @@ func TestRemovingALinkFromTheMiddleKeepsTheOthersReadableFromBothSides(t *testin
 }
 
 func TestACloneSharesNothingWithTheMap(t *testing.T) {
-	var b bimap.BiMap[string, int]
+	var b stablebimap.BiMap[string, int]
 	b.Link("a", 1)
 	c := b.Clone()
 	b.Link("b", 2)
@@ -139,7 +139,7 @@ func TestACloneSharesNothingWithTheMap(t *testing.T) {
 }
 
 func TestEveryOperationWorksFromEitherSide(t *testing.T) {
-	var b bimap.BiMap[int, string]
+	var b stablebimap.BiMap[int, string]
 	b.Link(1, "a")
 	b.Link(2, "b")
 	b.Link(3, "c")

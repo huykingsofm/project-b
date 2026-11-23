@@ -103,7 +103,7 @@ func (*forwardAction) Priority() int16  { return 0 }
 func (a *forwardAction) Apply(
 	c *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
-	r.Send[*toyState](a.To, onfail.Retry{}, &toyAction{N: a.N})
+	r.Send(a.To, onfail.Retry{}, &toyAction{N: a.N})
 	if a.Again > 0 {
 		r.ToSelfAt(c.Tick+a.Again, a)
 	}
@@ -147,11 +147,11 @@ func decodeReadAction(
 func toyCodecs() (*sim.Codecs, error) {
 	c := sim.NewCodecs()
 	return c, sim.Errors(
-		c.RegisterState[*toyState](&toyState{}, decodeToyState),
-		c.RegisterAction[*toyState](&toyAction{}, decodeToyAction),
-		c.RegisterAction[*toyState](&forwardAction{}, decodeForwardAction),
-		c.RegisterAction[*toyState](&readAction{}, decodeReadAction),
-		c.RegisterCommand[*toyState](toyCommand{}, decodeToyCommand),
+		c.RegisterState(&toyState{}, decodeToyState),
+		c.RegisterAction(&toyAction{}, decodeToyAction),
+		c.RegisterAction(&forwardAction{}, decodeForwardAction),
+		c.RegisterAction(&readAction{}, decodeReadAction),
+		c.RegisterCommand(toyCommand{}, decodeToyCommand),
 		onfail.Register(c),
 	)
 }

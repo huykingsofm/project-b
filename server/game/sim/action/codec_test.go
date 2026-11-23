@@ -210,9 +210,9 @@ func decodeZoneWithNoMap(*binary.Reader, codec.Version) (*zonestate.State, error
 func registerStates(t testing.TB, c *sim.Codecs) {
 	t.Helper()
 	for _, register := range []error{
-		c.RegisterState[*worldstate.State](&worldstate.State{}, worldstate.DecodeState),
-		c.RegisterState[*zonestate.State](&zonestate.State{}, decodeZoneWithNoMap),
-		c.RegisterState[*zonelayerstate.State](&zonelayerstate.State{}, zonelayerstate.DecodeState),
+		c.RegisterState(&worldstate.State{}, worldstate.DecodeState),
+		c.RegisterState(&zonestate.State{}, decodeZoneWithNoMap),
+		c.RegisterState(&zonelayerstate.State{}, zonelayerstate.DecodeState),
 	} {
 		if register != nil {
 			t.Fatal(register)

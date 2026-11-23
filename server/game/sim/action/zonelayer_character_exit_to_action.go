@@ -67,10 +67,10 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
 		selfID, back := s.ID(), body.Position()
-		undo := sim.NewActionMessage[*zonelayerstate.State](
+		undo := sim.NewActionMessage(
 			selfID, onfail.Drop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
 		)
-		r.Send[*zonelayerstate.State](
+		r.Send(
 			zoneLayerID, onfail.Compensate{With: undo},
 			&ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival()},
 		)

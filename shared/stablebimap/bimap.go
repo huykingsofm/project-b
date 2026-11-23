@@ -1,6 +1,6 @@
 // Package bimap holds a map that links the values of one type to the values of another, one to one,
 // and can be read from either side. It imports nothing of the project.
-package bimap
+package stablebimap
 
 import (
 	"iter"

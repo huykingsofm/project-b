@@ -5,7 +5,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
-	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
@@ -29,7 +28,7 @@ func (a *ZoneChatSendAction) Apply(
 ) {
 	s.SendMessage(zonestate.NewChatMessage(a.FromID, a.Text, c.Tick))
 	for zoneLayerID := range s.ZoneLayerSlots() {
-		r.Send[*zonelayerstate.State](
+		r.Send(
 			zoneLayerID, onfail.Drop{}, &ZoneLayerChatSendAction{FromID: a.FromID, Text: a.Text},
 		)
 	}

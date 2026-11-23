@@ -129,13 +129,14 @@ func (e *Engine[S]) Step() {
 	e.view.begin(e.tick)
 	e.settle(cfg, e.tick)
 
-	plan := e.plans.Get(cfg)
-	defer e.plans.Put(plan)
 	e.start = e.start[:0]
 	e.planSelf()
 	e.planScheduled()
 	e.planMessages()
 	e.planCommands()
+
+	plan := e.plans.Get(cfg)
+	defer e.plans.Put(plan)
 	plan.Build(e.start)
 	clear(e.start) // the plan holds the actions: the list does not keep them for the next tick
 
