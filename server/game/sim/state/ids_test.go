@@ -5,24 +5,25 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
-func TestTheEntitiesOfAStateMustBeTheLiveIDsOfItsAllocator(t *testing.T) {
+func none(uint32) bool { return false }
+
+func TestTheEntitiesOfAStateMustHaveIDsThatItsAllocatorGave(t *testing.T) {
 	ids := state.NewEntityIDs(2)
-	one, two := must.Ok(ids.Give()), must.Ok(ids.Give())
+	one := must.Ok(ids.Give(none, 0))
+	two := must.Ok(ids.Give(func(id uint32) bool { return id == one }, 1))
 	both := []state.EntityID{state.NewEntityID(5, one), state.NewEntityID(5, two)}
 	if err := state.CheckEntityIDs(5, &ids, both); err != nil {
 		t.Fatalf("an allocator and the entities it gave: %v", err)
 	}
 	for name, entities := range map[string][]state.EntityID{
-		"fewer":         both[:1],
-		"another ID":    {both[0], state.NewEntityID(5, 9)},
-		"another owner": {both[0], state.NewEntityID(6, two)},
+		"an ID never given": {both[0], state.NewEntityID(5, 9)},
+		"another owner":     {both[0], state.NewEntityID(6, two)},
 	} {
 		if err := state.CheckEntityIDs(5, &ids, entities); err == nil {
-			t.Errorf("%s: entities that are not the live IDs were accepted", name)
+			t.Errorf("%s was accepted", name)
 		}
 	}
 	ids.Release(two)
@@ -31,7 +32,7 @@ func TestTheEntitiesOfAStateMustBeTheLiveIDsOfItsAllocator(t *testing.T) {
 	}
 }
 
-func TestTheHashOfTheIDsSeesTheGraveAndTheFreeList(t *testing.T) {
+func TestTheHashOfTheIDsSeesTheGrave(t *testing.T) {
 	hash := func(a *state.EntityIDs) uint64 {
 		h := sim.NewHasher()
 		state.HashIDs(&h, a)
@@ -39,8 +40,8 @@ func TestTheHashOfTheIDsSeesTheGraveAndTheFreeList(t *testing.T) {
 	}
 	a, b := state.NewEntityIDs(2), state.NewEntityIDs(2)
 	for range 3 {
-		a.Give()
-		b.Give()
+		a.Give(none, 0)
+		b.Give(none, 0)
 	}
 	if hash(&a) != hash(&b) {
 		t.Fatal("the same IDs hash differently")
@@ -52,15 +53,5 @@ func TestTheHashOfTheIDsSeesTheGraveAndTheFreeList(t *testing.T) {
 	b.Release(2)
 	if hash(&a) != hash(&b) {
 		t.Fatal("the same grave hashes differently")
-	}
-	a.Step()
-	a.Step()
-	b.Step()
-	b.Step()
-	if hash(&a) != hash(&b) {
-		t.Fatal("the same free list hashes differently")
-	}
-	if a.Status(2) != ids.Free {
-		t.Fatalf("Status = %v", a.Status(2))
 	}
 }

@@ -139,7 +139,7 @@ func (s *State) AddZone(zoneID sim.StateID) {
 // AddZoneLayer gives a zonelayer an ID and makes the world know it. It reports false, and does
 // nothing, when the world has no ID left to give.
 func (s *State) AddZoneLayer() (sim.StateID, bool) {
-	local, ok := s.zoneLayerIDs.Give()
+	local, ok := s.zoneLayerIDs.Give(s.zoneLayerIDInUse, len(s.zoneLayers))
 	if !ok {
 		return 0, false
 	}
@@ -148,13 +148,19 @@ func (s *State) AddZoneLayer() (sim.StateID, bool) {
 	return id, true
 }
 
+// zoneLayerIDInUse reports whether a zonelayer of the world has the local number.
+func (s *State) zoneLayerIDInUse(local uint32) bool {
+	return slices.Contains(s.zoneLayers, sim.NewStateID(state.ZoneLayerType, local))
+}
+
 // RemoveZoneLayer makes the world forget a zonelayer, and gives its number back: it is given again
 // only after the steps of the grave. It reports false for an ID that is not one of a zonelayer of
 // the world.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) bool {
-	if zoneLayerID.Type() != state.ZoneLayerType || !s.zoneLayerIDs.Release(zoneLayerID.Local()) {
+	if !slices.Contains(s.zoneLayers, zoneLayerID) {
 		return false
 	}
+	s.zoneLayerIDs.Release(zoneLayerID.Local())
 	s.zoneLayers = slices.DeleteFunc(
 		s.zoneLayers, func(id sim.StateID) bool { return id == zoneLayerID },
 	)

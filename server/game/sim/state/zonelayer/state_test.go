@@ -296,24 +296,20 @@ func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 	}
 }
 
-func TestAnEntityIDIsGivenAgainOnlyAfterTheStepsOfTheGrave(t *testing.T) {
+func TestAnEntityThatLeavesIsNotGivenItsIDAgainSoon(t *testing.T) {
 	st := zonelayer.NewState(1, 1, 9, 3)
 	at := state.Vec{X: 3500, Y: 3500}
 	first := must.Ok(st.AddItemEntity(7, 1, at, 0))
 	st.RemoveItemEntity(first)
-	for tick := uint64(1); tick <= 2; tick++ {
+	for tick := uint64(1); tick <= 10; tick++ { // past the steps of the grave
 		st.SetTick(tick)
 		if got := must.Ok(st.AddItemEntity(7, 1, at, 0)); got == first {
-			t.Fatalf("the ID of an entity that left was given again after %d of 3 ticks", tick)
+			t.Fatalf("the ID of an entity that left was given again at tick %d", tick)
 		}
-	}
-	st.SetTick(3)
-	if got := must.Ok(st.AddItemEntity(7, 1, at, 0)); got != first {
-		t.Fatalf("the entity got %d, want the ID that waited its ticks, %d", got, first)
 	}
 }
 
-func TestTheBodyOfACharacterThatLeavesGivesItsIDBackToo(t *testing.T) {
+func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
 	st := zonelayer.NewState(1, 1, 9, 1)
 	at := state.Vec{X: 1500, Y: 1500}
 	body := must.Ok(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
@@ -322,7 +318,7 @@ func TestTheBodyOfACharacterThatLeavesGivesItsIDBackToo(t *testing.T) {
 	}
 	st.SetTick(1)
 	back := must.Ok(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
-	if back != body {
-		t.Fatalf("the body that came back got %d, want %d", back, body)
+	if back == body {
+		t.Fatalf("the body that came back got the ID of the one that left, %d", body)
 	}
 }

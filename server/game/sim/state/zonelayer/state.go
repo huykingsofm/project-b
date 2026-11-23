@@ -78,6 +78,12 @@ func (s *State) clone() *State {
 	}
 }
 
+// entityIDInUse reports whether an entity of the state has the local number.
+func (s *State) entityIDInUse(local uint32) bool {
+	_, ok := s.entities.Get(state.NewEntityID(s.id, local))
+	return ok
+}
+
 // SetTick sets the tick that the state is at, and takes the IDs in the grave one step. It is called
 // once at the start of each tick.
 func (s *State) SetTick(tick uint64) {
@@ -180,7 +186,7 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 // AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
 // false, and does nothing, when the state has no ID left to give.
 func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
-	local, ok := s.entityIDs.Give()
+	local, ok := s.entityIDs.Give(s.entityIDInUse, s.entities.Len())
 	if !ok {
 		return 0, false
 	}
@@ -227,7 +233,7 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
 ) (state.EntityID, bool) {
-	local, ok := s.entityIDs.Give()
+	local, ok := s.entityIDs.Give(s.entityIDInUse, s.entities.Len())
 	if !ok {
 		return 0, false
 	}

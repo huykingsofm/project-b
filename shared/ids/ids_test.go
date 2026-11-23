@@ -10,151 +10,164 @@ import (
 
 type testID uint32
 
-func give(t *testing.T, a *ids.Allocator[testID]) testID {
+// owner is what uses the IDs, as a state does: it knows which ones it holds.
+type owner struct {
+	a    ids.Allocator[testID]
+	used map[testID]bool
+}
+
+func newOwner(steps uint64, limit testID) *owner {
+	return &owner{a: ids.New(steps, limit), used: map[testID]bool{}}
+}
+
+func (o *owner) inUse(id testID) bool { return o.used[id] }
+
+func (o *owner) give() (testID, bool) {
+	id, ok := o.a.Give(o.inUse, len(o.used))
+	if ok {
+		o.used[id] = true
+	}
+	return id, ok
+}
+
+func (o *owner) mustGive(t *testing.T) testID {
 	t.Helper()
-	id, ok := a.Give()
+	id, ok := o.give()
 	if !ok {
 		t.Fatal("Give: no ID")
 	}
 	return id
 }
 
+func (o *owner) release(id testID) bool {
+	if !o.used[id] {
+		return false
+	}
+	delete(o.used, id)
+	return o.a.Release(id)
+}
+
 func TestGiveCountsFromOneAndNeverGivesZero(t *testing.T) {
-	a := ids.New[testID](3, 100)
+	o := newOwner(3, 100)
 	for want := testID(1); want <= 5; want++ {
-		if got := give(t, &a); got != want {
+		if got := o.mustGive(t); got != want {
 			t.Fatalf("Give = %d, want %d", got, want)
 		}
 	}
-	if a.Status(0) != ids.NeverGiven {
-		t.Fatalf("Status(0) = %v", a.Status(0))
+	if o.a.Status(0, o.inUse) != ids.NotGiven {
+		t.Fatalf("Status(0) = %v", o.a.Status(0, o.inUse))
 	}
 }
 
-func TestAnIDWaitsInTheGraveForTheStepsAndIsThenGivenAgain(t *testing.T) {
-	a := ids.New[testID](3, 100)
-	one, two := give(t, &a), give(t, &a)
-	if !a.Release(one) {
-		t.Fatal("Release of a live ID failed")
+func TestIDsAreGivenInOrderUpToTheLimitBeforeOneIsGivenAgain(t *testing.T) {
+	o := newOwner(0, 5)
+	one := o.mustGive(t)
+	o.release(one)
+	for want := testID(2); want <= 5; want++ {
+		if got := o.mustGive(t); got != want {
+			t.Fatalf("Give = %d, want %d: an ID that was given back came first", got, want)
+		}
 	}
-	if a.Status(one) != ids.InGrave || a.Status(two) != ids.Live {
-		t.Fatalf("Status = %v and %v", a.Status(one), a.Status(two))
+	if got := o.mustGive(t); got != one {
+		t.Fatalf("Give after the limit = %d, want the one that was given back, %d", got, one)
+	}
+	if !o.a.Wrapped() {
+		t.Fatal("the allocator does not say that it went round")
+	}
+}
+
+func TestAfterGoingRoundAnIDInUseOrInTheGraveIsSkipped(t *testing.T) {
+	o := newOwner(10, 4)
+	for range 4 {
+		o.mustGive(t)
+	}
+	o.release(2) // in the grave
+	o.release(3) // in the grave too
+	o.a = o.a.Clone()
+	if _, ok := o.give(); ok {
+		t.Fatal("an ID was given while every one is in use or in the grave")
+	}
+	for range 10 {
+		o.a.Step()
+	}
+	if got := o.mustGive(t); got != 2 {
+		t.Fatalf("Give = %d, want 2: 1 is in use", got)
+	}
+}
+
+func TestAnIDWaitsInTheGraveForTheSteps(t *testing.T) {
+	o := newOwner(3, 2)
+	one, two := o.mustGive(t), o.mustGive(t)
+	o.release(one)
+	if o.a.Status(one, o.inUse) != ids.InGrave || o.a.Status(two, o.inUse) != ids.Live {
+		t.Fatalf("Status = %v and %v", o.a.Status(one, o.inUse), o.a.Status(two, o.inUse))
 	}
 	for step := 1; step <= 2; step++ {
-		a.Step()
-		if got := give(t, &a); got == one {
-			t.Fatalf("the ID came back after %d steps of 3", step)
+		o.a.Step()
+		if _, ok := o.give(); ok {
+			t.Fatalf("an ID came back after %d steps of 3", step)
 		}
 	}
-	a.Step()
-	if a.Status(one) != ids.Free {
-		t.Fatalf("Status after 3 steps = %v", a.Status(one))
+	o.a.Step()
+	if o.a.Status(one, o.inUse) != ids.NotGiven {
+		t.Fatalf("Status after 3 steps = %v", o.a.Status(one, o.inUse))
 	}
-	if got := give(t, &a); got != one {
-		t.Fatalf("Give = %d, want the one that was given back, %d", got, one)
-	}
-	if a.Status(one) != ids.Live {
-		t.Fatalf("Status after it was given again = %v", a.Status(one))
-	}
-}
-
-func TestTheIDFreeLongestIsGivenFirst(t *testing.T) {
-	a := ids.New[testID](0, 100)
-	first, second, third := give(t, &a), give(t, &a), give(t, &a)
-	a.Release(second)
-	a.Release(third)
-	a.Release(first)
-	for _, want := range []testID{second, third, first} {
-		if got := give(t, &a); got != want {
-			t.Fatalf("Give = %d, want %d", got, want)
-		}
-	}
-}
-
-func TestStepsOfZeroMakeAnIDFreeAtOnce(t *testing.T) {
-	a := ids.New[testID](0, 100)
-	one := give(t, &a)
-	a.Release(one)
-	if a.Status(one) != ids.Free {
-		t.Fatalf("Status = %v", a.Status(one))
-	}
-}
-
-func TestReleaseOfAnIDThatIsNotLiveChangesNothing(t *testing.T) {
-	a := ids.New[testID](2, 100)
-	one := give(t, &a)
-	for name, id := range map[string]testID{"never given": 9, "zero": 0} {
-		if a.Release(id) {
-			t.Fatalf("Release of an ID that is %s succeeded", name)
-		}
-	}
-	a.Release(one)
-	if a.Release(one) {
-		t.Fatal("Release of an ID in the grave succeeded")
-	}
-	a.Step()
-	a.Step()
-	if a.Release(one) {
-		t.Fatal("Release of a free ID succeeded")
-	}
-	if a.LiveCount() != 0 {
-		t.Fatalf("LiveCount = %d", a.LiveCount())
-	}
-}
-
-func TestNothingIsGivenAtTheLimitUntilAnIDIsFree(t *testing.T) {
-	a := ids.New[testID](1, 2)
-	one, _ := give(t, &a), give(t, &a)
-	if _, ok := a.Give(); ok {
-		t.Fatal("Give went past the limit")
-	}
-	a.Release(one)
-	if _, ok := a.Give(); ok {
-		t.Fatal("Give gave an ID that is in the grave")
-	}
-	a.Step()
-	if got := give(t, &a); got != one {
+	if got := o.mustGive(t); got != one {
 		t.Fatalf("Give = %d, want %d", got, one)
 	}
 }
 
-func TestTheLiveCountFollowsWhatIsGivenAndGivenBack(t *testing.T) {
-	a := ids.New[testID](2, 100)
-	one, two, three := give(t, &a), give(t, &a), give(t, &a)
-	a.Release(one)
-	a.Release(two)
-	if a.LiveCount() != 1 {
-		t.Fatalf("LiveCount = %d, want 1 (%d)", a.LiveCount(), three)
+func TestReleaseOfAnIDThatCannotHaveBeenGivenChangesNothing(t *testing.T) {
+	o := newOwner(2, 100)
+	one := o.mustGive(t)
+	for name, id := range map[string]testID{"never given": 9, "zero": 0, "above the limit": 101} {
+		if o.a.Release(id) {
+			t.Errorf("Release of an ID that is %s succeeded", name)
+		}
+	}
+	o.release(one)
+	if o.a.Release(one) {
+		t.Fatal("Release of an ID in the grave succeeded")
+	}
+	if o.a.GraveLen() != 1 {
+		t.Fatalf("GraveLen = %d", o.a.GraveLen())
+	}
+}
+
+func TestStepsOfZeroKeepNothing(t *testing.T) {
+	o := newOwner(0, 100)
+	one := o.mustGive(t)
+	if !o.release(one) || o.a.GraveLen() != 0 || o.a.Status(one, o.inUse) != ids.NotGiven {
+		t.Fatalf("Status = %v, %d in the grave", o.a.Status(one, o.inUse), o.a.GraveLen())
 	}
 }
 
 // run does a long run of calls chosen by a generator with a seed, and returns what each gave.
-func run(seed uint64, a *ids.Allocator[testID]) []testID {
+func run(seed uint64, o *owner) []testID {
 	rng := rand.New(rand.NewPCG(seed, 1))
-	var live, out []testID
-	for range 2000 {
+	var held, out []testID
+	for range 3000 {
 		switch rng.IntN(4) {
 		case 0, 1:
-			if id, ok := a.Give(); ok {
-				live = append(live, id)
+			if id, ok := o.give(); ok {
+				held = append(held, id)
 				out = append(out, id)
 			}
 		case 2:
-			if len(live) > 0 {
-				i := rng.IntN(len(live))
-				a.Release(live[i])
-				live = append(live[:i], live[i+1:]...)
+			if len(held) > 0 {
+				i := rng.IntN(len(held))
+				o.release(held[i])
+				held = append(held[:i], held[i+1:]...)
 			}
 		default:
-			a.Step()
+			o.a.Step()
 		}
 	}
 	return out
 }
 
 func TestTheSameCallsGiveTheSameIDs(t *testing.T) {
-	a, b := ids.New[testID](5, 1000), ids.New[testID](5, 1000)
-	x, y := run(7, &a), run(7, &b)
+	x, y := run(7, newOwner(5, 200)), run(7, newOwner(5, 200))
 	if len(x) == 0 || len(x) != len(y) {
 		t.Fatalf("%d and %d IDs", len(x), len(y))
 	}
@@ -167,54 +180,53 @@ func TestTheSameCallsGiveTheSameIDs(t *testing.T) {
 
 func TestAnIDIsNeverLiveTwiceAndNeverGivenBeforeItsSteps(t *testing.T) {
 	const steps = 5
-	a := ids.New[testID](steps, 1000)
+	o := newOwner(steps, 50) // a small limit, to go round many times
 	rng := rand.New(rand.NewPCG(3, 3))
-	live := map[testID]bool{}
 	releasedAt := map[testID]uint64{}
-	var given []testID
-	for range 5000 {
+	var held []testID
+	for range 20000 {
 		switch rng.IntN(4) {
 		case 0, 1:
-			id, ok := a.Give()
+			id, ok := o.a.Give(o.inUse, len(o.used))
 			if !ok {
 				continue
 			}
-			if live[id] {
-				t.Fatalf("%d was given while live", id)
+			if o.used[id] {
+				t.Fatalf("%d was given while in use", id)
 			}
-			if at, was := releasedAt[id]; was && a.Clock()-at < steps {
-				t.Fatalf("%d was given again %d steps after it was given back", id, a.Clock()-at)
+			if at, was := releasedAt[id]; was && o.a.Clock()-at < steps {
+				t.Fatalf("%d was given again %d steps after it was given back", id, o.a.Clock()-at)
 			}
-			live[id] = true
-			given = append(given, id)
+			o.used[id] = true
+			held = append(held, id)
 		case 2:
-			if len(given) == 0 {
+			if len(held) == 0 {
 				continue
 			}
-			if id := given[rng.IntN(len(given))]; live[id] {
-				a.Release(id)
-				live[id] = false
-				releasedAt[id] = a.Clock()
-			}
+			i := rng.IntN(len(held))
+			o.release(held[i])
+			releasedAt[held[i]] = o.a.Clock()
+			held = append(held[:i], held[i+1:]...)
 		default:
-			a.Step()
+			o.a.Step()
 		}
+	}
+	if !o.a.Wrapped() {
+		t.Fatal("the run never went round, so it tested nothing of skipping")
 	}
 }
 
 func TestCloneSharesNothing(t *testing.T) {
-	a := ids.New[testID](2, 100)
-	one := give(t, &a)
-	a.Release(one)
-	c := a.Clone()
-	a.Step()
-	a.Step()
-	if c.Status(one) != ids.InGrave || a.Status(one) != ids.Free {
-		t.Fatalf("Status = %v in the clone, %v in the original", c.Status(one), a.Status(one))
-	}
-	give(t, &c)
-	if a.Status(one) != ids.Free {
-		t.Fatal("giving an ID in the clone changed the original")
+	o := newOwner(2, 100)
+	one := o.mustGive(t)
+	o.release(one)
+	c := o.a.Clone()
+	o.a.Step()
+	o.a.Step()
+	if !c.InGrave(one) || o.a.InGrave(one) {
+		t.Fatalf(
+			"in the grave: %v in the clone, %v in the original", c.InGrave(one), o.a.InGrave(one),
+		)
 	}
 }
 
@@ -225,58 +237,69 @@ func encoded(a *ids.Allocator[testID]) []byte {
 }
 
 func TestAnAllocatorSurvivesEncodeAndDecode(t *testing.T) {
-	a := ids.New[testID](4, 50)
-	run(11, &a)
-	got, err := ids.Decode[testID](binary.NewReader(encoded(&a)))
+	o := newOwner(4, 50)
+	run(11, o)
+	got, err := ids.Decode[testID](binary.NewReader(encoded(&o.a)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(encoded(&got)) != string(encoded(&a)) {
+	if string(encoded(&got)) != string(encoded(&o.a)) {
 		t.Fatal("what was read does not encode to what was written")
 	}
+	other := &owner{a: got, used: map[testID]bool{}}
+	for id := range o.used {
+		other.used[id] = true
+	}
 	for range 50 {
-		x, okx := a.Give()
-		y, oky := got.Give()
+		x, okx := o.give()
+		y, oky := other.give()
 		if x != y || okx != oky {
 			t.Fatalf("Give = %d, %v and %d, %v", x, okx, y, oky)
 		}
-		a.Step()
-		got.Step()
+		o.a.Step()
+		other.a.Step()
 	}
 }
 
 func TestDecodeRefusesWhatIsNotAnAllocator(t *testing.T) {
-	a := ids.New[testID](2, 50)
-	one, two := give(t, &a), give(t, &a)
-	a.Release(one)
-	a.Release(two)
-	good := encoded(&a)
+	o := newOwner(2, 50)
+	one, two := o.mustGive(t), o.mustGive(t)
+	o.release(one)
+	o.release(two)
+	good := encoded(&o.a)
 	for n := range good {
 		if _, err := ids.Decode[testID](binary.NewReader(good[:n])); err == nil {
 			t.Fatalf("a cut at %d bytes of %d was read", n, len(good))
 		}
 	}
-	var w binary.Writer
-	w.Uvarint(2)  // steps
-	w.Uvarint(50) // limit
-	w.Uvarint(2)  // next
-	w.Uvarint(0)  // clock
-	w.Uvarint(2)  // two in the grave: both the same ID
-	w.Uvarint(1)
-	w.Uvarint(2)
-	w.Uvarint(1)
-	w.Uvarint(2)
-	w.Uvarint(0)
-	if _, err := ids.Decode[testID](binary.NewReader(w.B)); err == nil {
-		t.Fatal("an ID in two places was read")
+	header := func(w *binary.Writer) {
+		w.Uvarint(2)  // steps
+		w.Uvarint(50) // limit
+		w.Uvarint(2)  // last
+		w.Bool(false) // wrapped
+		w.Uvarint(0)  // clock
 	}
-	w.B = w.B[:0]
-	w.Uvarint(2)
-	w.Uvarint(50)
-	w.Uvarint(2)
-	w.Uvarint(0)
-	w.Uvarint(1<<40 | 1) // a count that the bytes left cannot hold
-	if _, err := ids.Decode[testID](binary.NewReader(w.B)); err == nil {
-		t.Fatal("a count that is too large was read")
+	cases := map[string]func(w *binary.Writer){
+		"an ID twice in the grave": func(w *binary.Writer) {
+			w.Uvarint(2)
+			w.Uvarint(1)
+			w.Uvarint(2)
+			w.Uvarint(1)
+			w.Uvarint(2)
+		},
+		"an ID never given": func(w *binary.Writer) {
+			w.Uvarint(1)
+			w.Uvarint(9)
+			w.Uvarint(2)
+		},
+		"a count too large": func(w *binary.Writer) { w.Uvarint(1<<40 | 1) },
+	}
+	for name, grave := range cases {
+		var w binary.Writer
+		header(&w)
+		grave(&w)
+		if _, err := ids.Decode[testID](binary.NewReader(w.B)); err == nil {
+			t.Errorf("%s was read", name)
+		}
 	}
 }

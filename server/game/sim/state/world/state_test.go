@@ -118,7 +118,7 @@ func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 	}
 }
 
-func TestTheIDOfAZoneLayerThatWasRemovedIsGivenAgainOnlyAfterTheSteps(t *testing.T) {
+func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testing.T) {
 	st := world.NewState(1, 2)
 	first := must.Ok(st.AddZoneLayer())
 	if !st.RemoveZoneLayer(first) {
@@ -127,13 +127,11 @@ func TestTheIDOfAZoneLayerThatWasRemovedIsGivenAgainOnlyAfterTheSteps(t *testing
 	if got := st.ZoneLayerIDs(); len(got) != 0 {
 		t.Fatalf("the world still knows %v", got)
 	}
-	if second := must.Ok(st.AddZoneLayer()); second == first {
-		t.Fatal("the ID was given again at once")
-	}
-	st.SetTick(1)
-	st.SetTick(2)
-	if third := must.Ok(st.AddZoneLayer()); third != first {
-		t.Fatalf("the zonelayer got %d, want the ID that waited its ticks, %d", third, first)
+	for tick := uint64(1); tick <= 5; tick++ {
+		st.SetTick(tick)
+		if got := must.Ok(st.AddZoneLayer()); got == first {
+			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
+		}
 	}
 }
 

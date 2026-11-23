@@ -34,46 +34,38 @@ func NewZoneLayerIDs(graveSteps uint64) ZoneLayerIDs {
 // HashIDs works what an allocator holds into a hash.
 func HashIDs(h *sim.Hasher, a *ids.Allocator[uint32]) {
 	h.U64(a.Steps())
-	h.U64(uint64(a.Largest()))
+	h.U64(uint64(a.Last()))
+	if a.Wrapped() {
+		h.U64(1)
+	} else {
+		h.U64(0)
+	}
 	h.U64(a.Clock())
 	for id, until := range a.Grave() {
 		h.U64(uint64(id))
 		h.U64(until)
 	}
-	for id := range a.FreeIDs() {
-		h.U64(uint64(id))
-	}
 }
 
-// CheckEntityIDs reports an error when the entities that a state holds are not exactly the live
-// IDs of its allocator: a checkpoint in which they differ cannot be one that was written.
+// CheckEntityIDs reports an error when an entity that a state holds has an ID that its allocator
+// cannot have given it: of another state, never given, or in the grave. A checkpoint in which one
+// does cannot be one that was written.
 func CheckEntityIDs(owner sim.StateID, a *EntityIDs, entityIDs []EntityID) error {
-	if a.LiveCount() != len(entityIDs) {
-		return fmt.Errorf(
-			"the state %d holds %d entities and its IDs say %d are live",
-			owner, len(entityIDs), a.LiveCount(),
-		)
-	}
 	for _, id := range entityIDs {
-		if id.Owner() != owner || a.Status(id.Local()) != ids.Live {
-			return fmt.Errorf("the entity %d is not a live ID of the state %d", id, owner)
+		if id.Owner() != owner || !a.MayBeInUse(id.Local()) {
+			return fmt.Errorf("the entity %d is not one that the state %d gave", id, owner)
 		}
 	}
 	return nil
 }
 
-// CheckZoneLayerIDs reports an error when the zonelayers that a world knows are not exactly the
-// live IDs of its allocator: a checkpoint in which they differ cannot be one that was written.
+// CheckZoneLayerIDs reports an error when a zonelayer that a world knows has an ID that its
+// allocator cannot have given it: of another type, never given, or in the grave. A checkpoint in
+// which one does cannot be one that was written.
 func CheckZoneLayerIDs(a *ZoneLayerIDs, zoneLayerIDs []sim.StateID) error {
-	if a.LiveCount() != len(zoneLayerIDs) {
-		return fmt.Errorf(
-			"the world knows %d zonelayers and its IDs say %d are live",
-			len(zoneLayerIDs), a.LiveCount(),
-		)
-	}
 	for _, id := range zoneLayerIDs {
-		if id.Type() != ZoneLayerType || a.Status(id.Local()) != ids.Live {
-			return fmt.Errorf("the zonelayer %d is not a live ID of the world", id)
+		if id.Type() != ZoneLayerType || !a.MayBeInUse(id.Local()) {
+			return fmt.Errorf("the zonelayer %d is not one that the world gave", id)
 		}
 	}
 	return nil
