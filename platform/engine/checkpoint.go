@@ -109,6 +109,27 @@ type restoredCell struct {
 	pending        []sim.Message
 }
 
+// PCG is where the random numbers of the engine were.
+func (rc restoredCell) PCG() *rand.PCG { return rc.pcg }
+
+// Seq is the number of the last message the engine sent.
+func (rc restoredCell) Seq() uint64 { return rc.seq }
+
+// CfgVersionSeen is the version of the configuration the engine read last.
+func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
+
+// LastSeq is the last number that the engine took from each sender.
+func (rc restoredCell) LastSeq() map[sim.StateID]uint64 { return rc.lastSeq }
+
+// Pending is the messages that the engine held to send again.
+func (rc restoredCell) Pending() []sim.Message { return rc.pending }
+
+// Scheduler is what the engine waited for.
+func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }
+
+// Cell is what every engine knows besides its state.
+func (r *restored[S]) Cell() restoredCell { return r.cell }
+
 // readCheckpointRest reads what follows the state of an engine: what it waits for, and what only it
 // knows.
 func (env *Env) readCheckpointRest[S sim.State](
@@ -149,8 +170,9 @@ func (c *cell) encode(w *binary.Writer) error {
 		w.Uvarint(uint64(sender))
 		w.Uvarint(c.lastSeq[sender])
 	}
-	w.Uvarint(uint64(len(c.bounce.pending)))
-	for _, m := range c.bounce.pending {
+	pending := c.bounce.Pending()
+	w.Uvarint(uint64(len(pending)))
+	for _, m := range pending {
 		if err := sim.EncodeMessage(w, m); err != nil {
 			return fmt.Errorf("a message it holds to send again: %w", err)
 		}
@@ -200,8 +222,8 @@ func decodeCell(
 // restore gives the cell what a checkpoint says. It cannot fail: all of it was read and checked
 // before the engine was made.
 func (c *cell) restore(rc restoredCell) {
-	*c.pcg = *rc.pcg
-	c.seq, c.cfgVersionSeen = rc.seq, rc.cfgVersionSeen
-	c.lastSeq = rc.lastSeq
-	c.bounce.pending = rc.pending
+	*c.pcg = *rc.PCG()
+	c.seq, c.cfgVersionSeen = rc.Seq(), rc.CfgVersionSeen()
+	c.lastSeq = rc.LastSeq()
+	c.bounce.SetPending(rc.Pending())
 }

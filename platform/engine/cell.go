@@ -163,7 +163,7 @@ func (c *cell) flush(cfg *config.Snapshot, tick uint64, outbox []sim.Message) {
 // retire makes the engine unreachable and gives back what is waiting in its channels.
 func (c *cell) retire() {
 	c.router.Retire(c.me)
-	c.bounce.stopping = true
+	c.bounce.Stop()
 	for _, m := range channels.Drain(c.in.In) {
 		c.router.Return(m, sim.Retired)
 	}

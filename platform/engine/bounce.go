@@ -65,6 +65,20 @@ func (b *bouncer) Drop() { b.dropped++ }
 // Stopping reports whether the engine is stopping.
 func (b *bouncer) Stopping() bool { return b.stopping }
 
+// Pending is the messages that are to be sent again, in the order they will be. The list is a view:
+// do not change it.
+func (b *bouncer) Pending() []sim.Message { return b.pending }
+
+// SetPending sets the messages that are to be sent again, as a checkpoint says.
+func (b *bouncer) SetPending(messages []sim.Message) { b.pending = messages }
+
+// Stop makes the engine stopping: from now on nothing is sent again.
+func (b *bouncer) Stop() { b.stopping = true }
+
+// SetNotice sets what tells an actor something: what a notice of a message that could not be
+// delivered is given to.
+func (b *bouncer) SetNotice(notice func(actor any, key string, args []any)) { b.notice = notice }
+
 // take returns the messages that are to be sent again, and forgets them.
 func (b *bouncer) take() []sim.Message {
 	out := b.pending

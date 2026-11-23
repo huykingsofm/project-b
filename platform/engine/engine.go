@@ -52,7 +52,9 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	}
 	e.reg.Me, e.reg.Stable = me, e.view
 	if n, ok := any(st).(Noticer); ok {
-		e.bounce.notice = func(actor any, key string, args []any) { n.Notice(actor, key, args...) }
+		e.bounce.SetNotice(
+			func(actor any, key string, args []any) { n.Notice(actor, key, args...) },
+		)
 	}
 	return e
 }
@@ -257,7 +259,7 @@ func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error
 	}
 	e := New(st, env, seed)
 	e.tick = tick
-	e.sched = rest.sched
-	e.cell.restore(rest.cell)
+	e.sched = rest.Scheduler()
+	e.cell.restore(rest.Cell())
 	return e, nil
 }
