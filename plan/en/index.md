@@ -16,6 +16,7 @@ The plan covers everything an online game needs: the simulation engine, space, c
 | [proposed-designs.md](proposed-designs.md) | The proposed designs; what `observe` and `effects` are |
 | [phases.md](phases.md) | Phases 0 to 10: tasks and acceptance |
 | [decisions.md](decisions.md) | The owner's decisions: decided and open |
+| [roadmap.md](roadmap.md) | What is to be done soonest, in order |
 
 ## Status of an item
 
