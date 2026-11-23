@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"maps"
 	"slices"
 	"testing"
 
@@ -50,14 +51,18 @@ func TestFindByIDAndByActorAndCancel(t *testing.T) {
 		t.Fatal("unexpected first action")
 	}
 
-	if got := p.Find(ActionKey{ID: testID}); len(got) != 3 {
-		t.Fatalf("by ID found %d, want 3", len(got))
+	got := p.Find(ActionKey{ID: testID})
+	if len(got) != 4 || got[0].Status() != EntryRan || got[1].Status() != EntryPending {
+		t.Fatalf("by ID found %d, want 4: the modifier that ran, and the 3 still to run", len(got))
 	}
 	byTwo := p.Find(ActionKey{Actor: 2, ID: testID})
 	if len(byTwo) != 2 || nameOf(byTwo[0].Action()) != "by-2" {
 		t.Fatalf("by engine found %v", byTwo)
 	}
 	p.Cancel(byTwo[0])
+	if byTwo[0].Status() != EntryCancelled {
+		t.Fatal("the status of a cancelled entry is not EntryCancelled")
+	}
 	if got := names(p, anonymousName); !slices.Equal(
 		got, []string{"by-1", "by-2-again"},
 	) {
@@ -105,15 +110,28 @@ type impostorAction struct{ anonymousAction }
 
 func (a *impostorAction) ID() ActionID { return typedID }
 
-func typedNames(p *Plan[*toyState]) []string {
-	var out []string
-	for _, a := range p.FindByID[*typedAction](typedID) {
-		out = append(out, a.name)
+// typedNames is the name of every typed action in the plan, and the status of its entry.
+func typedNames(p *Plan[*toyState]) map[string]EntryStatus {
+	out := map[string]EntryStatus{}
+	for e, a := range p.FindByID[*typedAction](typedID) {
+		out[a.name] = e.Status()
 	}
 	return out
 }
 
-func TestFindByIDReturnsTheActionsOfOneIDThatHaveNotRunAndAreNotCancelled(t *testing.T) {
+// pendingTypedNames is the names of the typed actions still to run, as a caller that changes
+// actions has to find them: by checking the status of each entry.
+func pendingTypedNames(p *Plan[*toyState]) []string {
+	var out []string
+	for e, a := range p.FindByID[*typedAction](typedID) {
+		if e.Status() == EntryPending {
+			out = append(out, a.name)
+		}
+	}
+	return out
+}
+
+func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *testing.T) {
 	p := NewPlan[*toyState]()
 	p.Append(&anonymousAction{name: "a"})
 	p.Append(&typedAction{anonymousAction{name: "t1"}})
@@ -121,7 +139,7 @@ func TestFindByIDReturnsTheActionsOfOneIDThatHaveNotRunAndAreNotCancelled(t *tes
 	p.Append(second)
 	p.Append(&typedAction{anonymousAction{name: "t3", priority: 10}})
 
-	if got := typedNames(p); !slices.Equal(got, []string{"t1", "t2", "t3"}) {
+	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t1", "t2", "t3"}) {
 		t.Fatalf("found %v, want the three typed actions in the order they were added", got)
 	}
 	for e, a := range p.FindByID[*typedAction](typedID) {
@@ -131,12 +149,16 @@ func TestFindByIDReturnsTheActionsOfOneIDThatHaveNotRunAndAreNotCancelled(t *tes
 	}
 	p.Next() // runs the first entry in the order of the plan, which is "a" or "t1"
 	p.Next()
-	if got := typedNames(p); !slices.Equal(got, []string{"t3"}) {
-		t.Fatalf("after one cancelled and two run, found %v, want only t3", got)
+	want := map[string]EntryStatus{"t1": EntryRan, "t2": EntryCancelled, "t3": EntryPending}
+	if got := typedNames(p); !maps.Equal(got, want) {
+		t.Fatalf("found %v, want %v", got, want)
+	}
+	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t3"}) {
+		t.Fatalf("still to run %v, want only t3", got)
 	}
 }
 
-func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsLeftOut(t *testing.T) {
+func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsGivenAsCancelled(t *testing.T) {
 	p := NewPlan[*toyState]()
 	var entries []*PlanEntry[*toyState]
 	for _, name := range []string{"t1", "t2", "t3"} {
@@ -149,10 +171,12 @@ func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsLeftOut(t *tes
 	for e, a := range p.FindByID[*typedAction](typedID) {
 		seen = append(seen, a.name)
 		p.Cancel(entries[2]) // t3: not reached yet
-		_ = e
+		if a.name == "t3" && e.Status() != EntryCancelled {
+			t.Fatal("t3 was cancelled before the loop reached it and is not given as cancelled")
+		}
 	}
-	if !slices.Equal(seen, []string{"t1", "t2"}) {
-		t.Fatalf("walked %v, want t1 and t2: t3 was cancelled before the loop reached it", seen)
+	if !slices.Equal(seen, []string{"t1", "t2", "t3"}) {
+		t.Fatalf("walked %v, want all three", seen)
 	}
 	seen = nil
 	for _, a := range p.FindByID[*typedAction](typedID) {
@@ -169,7 +193,7 @@ func TestAnActionOfTheIDButNotOfTheTypeIsLeftOutAndTheOthersAreFound(t *testing.
 	p.Append(&typedAction{anonymousAction{name: "t1"}})
 	p.Append(&impostorAction{anonymousAction{name: "impostor"}})
 	p.Append(&typedAction{anonymousAction{name: "t2"}})
-	if got := typedNames(p); !slices.Equal(got, []string{"t1", "t2"}) {
+	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t1", "t2"}) {
 		t.Fatalf("found %v, want the two of the right type", got)
 	}
 }
@@ -236,7 +260,9 @@ func TestBuildGivesTheOrderOfAnAppendOfEachActionAndTheEntriesAreAtDepthZero(t *
 	}
 }
 
-func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesThem(t *testing.T) {
+func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesAll(
+	t *testing.T,
+) {
 	p := NewPlan[*toyState]()
 	p.Build([]Action[*toyState]{
 		&typedAction{anonymousAction{name: "t1", priority: 0}},
@@ -244,8 +270,11 @@ func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesTh
 	})
 	e, _ := p.Next() // t1 runs
 	p.Append(&typedAction{anonymousAction{name: "early", priority: -100}})
-	if got := typedNames(p); !slices.Equal(got, []string{"t2", "early"}) {
+	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t2", "early"}) {
 		t.Fatalf("found %v, want what is still to run, in the order they were added", got)
+	}
+	if got := typedNames(p); len(got) != 3 || got["t1"] != EntryRan {
+		t.Fatalf("found %v, want the three, t1 among them as ran", got)
 	}
 	if next, _ := p.Next(); nameOf(next.Action()) != "early" || next.depth != e.depth+1 {
 		t.Fatalf(
@@ -268,9 +297,9 @@ func TestCancelledListsTheEntriesCancelledInTheOrderTheyWereAndNotTheOnesThatRan
 		entries = append(entries, e)
 	}
 	p.Cancel(entries[1])
-	p.Cancel(entries[0])
+	p.Cancel(entries[2])
 	got := p.Cancelled()
-	if len(got) != 2 || nameOf(got[0].Action()) != "t3" || nameOf(got[1].Action()) != "t2" {
-		t.Fatalf("cancelled %v, want t3 then t2", got)
+	if len(got) != 2 || nameOf(got[0].Action()) != "t2" || nameOf(got[1].Action()) != "t3" {
+		t.Fatalf("cancelled %v, want t2 then t3", got)
 	}
 }

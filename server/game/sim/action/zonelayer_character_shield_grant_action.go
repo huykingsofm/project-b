@@ -43,7 +43,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Apply(
 	}
 	damages := p.FindByID[*ZoneLayerCharacterDamageAction](ZoneLayerCharacterDamageActionID)
 	for e, damage := range damages {
-		if damage.VictimID == entity.ID() {
+		if e.Status() == sim.EntryPending && damage.VictimID == entity.ID() {
 			p.Cancel(e)
 			return
 		}

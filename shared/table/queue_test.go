@@ -83,11 +83,9 @@ func TestWhatIsAddedWhileTakingIsOrderedAmongTheOnesStillToBeTakenNeverBeforeOne
 func TestAllWalksEveryElementAndPendingStartsAtTheNextOneToBeTaken(t *testing.T) {
 	q := newJobs(t)
 	q.BuildFrom([]job{{"a", 1, "x"}, {"b", 2, "x"}, {"c", 3, "x"}, {"d", 4, "x"}})
-	q.Next()            // a
-	q.Next()            // b
-	k, _, _ := q.Next() // c
-	_ = k
-	q.Cancel(3) // d is cancelled
+	q.Next() // a
+	q.Next() // b
+	q.Next() // c
 	names := func(seq func(func(int64, job) bool)) (out []string) {
 		for _, j := range seq {
 			out = append(out, j.name)
@@ -97,8 +95,8 @@ func TestAllWalksEveryElementAndPendingStartsAtTheNextOneToBeTaken(t *testing.T)
 	if got := names(q.All()); !slices.Equal(got, []string{"a", "b", "c", "d"}) {
 		t.Fatalf("All %v, want every element, the ones taken and cancelled included", got)
 	}
-	if got := names(q.Pending()); len(got) != 0 {
-		t.Fatalf("Pending %v, want none: the rest is taken or cancelled", got)
+	if got := names(q.Pending()); !slices.Equal(got, []string{"d"}) {
+		t.Fatalf("Pending %v, want [d]", got)
 	}
 	r := newJobs(t)
 	r.BuildFrom([]job{{"a", 1, "x"}, {"b", 2, "x"}, {"c", 3, "x"}})
@@ -108,39 +106,20 @@ func TestAllWalksEveryElementAndPendingStartsAtTheNextOneToBeTaken(t *testing.T)
 	}
 }
 
-func TestACancelledElementIsNotTakenAndTheKeysCancelledAreKnown(t *testing.T) {
-	q := newJobs(t)
-	q.BuildFrom([]job{{"a", 1, "x"}, {"b", 2, "x"}, {"c", 3, "x"}})
-	if !q.Cancel(1) || q.Cancel(1) || q.Cancel(9) || q.Cancel(-1) {
-		t.Fatal("Cancel did not say whether the element was still to be taken")
-	}
-	if got := namesOfQueue(q); !slices.Equal(got, []string{"a", "c"}) {
-		t.Fatalf("taken %v, want [a c]", got)
-	}
-	if q.Cancel(0) {
-		t.Fatal("an element that was taken was cancelled")
-	}
-	if got := q.Cancelled(); !slices.Equal(got, []int64{1}) {
-		t.Fatalf("cancelled %v, want [1]", got)
-	}
-	if j, ok := q.Get(1); !ok || j.name != "b" {
-		t.Fatal("a cancelled element is not there to be read")
-	}
-}
-
-func TestLookupFindsOnlyWhatIsStillToBeTakenAndSeesACancelInTheWalk(t *testing.T) {
+func TestLookupFindsTheElementsThatWereTakenAsWellAsTheOthers(t *testing.T) {
 	q := newJobs(t)
 	q.BuildFrom([]job{{"a", 1, "item"}, {"b", 2, "item"}, {"c", 3, "body"}, {"d", 4, "item"}})
 	q.Next() // a is taken
+	q.Next() // b is taken
 	var seen []string
-	for k, j := range q.Lookup(kind("item")) {
+	for _, j := range q.Lookup(kind("item")) {
 		seen = append(seen, j.name)
-		if j.name == "b" {
-			q.Cancel(k + 2) // d, not reached yet: left out
-		}
 	}
-	if !slices.Equal(seen, []string{"b"}) {
-		t.Fatalf("walked %v, want [b]: a was taken, d was cancelled before it was reached", seen)
+	if !slices.Equal(seen, []string{"a", "b", "d"}) {
+		t.Fatalf("walked %v, want [a b d]: the ones taken are found too", seen)
+	}
+	if j, ok := q.Get(1); !ok || j.name != "b" {
+		t.Fatal("an element that was taken is not there to be read")
 	}
 }
 
@@ -148,9 +127,8 @@ func TestResetTakesEverythingOutAndTheQueueGoesOn(t *testing.T) {
 	q := newJobs(t)
 	q.BuildFrom([]job{{"a", 1, "x"}, {"b", 2, "x"}})
 	q.Next()
-	q.Cancel(1)
 	q.Reset()
-	if q.Len() != 0 || len(q.Cancelled()) != 0 {
+	if q.Len() != 0 {
 		t.Fatal("Reset left something")
 	}
 	k := q.Add(job{"z", 0, "x"})
