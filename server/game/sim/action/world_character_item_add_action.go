@@ -72,7 +72,7 @@ func (a *WorldCharacterItemAddAction) Encode(w *binary.Writer) {
 // decodeWorldCharacterItemAddAction reads what Encode wrote.
 func decodeWorldCharacterItemAddAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*worldstate.State], error) {
+) (*WorldCharacterItemAddAction, error) {
 	a := &WorldCharacterItemAddAction{
 		CharacterID:     r.Uint[state.CharacterID](),
 		ItemID:          r.Uint[state.ItemID](),

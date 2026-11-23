@@ -62,7 +62,7 @@ func (a *toyAction) Apply(
 }
 func (a *toyAction) Encode(w *binary.Writer) { w.Varint(a.N); w.Varint(int64(a.Author)) }
 
-func decodeToyAction(r *binary.Reader, _ codec.Version) (sim.Action[*toyState], error) {
+func decodeToyAction(r *binary.Reader, _ codec.Version) (*toyAction, error) {
 	a := &toyAction{N: r.Varint(), Author: int(r.Varint())}
 	return a, r.Err()
 }
@@ -84,7 +84,7 @@ func (c toyCommand) Clone() sim.Command[*toyState] { return c }
 
 func decodeToyCommand(
 	r *binary.Reader, _ codec.Version,
-) (sim.Command[*toyState], error) {
+) (toyCommand, error) {
 	c := toyCommand{N: r.Varint()}
 	return c, r.Err()
 }
@@ -116,7 +116,7 @@ func (a *forwardAction) Encode(w *binary.Writer) {
 
 func decodeForwardAction(
 	r *binary.Reader, _ codec.Version,
-) (sim.Action[*toyState], error) {
+) (*forwardAction, error) {
 	a := &forwardAction{To: sim.StateID(r.Uvarint()), N: r.Varint(), Again: r.Uvarint()}
 	return a, r.Err()
 }
@@ -139,7 +139,7 @@ func (a *readAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.From)) }
 
 func decodeReadAction(
 	r *binary.Reader, _ codec.Version,
-) (sim.Action[*toyState], error) {
+) (*readAction, error) {
 	a := &readAction{From: sim.StateID(r.Uvarint())}
 	return a, r.Err()
 }
@@ -147,11 +147,11 @@ func decodeReadAction(
 func toyCodecs() (*sim.Codecs, error) {
 	c := sim.NewCodecs()
 	return c, sim.Errors(
-		c.RegisterState(&toyState{}, decodeToyState),
-		c.RegisterAction(&toyAction{}, decodeToyAction),
-		c.RegisterAction(&forwardAction{}, decodeForwardAction),
-		c.RegisterAction(&readAction{}, decodeReadAction),
-		c.RegisterCommand(toyCommand{}, decodeToyCommand),
+		c.RegisterState(decodeToyState),
+		c.RegisterAction(decodeToyAction),
+		c.RegisterAction(decodeForwardAction),
+		c.RegisterAction(decodeReadAction),
+		c.RegisterCommand(decodeToyCommand),
 		onfail.Register(c),
 	)
 }

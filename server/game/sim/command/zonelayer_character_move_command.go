@@ -40,7 +40,7 @@ func (c ZoneLayerCharacterMoveCommand) Encode(w *binary.Writer) error {
 // decodeZoneLayerCharacterMoveCommand reads what Encode wrote.
 func decodeZoneLayerCharacterMoveCommand(
 	r *binary.Reader, version codec.Version,
-) (sim.Command[*zonelayerstate.State], error) {
+) (ZoneLayerCharacterMoveCommand, error) {
 	c := ZoneLayerCharacterMoveCommand{
 		CharacterID: r.Uint[state.CharacterID](),
 		Dir:         state.Dir(r.Uint8()),

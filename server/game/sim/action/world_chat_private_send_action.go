@@ -41,7 +41,7 @@ func (a *WorldChatPrivateSendAction) Encode(w *binary.Writer) {
 // decodeWorldChatPrivateSendAction reads what Encode wrote.
 func decodeWorldChatPrivateSendAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*worldstate.State], error) {
+) (*WorldChatPrivateSendAction, error) {
 	a := &WorldChatPrivateSendAction{
 		FromID: r.Uint[state.PlayerID](),
 		ToID:   r.Uint[state.PlayerID](),

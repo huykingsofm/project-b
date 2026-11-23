@@ -36,7 +36,7 @@ func (a *ZoneLayerChatSendAction) Encode(w *binary.Writer) {
 // decodeZoneLayerChatSendAction reads what Encode wrote.
 func decodeZoneLayerChatSendAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerChatSendAction, error) {
 	a := &ZoneLayerChatSendAction{FromID: r.Uint[state.CharacterID](), Text: r.String()}
 	return a, r.Err()
 }

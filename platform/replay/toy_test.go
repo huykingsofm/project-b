@@ -47,7 +47,7 @@ func (a *toyMoveAction) Encode(w *binary.Writer) {
 }
 func decodeToyMoveAction(
 	r *binary.Reader, _ codec.Version,
-) (sim.Action[*toyState], error) {
+) (*toyMoveAction, error) {
 	a := &toyMoveAction{CharacterID: r.Uvarint(), Dir: r.Uint8(), Ticks: uint32(r.Uvarint())}
 	return a, r.Err()
 }
@@ -66,7 +66,7 @@ func (*toyChatAction) Apply(
 func (a *toyChatAction) Encode(w *binary.Writer) { w.Uvarint(a.FromID); w.String(a.Text) }
 func decodeToyChatAction(
 	r *binary.Reader, _ codec.Version,
-) (sim.Action[*toyState], error) {
+) (*toyChatAction, error) {
 	a := &toyChatAction{FromID: r.Uvarint(), Text: r.String()}
 	return a, r.Err()
 }
@@ -82,7 +82,7 @@ func (*toyRegenAction) Apply(
 func (*toyRegenAction) Encode(*binary.Writer) {}
 func decodeToyRegenAction(
 	_ *binary.Reader, _ codec.Version,
-) (sim.Action[*toyState], error) {
+) (*toyRegenAction, error) {
 	return &toyRegenAction{}, nil
 }
 
@@ -104,7 +104,7 @@ func (c toyMove) Translate() []sim.Action[*toyState] {
 	return []sim.Action[*toyState]{&toyMoveAction{c.CharacterID, c.Dir, c.Ticks}}
 }
 func (c toyMove) Clone() sim.Command[*toyState] { return c }
-func decodeToyMove(r *binary.Reader, _ codec.Version) (sim.Command[*toyState], error) {
+func decodeToyMove(r *binary.Reader, _ codec.Version) (toyMove, error) {
 	c := toyMove{CharacterID: r.Uvarint(), Dir: r.Uint8(), Ticks: uint32(r.Uvarint())}
 	return c, r.Err()
 }
@@ -124,7 +124,7 @@ func (c toyChat) Translate() []sim.Action[*toyState] {
 	return []sim.Action[*toyState]{&toyChatAction{c.FromID, c.Text}}
 }
 func (c toyChat) Clone() sim.Command[*toyState] { return c }
-func decodeToyChat(r *binary.Reader, _ codec.Version) (sim.Command[*toyState], error) {
+func decodeToyChat(r *binary.Reader, _ codec.Version) (toyChat, error) {
 	c := toyChat{FromID: r.Uvarint(), Text: r.String()}
 	return c, r.Err()
 }
@@ -142,7 +142,7 @@ func (c toyEnter) Encode(w *binary.Writer) error {
 }
 func (c toyEnter) Translate() []sim.Action[*toyState] { return nil }
 func (c toyEnter) Clone() sim.Command[*toyState]      { return c }
-func decodeToyEnter(r *binary.Reader, _ codec.Version) (sim.Command[*toyState], error) {
+func decodeToyEnter(r *binary.Reader, _ codec.Version) (toyEnter, error) {
 	c := toyEnter{Name: r.String(), Cooldown: r.Uvarint()}
 	return c, r.Err()
 }
@@ -150,13 +150,13 @@ func decodeToyEnter(r *binary.Reader, _ codec.Version) (sim.Command[*toyState], 
 func toyCodecs() *sim.Codecs {
 	c := sim.NewCodecs()
 	err := sim.Errors(
-		c.RegisterState[*toyState](&toyState{}, decodeToyState),
-		c.RegisterAction[*toyState](&toyMoveAction{}, decodeToyMoveAction),
-		c.RegisterAction[*toyState](&toyChatAction{}, decodeToyChatAction),
-		c.RegisterAction[*toyState](&toyRegenAction{}, decodeToyRegenAction),
-		c.RegisterCommand[*toyState](toyMove{}, decodeToyMove),
-		c.RegisterCommand[*toyState](toyChat{}, decodeToyChat),
-		c.RegisterCommand[*toyState](toyEnter{}, decodeToyEnter),
+		c.RegisterState(decodeToyState),
+		c.RegisterAction(decodeToyMoveAction),
+		c.RegisterAction(decodeToyChatAction),
+		c.RegisterAction(decodeToyRegenAction),
+		c.RegisterCommand(decodeToyMove),
+		c.RegisterCommand(decodeToyChat),
+		c.RegisterCommand(decodeToyEnter),
 		onfail.Register(c),
 	)
 	if err != nil {

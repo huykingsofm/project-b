@@ -51,12 +51,15 @@ func NewCodecs() *Codecs {
 	}
 }
 
-// RegisterState registers a type of state: the prototype says its type and its Go type, and decode
-// reads it. It also makes the messages for the states of this type readable, which carry actions
-// of S. It is an error when the type or the Go type is already registered.
+// RegisterState registers a type of state: decode reads it, and the type of state and its Go type
+// are the ones of S. It also makes the messages for the states of this type readable, which carry
+// actions of S. It is an error when the type or the Go type is already registered. The type of a
+// state is a constant of its kind, so it is read from the zero value of S, which is not used for
+// anything else.
 func (c *Codecs) RegisterState[S State](
-	prototype S, decode func(r *binary.Reader, version codec.Version) (S, error),
+	decode func(r *binary.Reader, version codec.Version) (S, error),
 ) error {
+	var prototype S
 	err := c.States.Register(
 		prototype,
 		func(r *binary.Reader, version codec.Version) (State, error) {
@@ -74,12 +77,13 @@ func (c *Codecs) RegisterState[S State](
 	return nil
 }
 
-// RegisterAction registers an action of the states of type S. It is an error when its ID or its Go
-// type is already registered.
-func (c *Codecs) RegisterAction[S State](
-	prototype Action[S],
-	decode func(r *binary.Reader, version codec.Version) (Action[S], error),
+// RegisterAction registers an action A of the states of type S: decode reads it, and its ID and
+// its Go type are the ones of A. It is an error when its ID or its Go type is already registered.
+// The ID is read from the zero value of A, so the ID method of an action does not read its fields.
+func (c *Codecs) RegisterAction[S State, A Action[S]](
+	decode func(r *binary.Reader, version codec.Version) (A, error),
 ) error {
+	var prototype A
 	return c.Actions.Register(
 		prototype,
 		func(r *binary.Reader, version codec.Version) (BaseAction, error) {
@@ -92,12 +96,11 @@ func (c *Codecs) RegisterAction[S State](
 	)
 }
 
-// RegisterCommand registers a command of the states of type S. It is an error when its ID or its Go
-// type is already registered.
-func (c *Codecs) RegisterCommand[S State](
-	prototype Command[S],
-	decode func(r *binary.Reader, version codec.Version) (Command[S], error),
+// RegisterCommand registers a command C of the states of type S, as RegisterAction does an action.
+func (c *Codecs) RegisterCommand[S State, C Command[S]](
+	decode func(r *binary.Reader, version codec.Version) (C, error),
 ) error {
+	var prototype C
 	return c.Commands.Register(
 		prototype,
 		func(r *binary.Reader, version codec.Version) (BaseCommand, error) {

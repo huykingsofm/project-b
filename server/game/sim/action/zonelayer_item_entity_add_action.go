@@ -50,7 +50,7 @@ func (a *ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
 // decodeZoneLayerItemEntityAddAction reads what Encode wrote.
 func decodeZoneLayerItemEntityAddAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerItemEntityAddAction, error) {
 	a := &ZoneLayerItemEntityAddAction{
 		ItemID: r.Uint[state.ItemID](),
 		Count:  r.Uint[uint32](),

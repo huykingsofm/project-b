@@ -85,7 +85,7 @@ func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterItemPickupAction, error) {
 	a := &ZoneLayerCharacterItemPickupAction{
 		CharacterID:  r.Uint[state.CharacterID](),
 		ItemEntityID: r.Uint[state.EntityID](),

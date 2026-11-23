@@ -9,49 +9,20 @@ import (
 // two actions share is an error.
 func Register(c *sim.Codecs) error {
 	return sim.Errors(
-		c.RegisterAction(
-			&WorldChatPrivateSendAction{}, decodeWorldChatPrivateSendAction,
-		),
-		c.RegisterAction(
-			&WorldCharacterItemAddAction{}, decodeWorldCharacterItemAddAction,
-		),
-		c.RegisterAction(&ZoneChatSendAction{}, decodeZoneChatSendAction),
-		c.RegisterAction(
-			&ZoneCharacterEnterAction{}, decodeZoneCharacterEnterAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerChatSendAction{}, decodeZoneLayerChatSendAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterEnterAction{}, decodeZoneLayerCharacterEnterAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterMoveAction{}, decodeZoneLayerCharacterMoveAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterNormalAttackTriggerAction{},
-			decodeZoneLayerCharacterNormalAttackTriggerAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterDamageAction{}, decodeZoneLayerCharacterDamageAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterShieldGrantAction{}, decodeZoneLayerCharacterShieldGrantAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterRegenAction{}, decodeZoneLayerCharacterRegenAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterExitToAction{}, decodeZoneLayerCharacterExitToAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerCharacterItemPickupAction{}, decodeZoneLayerCharacterItemPickupAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerItemEntityAddAction{}, decodeZoneLayerItemEntityAddAction,
-		),
-		c.RegisterAction(
-			&ZoneLayerItemEntityRemoveAction{}, decodeZoneLayerItemEntityRemoveAction,
-		),
+		c.RegisterAction(decodeWorldChatPrivateSendAction),
+		c.RegisterAction(decodeWorldCharacterItemAddAction),
+		c.RegisterAction(decodeZoneChatSendAction),
+		c.RegisterAction(decodeZoneCharacterEnterAction),
+		c.RegisterAction(decodeZoneLayerChatSendAction),
+		c.RegisterAction(decodeZoneLayerCharacterEnterAction),
+		c.RegisterAction(decodeZoneLayerCharacterMoveAction),
+		c.RegisterAction(decodeZoneLayerCharacterNormalAttackTriggerAction),
+		c.RegisterAction(decodeZoneLayerCharacterDamageAction),
+		c.RegisterAction(decodeZoneLayerCharacterShieldGrantAction),
+		c.RegisterAction(decodeZoneLayerCharacterRegenAction),
+		c.RegisterAction(decodeZoneLayerCharacterExitToAction),
+		c.RegisterAction(decodeZoneLayerCharacterItemPickupAction),
+		c.RegisterAction(decodeZoneLayerItemEntityAddAction),
+		c.RegisterAction(decodeZoneLayerItemEntityRemoveAction),
 	)
 }

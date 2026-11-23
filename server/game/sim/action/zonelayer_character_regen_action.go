@@ -39,7 +39,7 @@ func (a *ZoneLayerCharacterRegenAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterRegenAction reads what Encode wrote.
 func decodeZoneLayerCharacterRegenAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterRegenAction, error) {
 	a := &ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
 	return a, r.Err()
 }

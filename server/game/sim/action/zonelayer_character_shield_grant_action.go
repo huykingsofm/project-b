@@ -63,7 +63,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
 func decodeZoneLayerCharacterShieldGrantAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterShieldGrantAction, error) {
 	a := &ZoneLayerCharacterShieldGrantAction{
 		CharacterID: r.Uint[state.CharacterID](),
 		Duration:    r.Uvarint(),

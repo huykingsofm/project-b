@@ -36,7 +36,7 @@ func (a *ZoneLayerItemEntityRemoveAction) Encode(w *binary.Writer) {
 // decodeZoneLayerItemEntityRemoveAction reads what Encode wrote.
 func decodeZoneLayerItemEntityRemoveAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerItemEntityRemoveAction, error) {
 	a := &ZoneLayerItemEntityRemoveAction{EntityID: r.Uint[state.EntityID]()}
 	return a, r.Err()
 }

@@ -59,7 +59,7 @@ func (a *ZoneCharacterEnterAction) Encode(w *binary.Writer) {
 // decodeZoneCharacterEnterAction reads what Encode wrote.
 func decodeZoneCharacterEnterAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonestate.State], error) {
+) (*ZoneCharacterEnterAction, error) {
 	c, err := zonelayerstate.DecodeCharacter(r, version)
 	if err != nil {
 		return nil, err

@@ -87,7 +87,7 @@ func (a *ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterExitToAction reads what Encode wrote.
 func decodeZoneLayerCharacterExitToAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterExitToAction, error) {
 	a := &ZoneLayerCharacterExitToAction{
 		CharacterID:  r.Uint[state.CharacterID](),
 		ExitEntityID: r.Uint[state.EntityID](),

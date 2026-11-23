@@ -84,7 +84,7 @@ func (a *anonymousAction) Encode(w *binary.Writer) {
 
 func decodeAnonymousAction(
 	r *binary.Reader, _ codec.Version,
-) (Action[*toyState], error) {
+) (*anonymousAction, error) {
 	a := &anonymousAction{name: r.String(), priority: int16(r.Varint())}
 	return a, r.Err()
 }
@@ -109,7 +109,7 @@ func (a *addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Pl
 }
 func (a *addAction) Encode(w *binary.Writer) { w.Varint(a.N) }
 
-func decodeAddAction(r *binary.Reader, _ codec.Version) (Action[*toyState], error) {
+func decodeAddAction(r *binary.Reader, _ codec.Version) (*addAction, error) {
 	a := &addAction{N: r.Varint()}
 	return a, r.Err()
 }
@@ -127,7 +127,7 @@ func (*otherAction) Encode(*binary.Writer) {}
 
 func decodeOtherAction(
 	_ *binary.Reader, _ codec.Version,
-) (Action[*otherState], error) {
+) (*otherAction, error) {
 	return &otherAction{}, nil
 }
 
@@ -146,7 +146,7 @@ func (c addCommand) Translate() []Action[*toyState] {
 }
 func (c addCommand) Clone() Command[*toyState] { return c }
 
-func decodeAddCommand(r *binary.Reader, _ codec.Version) (Command[*toyState], error) {
+func decodeAddCommand(r *binary.Reader, _ codec.Version) (addCommand, error) {
 	c := addCommand{N: r.Varint()}
 	return c, r.Err()
 }
@@ -168,12 +168,12 @@ func nameOf(a Action[*toyState]) string {
 func toyCodecs() (*Codecs, error) {
 	c := NewCodecs()
 	return c, Errors(
-		c.RegisterState[*toyState](&toyState{}, decodeToyState),
-		c.RegisterState[*otherState](&otherState{}, decodeOtherState),
-		c.RegisterAction[*toyState](&anonymousAction{}, decodeAnonymousAction),
-		c.RegisterAction[*toyState](&addAction{}, decodeAddAction),
-		c.RegisterAction[*otherState](&otherAction{}, decodeOtherAction),
-		c.RegisterCommand[*toyState](addCommand{}, decodeAddCommand),
+		c.RegisterState(decodeToyState),
+		c.RegisterState(decodeOtherState),
+		c.RegisterAction(decodeAnonymousAction),
+		c.RegisterAction(decodeAddAction),
+		c.RegisterAction(decodeOtherAction),
+		c.RegisterCommand(decodeAddCommand),
 		c.RegisterOnFail(testDrop{}, decodeTestDrop),
 		c.RegisterOnFail(testCompensate{}, decodeTestCompensate),
 	)

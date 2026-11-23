@@ -38,7 +38,7 @@ func (c WorldChatPrivateSendCommand) Encode(w *binary.Writer) error {
 // decodeWorldChatPrivateSendCommand reads what Encode wrote.
 func decodeWorldChatPrivateSendCommand(
 	r *binary.Reader, version codec.Version,
-) (sim.Command[*worldstate.State], error) {
+) (WorldChatPrivateSendCommand, error) {
 	c := WorldChatPrivateSendCommand{
 		FromID: r.Uint[state.PlayerID](), ToID: r.Uint[state.PlayerID](), Text: r.String(),
 	}

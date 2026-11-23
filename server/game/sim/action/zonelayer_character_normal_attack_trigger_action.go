@@ -81,7 +81,7 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterNormalAttackTriggerAction reads what Encode wrote.
 func decodeZoneLayerCharacterNormalAttackTriggerAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterNormalAttackTriggerAction, error) {
 	a := &ZoneLayerCharacterNormalAttackTriggerAction{
 		CharacterID: r.Uint[state.CharacterID](),
 		TargetID:    r.Uint[state.CharacterID](),

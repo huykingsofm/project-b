@@ -34,18 +34,16 @@ func TestAnActionComesBackAsItWasWritten(t *testing.T) {
 
 func TestACodecRefusesANumberOrATypeThatTwoKindsShare(t *testing.T) {
 	c := mustCodecs(t)
-	if err := c.RegisterAction(&addAction{}, decodeAddAction); err == nil {
+	if err := c.RegisterAction(decodeAddAction); err == nil {
 		t.Fatal("the same action was registered twice")
 	}
-	if err := c.RegisterState(&toyState{}, decodeToyState); err == nil {
+	if err := c.RegisterState(decodeToyState); err == nil {
 		t.Fatal("the same state was registered twice")
 	}
 	if err := c.RegisterOnFail(testDrop{}, decodeTestDrop); err == nil {
 		t.Fatal("the same OnFail was registered twice")
 	}
-	// another Go type that says it has a number that is taken
-	taken := &otherAction{}
-	if err := c.RegisterAction(taken, decodeOtherAction); err == nil {
+	if err := c.RegisterAction(decodeOtherAction); err == nil {
 		t.Fatal("an action was registered under a number that was taken")
 	}
 }

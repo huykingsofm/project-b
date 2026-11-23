@@ -42,7 +42,7 @@ func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterDamageAction reads what Encode wrote.
 func decodeZoneLayerCharacterDamageAction(
 	r *binary.Reader, version codec.Version,
-) (sim.Action[*zonelayerstate.State], error) {
+) (*ZoneLayerCharacterDamageAction, error) {
 	a := &ZoneLayerCharacterDamageAction{
 		SourceID: r.Uint[state.EntityID](),
 		VictimID: r.Uint[state.EntityID](),

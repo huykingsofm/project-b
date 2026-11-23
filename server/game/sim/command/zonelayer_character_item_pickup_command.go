@@ -40,7 +40,7 @@ func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binary.Writer) error {
 // decodeZoneLayerCharacterItemPickupCommand reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupCommand(
 	r *binary.Reader, version codec.Version,
-) (sim.Command[*zonelayerstate.State], error) {
+) (ZoneLayerCharacterItemPickupCommand, error) {
 	c := ZoneLayerCharacterItemPickupCommand{
 		CharacterID: r.Uint[state.CharacterID](), ItemEntityID: r.Uint[state.EntityID](),
 	}
