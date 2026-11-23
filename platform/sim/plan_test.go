@@ -98,8 +98,14 @@ func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.
 	if !slices.Equal(ran, []uint8{0, 1, 2}) {
 		t.Fatalf("depths that ran = %v, want [0 1 2]", ran)
 	}
-	if len(p.TooDeep()) != 1 {
-		t.Fatalf("%d entries cut, want 1", len(p.TooDeep()))
+	cut := 0
+	for _, e := range p.queue.All() {
+		if e.Status() == EntryCut {
+			cut++
+		}
+	}
+	if cut != 1 {
+		t.Fatalf("%d entries cut, want 1", cut)
 	}
 }
 

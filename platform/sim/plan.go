@@ -51,10 +51,9 @@ type Plan[S State] struct {
 	queue     *table.PriorityQueue[*PlanEntry[S], int16]
 	current   *PlanEntry[S]    // the entry that runs, nil before the first
 	cfg       *config.Snapshot // the configuration of the tick, which says how deep a chain may go
-	tooDeep   []*PlanEntry[S]
-	cancelled []*PlanEntry[S] // in the order they were cancelled
-	built     []PlanEntry[S]  // the entries of Build, kept for the next tick
-	built2    []*PlanEntry[S]
+	cancelled []*PlanEntry[S]  // in the order they were cancelled
+	entries   []PlanEntry[S]   // the entries of Build, kept for the next tick
+	entryPtrs []*PlanEntry[S]  // pointers to entries, which the queue is built from
 }
 
 // NewPlan returns an empty plan, with the default configuration until Reset gives it one.
@@ -77,12 +76,10 @@ func (p *Plan[S]) Reset(cfg *config.Snapshot) {
 	p.queue.Reset()
 	p.current = nil
 	p.cfg = cfg
-	clear(p.tooDeep)
-	p.tooDeep = p.tooDeep[:0]
 	clear(p.cancelled)
 	p.cancelled = p.cancelled[:0]
-	clear(p.built)
-	clear(p.built2)
+	clear(p.entries)
+	clear(p.entryPtrs)
 }
 
 // Len returns how many entries the plan holds, run or not.
@@ -93,16 +90,16 @@ func (p *Plan[S]) Len() int { return p.queue.Len() }
 // Append of each action makes, with the order done once.
 func (p *Plan[S]) Build(actions []Action[S]) {
 	p.Reset(p.cfg)
-	if cap(p.built) < len(actions) {
-		p.built = make([]PlanEntry[S], len(actions))
+	if cap(p.entries) < len(actions) {
+		p.entries = make([]PlanEntry[S], len(actions))
 	}
-	p.built = p.built[:len(actions)]
-	p.built2 = p.built2[:0]
+	p.entries = p.entries[:len(actions)]
+	p.entryPtrs = p.entryPtrs[:0]
 	for i, a := range actions {
-		p.built[i] = PlanEntry[S]{action: a}
-		p.built2 = append(p.built2, &p.built[i])
+		p.entries[i] = PlanEntry[S]{action: a}
+		p.entryPtrs = append(p.entryPtrs, &p.entries[i])
 	}
-	p.queue.BuildFrom(p.built2)
+	p.queue.BuildFrom(p.entryPtrs)
 }
 
 // Append adds an action in its place: after the last entry whose priority is not larger, and never
@@ -118,7 +115,7 @@ func (p *Plan[S]) Append(a Action[S]) {
 
 // Next moves the cursor to the next entry that is pending and is not too deep, and returns it, with
 // its status set to ran. An entry that is cancelled is passed over. An entry that is too deep is
-// cut: it does not run and is listed in TooDeep.
+// cut: it does not run, and its status is EntryCut.
 func (p *Plan[S]) Next() (*PlanEntry[S], bool) {
 	for {
 		_, e, ok := p.queue.Next()
@@ -130,7 +127,6 @@ func (p *Plan[S]) Next() (*PlanEntry[S], bool) {
 		}
 		if int(e.depth) > MaxDepth.Get(p.cfg) {
 			e.status = EntryCut
-			p.tooDeep = append(p.tooDeep, e)
 			logging.Warn(
 				"action cut: its chain is too deep",
 				"action",
@@ -188,9 +184,6 @@ func (p *Plan[S]) Cancel(e *PlanEntry[S]) {
 	e.status = EntryCancelled
 	p.cancelled = append(p.cancelled, e)
 }
-
-// TooDeep returns the entries that were cut in this tick because their chain went too deep.
-func (p *Plan[S]) TooDeep() []*PlanEntry[S] { return p.tooDeep }
 
 // Cancelled returns the entries that were cancelled in this tick, in the order they were, so that
 // the engine can tell their actions that they did not run.

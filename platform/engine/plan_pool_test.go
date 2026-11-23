@@ -19,13 +19,8 @@ func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) 
 		t.Fatal(err)
 	}
 	q := pool.Get(cfg)
-	if q.Len() != 0 || len(q.Cancelled()) != 0 || len(q.TooDeep()) != 0 {
-		t.Fatalf(
-			"a plan from the pool holds %d entries, %d cancelled, %d cut",
-			q.Len(),
-			len(q.Cancelled()),
-			len(q.TooDeep()),
-		)
+	if q.Len() != 0 || len(q.Cancelled()) != 0 {
+		t.Fatalf("a plan from the pool holds %d entries, %d cancelled", q.Len(), len(q.Cancelled()))
 	}
 	if _, ok := q.Next(); ok {
 		t.Fatal("a plan from the pool had something to run")
@@ -41,8 +36,8 @@ func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) 
 		ran++
 		q.Append(&toyAction{}) // every action that runs adds one
 	}
-	if ran != 2 || len(q.TooDeep()) != 1 {
-		t.Fatalf("ran %d, cut %d; want 2 and 1 with a maximum depth of 1", ran, len(q.TooDeep()))
+	if cut := q.Len() - ran; ran != 2 || cut != 1 {
+		t.Fatalf("ran %d, cut %d; want 2 and 1 with a maximum depth of 1", ran, cut)
 	}
 }
 
