@@ -14,9 +14,9 @@ What has been built and what is to be built, in the order it is done. What is bu
 
 ## To build
 
-Two pull requests, each on top of the one before.
+One pull request, on top of the one that gives out IDs, in two parts that are commits of it.
 
-### 1. Replay log
+### Part 1: replay log
 
 Status: `agreed`.
 
@@ -29,7 +29,7 @@ Status: `agreed`.
 | Segment log | a reader that reads from bytes (`SegmentReader`), and a count of the batches that were synced |
 | Durable tick | the log says which tick of an engine is synced |
 
-### 2. Recovery of a cluster
+### Part 2: recovery of a cluster
 
 Status: `agreed`.
 
