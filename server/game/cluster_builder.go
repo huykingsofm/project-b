@@ -48,20 +48,26 @@ type ClusterBuilder struct {
 	replayLog replay.Log
 	emitter   engine.Emitter
 
+	// entityGraveSteps is how many ticks an entity ID waits after its entity left, before it is
+	// given again: longer than anything that can still name the entity.
+	entityGraveSteps uint64
+
 	world      *WorldParams
 	zones      []ZoneParams
 	zoneLayers []ZoneLayerParams
 }
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
-// seed 0, a queue of 256 for each engine, a replay log that records nothing, and an emitter that
-// discards.
+// seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
+// discards, and entity IDs that wait 12000 ticks before they are given again.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
 		queueSize: 256,
 		replayLog: replay.NopLog{},
 		emitter:   engine.NopEmitter{},
+
+		entityGraveSteps: 12000,
 	}
 }
 
@@ -103,6 +109,17 @@ func (b *ClusterBuilder) WithEmitter(e engine.Emitter) *ClusterBuilder {
 	}
 	return b
 }
+
+// WithEntityGraveSteps sets how many ticks an entity ID waits after its entity left, before it is
+// given again. It must be longer than anything that can still name the entity, such as the removal
+// that was set for an item on the ground.
+func (b *ClusterBuilder) WithEntityGraveSteps(steps uint64) *ClusterBuilder {
+	b.entityGraveSteps = steps
+	return b
+}
+
+// EntityGraveSteps is how many ticks an entity ID waits before it is given again.
+func (b *ClusterBuilder) EntityGraveSteps() uint64 { return b.entityGraveSteps }
 
 // WithWorld sets the parameters of the world.
 func (b *ClusterBuilder) WithWorld(p WorldParams) *ClusterBuilder {
@@ -238,14 +255,17 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	var layerEngines []*engine.Engine[*zonelayerstate.State]
 	for _, zp := range b.zones {
 		worldState.AddZone(zp.ID)
-		zoneState := zonestate.NewState(zp.ID, b.world.ID, zp.Tiles, zp.Adjacent...)
+		zoneState := zonestate.NewState(
+			zp.ID, b.world.ID, b.entityGraveSteps, zp.Tiles, zp.Adjacent...,
+		)
 		lp := layers[zp.ID]
 		for range lp.Count {
 			nextLocal++
 			layerID := sim.NewStateID(state.ZoneLayerType, nextLocal)
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
 			worldState.AddZoneLayer(layerID)
-			le := engine.New(zonelayerstate.NewState(layerID, zp.ID, b.world.ID), env, b.seed)
+			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID, b.entityGraveSteps)
+			le := engine.New(layerState, env, b.seed)
 			if err := EnsureRegen(le, lp.RegenEvery); err != nil {
 				return nil, err
 			}

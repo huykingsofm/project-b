@@ -53,24 +53,30 @@ type State struct {
 	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
 	chat       ring.Ring[ChatMessage]
 
-	nextEntityID uint32
+	entityIDs state.EntityIDs
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
 // NewState makes the state of a zone with no zonelayer, on a map. The exits of the map stand in the
-// zone as entities.
+// zone as entities. An entity that leaves gives its ID back, and it is given again only after
+// entityGraveSteps ticks.
 func NewState(
-	zoneID, worldID sim.StateID, tiles *tilemap.TileMap, adjacent ...sim.StateID,
+	zoneID, worldID sim.StateID, entityGraveSteps uint64, tiles *tilemap.TileMap,
+	adjacent ...sim.StateID,
 ) *State {
 	s := &State{
 		id: zoneID, worldID: worldID, adjacent: slices.Clone(adjacent), tiles: tiles,
-		chat: ring.New[ChatMessage](chatKeep),
+		chat:      ring.New[ChatMessage](chatKeep),
+		entityIDs: state.NewEntityIDs(entityGraveSteps),
 	}
 	for _, exit := range tiles.Exits() {
-		s.nextEntityID++
-		id := state.NewEntityID(zoneID, s.nextEntityID)
+		local, ok := s.entityIDs.Give()
+		if !ok {
+			break // a map has no more than a few exits: there is always an ID
+		}
+		id := state.NewEntityID(zoneID, local)
 		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
 	}
 	return s
@@ -80,15 +86,15 @@ func NewState(
 // changes.
 func (s *State) clone() *State {
 	return &State{
-		id:           s.id,
-		worldID:      s.worldID,
-		adjacent:     slices.Clone(s.adjacent),
-		tick:         s.tick,
-		tiles:        s.tiles,
-		entities:     s.entities.Clone(),
-		zoneLayers:   s.zoneLayers.Clone(),
-		chat:         s.chat.Clone(),
-		nextEntityID: s.nextEntityID,
+		id:         s.id,
+		worldID:    s.worldID,
+		adjacent:   slices.Clone(s.adjacent),
+		tick:       s.tick,
+		tiles:      s.tiles,
+		entities:   s.entities.Clone(),
+		zoneLayers: s.zoneLayers.Clone(),
+		chat:       s.chat.Clone(),
+		entityIDs:  s.entityIDs.Clone(),
 	}
 }
 
@@ -123,7 +129,10 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 }
 
 // SetTick sets the tick that the state is at.
-func (s *State) SetTick(tick uint64) { s.tick = tick }
+func (s *State) SetTick(tick uint64) {
+	s.tick = tick
+	s.entityIDs.Step()
+}
 
 // WorldID is the ID of the world that the zone is in.
 func (s *State) WorldID() sim.StateID { return s.worldID }

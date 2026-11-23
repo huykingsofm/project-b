@@ -10,6 +10,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
@@ -45,7 +46,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.String(m.text)
 		w.Uvarint(m.tick)
 	}
-	w.Uvarint(uint64(s.nextEntityID))
+	s.entityIDs.Encode(w)
 	return nil
 }
 
@@ -114,6 +115,14 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	s.nextEntityID = r.Uint[uint32]()
-	return s, r.Err()
+	if s.entityIDs, err = ids.Decode[uint32](r); err != nil {
+		return nil, err
+	}
+	if err = r.Err(); err != nil {
+		return nil, err
+	}
+	if err = state.CheckEntityIDs(s.id, &s.entityIDs, s.entities.Keys()); err != nil {
+		return nil, err
+	}
+	return s, nil
 }

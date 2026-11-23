@@ -31,3 +31,14 @@
 - It is not safe for concurrent use: the state that owns it is changed by one goroutine.
 - A call with the same arguments in the same order ends with the same allocator, so a replay of the same inputs gives the same IDs.
 - `Decode` refuses a count that claims more than the bytes left can hold, an ID that is 0, above the largest that was given or in two places, and an ID in the grave before its step.
+
+## Who uses it
+
+| Who | What it gives out | Steps of the grave |
+|---|---|---|
+| `zonelayer` and `zone` states | the local number of the `EntityID` of each entity, from 1 up to 2^32 - 1; an entity that leaves (a body, an item) gives its number back | set when the state is made (`ClusterBuilder.WithEntityGraveSteps`, 12000 ticks unless set), written in the checkpoint with the allocator |
+
+- The state steps its allocator once in `SetTick`, at the start of each tick, so the grave is counted in the ticks of the state and a replay counts the same.
+- The steps must be longer than anything that can still name the entity: the removal that is set for an item on the ground (`ZoneLayerItemEntityRemoveAction`, at the tick the item expires) holds its `EntityID`, and an ID that came back sooner would have that action remove another item.
+- A state whose allocator has no ID left refuses the new entity (`AddCharacterEntity` and `AddItemEntity` return false), and the action logs an error. With 2^32 IDs and the ones that left coming back, only a state that holds that many entities at once, or that gave them away faster than they wait, can reach it.
+- A checkpoint is refused when the entities it holds are not exactly the live IDs of its allocator, and the hash of a state covers the allocator, the grave and the free list included.

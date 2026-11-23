@@ -8,6 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/ids"
 )
 
 // Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
@@ -45,7 +46,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.Uvarint(uint64(characterID))
 		w.Uvarint(uint64(entityID.Local()))
 	}
-	w.Uvarint(uint64(s.nextEntityID))
+	s.entityIDs.Encode(w)
 	return nil
 }
 
@@ -66,7 +67,7 @@ func count(r *binary.Reader) (uint64, error) {
 func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
 	worldID := r.Uint[sim.StateID]()
-	s := NewState(id, zoneID, worldID)
+	s := NewState(id, zoneID, worldID, 0) // its allocator is read below, with its own steps
 	s.tick = r.Uvarint()
 	n, err := count(r)
 	if err != nil {
@@ -110,6 +111,14 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 		entityID := state.NewEntityID(id, r.Uint[uint32]())
 		s.bodies.Link(characterID, entityID)
 	}
-	s.nextEntityID = r.Uint[uint32]()
-	return s, r.Err()
+	if s.entityIDs, err = ids.Decode[uint32](r); err != nil {
+		return nil, err
+	}
+	if err = r.Err(); err != nil {
+		return nil, err
+	}
+	if err = state.CheckEntityIDs(id, &s.entityIDs, s.entities.Keys()); err != nil {
+		return nil, err
+	}
+	return s, nil
 }

@@ -35,17 +35,19 @@ type State struct {
 	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
-	bodies       stablebimap.BiMap[state.CharacterID, state.EntityID]
-	nextEntityID uint32
+	bodies    stablebimap.BiMap[state.CharacterID, state.EntityID]
+	entityIDs state.EntityIDs
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of an empty zonelayer.
-func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
+// NewState makes the state of an empty zonelayer. An entity that leaves gives its ID back, and it
+// is given again only after entityGraveSteps ticks.
+func NewState(zoneLayerID, zoneID, worldID sim.StateID, entityGraveSteps uint64) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
+		entityIDs: state.NewEntityIDs(entityGraveSteps),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -68,16 +70,20 @@ var _ ReadOnlyZoneLayerState = (*State)(nil)
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:     s.entities.Clone(),
-		characters:   s.characters.Clone(),
-		chat:         s.chat.Clone(),
-		bodies:       s.bodies.Clone(),
-		nextEntityID: s.nextEntityID,
+		entities:   s.entities.Clone(),
+		characters: s.characters.Clone(),
+		chat:       s.chat.Clone(),
+		bodies:     s.bodies.Clone(),
+		entityIDs:  s.entityIDs.Clone(),
 	}
 }
 
-// SetTick sets the tick that the state is at.
-func (s *State) SetTick(tick uint64) { s.tick = tick }
+// SetTick sets the tick that the state is at, and takes the IDs in the grave one step. It is called
+// once at the start of each tick.
+func (s *State) SetTick(tick uint64) {
+	s.tick = tick
+	s.entityIDs.Step()
+}
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }
@@ -171,11 +177,15 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 	}
 }
 
-// AddCharacterEntity gives a character a body at a position, and returns the entity.
-func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
-	s.nextEntityID++
+// AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
+// false, and does nothing, when the state has no ID left to give.
+func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
+	local, ok := s.entityIDs.Give()
+	if !ok {
+		return 0, false
+	}
 	e := entity.NewCharacterEntity(
-		state.NewEntityID(s.id, s.nextEntityID), at, c.radius, c.health, c.maxHealth,
+		state.NewEntityID(s.id, local), at, c.radius, c.health, c.maxHealth,
 	)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
@@ -189,7 +199,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 			EntityID: e.ID(), CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.Radius(),
 		},
 	)
-	return e.ID()
+	return e.ID(), true
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -202,6 +212,7 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 	entityID, _ := s.bodies.GetByV1(characterID)
 	body, _ := s.entities.Get(entityID)
 	s.entities.Delete(entityID)
+	s.entityIDs.Release(entityID.Local())
 	s.characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
 	s.events.Add(
@@ -211,17 +222,19 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 }
 
 // AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
-// ever), and returns its entity.
+// ever), and returns its entity. It reports false, and does nothing, when the state has no ID left
+// to give.
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
-) state.EntityID {
-	s.nextEntityID++
-	e := entity.NewItemEntity(
-		state.NewEntityID(s.id, s.nextEntityID), at, itemID, count, expiry,
-	)
+) (state.EntityID, bool) {
+	local, ok := s.entityIDs.Give()
+	if !ok {
+		return 0, false
+	}
+	e := entity.NewItemEntity(state.NewEntityID(s.id, local), at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
-	return e.ID()
+	return e.ID(), true
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.
@@ -231,6 +244,7 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bo
 		return entity.ItemEntity{}, false
 	}
 	s.entities.Delete(entityID)
+	s.entityIDs.Release(entityID.Local())
 	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Position()})
 	return item, true
 }
