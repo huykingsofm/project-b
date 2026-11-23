@@ -12,14 +12,13 @@ import (
 // register, of the data version given. The decoder of an OnFail that holds a message is given the
 // function that reads one.
 type (
-	MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 	ActionDecoder  func(r *binary.Reader, version codec.Version) (BaseAction, error)
 	CommandDecoder func(r *binary.Reader, version codec.Version) (BaseCommand, error)
 	StateDecoder   func(r *binary.Reader, version codec.Version) (State, error)
 	OnFailDecoder  func(
 		r *binary.Reader, version codec.Version, nested MessageDecoder,
 	) (OnFail, error)
-	messageDecoder func(
+	stateMessageDecoder func(
 		to StateID, r *binary.Reader, version codec.Version, nested MessageDecoder,
 	) (Message, error)
 )
@@ -37,7 +36,7 @@ type Codecs struct {
 	Commands *codec.Registry[CommandID, BaseCommand, CommandDecoder]
 	States   *codec.Registry[StateType, State, StateDecoder]
 	OnFails  *codec.Registry[OnFailID, OnFail, OnFailDecoder]
-	messages map[StateType]messageDecoder
+	messages map[StateType]stateMessageDecoder
 }
 
 // NewCodecs makes empty codecs.
@@ -47,7 +46,7 @@ func NewCodecs() *Codecs {
 		Commands: codec.New[CommandID, BaseCommand, CommandDecoder](BaseCommand.ID),
 		States:   codec.New[StateType, State, StateDecoder](State.Type),
 		OnFails:  codec.New[OnFailID, OnFail, OnFailDecoder](OnFail.ID),
-		messages: map[StateType]messageDecoder{},
+		messages: map[StateType]stateMessageDecoder{},
 	}
 }
 

@@ -3,6 +3,7 @@ package sim
 import (
 	"errors"
 
+	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
@@ -89,6 +90,10 @@ type Message interface {
 	// cannot be written is left in w.
 	Encode(w *binary.Writer) error
 }
+
+// MessageDecoder reads a message that Message.Encode wrote, of the data version given. A kind of
+// OnFail that holds a message is given one to read it with.
+type MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 
 // OnFailID names a kind of OnFail, by a number: see the register in package onfail. A kind returns
 // its own with its method ID(). A number is never changed or reused, because the replay log writes
