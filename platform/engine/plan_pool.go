@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/sim"
 )
 
@@ -15,20 +14,20 @@ import (
 // because it is not data: it is the running of the engines that needs it.
 type PlanPool[S sim.State] struct{ pool sync.Pool }
 
-// Get returns an empty plan that reads the configuration of the tick.
-func (p *PlanPool[S]) Get(cfg *config.Snapshot) *sim.Plan[S] {
+// Get returns an empty plan.
+func (p *PlanPool[S]) Get() *sim.Plan[S] {
 	plan, ok := p.pool.Get().(*sim.Plan[S])
 	if !ok {
 		plan = sim.NewPlan[S]()
 	}
-	plan.Reset(cfg)
+	plan.Reset()
 	return plan
 }
 
-// Put empties the plan, so that it holds no action and no configuration, and keeps it for the next
-// Get. The plan must not be used after it is put back.
+// Put empties the plan, so that it holds no action, and keeps it for the next Get. The plan must
+// not be used after it is put back.
 func (p *PlanPool[S]) Put(plan *sim.Plan[S]) {
-	plan.Reset(nil)
+	plan.Reset()
 	p.pool.Put(plan)
 }
 

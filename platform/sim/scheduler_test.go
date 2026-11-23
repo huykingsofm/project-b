@@ -12,7 +12,7 @@ import (
 func names(p *Plan[*toyState], name func(Action[*toyState]) string) []string {
 	var out []string
 	for {
-		e, ok := p.Next()
+		e, ok := p.Next(4)
 		if !ok {
 			return out
 		}

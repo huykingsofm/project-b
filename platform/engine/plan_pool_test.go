@@ -2,35 +2,29 @@ package engine
 
 import (
 	"testing"
-
-	"github.com/huykingsofm/project-b/platform/config"
 )
 
-func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) {
+func TestAPlanFromThePoolIsEmpty(t *testing.T) {
 	var pool PlanPool[*toyState]
-	p := pool.Get(config.Defaults())
+	p := pool.Get()
 	p.Append(&toyAction{})
-	p.Next()
+	p.Next(4)
 	p.Append(&toyAction{})
 	pool.Put(p)
 
-	cfg, _, err := config.Build(1, map[string]string{"action.max_depth": "1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := pool.Get(cfg)
+	q := pool.Get()
 	if q.Len() != 0 || len(q.Cancelled()) != 0 {
 		t.Fatalf("a plan from the pool holds %d entries, %d cancelled", q.Len(), len(q.Cancelled()))
 	}
-	if _, ok := q.Next(); ok {
+	if _, ok := q.Next(1); ok {
 		t.Fatal("a plan from the pool had something to run")
 	}
-	// the configuration is the one given: with a maximum depth of 1 the command and its child run,
+	// with a maximum depth of 1 the command and its child run,
 	// and the grandchild is cut.
 	q.Append(&toyAction{})
 	ran := 0
 	for {
-		if _, ok := q.Next(); !ok {
+		if _, ok := q.Next(1); !ok {
 			break
 		}
 		ran++
@@ -43,7 +37,7 @@ func TestAPlanFromThePoolIsEmptyAndReadsTheConfigurationItIsGiven(t *testing.T) 
 
 func TestAPlanThatWasPutBackHoldsNoAction(t *testing.T) {
 	var pool PlanPool[*toyState]
-	p := pool.Get(config.Defaults())
+	p := pool.Get()
 	p.Append(&toyAction{})
 	p.Append(&toyAction{})
 	pool.Put(p)

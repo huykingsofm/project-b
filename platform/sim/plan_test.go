@@ -4,8 +4,6 @@ import (
 	"maps"
 	"slices"
 	"testing"
-
-	"github.com/huykingsofm/project-b/platform/config"
 )
 
 func TestSmallerPriorityRunsFirstAndEqualOnesInArrivalOrder(t *testing.T) {
@@ -25,7 +23,7 @@ func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 	p.Append(&anonymousAction{name: "last", priority: 10})
 	var got []string
 	for {
-		e, ok := p.Next()
+		e, ok := p.Next(4)
 		if !ok {
 			break
 		}
@@ -47,7 +45,7 @@ func TestFindByIDAndCancel(t *testing.T) {
 	p.Append(&authoredAction{anonymousAction{"by-1", 0}, 1})
 	p.Append(&authoredAction{anonymousAction{"by-2", 0}, 2})
 	p.Append(&authoredAction{anonymousAction{"by-2-again", 0}, 2})
-	if e, _ := p.Next(); nameOf(e.Action()) != "modifier" { // the modifier runs
+	if e, _ := p.Next(4); nameOf(e.Action()) != "modifier" { // the modifier runs
 		t.Fatal("unexpected first action")
 	}
 
@@ -79,16 +77,11 @@ func TestFindByIDAndCancel(t *testing.T) {
 }
 
 func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.T) {
-	cfg, _, err := config.Build(1, map[string]string{"action.max_depth": "2"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	p := NewPlan[*toyState]()
-	p.Reset(cfg)
 	p.Append(&anonymousAction{name: "command"})
 	var ran []uint8
 	for {
-		e, ok := p.Next()
+		e, ok := p.Next(2)
 		if !ok {
 			break
 		}
@@ -158,8 +151,8 @@ func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *test
 			p.Cancel(e)
 		}
 	}
-	p.Next() // runs the first entry in the order of the plan, which is "a" or "t1"
-	p.Next()
+	p.Next(4) // runs the first entry in the order of the plan, which is "a" or "t1"
+	p.Next(4)
 	want := map[string]EntryStatus{"t1": EntryRan, "t2": EntryCancelled, "t3": EntryPending}
 	if got := typedNames(p); !maps.Equal(got, want) {
 		t.Fatalf("found %v, want %v", got, want)
@@ -261,7 +254,7 @@ func TestBuildGivesTheOrderOfAnAppendOfEachActionAndTheEntriesAreAtDepthZero(t *
 	built := NewPlan[*toyState]()
 	built.Build(actions())
 	for {
-		e, ok := built.Next()
+		e, ok := built.Next(4)
 		if !ok {
 			break
 		}
@@ -279,7 +272,7 @@ func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesAl
 		&typedAction{anonymousAction{name: "t1", priority: 0}},
 		&typedAction{anonymousAction{name: "t2", priority: 10}},
 	})
-	e, _ := p.Next() // t1 runs
+	e, _ := p.Next(4) // t1 runs
 	p.Append(&typedAction{anonymousAction{name: "early", priority: -100}})
 	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t2", "early"}) {
 		t.Fatalf("found %v, want what is still to run, in the order they were added", got)
@@ -287,7 +280,7 @@ func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesAl
 	if got := typedNames(p); len(got) != 3 || got["t1"] != EntryRan {
 		t.Fatalf("found %v, want the three, t1 among them as ran", got)
 	}
-	if next, _ := p.Next(); nameOf(next.Action()) != "early" || next.depth != e.depth+1 {
+	if next, _ := p.Next(4); nameOf(next.Action()) != "early" || next.depth != e.depth+1 {
 		t.Fatalf(
 			"the next to run is %q at depth %d, want early, one deeper than t1",
 			nameOf(next.Action()), next.depth,
@@ -301,7 +294,7 @@ func TestCancelledListsTheEntriesCancelledInTheOrderTheyWereAndNotTheOnesThatRan
 		&typedAction{anonymousAction{name: "t1"}}, &typedAction{anonymousAction{name: "t2"}},
 		&typedAction{anonymousAction{name: "t3"}},
 	})
-	first, _ := p.Next()
+	first, _ := p.Next(4)
 	p.Cancel(first) // it ran already: nothing to cancel
 	var entries []*PlanEntry[*toyState]
 	for e := range p.FindByID[*typedAction](typedID) {

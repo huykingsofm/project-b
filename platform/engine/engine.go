@@ -131,13 +131,14 @@ func (e *Engine[S]) Step() {
 	e.planMessages()
 	e.planCommands()
 
-	plan := e.plans.Get(cfg)
+	plan := e.plans.Get()
 	defer e.plans.Put(plan)
 	plan.Build(e.start)
 	clear(e.start) // the plan holds the actions: the list does not keep them for the next tick
 
+	maxDepth := sim.MaxDepth.Get(cfg)
 	for {
-		entry, ok := plan.Next()
+		entry, ok := plan.Next(maxDepth)
 		if !ok {
 			break
 		}

@@ -3,8 +3,6 @@ package sim
 import (
 	"fmt"
 	"testing"
-
-	"github.com/huykingsofm/project-b/platform/config"
 )
 
 // The kinds of action of the plan of a tick: a move and an attack of a character (they have an
@@ -61,14 +59,13 @@ var planSizes = []int{20, 100, 1000}
 
 // BenchmarkPlanAppend fills a plan that is reused, as an engine does every tick.
 func BenchmarkPlanAppend(b *testing.B) {
-	cfg := config.Defaults()
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
 			p := NewPlan[*toyState]()
 			b.ReportAllocs()
 			for b.Loop() {
-				p.Reset(cfg)
+				p.Reset()
 				for _, a := range actions {
 					p.Append(a)
 				}
@@ -81,19 +78,18 @@ func BenchmarkPlanAppend(b *testing.B) {
 // BenchmarkPlanAppendAndRun fills a plan with Append and takes every entry out: what an engine does
 // with the actions it starts a tick with, one by one.
 func BenchmarkPlanAppendAndRun(b *testing.B) {
-	cfg := config.Defaults()
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
 			p := NewPlan[*toyState]()
 			b.ReportAllocs()
 			for b.Loop() {
-				p.Reset(cfg)
+				p.Reset()
 				for _, a := range actions {
 					p.Append(a)
 				}
 				for {
-					if _, ok := p.Next(); !ok {
+					if _, ok := p.Next(4); !ok {
 						break
 					}
 				}
@@ -105,17 +101,16 @@ func BenchmarkPlanAppendAndRun(b *testing.B) {
 
 // BenchmarkPlanBuildAndRun does the same with Build, which orders the actions once.
 func BenchmarkPlanBuildAndRun(b *testing.B) {
-	cfg := config.Defaults()
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
 			p := NewPlan[*toyState]()
-			p.Reset(cfg)
+			p.Reset()
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Build(actions)
 				for {
-					if _, ok := p.Next(); !ok {
+					if _, ok := p.Next(4); !ok {
 						break
 					}
 				}
