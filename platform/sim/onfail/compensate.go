@@ -19,6 +19,14 @@ func (f Compensate) Handle(b sim.Bouncer, _ sim.Message, _ sim.DeliveryFailure) 
 
 func (f Compensate) Nested() sim.Message { return f.With }
 
+// Clone returns a copy that shares nothing with the kind.
+func (f Compensate) Clone() sim.OnFail {
+	if f.With == nil {
+		return f
+	}
+	return Compensate{With: f.With.Clone()}
+}
+
 func (f Compensate) Encode(w *binary.Writer) error {
 	if f.With == nil {
 		return sim.ErrNoCodec

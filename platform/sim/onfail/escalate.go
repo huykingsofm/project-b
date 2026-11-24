@@ -19,6 +19,9 @@ func (f Escalate) Handle(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) {
 	}
 }
 
+// Clone returns the kind itself: it holds only values.
+func (f Escalate) Clone() sim.OnFail { return f }
+
 func (f Escalate) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(f.To))
 	return nil

@@ -35,6 +35,12 @@ func (a *ZoneLayerCharacterMoveAction) ID() sim.ActionID { return ZoneLayerChara
 func (a *ZoneLayerCharacterMoveAction) Priority() int16  { return PriorityIntent }
 func (a *ZoneLayerCharacterMoveAction) Actor() any       { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterMoveAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply moves the character one step, or takes its place in the cooldown.
 func (a *ZoneLayerCharacterMoveAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

@@ -25,9 +25,20 @@ import (
 // ticks.
 func aWorldToCheckpoint(t testing.TB) *game.Cluster {
 	t.Helper()
+	return aWorldToCheckpointWith(t, config.NewStore(), nil)
+}
+
+// aWorldToCheckpointWith is aWorldToCheckpoint with the configuration and the writer of the
+// checkpoints given; with no writer the engines take none.
+func aWorldToCheckpointWith(
+	t testing.TB, cfg *config.Store, w engine.CheckpointWriter,
+) *game.Cluster {
+	t.Helper()
 	tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	c, err := game.NewBuilder().
 		WithSeed(7).
+		WithConfig(cfg).
+		WithCheckpointWriter(w).
 		WithReplayLog(&replay.MemLog{}).
 		WithWorld(game.WorldParams{ID: testkit.World}).
 		WithZone(game.ZoneParams{ID: testkit.Zone1, Tiles: tiles}).
@@ -88,19 +99,19 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 	if _, waits := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); !waits {
 		t.Fatal("the zonelayer waits for no heal: the test checks nothing")
 	}
-	data, err := engine.CheckpointEngine(l)
+	data, err := l.Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// in the environment of the cluster, as the engine it came from: it reads the zone as it does
-	r, err := engine.RestoreEngine[*zonelayerstate.State](data, c.Env, 7)
+	r, err := restoreEngine[*zonelayerstate.State](data, c.Env, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if hashOf(r) != hashOf(l) || r.Tick() != l.Tick() || r.State().Hash() != l.State().Hash() {
 		t.Fatal("the restored engine has another hash, or another tick")
 	}
-	if again, err := engine.CheckpointEngine(r); err != nil || !bytes.Equal(again, data) {
+	if again, err := r.Checkpoint().Encode(); err != nil || !bytes.Equal(again, data) {
 		t.Fatalf("the restored engine is written differently: %v", err)
 	}
 	for tick := 1; tick <= 60; tick++ { // the item is taken off, the run ends, the heal comes twice
@@ -114,30 +125,30 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 
 func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	world, err := engine.CheckpointEngine(c.World)
+	world, err := c.World.Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := engine.RestoreEngine[*worldstate.State](world, aFreshEnv(c), 7)
+	w, err := restoreEngine[*worldstate.State](world, aFreshEnv(c), 7)
 	if err != nil || hashOf(w) != hashOf(c.World) || w.Tick() != c.World.Tick() {
 		t.Fatalf("the world: %v", err)
 	}
 	if len(w.State().ZoneIDs()) != 1 || len(w.State().ZoneLayerIDs()) != 1 {
 		t.Fatalf("the restored world knows %+v", w.State())
 	}
-	if again, err := engine.CheckpointEngine(w); err != nil || !bytes.Equal(again, world) {
+	if again, err := w.Checkpoint().Encode(); err != nil || !bytes.Equal(again, world) {
 		t.Fatalf("the restored world is written differently: %v", err)
 	}
-	zone, err := engine.CheckpointEngine(c.Zone(testkit.Zone1))
+	zone, err := c.Zone(testkit.Zone1).Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	z, err := engine.RestoreEngine[*zonestate.State](zone, aFreshEnv(c), 7)
+	z, err := restoreEngine[*zonestate.State](zone, aFreshEnv(c), 7)
 	if err != nil || hashOf(z) != hashOf(c.Zone(testkit.Zone1)) ||
 		z.Tick() != c.Zone(testkit.Zone1).Tick() {
 		t.Fatalf("the zone: %v", err)
 	}
-	if again, err := engine.CheckpointEngine(z); err != nil || !bytes.Equal(again, zone) {
+	if again, err := z.Checkpoint().Encode(); err != nil || !bytes.Equal(again, zone) {
 		t.Fatalf("the restored zone is written differently: %v", err)
 	}
 	zoneState := c.Zone(testkit.Zone1).State()
@@ -148,24 +159,24 @@ func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 
 func TestACheckpointThatIsCutOrOfAnotherTypeOfStateIsAnErrorAndNeverAPanic(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	data, err := engine.CheckpointEngine(c.ZoneLayer(theLayer))
+	data, err := c.ZoneLayer(theLayer).Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for n := range data { // every proper prefix
-		_, err := engine.RestoreEngine[*zonelayerstate.State](data[:n], aFreshEnv(c), 7)
+		_, err := restoreEngine[*zonelayerstate.State](data[:n], aFreshEnv(c), 7)
 		if err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 	}
 	longer := append(append([]byte{}, data...), 0)
-	if _, err := engine.RestoreEngine[*zonelayerstate.State](longer, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*zonelayerstate.State](longer, aFreshEnv(c), 7); err == nil {
 		t.Fatal("a checkpoint with a byte more was restored")
 	}
-	if _, err := engine.RestoreEngine[*worldstate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*worldstate.State](data, aFreshEnv(c), 7); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as the world")
 	}
-	if _, err := engine.RestoreEngine[*zonestate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*zonestate.State](data, aFreshEnv(c), 7); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as a zone")
 	}
 }
@@ -174,7 +185,7 @@ func TestACheckpointThatIsCutOrOfAnotherTypeOfStateIsAnErrorAndNeverAPanic(t *te
 // bounces as an engine that is not built, and does not wait in a queue that nothing reads.
 func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	data, err := engine.CheckpointEngine(c.ZoneLayer(theLayer))
+	data, err := c.ZoneLayer(theLayer).Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +194,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	)
 	for n := range data { // every proper prefix, which is bad after the state or before it
 		env := aFreshEnv(c)
-		if _, err := engine.RestoreEngine[*zonelayerstate.State](data[:n], env, 7); err == nil {
+		if _, err := restoreEngine[*zonelayerstate.State](data[:n], env, 7); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 		if reason, ok := env.Router.Deliver(say); ok || reason != sim.DeliveryFailureNotStarted {
@@ -192,7 +203,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 		}
 	}
 	env := aFreshEnv(c)
-	if _, err := engine.RestoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
+	if _, err := restoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
 		t.Fatal(err)
 	}
 	if reason, ok := env.Router.Deliver(say); !ok {
@@ -200,68 +211,16 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	}
 }
 
-func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *testing.T) {
-	c := aWorldToCheckpoint(t) // the builder asked for healing every 10 ticks
-	l := c.ZoneLayer(theLayer)
-	regen, ok := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID)
-	if !ok || regen.(*action.ZoneLayerCharacterRegenAction).Every != 10 {
-		t.Fatalf("the zonelayer does not wait for the heal that was asked for: %v, %v", regen, ok)
-	}
-	if err := game.EnsureRegen(l, 10); err != nil {
-		t.Fatalf("the same period: %v", err)
-	}
-	if err := game.EnsureRegen(l, 20); err == nil {
-		t.Fatal("a period that is not the one that waits was accepted")
-	}
-	if err := game.EnsureRegen(l, 0); err == nil {
-		t.Fatal("no healing was accepted while a heal waits")
-	}
-	data, err := engine.CheckpointEngine(l)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := engine.RestoreEngine[*zonelayerstate.State](data, c.Env, 7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := game.EnsureRegen(r, 10); err != nil {
-		t.Fatalf("a restored zonelayer: %v", err)
-	}
-	if err := game.EnsureRegen(r, 20); err == nil {
-		t.Fatal("a restored zonelayer accepted another period than the one it was written with")
-	}
-
-	// a builder that asks for no healing leaves nothing waiting, and asking for one sets the first
-	noHeal, err := game.NewBuilder().
-		WithWorld(game.WorldParams{ID: testkit.World}).
-		WithZone(game.ZoneParams{
-			ID: testkit.Zone1, Tiles: tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, nil),
-		}).
-		WithZoneLayers(game.ZoneLayerParams{ZoneID: testkit.Zone1, Count: 1, Capacity: 1}).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-	none := noHeal.ZoneLayer(theLayer)
-	if _, waits := none.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); waits {
-		t.Fatal("a zonelayer that heals every 0 ticks waits for a heal")
-	}
-	if err := game.EnsureRegen(none, 0); err != nil {
-		t.Fatalf("no healing asked, none waiting: %v", err)
-	}
-	if err := game.EnsureRegen(none, 5); err != nil {
-		t.Fatalf("healing asked, none waiting: %v", err)
-	}
-	if _, waits := none.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); !waits {
-		t.Fatal("asking for healing set no heal")
-	}
-}
-
 // aBigZoneLayer is a zonelayer as full as the design says one gets: 150 characters, 150 items on
 // the ground that will be taken off, and what each waits for.
 func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 	t.Helper()
-	c := aWorldToCheckpoint(t)
+	return aBigZoneLayerOf(t, aWorldToCheckpoint(t))
+}
+
+// aBigZoneLayerOf is aBigZoneLayer, made the zonelayer of the world given.
+func aBigZoneLayerOf(t testing.TB, c *game.Cluster) *engine.Engine[*zonelayerstate.State] {
+	t.Helper()
 	l := c.ZoneLayer(theLayer)
 	for i := range 150 {
 		ch, err := zonelayerstate.NewCharacter(state.CharacterID(i+1), "Binh", 100, 250, 256)
@@ -275,32 +234,44 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 		l.ScheduleAt(
 			uint64(500+i),
 			&action.ZoneLayerItemEntityRemoveAction{
-				EntityID: state.NewEntityID(theLayer, uint64(i)),
+				EntityID: state.NewEntityID(theLayer, uint64(i+1)),
 			},
 		)
 	}
 	return l
 }
 
-func BenchmarkCheckpointZoneLayer(b *testing.B) {
-	l := aBigZoneLayer(b)
-	data, err := engine.CheckpointEngine(l)
+// BenchmarkEncodeCheckpointZoneLayer is what the writer of the checkpoints pays for one: the
+// encoding of a checkpoint that was taken.
+func BenchmarkEncodeCheckpointZoneLayer(b *testing.B) {
+	taken := aBigZoneLayer(b).Checkpoint()
+	data, err := taken.Encode()
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.CheckpointEngine(l); err != nil {
+		if _, err := taken.Encode(); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// BenchmarkTakeCheckpointZoneLayer is a checkpoint taken between two ticks: a clone of the state,
+// and of what the engine waits for and what only it and its peer know.
+func BenchmarkTakeCheckpointZoneLayer(b *testing.B) {
+	l := aBigZoneLayer(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		l.Checkpoint()
 	}
 }
 
 func BenchmarkRestoreZoneLayer(b *testing.B) {
 	c := aWorldToCheckpoint(b)
 	l := aBigZoneLayer(b)
-	data, err := engine.CheckpointEngine(l)
+	data, err := l.Checkpoint().Encode()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -308,7 +279,7 @@ func BenchmarkRestoreZoneLayer(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.RestoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
+		if _, err := restoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -334,7 +305,13 @@ func BenchmarkHashZoneLayerState(b *testing.B) {
 // of 20 slots each, and the 1,000 private messages that it keeps.
 func aBigWorld(t testing.TB) *engine.Engine[*worldstate.State] {
 	t.Helper()
-	w := aWorldToCheckpoint(t).World
+	return aBigWorldOf(t, aWorldToCheckpoint(t))
+}
+
+// aBigWorldOf is aBigWorld, made the world given.
+func aBigWorldOf(t testing.TB, c *game.Cluster) *engine.Engine[*worldstate.State] {
+	t.Helper()
+	w := c.World
 	for i := range 2000 {
 		for item := range 20 {
 			w.State().AddItemToCharacter(state.CharacterID(i+1), state.ItemID(item+1), 7, 20, 99)
@@ -348,25 +325,37 @@ func aBigWorld(t testing.TB) *engine.Engine[*worldstate.State] {
 	return w
 }
 
-func BenchmarkCheckpointWorld(b *testing.B) {
-	w := aBigWorld(b)
-	data, err := engine.CheckpointEngine(w)
+// BenchmarkEncodeCheckpointWorld is what the writer of the checkpoints pays for one: the
+// encoding of a checkpoint that was taken.
+func BenchmarkEncodeCheckpointWorld(b *testing.B) {
+	taken := aBigWorld(b).Checkpoint()
+	data, err := taken.Encode()
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.CheckpointEngine(w); err != nil {
+		if _, err := taken.Encode(); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// BenchmarkTakeCheckpointWorld is a checkpoint taken between two ticks: a clone of the state, and
+// of what the engine waits for and what only it and its peer know.
+func BenchmarkTakeCheckpointWorld(b *testing.B) {
+	w := aBigWorld(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		w.Checkpoint()
 	}
 }
 
 func BenchmarkRestoreWorld(b *testing.B) {
 	c := aWorldToCheckpoint(b)
 	w := aBigWorld(b)
-	data, err := engine.CheckpointEngine(w)
+	data, err := w.Checkpoint().Encode()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -374,7 +363,7 @@ func BenchmarkRestoreWorld(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.RestoreEngine[*worldstate.State](data, env, 7); err != nil {
+		if _, err := restoreEngine[*worldstate.State](data, env, 7); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -406,5 +395,62 @@ func BenchmarkCloneZoneLayer(b *testing.B) {
 	}
 }
 
+// discardingWriter is a writer of checkpoints that takes each and writes none: what is left of
+// taking a checkpoint is what the goroutine of the engine pays for it.
+type discardingWriter struct{}
+
+func (discardingWriter) Offer(sim.StateID, uint64, func() ([]byte, error)) {}
+
+// stepping is the world of aWorldToCheckpoint that takes a checkpoint at every tick, or at none.
+func stepping(b *testing.B, checkpointAtEveryTick bool) *game.Cluster {
+	b.Helper()
+	cfg := config.NewStore()
+	if !checkpointAtEveryTick {
+		return aWorldToCheckpointWith(b, cfg, nil)
+	}
+	if _, err := cfg.Apply(map[string]string{"checkpoint.every_ticks": "1"}); err != nil {
+		b.Fatal(err)
+	}
+	return aWorldToCheckpointWith(b, cfg, discardingWriter{})
+}
+
+// benchmarkStep measures a tick of an engine with nothing sent to it: the clone it publishes, the
+// hash, and taking a checkpoint when the world takes one at every tick.
+func benchmarkStep(b *testing.B, step func() error) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := step(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkStepZoneLayer(b *testing.B) {
+	benchmarkStep(b, aBigZoneLayerOf(b, stepping(b, false)).Step)
+}
+
+func BenchmarkStepZoneLayerTakingACheckpoint(b *testing.B) {
+	benchmarkStep(b, aBigZoneLayerOf(b, stepping(b, true)).Step)
+}
+
+func BenchmarkStepWorld(b *testing.B) {
+	benchmarkStep(b, aBigWorldOf(b, stepping(b, false)).Step)
+}
+
+func BenchmarkStepWorldTakingACheckpoint(b *testing.B) {
+	benchmarkStep(b, aBigWorldOf(b, stepping(b, true)).Step)
+}
+
 // hashOf is the hash of an engine, from a new hasher.
 func hashOf[S sim.State](e *engine.Engine[S]) uint64 { return e.Hash(sim.NewHasher()) }
+
+// restoreEngine reads a checkpoint and makes its engine, in the environment given.
+func restoreEngine[S sim.State](
+	data []byte, env *engine.Env, seed uint64,
+) (*engine.Engine[S], error) {
+	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
+	if err != nil {
+		return nil, err
+	}
+	return c.Restore(env, seed)
+}

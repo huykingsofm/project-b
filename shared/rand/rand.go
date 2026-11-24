@@ -25,6 +25,13 @@ func NewPCG(seed1, seed2 uint64) *Rand {
 	return &Rand{Rand: stdrand.New(pcg), pcg: pcg}
 }
 
+// Clone returns random numbers that share nothing with these and go on from the same place: the
+// same numbers, drawn apart.
+func (r *Rand) Clone() *Rand {
+	pcg := *r.pcg
+	return &Rand{Rand: stdrand.New(&pcg), pcg: &pcg}
+}
+
 // Encode writes where the PCG is, as bytes with their length.
 func (r *Rand) Encode(w *binary.Writer) error {
 	place, err := r.pcg.MarshalBinary()

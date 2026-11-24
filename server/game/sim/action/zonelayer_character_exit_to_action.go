@@ -33,6 +33,12 @@ func (a *ZoneLayerCharacterExitToAction) ID() sim.ActionID {
 func (a *ZoneLayerCharacterExitToAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterExitToAction) Actor() any      { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply takes the character out and sends it to the zonelayer that has room.
 func (a *ZoneLayerCharacterExitToAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

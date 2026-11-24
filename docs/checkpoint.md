@@ -1,17 +1,34 @@
 # Checkpoint of an engine
 
-`platform/engine/checkpoint.go`, with the codecs of the states (`Encode` in `server/game/sim/state/*/state.go`, the decoder in `server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
+`platform/engine/engine_checkpoint.go` (with `CheckpointWriter`), the period in `platform/engine/engine.go`, the files in `platform/checkpoint`, with the codecs of the states (`Encode` in `server/game/sim/state/*/state.go`, the decoder in `server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at: `engine.EngineCheckpoint[S]`, which holds it as data that shares nothing with the engine, and its bytes. The design: `plan/en/proposed-designs.md`.
 
 ## Entry points
 
 | Call | What it does |
 |---|---|
-| `engine.CheckpointEngine(e)` | writes the checkpoint of an engine: the start (below), then its state, its scheduler and what only the engine knows (`cellData.Encode`); called between two ticks, by the goroutine of the engine or while it does not run |
-| `engine.RestoreEngine[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
+| `e.Checkpoint()` | takes the checkpoint of an engine as it is: a clone of its state, its scheduler, its random numbers and what its peer knows; called between two ticks, by the goroutine of the engine or while it does not run |
+| `c.Encode()` | writes a checkpoint as bytes (below) |
+| `engine.DecodeEngineCheckpoint[S](data, codecs)` | reads a checkpoint of an engine whose state is of type `S`; the state is read with the codecs, which for a zone know the map of the zone (`game.NewCodecs(tilesOf)`); a checkpoint of an engine whose state is of another type is an error |
+| `c.Restore(env, seed)` | makes the engine of a checkpoint, at its tick; the engine takes what the checkpoint holds |
+| `checkpoint.NewFileWriter(dir, queue)` | the `engine.CheckpointWriter` of a cluster: one goroutine that writes the checkpoints of every engine to files under `dir`, with a queue of `queue`; `Close` writes what waits and stops it |
+| `checkpoint.Ticks(dir, id)` | the ticks at which an engine has a checkpoint file, in rising order |
+| `checkpoint.Read(dir, id, tick)` | the bytes of the checkpoint of an engine at a tick |
 
-- A restore registers the engine in the router of `env`, as `engine.New` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
+- `Restore` registers the engine in the router of `env`, as `engine.New` does; a checkpoint whose state is not of its engine or not at its tick is an error, and registers nothing.
 - What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
 - A checkpoint that is cut, has a byte too many, is of another data version or of another type of state is an error, never a panic.
+
+## What it holds
+
+| Field of `EngineCheckpoint` | Holds |
+|---|---|
+| `ID` | the ID of the engine |
+| `Tick` | the tick the engine is at |
+| `State` | the state, a copy that no one changes |
+| `ActionScheduler` | what the engine waits for, each action a clone |
+| `Rand` | the random numbers of the engine, a clone that goes on from where they are |
+| `CfgVersionSeen` | the version of the configuration the engine read last |
+| `Peer` | the number of the last message the engine sent, the last taken from each sender, and the unsettled messages, each a clone |
 
 ## What is written
 
@@ -25,8 +42,8 @@ In this order:
 | state | the data of the state, by its `Encode` (below) |
 | scheduler | the last tick it gave out, and the actions set for the ticks to come (the next one included), by tick and in order |
 | random numbers | where the generator of the engine is (the PCG), as its own bytes |
-| `sentSeq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |
+| `sentSeq` | the number of the last message the engine sent |
 | `lastRecvSeq` | the last number taken from each sender, in the order of the state IDs |
 | unsettled messages | the messages that are to go, and the messages that went and were not acked, each written whole ([unsettled messages](unsettled_messages.md)) |
 
@@ -58,13 +75,40 @@ In this order:
 |---|---|
 | state | the hash of the state |
 | scheduler, self list | each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it |
-| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `sentSeq`, `lastRecvSeq`, the version of the configuration, the messages that are to go |
+| what only the engine knows | the bytes the checkpoint writes for it: random numbers, the version of the configuration |
+| what its peer knows | the bytes the checkpoint writes for it: `sentSeq`, `lastRecvSeq`, the messages that are to go |
 
 - A restore that differs from the engine it came from in any of them has another hash, and a replay finds it.
 
+## Taken at the end of a tick
+
+Each engine takes its own checkpoints, with no set for the cluster: no checkpoint of one engine depends on another.
+
+| Key | Value |
+|---|---|
+| when | at every tick for which `(tick + offset mod every) mod every` is 0 |
+| `every` | the config variable `checkpoint.every_ticks` (600) |
+| offset | the hash of the ID of the engine, the same offset as for the hash of the replay log, so the engines of a cluster are spread over the ticks of a period |
+| where in `Step` | after the messages of the tick are sent, before `EndTick` |
+| on the goroutine of the engine | an `EngineCheckpoint` whose state is the clone that was just published, which no one changes; the scheduler, the random numbers and what the peer knows are cloned |
+| on the goroutine of the writer | the checkpoint is encoded (`Encode`), and the file is written |
+| the hash | the replay log has the hash of the engine at every tick a checkpoint is taken at, whether the hash is due or not; a replay, whose engines take no checkpoint, hashes at the same ticks, since it depends on the configuration and the tick alone |
+| no writer in `Env` | no checkpoint is taken (a replay) |
+
+## Files
+
+| Key | Value |
+|---|---|
+| path | `<dir>/<name>-<id>/ckpt-<tick>.snap`, in the directory of the engine next to its replay log (`replay.EngineDir`); the tick in 20 digits |
+| how it is written | to `ckpt-<tick>.snap.tmp`, synced, renamed, then the directory is synced: a file with the name of a checkpoint is whole |
+| a temporary file left by a crash | not a checkpoint; written over when the same tick is written again |
+| order | one writer for the cluster, in the order the checkpoints were offered |
+| a full queue, or a writer that is closed | the checkpoint is dropped, logged and counted (`Dropped`); the engine goes on, and its next checkpoint is a period later |
+| a checkpoint that cannot be encoded or written | logged and counted (`Failed`); no file is left |
+| deleted | never: all are kept for now |
+
 ## Not here yet
 
-- The copy taken at the end of the tick and written outside the goroutine of the engine, the period with an offset for each engine, and the files: the next part of the plan.
-- Loading a set of checkpoints for the cluster.
+- Starting a replay or a recovery from the checkpoints of the engines.
 
 Benchmarks: [checkpoint](benchmark/checkpoint.md).

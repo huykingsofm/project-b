@@ -14,6 +14,9 @@ func (Drop) ID() sim.OnFailID { return DropID }
 // Handle drops the sim.
 func (Drop) Handle(b sim.Bouncer, _ sim.Message, _ sim.DeliveryFailure) { b.Drop() }
 
+// Clone returns the kind itself: it holds only values.
+func (f Drop) Clone() sim.OnFail { return f }
+
 func (Drop) Encode(*binary.Writer) error { return nil }
 
 func decodeDrop(

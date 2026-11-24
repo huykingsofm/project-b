@@ -159,6 +159,7 @@ func (noEncodeAction) Priority() int16 { return 0 }
 func (noEncodeAction) Actor() any      { return nil }
 func (noEncodeAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
+func (a noEncodeAction) Clone() Action[*toyState] { return a }
 
 func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testing.T) {
 	var w binary.Writer

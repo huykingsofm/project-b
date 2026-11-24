@@ -25,7 +25,7 @@ func anonymousName(a Action[*toyState]) string { return nameOf(a) }
 // at is an action that the scheduler of these tests holds.
 func at(name string) Action[*toyState] { return &anonymousAction{name: name} }
 
-func dueNames(s *Scheduler[*toyState], tick uint64) []string {
+func dueNames(s *ActionScheduler[*toyState], tick uint64) []string {
 	var out []string
 	for _, a := range s.Due(tick) {
 		out = append(out, nameOf(a))
@@ -34,7 +34,7 @@ func dueNames(s *Scheduler[*toyState], tick uint64) []string {
 }
 
 func TestSchedulerRunsAnActionAtItsTickInTheOrderItWasSet(t *testing.T) {
-	var s Scheduler[*toyState]
+	var s ActionScheduler[*toyState]
 	s.Due(1)
 	s.At(4, at("later"))
 	s.At(4, at("later-too"))
@@ -55,7 +55,7 @@ func TestSchedulerRunsAnActionAtItsTickInTheOrderItWasSet(t *testing.T) {
 }
 
 func TestSchedulerRunsAnActionForAPastTickAtTheNextOne(t *testing.T) {
-	var s Scheduler[*toyState]
+	var s ActionScheduler[*toyState]
 	s.Due(5)
 	s.At(3, at("late"))
 	if got := dueNames(&s, 6); !slices.Equal(got, []string{"late"}) {
@@ -64,7 +64,7 @@ func TestSchedulerRunsAnActionForAPastTickAtTheNextOne(t *testing.T) {
 }
 
 func TestSchedulerFindsTheActionOfAnIDThatWaitsForTheEarliestTick(t *testing.T) {
-	var s Scheduler[*toyState]
+	var s ActionScheduler[*toyState]
 	s.At(9, &authoredAction{name: "late", author: 1})
 	s.At(5, &authoredAction{name: "early", author: 2})
 	s.At(5, &authoredAction{name: "early too", author: 3})
@@ -79,8 +79,8 @@ func TestSchedulerFindsTheActionOfAnIDThatWaitsForTheEarliestTick(t *testing.T) 
 	}
 }
 
-func aSchedulerThatWaits() *Scheduler[*toyState] {
-	var s Scheduler[*toyState]
+func aSchedulerThatWaits() *ActionScheduler[*toyState] {
+	var s ActionScheduler[*toyState]
 	s.At(30, &addAction{N: 10})
 	s.Due(4) // the last tick it gave out
 	s.At(9, &addAction{N: 12})
@@ -89,7 +89,7 @@ func aSchedulerThatWaits() *Scheduler[*toyState] {
 	return &s
 }
 
-func hashOf(s *Scheduler[*toyState]) uint64 {
+func hashOf(s *ActionScheduler[*toyState]) uint64 {
 	h := NewHasher()
 	s.Hash(&h)
 	return h.Sum()
@@ -102,7 +102,7 @@ func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 	if err := s.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
-	var got Scheduler[*toyState]
+	var got ActionScheduler[*toyState]
 	r := binary.NewReader(w.B)
 	if err := got.Decode(c, r, 1); err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
@@ -122,7 +122,7 @@ func TestASchedulerComesBackAsItWasWritten(t *testing.T) {
 		}
 	}
 	for n := range w.B { // every proper prefix
-		var cut Scheduler[*toyState]
+		var cut ActionScheduler[*toyState]
 		if err := cut.Decode(c, binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
@@ -160,7 +160,7 @@ func TestASchedulerThatHasATickTwiceIsRefused(t *testing.T) {
 		w.Uvarint(5) // the same tick
 		w.Uvarint(0) // no action
 	}
-	var s Scheduler[*toyState]
+	var s ActionScheduler[*toyState]
 	err := s.Decode(mustCodecs(t), binary.NewReader(w.B), 1)
 	if !errors.Is(err, binary.ErrBadValue) {
 		t.Fatalf("error %v, want a bad value", err)

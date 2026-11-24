@@ -24,6 +24,9 @@ func (Retry) Handle(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) {
 	}
 }
 
+// Clone returns the kind itself: it holds only values.
+func (f Retry) Clone() sim.OnFail { return f }
+
 func (Retry) Encode(*binary.Writer) error { return nil }
 
 func decodeRetry(

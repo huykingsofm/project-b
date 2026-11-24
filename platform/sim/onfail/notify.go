@@ -1,6 +1,8 @@
 package onfail
 
 import (
+	"slices"
+
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -17,6 +19,12 @@ func (Notify) ID() sim.OnFailID { return NotifyID }
 // Handle tells the actor of the sim.
 func (f Notify) Handle(b sim.Bouncer, m sim.Message, _ sim.DeliveryFailure) {
 	b.Tell(m.Subject(), f.Key, f.Args)
+}
+
+// Clone returns a copy that shares nothing with the kind.
+func (f Notify) Clone() sim.OnFail {
+	f.Args = slices.Clone(f.Args)
+	return f
 }
 
 func (f Notify) Encode(w *binary.Writer) error {

@@ -149,14 +149,15 @@ func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engi
 
 func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
+	held := &a.peer.data.unsettledMessages
 	first := uint64(unsettledResendFirst.Get(config.Defaults()))
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
-	if b.State().Total != 7 || a.unsettledMessages.Len() != 1 {
+	if b.State().Total != 7 || held.Len() != 1 {
 		t.Fatalf("b has %d and a holds %d, want 7 and 1",
-			b.State().Total, a.unsettledMessages.Len())
+			b.State().Total, held.Len())
 	}
-	sent := a.unsettledMessages.Sent()[0].Head()
+	sent := held.Sent()[0].Head()
 	if sent.From != 1 || sent.Tick != 1 {
 		t.Fatalf("the message went with the header %+v", sent)
 	}
@@ -166,41 +167,43 @@ func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t 
 	if b.State().Total != 7 {
 		t.Fatalf("b took a second copy: it has %d", b.State().Total)
 	}
-	if a.unsettledMessages.Len() != 1 || a.unsettledMessages.Sent()[0].Head() != sent {
+	if held.Len() != 1 || held.Sent()[0].Head() != sent {
 		t.Fatalf("a holds %d messages, and the first has the header %+v, want it unchanged",
-			a.unsettledMessages.Len(), a.unsettledMessages.Sent()[0].Head())
+			held.Len(), held.Sent()[0].Head())
 	}
 	log.safe[2] = b.Tick() // the tick at which b took it is safe
 	c.Step()               // b says it
 	c.Step()               // a reads it
-	if a.unsettledMessages.Len() != 0 {
-		t.Fatalf("a holds %d messages after the ack, want none", a.unsettledMessages.Len())
+	if held.Len() != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", held.Len())
 	}
 }
 
 func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
+	held := &a.peer.data.unsettledMessages
 	for _, tick := range []uint64{1, 4, 7} {
 		a.ScheduleAt(tick, &forwardAction{To: 2, N: 1})
 	}
 	for range 8 {
 		c.Step()
 	}
-	if a.unsettledMessages.Len() != 3 || b.State().Total != 3 {
+	if held.Len() != 3 || b.State().Total != 3 {
 		t.Fatalf("a holds %d and b has %d, want 3 and 3",
-			a.unsettledMessages.Len(), b.State().Total)
+			held.Len(), b.State().Total)
 	}
 	log.safe[2] = 5 // b took the messages at the ticks 1 and 4, which are safe, not the one at 7
 	c.Step()
 	c.Step()
-	if a.unsettledMessages.Len() != 1 || a.unsettledMessages.Sent()[0].Head().Tick != 7 {
+	if held.Len() != 1 || held.Sent()[0].Head().Tick != 7 {
 		t.Fatalf("a holds %d messages: want only the one that b took at tick 7",
-			a.unsettledMessages.Len())
+			held.Len())
 	}
 }
 
 func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
+	held := &a.peer.data.unsettledMessages
 	first := uint64(unsettledResendFirst.Get(config.Defaults()))
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
@@ -208,8 +211,8 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	for a.Tick() < first+3 {
 		c.Step()
 	}
-	if a.unsettledMessages.Len() != 0 {
-		t.Fatalf("a still holds %d messages for a receiver that is gone", a.unsettledMessages.Len())
+	if held.Len() != 0 {
+		t.Fatalf("a still holds %d messages for a receiver that is gone", held.Len())
 	}
 	returned := 0
 	for _, r := range c.Env.ReplayLog.(*aLogThatSaysWhatIsSafe).Records {
@@ -226,18 +229,18 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
-	data, err := CheckpointEngine(b)
+	data, err := b.Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := newToyEnv(t)
-	restored, err := RestoreEngine[*toyState](data, env, 1)
+	restored, err := restoreEngine[*toyState](data, env, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// the state of b was restored from the checkpoint: what it took is in a place that no crash
 	// takes back, so a sender is told of it without waiting
-	if got := env.Acks.Acked(2, 1); got != a.unsettledMessages.Sent()[0].Head().Seq {
+	if got := env.Acks.Acked(2, 1); got != a.peer.data.unsettledMessages.Sent()[0].Head().Seq {
 		t.Fatalf("a restored b acks %d to a, want the number of the message it took", got)
 	}
 	if restored.State().Total != 7 {

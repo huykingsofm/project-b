@@ -14,7 +14,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [plan.md](plan.md) | filling a plan and finding actions in it | `platform/sim` |
 | [codec.md](codec.md) | writing and reading a message with its actions | `platform/sim` |
 | [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `platform/replay/runner` |
-| [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine | `engine` |
+| [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine, taking it at a tick, and its file | `engine`, `platform/checkpoint` |
 
 ## Run
 
@@ -29,6 +29,7 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | the segment log | `shared/segmentlog` |
 | the replay log | `platform/replay` |
 | the replay runner | `platform/replay/runner` |
+| the checkpoint | `server/game`, `platform/checkpoint` |
 
 - Record the median of the runs.
 

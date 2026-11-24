@@ -21,6 +21,12 @@ func (a *ZoneLayerCharacterRegenAction) ID() sim.ActionID { return ZoneLayerChar
 func (a *ZoneLayerCharacterRegenAction) Priority() int16  { return PrioritySystem }
 func (a *ZoneLayerCharacterRegenAction) Actor() any       { return nil }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterRegenAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply heals everyone and sets the action again.
 func (a *ZoneLayerCharacterRegenAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

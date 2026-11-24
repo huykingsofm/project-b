@@ -35,6 +35,12 @@ func (a *ZoneLayerCharacterItemPickupAction) ID() sim.ActionID {
 func (a *ZoneLayerCharacterItemPickupAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterItemPickupAction) Actor() any      { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterItemPickupAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply takes the item off the ground and sends it to the world.
 func (a *ZoneLayerCharacterItemPickupAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

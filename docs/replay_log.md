@@ -21,7 +21,7 @@
 | `Append(engine, tick, body)` | records what the engine took, sent or read at the tick: it is encoded into the buffer of the tick |
 | `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick, the hash of its state included when it is due; a log in files hands the frame of the tick to the goroutine that writes it |
 
-- The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
+- The engine writes the hash as the last record of the tick, in `EndTick`, every `replay_log.hash_every_ticks` ticks and at every tick it takes a checkpoint at ([checkpoint](checkpoint.md)). Each engine counts a period from an offset of its own, the hash of its ID, so the engines do not all hash at the same tick. A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
 - The tick of a frame is the one after the last of the log, and the first of a log is the tick 1 (the state of a new engine is at the tick 0): a log has no gap, and a frame that does not follow is refused and the log marked as failed.
 - `Engine.Remove` (`Cluster.Remove`) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
 

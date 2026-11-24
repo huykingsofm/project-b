@@ -76,6 +76,7 @@ func (a *anonymousAction) Priority() int16 { return a.priority }
 func (a *anonymousAction) Actor() any      { return nil }
 func (a *anonymousAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
+func (a *anonymousAction) Clone() Action[*toyState] { c := *a; return &c }
 
 func (a *anonymousAction) Encode(w *binary.Writer) {
 	w.String(a.name)
@@ -108,7 +109,8 @@ func (a *addAction) Actor() any      { return nil }
 func (a *addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Plan[*toyState]) {
 	s.Total += a.N
 }
-func (a *addAction) Encode(w *binary.Writer) { w.Varint(a.N) }
+func (a *addAction) Clone() Action[*toyState] { c := *a; return &c }
+func (a *addAction) Encode(w *binary.Writer)  { w.Varint(a.N) }
 
 func decodeAddAction(r *binary.Reader, _ codec.Version) (*addAction, error) {
 	a := &addAction{N: r.Varint()}
@@ -125,7 +127,8 @@ func (*otherAction) Priority() int16 { return 0 }
 func (*otherAction) Actor() any      { return nil }
 func (*otherAction) Apply(*Context, *otherState, *Registry[*otherState], *Plan[*otherState]) {
 }
-func (*otherAction) Encode(*binary.Writer) {}
+func (a *otherAction) Clone() Action[*otherState] { c := *a; return &c }
+func (*otherAction) Encode(*binary.Writer)        {}
 
 func decodeOtherAction(
 	_ *binary.Reader, _ codec.Version,
@@ -192,6 +195,7 @@ const (
 
 func (testDrop) ID() OnFailID                                   { return testDropID }
 func (testDrop) Handle(b Bouncer, _ Message, _ DeliveryFailure) { b.Drop() }
+func (f testDrop) Clone() OnFail                                { return f }
 func (testDrop) Encode(*binary.Writer) error                    { return nil }
 
 func decodeTestDrop(
@@ -204,7 +208,11 @@ type testCompensate struct{ With Message }
 
 func (testCompensate) ID() OnFailID                                     { return testCompensateID }
 func (f testCompensate) Handle(b Bouncer, _ Message, _ DeliveryFailure) { b.Resend(f.With) }
-func (f testCompensate) Nested() Message                                { return f.With }
+func (f testCompensate) Clone() OnFail {
+	f.With = f.With.Clone()
+	return f
+}
+func (f testCompensate) Nested() Message { return f.With }
 func (f testCompensate) Encode(w *binary.Writer) error {
 	if f.With == nil {
 		return ErrNoCodec

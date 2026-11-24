@@ -26,6 +26,12 @@ func (a *ZoneLayerItemEntityAddAction) ID() sim.ActionID { return ZoneLayerItemE
 func (a *ZoneLayerItemEntityAddAction) Priority() int16  { return PriorityResolve }
 func (a *ZoneLayerItemEntityAddAction) Actor() any       { return nil }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerItemEntityAddAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply puts the items on the ground and sets their removal.
 func (a *ZoneLayerItemEntityAddAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

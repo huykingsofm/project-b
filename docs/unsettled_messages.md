@@ -1,6 +1,6 @@
 # Unsettled messages and acks
 
-`platform/engine/unsettled_messages.go`, `platform/engine/cell.go` (`flushUnsettledMessages`, `releaseAckedMessages`, `publishAcks`), `platform/replay/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
+`platform/engine/unsettled_messages.go`, `platform/engine/peer.go` (`flushUnsettledMessages`, `releaseAckedMessages`, `publishAcks`), `platform/replay/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
 
 ## What they hold
 

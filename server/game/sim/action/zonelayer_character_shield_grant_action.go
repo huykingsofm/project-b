@@ -27,6 +27,12 @@ func (a *ZoneLayerCharacterShieldGrantAction) ID() sim.ActionID {
 func (a *ZoneLayerCharacterShieldGrantAction) Priority() int16 { return PriorityModifier }
 func (a *ZoneLayerCharacterShieldGrantAction) Actor() any      { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterShieldGrantAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply blocks the first damage that is aimed at the character, or stands again next tick.
 func (a *ZoneLayerCharacterShieldGrantAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

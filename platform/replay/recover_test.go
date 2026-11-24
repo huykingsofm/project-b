@@ -24,7 +24,7 @@ func lastTicksOf(t *testing.T, dir string, engines ...sim.StateID) map[sim.State
 	t.Helper()
 	out := map[sim.StateID]uint64{}
 	for _, e := range engines {
-		last, err := segmentlog.LastFrameID(findEngineDir(dir, e))
+		last, err := segmentlog.LastFrameID(EngineDir(dir, e))
 		if err != nil {
 			t.Fatal(err)
 		}

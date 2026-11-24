@@ -47,6 +47,8 @@ type ClusterBuilder struct {
 	queueSize int
 	replayLog replay.Log
 	emitter   engine.Emitter
+	// checkpoints writes the checkpoints the engines take; nil: they take none
+	checkpoints engine.CheckpointWriter
 
 	world      *WorldParams
 	zones      []ZoneParams
@@ -55,7 +57,7 @@ type ClusterBuilder struct {
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
 // seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
-// discards.
+// discards, and no writer of checkpoints, so the engines take none.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
@@ -93,6 +95,13 @@ func (b *ClusterBuilder) WithReplayLog(log replay.Log) *ClusterBuilder {
 	if log != nil {
 		b.replayLog = log
 	}
+	return b
+}
+
+// WithCheckpointWriter sets what writes the checkpoints that the engines take at the end of a tick
+// (see engine.CheckpointWriter). With none, which is the default, they take none.
+func (b *ClusterBuilder) WithCheckpointWriter(w engine.CheckpointWriter) *ClusterBuilder {
+	b.checkpoints = w
 	return b
 }
 
@@ -203,7 +212,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 	env := &engine.Env{
 		Router: engine.NewRouter(), Cfg: b.cfg, ReplayLog: b.replayLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
-		Emitter: b.emitter, Acks: engine.NewAckBoard(),
+		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
 	return b.assemble(env)
 }

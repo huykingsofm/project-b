@@ -6,8 +6,8 @@
 //
 //	go run ./server/cmd/world
 //
-// With -replay-dir it also writes the replay log of every engine to files under that directory, and
-// reads them back at the end to say what each engine recorded:
+// With -replay-dir it also writes the replay log and the checkpoints of every engine to files under
+// that directory, and reads them back at the end to say what each engine recorded:
 //
 //	go run ./server/cmd/world -replay-dir /tmp/replay
 package main
@@ -18,6 +18,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/checkpoint"
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
@@ -62,7 +65,8 @@ var (
 
 func main() {
 	replayDir := flag.String(
-		"replay-dir", "", "write the replay log of every engine under this directory",
+		"replay-dir", "",
+		"write the replay log and the checkpoints of every engine under this directory",
 	)
 	flag.Parse()
 
@@ -105,9 +109,18 @@ func main() {
 	}
 
 	seed := uint64(1)
+	// the script runs some 40 ticks: a checkpoint every 10 shows a few of each engine
+	cfg := config.NewStore()
+	if _, err := cfg.Apply(map[string]string{"checkpoint.every_ticks": "10"}); err != nil {
+		fail("the configuration is refused", err)
+	}
 	var replayLog replay.Log = replay.NopLog{}
 	var replayFile *replay.FileLog
+	var checkpointFiles *checkpoint.FileWriter
+	var checkpoints engine.CheckpointWriter // none without files: the engines then take none
 	if *replayDir != "" {
+		checkpointFiles = checkpoint.NewFileWriter(*replayDir, 64)
+		checkpoints = checkpointFiles
 		replayFile = replay.NewFileLog(
 			*replayDir,
 			replay.FileLogOptions{
@@ -120,6 +133,8 @@ func main() {
 	cluster, err := game.NewBuilder().
 		WithSeed(seed).
 		WithReplayLog(replayLog).
+		WithConfig(cfg).
+		WithCheckpointWriter(checkpoints).
 		WithEmitter(printer{}).
 		WithWorld(game.WorldParams{ID: worldID}).
 		WithZone(game.ZoneParams{ID: zone1ID, Tiles: zone1Tiles}).
@@ -218,6 +233,7 @@ func main() {
 		cluster.ZoneLayer(layer3ID).State().CharacterCount())
 
 	if replayFile != nil {
+		checkpointFiles.Close()
 		if err := replayFile.Close(); err != nil {
 			fail("the replay log could not be written", err)
 		}
@@ -241,11 +257,15 @@ func main() {
 			if readErr != nil {
 				fail("the replay log is damaged", readErr)
 			}
+			ticks, err := checkpoint.Ticks(*replayDir, e)
+			if err != nil {
+				fail("the checkpoints could not be listed", err)
+			}
 			fmt.Printf("  %s: %d inbound, %d commands, %d config, %d hashes, %d stable "+
-				"reads, up to tick %d\n",
+				"reads, up to tick %d; checkpoints at %v\n",
 				label(e), counts[replay.KindInbound], counts[replay.KindCommand],
 				counts[replay.KindConfig], counts[replay.KindHash],
-				counts[replay.KindStableRead], last)
+				counts[replay.KindStableRead], last, ticks)
 		}
 	}
 }
