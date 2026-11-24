@@ -21,6 +21,12 @@ func (a *WorldChatPrivateSendAction) ID() sim.ActionID { return WorldChatPrivate
 func (a *WorldChatPrivateSendAction) Priority() int16  { return PriorityResolve }
 func (a *WorldChatPrivateSendAction) Actor() any       { return a.FromID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *WorldChatPrivateSendAction) Clone() sim.Action[*worldstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply records the message.
 func (a *WorldChatPrivateSendAction) Apply(
 	c *sim.Context, s *worldstate.State, _ *sim.Registry[*worldstate.State],

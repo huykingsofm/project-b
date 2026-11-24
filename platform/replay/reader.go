@@ -32,7 +32,7 @@ type FileLogReader struct {
 func ReadFileLog(
 	dir string, engine sim.StateID, fromTick uint64, codecs *sim.Codecs,
 ) (*FileLogReader, error) {
-	r, err := segmentlog.OpenReader(findEngineDir(dir, engine), fromTick)
+	r, err := segmentlog.OpenReader(EngineDir(dir, engine), fromTick)
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +135,10 @@ func firstSegmentInfo(logDir string) (segmentInfo, bool) {
 	return info, err == nil
 }
 
-// findEngineDir returns the directory of the log of an engine under dir, which its ID names. An
-// engine that has no log has no directory, which reads as an empty log.
-func findEngineDir(dir string, engine sim.StateID) string {
+// EngineDir returns the directory of an engine under dir, which its ID names: it holds the log of
+// the engine, and its checkpoints beside it. An engine that has no log has no directory, which
+// reads as an empty log.
+func EngineDir(dir string, engine sim.StateID) string {
 	return filepath.Join(dir, engineDirName(engine))
 }
 

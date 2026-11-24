@@ -14,7 +14,8 @@ import (
 
 // Env is what every engine of a cluster shares: the router that carries their messages, the
 // configuration they read, the replay log they write, the store of the states they publish, the
-// emitter where they give what changed, and the codecs that read back what they wrote.
+// emitter where they give what changed, the codecs that read back what they wrote, and the writer
+// of their checkpoints.
 type Env struct {
 	Router    MessageRouter
 	Cfg       ConfigSource
@@ -26,6 +27,9 @@ type Env struct {
 	// Acks is where the engines say what they hold safe and read what their receivers hold. An
 	// engine with none holds no message for an ack: a replay has none.
 	Acks *AckBoard
+	// Checkpoints writes the checkpoints that the engines take at the end of a tick. With none the
+	// engines take none: a replay has none.
+	Checkpoints CheckpointWriter
 }
 
 // Remove ends the engine with the state ID for good, and forgets it: see Engine.Remove. It reports

@@ -44,6 +44,22 @@ type unsettledMessages struct {
 	sent   []sentMessage // in the order they were sent, which is the order of their numbers
 }
 
+// Clone returns a copy that shares nothing with the messages it holds: each is copied with its
+// Clone.
+func (u *unsettledMessages) Clone() unsettledMessages {
+	c := unsettledMessages{
+		unsent: make([]sim.Message, len(u.unsent)), sent: make([]sentMessage, len(u.sent)),
+	}
+	for i, m := range u.unsent {
+		c.unsent[i] = m.Clone()
+	}
+	for i, s := range u.sent {
+		s.message = s.message.Clone()
+		c.sent[i] = s
+	}
+	return c
+}
+
 // AddUnsent puts a message that is to go at the next flush.
 func (u *unsettledMessages) AddUnsent(m sim.Message) { u.unsent = append(u.unsent, m) }
 

@@ -11,27 +11,27 @@ What has been built and what is to be built, in the order it is done. What is bu
 | Fixes from a review of the replay and the checkpoint | `done` |
 | The platform that runs states in ticks split from the game; the plan, the scheduler, the containers and the codecs rebuilt | `done` |
 | IDs that a state gives out, counted up from 1 and never given again, from a number that the state holds (`lastStateID` of the world for its zonelayers, `lastEntityID` of a zone and a zonelayer for their entities) (see [ids](../../docs/ids.md)) | `done` |
-|## To build
+| The replay log writes one frame for each tick, says which tick is on the disk, and names its directory from the type of the state | `done` |
+| A message carries the tick of its sender; what an engine takes or reads makes it depend on a tick of another engine (`StateDependency`) | `done` |
+| The router says why a message has no engine: the engine was retired or has not started | `done` |
+| An engine holds the messages it sent until the receiver says they are safe, and the log works out what is safe | `done` |
+| A retired engine ends its log with a `Retired` frame, and its ID is never given again | `done` |
+| The recovery line of a cluster, and the logs cut to it | `done` |
+| Checkpoint files: each engine takes its own checkpoint every period from an offset of its own (the hash of its ID, as for the hash of the log), copied at the end of the tick and written by one writer for the cluster out of the goroutines of the engines; the log has the hash at the tick of each; all are kept for now (see [checkpoint](../../docs/checkpoint.md)) | `done` |
 
-What is left of the recovery of a cluster: the logs can be cut to the recovery line and then replayed from tick 0 with no divergence, and what is not there yet is to make it quick and to go on.
+## To build
+
+What is left of the recovery of a cluster: the logs can be cut to the recovery line and then replayed from tick 0 with no divergence, and every engine writes its checkpoints to files; what is not there yet is to start from them and to go on.
 
 | Piece | What it is |
 |---|---|
-| Checkpoint files | a set of checkpoints for the cluster, written by a copy taken at the end of a tick outside the goroutine of the engine, at a period with an offset for each engine; all are kept for now |
-| Recovery line cache | the `Safe` of every engine, written to a file of its own by the goroutine that works out what is safe (a temporary file that is synced and renamed); a recovery reads the log of an engine from the tick after its cached one and not from the tick 1, after it checked that no cached tick is above the end of its log (if one is, the cache is not used and the logs are read whole); it is written again after a cut, and it is made with the checkpoint files, since replay from a checkpoint is what makes the read of the logs from the tick 1 the slow part |
+| Recovery line cache | the `Safe` of every engine, written to a file of its own by the goroutine that works out what is safe (a temporary file that is synced and renamed); a recovery reads the log of an engine from the tick after its cached one and not from the tick 1, after it checked that no cached tick is above the end of its log (if one is, the cache is not used and the logs are read whole); it is written again after a cut, and it is made with the replay from a checkpoint, since that is what makes the read of the logs from the tick 1 the slow part |
 | Checkpoints above the line | the checkpoints of an engine whose tick is above its limit are dropped, since they hold what was cut |
 | Replay from a checkpoint | each engine is made from its latest checkpoint at or below its limit and run on its own log to its limit, instead of from tick 0 |
 | Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the unsettled messages are those of the checkpoints, and the acks are made again |
 | Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
 | Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
 | To measure | the size of the unsettled messages in a checkpoint; the time of a recovery, from tick 0 and from a checkpoint |
-
- sender when it flushes; a copy that was taken before is not acked by being dropped |
-| Retire | an engine that is destroyed writes a frame that holds `Retired`; its ID is never given again, so a log is of one engine and starts at the tick 1 |
-| Recovery line | each engine is cut before the first tick with a dependency above the durable tick of its source, until nothing changes; then replayed once from its latest checkpoint at or below its limit; a checkpoint above is dropped; all checkpoints are kept for now |
-| Cut | `segmentlog.CutAfter(dir, limit)` on a log, called with the limit that recovery worked out; the segment is found by the begins of the headers, so a cut does not read the log; a cut loses the whole tick, commands included; the hash is checked only up to the limit |
-| Logs of a cluster | all engines have a log or none has |
-| To measure | the size of the unsettled messages in a checkpoint; the time of a recovery |
 
 ## Later
 

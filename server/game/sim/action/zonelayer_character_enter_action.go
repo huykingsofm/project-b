@@ -26,6 +26,13 @@ func (a *ZoneLayerCharacterEnterAction) ID() sim.ActionID { return ZoneLayerChar
 func (a *ZoneLayerCharacterEnterAction) Priority() int16  { return PriorityResolve }
 func (a *ZoneLayerCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterEnterAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	c.Character = a.Character.Clone()
+	return &c
+}
+
 // Apply gives the character a body.
 func (a *ZoneLayerCharacterEnterAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],

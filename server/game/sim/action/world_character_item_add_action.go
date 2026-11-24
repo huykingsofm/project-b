@@ -40,6 +40,12 @@ func (a *WorldCharacterItemAddAction) ID() sim.ActionID { return WorldCharacterI
 func (a *WorldCharacterItemAddAction) Priority() int16  { return PriorityResolve }
 func (a *WorldCharacterItemAddAction) Actor() any       { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *WorldCharacterItemAddAction) Clone() sim.Action[*worldstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply adds the items and sends back the ones that did not fit.
 func (a *WorldCharacterItemAddAction) Apply(
 	c *sim.Context, s *worldstate.State, r *sim.Registry[*worldstate.State],

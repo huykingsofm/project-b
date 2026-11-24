@@ -89,6 +89,9 @@ type Message interface {
 	// sent it, how many times it was tried, its OnFail and its actions. Nothing of a message that
 	// cannot be written is left in w.
 	Encode(w *binary.Writer) error
+	// Clone returns a copy that shares nothing with the message: its actions and its OnFail are
+	// copied with their Clone. Stamp, Again and Redirected copy the message and share them.
+	Clone() Message
 }
 
 // MessageDecoder reads a message that Message.Encode wrote, of the data version given. A kind of
@@ -112,6 +115,9 @@ type OnFail interface {
 	Handle(b Bouncer, m Message, r DeliveryFailure)
 	// Encode writes what the kind holds, not its ID: Codecs.EncodeOnFail writes the ID first.
 	Encode(w *binary.Writer) error
+	// Clone returns a copy that shares nothing with the kind: a kind that holds only values
+	// returns itself.
+	Clone() OnFail
 }
 
 // NestedOnFail is implemented by a kind of OnFail that holds a message, so that the depth of

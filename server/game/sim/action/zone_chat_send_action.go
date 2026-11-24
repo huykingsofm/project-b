@@ -21,6 +21,12 @@ func (a *ZoneChatSendAction) ID() sim.ActionID { return ZoneChatSendActionID }
 func (a *ZoneChatSendAction) Priority() int16  { return PriorityResolve }
 func (a *ZoneChatSendAction) Actor() any       { return a.FromID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneChatSendAction) Clone() sim.Action[*zonestate.State] {
+	c := *a
+	return &c
+}
+
 // Apply records the message and gives it to each zonelayer.
 func (a *ZoneChatSendAction) Apply(
 	c *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],

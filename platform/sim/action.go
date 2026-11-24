@@ -31,9 +31,15 @@ type BaseAction interface {
 //
 // An action of one type of state cannot be given to an engine of another, and a message to a state
 // carries only actions of that state's type: the compiler checks both.
+//
+// An action may change what it holds as it runs (a run of movement that reserved its time), so a
+// copy of it that must stay as it was is made with Clone: a checkpoint, and an engine that takes a
+// message, do.
 type Action[S State] interface {
 	BaseAction
 	Apply(c *Context, s S, r *Registry[S], p *Plan[S])
+	// Clone returns a copy that shares nothing with the action.
+	Clone() Action[S]
 }
 
 // Cancellable is an Action that has something to settle when another action cancels it before it

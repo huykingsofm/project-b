@@ -61,7 +61,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 |---|---|
 | `Cluster.Step` | the router stops (every message bounces as `DeliveryFailureStopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
 | `Cluster.Run` | the engine that failed retires and returns its error; every other engine stops as if the context had ended; the error is logged once, by `Run` |
-| an engine is made | it starts at the tick of its state; `RestoreEngine` refuses a checkpoint whose state is not at the tick in its header |
+| an engine is made | it starts at the tick of its state; `DecodeEngineCheckpoint` and `EngineCheckpoint.Restore` refuse a checkpoint whose state is not at the tick in its header |
 
 ## Actions
 
@@ -69,6 +69,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 - An action that must wait sets itself at the tick it knows it can run.
 - The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldGrantAction`](action/zonelayer.md#zonelayercharactershieldaction) is the pattern.
 - A cancellable action implements `sim.Cancellable[S]` (a `sim.Action[S]` with one more method, `ApplyCancel`).
+- Every action has `Clone`, a copy that shares nothing with it (most are `c := *a; return &c`; one that holds a character clones it): a checkpoint and an engine that takes a message copy actions with it.
 - Cooldowns: [action/index.md](action/index.md#cooldowns).
 
 ## Reading other states
@@ -82,6 +83,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 - A message decides what a failed delivery means with its `OnFail`: [action/index](action/index.md#failed-delivery).
 - The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`platform/engine/bounce.go`), through `sim.Bouncer`.
 - A message and its `OnFail` are written by one codec (`platform/sim/codecs.go`): [replay_log](replay_log.md#messages-and-actions).
+- The engine that takes a message runs a clone of it (`Message.Clone`: each action and the `OnFail` with their `Clone`): the sender keeps the message until it is acked, and an action may change what it holds as it runs.
 
 ## Chat
 
@@ -106,11 +108,12 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `Cluster`, `Env` | the engines, in the order they were added (the order of `Step`), and what they share |
 | `game.ClusterBuilder` | `NewBuilder`, `With...`, `Build`: builds the cluster of this game; gives every state its ID |
 | `Router` | carries messages between engines through `OutgoingChannel` |
-| `cell` | holds the `IncomingChannel`, the config, the replay log and the bouncer |
+| `peer` | what an engine has to talk to the other engines: the `IncomingChannel`, the router, the `StableView`, the bouncer, the numbers of the messages, the unsettled messages and the acks; the engine itself holds its random numbers, its configuration and its replay log |
 | `StableStateStore` | the latest published state of every engine, whatever its type |
 | `StableView` | what one engine reads of the store; fixed within a tick, first read of each state written to the replay log |
 | `Emitter` | one; the events of every engine, which the game interprets |
-| `replay.Log` | records the input from outside and the state hash (sparse, offset per engine); `EndTick` says an engine is done with a tick; `replay.MemLog` keeps the records in memory, `replay.FileLog` writes them to files ([replay_log](replay_log.md)) |
+| `replay.Log` | records the input from outside and the state hash (sparse, offset per engine, and at each checkpoint); `EndTick` says an engine is done with a tick; `replay.MemLog` keeps the records in memory, `replay.FileLog` writes them to files ([replay_log](replay_log.md)) |
+| `CheckpointWriter` | writes the checkpoints that the engines take at the end of a tick, out of their goroutines; `checkpoint.FileWriter` writes them to files ([checkpoint](checkpoint.md)) |
 | `PlanPool[S]` | one per type of state |
 | `sim.Codecs` | the registers that read back states, actions, commands and kinds of `OnFail`; the game fills them (`game.NewCodecs`) and puts them in `Env` |
 

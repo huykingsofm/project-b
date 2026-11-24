@@ -66,7 +66,8 @@ func (a *toyAction) Apply(
 ) {
 	s.Total += a.N
 }
-func (a *toyAction) Encode(w *binary.Writer) { w.Varint(a.N); w.Varint(int64(a.Author)) }
+func (a *toyAction) Clone() sim.Action[*toyState] { c := *a; return &c }
+func (a *toyAction) Encode(w *binary.Writer)      { w.Varint(a.N); w.Varint(int64(a.Author)) }
 
 func decodeToyAction(r *binary.Reader, _ codec.Version) (*toyAction, error) {
 	a := &toyAction{N: r.Varint(), Author: int(r.Varint())}
@@ -115,6 +116,7 @@ func (a *forwardAction) Apply(
 		r.ToSelfAt(c.Tick+a.Again, a)
 	}
 }
+func (a *forwardAction) Clone() sim.Action[*toyState] { c := *a; return &c }
 func (a *forwardAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.To))
 	w.Varint(a.N)
@@ -143,7 +145,8 @@ func (a *readAction) Apply(
 		s.Total = other.Total
 	}
 }
-func (a *readAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.From)) }
+func (a *readAction) Clone() sim.Action[*toyState] { c := *a; return &c }
+func (a *readAction) Encode(w *binary.Writer)      { w.Uvarint(uint64(a.From)) }
 
 func decodeReadAction(
 	r *binary.Reader, _ codec.Version,

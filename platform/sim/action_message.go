@@ -47,6 +47,20 @@ func (m *ActionMessage[S]) Stamp(h Header) Message {
 	return &c
 }
 
+// Clone returns a copy that shares nothing with the message: each action and the OnFail are copied
+// with their Clone.
+func (m *ActionMessage[S]) Clone() Message {
+	c := *m
+	c.Actions = make([]Action[S], len(m.Actions))
+	for i, a := range m.Actions {
+		c.Actions[i] = a.Clone()
+	}
+	if m.onFail != nil {
+		c.onFail = m.onFail.Clone()
+	}
+	return &c
+}
+
 // Again returns a copy for one more attempt.
 func (m *ActionMessage[S]) Again() Message {
 	c := *m

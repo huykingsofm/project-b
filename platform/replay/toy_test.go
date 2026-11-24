@@ -43,6 +43,7 @@ func (*toyMoveAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
+func (a *toyMoveAction) Clone() sim.Action[*toyState] { c := *a; return &c }
 func (a *toyMoveAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.CharacterID)
 	w.Uint8(a.Dir)
@@ -67,7 +68,8 @@ func (*toyChatAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
-func (a *toyChatAction) Encode(w *binary.Writer) { w.Uvarint(a.FromID); w.String(a.Text) }
+func (a *toyChatAction) Clone() sim.Action[*toyState] { c := *a; return &c }
+func (a *toyChatAction) Encode(w *binary.Writer)      { w.Uvarint(a.FromID); w.String(a.Text) }
 func decodeToyChatAction(
 	r *binary.Reader, _ codec.Version,
 ) (*toyChatAction, error) {
@@ -84,7 +86,8 @@ func (*toyRegenAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
-func (*toyRegenAction) Encode(*binary.Writer) {}
+func (a *toyRegenAction) Clone() sim.Action[*toyState] { c := *a; return &c }
+func (*toyRegenAction) Encode(*binary.Writer)          {}
 func decodeToyRegenAction(
 	_ *binary.Reader, _ codec.Version,
 ) (*toyRegenAction, error) {

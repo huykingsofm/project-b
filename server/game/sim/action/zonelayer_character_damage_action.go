@@ -22,6 +22,12 @@ func (a *ZoneLayerCharacterDamageAction) ID() sim.ActionID {
 func (a *ZoneLayerCharacterDamageAction) Priority() int16 { return PriorityResolve }
 func (a *ZoneLayerCharacterDamageAction) Actor() any      { return nil }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterDamageAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply hurts the victim.
 func (a *ZoneLayerCharacterDamageAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],

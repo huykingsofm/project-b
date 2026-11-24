@@ -35,6 +35,12 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) ID() sim.ActionID {
 func (a *ZoneLayerCharacterNormalAttackTriggerAction) Priority() int16 { return PriorityIntent }
 func (a *ZoneLayerCharacterNormalAttackTriggerAction) Actor() any      { return a.CharacterID }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelayerstate.State] {
+	c := *a
+	return &c
+}
+
 // Apply sets the cooldown and adds the hit to the plan, or does nothing.
 func (a *ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],

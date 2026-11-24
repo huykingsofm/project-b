@@ -27,6 +27,13 @@ func (a *ZoneCharacterEnterAction) ID() sim.ActionID { return ZoneCharacterEnter
 func (a *ZoneCharacterEnterAction) Priority() int16  { return PriorityIntent }
 func (a *ZoneCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
 
+// Clone returns a copy that shares nothing with the action.
+func (a *ZoneCharacterEnterAction) Clone() sim.Action[*zonestate.State] {
+	c := *a
+	c.Character = a.Character.Clone()
+	return &c
+}
+
 // Apply picks a zonelayer and sends it the character.
 func (a *ZoneCharacterEnterAction) Apply(
 	_ *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],
