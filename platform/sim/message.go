@@ -46,8 +46,7 @@ type DeliveryFailure uint8
 const (
 	// DeliveryFailureRetired: the engine was removed.
 	DeliveryFailureRetired DeliveryFailure = iota + 1
-	// DeliveryFailureNotStarted: the engine exists, or its ID is given to a state, but it does not
-	// run yet.
+	// DeliveryFailureNotStarted: the engine does not exist yet, or the ID names none.
 	DeliveryFailureNotStarted
 	// DeliveryFailureMoved: what the message is about has gone to another engine.
 	DeliveryFailureMoved
@@ -55,11 +54,6 @@ const (
 	DeliveryFailureStopping
 	// DeliveryFailureFull: the inbox of the engine is full.
 	DeliveryFailureFull
-	// DeliveryFailureNotGiven: the ID names no state: it was never given. To an action it is a
-	// state that is gone, as DeliveryFailureRetired is, but it says that the ID is not one of a
-	// state, and not that a state was removed. It is the last of the numbers, because a number is
-	// never changed or reused.
-	DeliveryFailureNotGiven
 )
 
 func (r DeliveryFailure) String() string {
@@ -74,18 +68,14 @@ func (r DeliveryFailure) String() string {
 		return "stopping"
 	case DeliveryFailureFull:
 		return "full"
-	case DeliveryFailureNotGiven:
-		return "not given"
 	}
 	return "unknown"
 }
 
 // Gone reports whether a message that could not be delivered for this reason will not be delivered
-// by sending it again: the state it is for was removed, or never was. Sending it again fails the
-// same way, so it is for its OnFail to say what that means, once.
-func (r DeliveryFailure) Gone() bool {
-	return r == DeliveryFailureRetired || r == DeliveryFailureNotGiven
-}
+// by sending it again: the state it is for was removed. Sending it again fails the same way, so it
+// is for its OnFail to say what that means, once.
+func (r DeliveryFailure) Gone() bool { return r == DeliveryFailureRetired }
 
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bouncer handle messages and do not know which type of state one is

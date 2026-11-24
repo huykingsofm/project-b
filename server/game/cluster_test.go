@@ -301,7 +301,6 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	// the zonelayer is removed: the world forgets it, and the router has no engine for it
 	c.World.State().RemoveZoneLayer(testkit.Layer3)
 	c.Env.Router.Retire(testkit.Layer3)
-	testkit.Steps(t, c, 1) // the world publishes that the ID was removed
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
@@ -571,35 +570,4 @@ func layerCount(view *engine.StableView, id sim.StateID) int {
 		return -1
 	}
 	return st.(zonelayerstate.ReadOnlyZoneLayerState).CharacterCount()
-}
-
-func TestAMessageToAStateThatHasNoEngineBouncesAsTheWorldSaysItsIDIs(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
-	testkit.Steps(t, c, 1) // the world publishes what it knows
-	say := func(to sim.StateID) sim.Message {
-		return sim.NewActionMessage[*zonelayerstate.State](
-			to, onfail.Drop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "x"},
-		)
-	}
-	for name, tc := range map[string]struct {
-		to   sim.StateID
-		want sim.DeliveryFailure
-	}{
-		"a zonelayer that was never given": {
-			sim.NewStateID(state.ZoneLayerType, 99), sim.DeliveryFailureNotGiven,
-		},
-		"a type that has no states": {sim.NewStateID(200, 1), sim.DeliveryFailureNotGiven},
-	} {
-		if reason, ok := c.Env.Router.Deliver(say(tc.to)); ok || reason != tc.want {
-			t.Errorf("%s: bounced as %v, %v; want %v", name, reason, ok, tc.want)
-		}
-	}
-	// a zonelayer that the world removed: its engine is retired too
-	c.World.State().RemoveZoneLayer(testkit.Layer1)
-	testkit.Steps(t, c, 1)
-	c.Env.Router.Retire(testkit.Layer1)
-	reason, ok := c.Env.Router.Deliver(say(testkit.Layer1))
-	if ok || reason != sim.DeliveryFailureRetired {
-		t.Errorf("a zonelayer that was removed: bounced as %v, %v; want retired", reason, ok)
-	}
 }

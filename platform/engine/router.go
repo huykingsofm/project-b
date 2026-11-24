@@ -23,9 +23,6 @@ type MessageRouter interface {
 
 var _ MessageRouter = (*Router)(nil)
 
-// Directory is what a router asks why a message has no engine to go to: see sim.StateDirectory.
-type Directory = sim.StateDirectory
-
 type routerData struct {
 	chans   map[sim.StateID]OutgoingChannel
 	retired map[sim.StateID]bool
@@ -39,17 +36,7 @@ type Router struct {
 	data     atomic.Pointer[routerData]
 	stopping atomic.Bool
 	dropped  atomic.Uint64
-	// directory says what an ID with no engine is: DeliveryFailureNotStarted for a state that
-	// exists, DeliveryFailureRetired for one that was removed, and DeliveryFailureNotGiven for any
-	// other ID. A router with none says DeliveryFailureRetired for an engine that was retired and
-	// DeliveryFailureNotStarted for any other ID.
-	directory atomic.Pointer[Directory]
 }
-
-// SetDirectory sets the directory that the router asks. With one, what a message to an ID with no
-// engine bounces as is decided by what the directory says the ID is, and the router remembers no
-// engine that was retired.
-func (rt *Router) SetDirectory(d Directory) { rt.directory.Store(&d) }
 
 // NewRouter makes an empty router.
 func NewRouter() *Router {
@@ -87,12 +74,9 @@ func (rt *Router) Register(o OutgoingChannel) {
 // Retire makes an engine unreachable for good: a message to it bounces as
 // DeliveryFailureRetired.
 func (rt *Router) Retire(a sim.StateID) {
-	remember := rt.directory.Load() == nil
 	rt.update(func(n *routerData) {
 		delete(n.chans, a)
-		if remember {
-			n.retired[a] = true
-		}
+		n.retired[a] = true
 	})
 }
 
@@ -115,17 +99,9 @@ func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 	return 0, true
 }
 
-// whyNoEngine says why a message to an ID with no engine cannot be delivered.
+// whyNoEngine says why a message to an ID with no engine cannot be delivered: the engine was
+// retired, or it does not exist yet.
 func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.DeliveryFailure {
-	if d := rt.directory.Load(); d != nil {
-		switch (*d).StateStatus(id) {
-		case sim.StateLive:
-			return sim.DeliveryFailureNotStarted
-		case sim.StateRemoved:
-			return sim.DeliveryFailureRetired
-		}
-		return sim.DeliveryFailureNotGiven
-	}
 	if data.retired[id] {
 		return sim.DeliveryFailureRetired
 	}

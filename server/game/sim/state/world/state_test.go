@@ -147,35 +147,3 @@ func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
 		}
 	}
 }
-
-func TestTheWorldSaysWhatAStateIDIsOfTheStatesOfItsCluster(t *testing.T) {
-	st := world.NewState(sim.NewStateID(state.WorldType, 1))
-	zone := sim.NewStateID(state.ZoneType, 1)
-	st.AddZone(zone)
-	layer := must.Ok(st.AddZoneLayer())
-	gone := must.Ok(st.AddZoneLayer())
-	st.RemoveZoneLayer(gone)
-	for name, tc := range map[string]struct {
-		id   sim.StateID
-		want sim.StateStatus
-	}{
-		"the world":                 {sim.NewStateID(state.WorldType, 1), sim.StateLive},
-		"another world":             {sim.NewStateID(state.WorldType, 2), sim.StateNotGiven},
-		"a zone that it knows":      {zone, sim.StateLive},
-		"a zone that it does not":   {sim.NewStateID(state.ZoneType, 2), sim.StateNotGiven},
-		"a zonelayer":               {layer, sim.StateLive},
-		"a zonelayer that was gone": {gone, sim.StateRemoved},
-		"a zonelayer never given":   {sim.NewStateID(state.ZoneLayerType, 9), sim.StateNotGiven},
-		"a type that is no state's": {sim.NewStateID(200, 1), sim.StateNotGiven},
-	} {
-		if got := st.StateStatus(tc.id); got != tc.want {
-			t.Errorf("%s: %v, want %v", name, got, tc.want)
-		}
-	}
-	for range 5 {
-		st.NextTick()
-	}
-	if got := st.StateStatus(gone); got != sim.StateRemoved {
-		t.Errorf("a zonelayer that was removed, some ticks later: %v, want removed for good", got)
-	}
-}

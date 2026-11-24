@@ -114,7 +114,6 @@ func TestRetrySendsAgainForALostChanceButNeverToAStateThatIsGone(t *testing.T) {
 	}{
 		{sim.DeliveryFailureFull, 1}, {sim.DeliveryFailureNotStarted, 1},
 		{sim.DeliveryFailureMoved, 1}, {sim.DeliveryFailureRetired, 0},
-		{sim.DeliveryFailureNotGiven, 0},
 	} {
 		var b aBouncer
 		Retry{}.Handle(&b, m, tc.reason)

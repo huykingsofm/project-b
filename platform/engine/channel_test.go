@@ -35,52 +35,23 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 	}
 }
 
-// aDirectory says what each ID is, for the tests of a router that asks one.
-type aDirectory map[sim.StateID]sim.StateStatus
-
-func (d aDirectory) StateStatus(id sim.StateID) sim.StateStatus {
-	if status, ok := d[id]; ok {
-		return status
-	}
-	return sim.StateNotGiven
-}
-
-func TestARouterSaysWhyAnIDHasNoEngineByWhatItsDirectorySays(t *testing.T) {
+func TestARouterSaysAnIDWithNoEngineIsNotStartedUntilItsEngineIsRetired(t *testing.T) {
 	message := func(to sim.StateID) sim.Message {
 		return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1})
 	}
+	_, out := NewChannel(5, 4)
 	rt := NewRouter()
 	if reason, ok := rt.Deliver(message(5)); ok || reason != sim.DeliveryFailureNotStarted {
-		t.Fatalf("with no directory an ID with no engine bounced as %v, %v", reason, ok)
+		t.Fatalf("an ID with no engine bounced as %v, %v", reason, ok)
 	}
-	rt.SetDirectory(aDirectory{
-		5: sim.StateLive, 6: sim.StateRemoved, // 7 is not given
-	})
+	rt.Register(out)
+	rt.Retire(5)
 	for to, want := range map[sim.StateID]sim.DeliveryFailure{
-		5: sim.DeliveryFailureNotStarted,
-		6: sim.DeliveryFailureRetired,
-		7: sim.DeliveryFailureNotGiven,
+		5: sim.DeliveryFailureRetired,
+		6: sim.DeliveryFailureNotStarted,
 	} {
 		if reason, ok := rt.Deliver(message(to)); ok || reason != want {
 			t.Errorf("a message to %d bounced as %v, %v; want %v", to, reason, ok, want)
 		}
-	}
-}
-
-func TestARouterWithADirectoryRemembersNoEngineThatWasRetired(t *testing.T) {
-	_, out := NewChannel(5, 4)
-	rt := NewRouter()
-	rt.SetDirectory(aDirectory{5: sim.StateRemoved})
-	rt.Register(out)
-	rt.Retire(5)
-	if got := len(rt.data.Load().retired); got != 0 {
-		t.Fatalf("the router remembers %d engines that were retired", got)
-	}
-	other := NewRouter() // no directory: it remembers
-	other.Register(out)
-	other.Retire(5)
-	reason, _ := other.Deliver(sim.NewActionMessage[*toyState](5, onfail.Drop{}))
-	if reason != sim.DeliveryFailureRetired {
-		t.Fatalf("a message to an engine that was retired bounced as %v", reason)
 	}
 }

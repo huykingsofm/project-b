@@ -255,9 +255,6 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	}
 
 	c := &Cluster{Cluster: engine.NewCluster(env), World: engine.New(worldState, env, b.seed)}
-	if router, ok := env.Router.(interface{ SetDirectory(engine.Directory) }); ok {
-		router.SetDirectory(worldDirectory{stable: env.Stable, worldID: b.world.ID})
-	}
 	for _, l := range layerEngines {
 		c.Add(l)
 	}

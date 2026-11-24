@@ -78,12 +78,7 @@ type ReadOnlyWorldState interface {
 	Hash() uint64
 	ZoneIDs() []sim.StateID
 	ZoneLayerIDs() []sim.StateID
-	StateDirectory
 }
-
-// StateDirectory is what the world says of the IDs of the states of its cluster: see
-// sim.StateDirectory.
-type StateDirectory = sim.StateDirectory
 
 var _ ReadOnlyWorldState = (*State)(nil)
 
@@ -143,30 +138,6 @@ func (s *State) AddZoneLayer() (sim.StateID, bool) {
 	}
 	s.zoneLayers = append(s.zoneLayers, id)
 	return id, true
-}
-
-// StateStatus says what a state ID is, of a state of the cluster of the world: the world and its
-// zones are live as long as it knows them, a zonelayer is live while it is one of the world's and
-// removed when its number was given and it is not, and any other ID is not given.
-func (s *State) StateStatus(id sim.StateID) sim.StateStatus {
-	switch id.Type() {
-	case state.WorldType:
-		if id == s.id {
-			return sim.StateLive
-		}
-	case state.ZoneType:
-		if slices.Contains(s.zones, id) {
-			return sim.StateLive
-		}
-	case state.ZoneLayerType:
-		switch {
-		case slices.Contains(s.zoneLayers, id):
-			return sim.StateLive
-		case id.Local() >= 1 && id.Local() <= s.stateIDCounters.Last(state.ZoneLayerType):
-			return sim.StateRemoved
-		}
-	}
-	return sim.StateNotGiven
 }
 
 // RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false

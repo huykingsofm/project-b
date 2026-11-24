@@ -47,4 +47,3 @@
 | `world` state, with `sim.StateIDCounters` | the `StateID` of each state it makes, a counter for each type; today the zonelayers (`State.AddZoneLayer` gives the ID and makes the world know the zonelayer; `RemoveZoneLayer` makes it forget it) |
 
 - The IDs of zones come from the content (the map of a zone says which zone an exit leads to), so no counter gives them.
-- The world says what a `StateID` is (`StateStatus`, the `sim.StateDirectory` that the router asks): `StateLive` for itself, a zone it knows and a zonelayer it knows; `StateRemoved` for a zonelayer whose number was given and that it does not know; `StateNotGiven` for any other ID. Removed stays removed.
