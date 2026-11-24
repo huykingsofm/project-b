@@ -51,8 +51,8 @@ type ClusterBuilder struct {
 	// entityGraveSteps is how many ticks an entity ID waits after its entity left, before it is
 	// given again: longer than anything that can still name the entity.
 	entityGraveSteps uint64
-	// zoneLayerGraveSteps is the same for the ID of a zonelayer that was removed.
-	zoneLayerGraveSteps uint64
+	// stateGraveSteps is the same for the ID of a state that the world gave and that was removed.
+	stateGraveSteps uint64
 
 	world      *WorldParams
 	zones      []ZoneParams
@@ -61,7 +61,7 @@ type ClusterBuilder struct {
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
 // seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
-// discards, and entity IDs and zonelayer IDs that wait 12000 ticks before they are given again.
+// discards, and entity IDs and state IDs that wait 12000 ticks before they are given again.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
@@ -69,8 +69,8 @@ func NewBuilder() *ClusterBuilder {
 		replayLog: replay.NopLog{},
 		emitter:   engine.NopEmitter{},
 
-		entityGraveSteps:    12000,
-		zoneLayerGraveSteps: 12000,
+		entityGraveSteps: 12000,
+		stateGraveSteps:  12000,
 	}
 }
 
@@ -124,11 +124,11 @@ func (b *ClusterBuilder) WithEntityGraveSteps(steps uint64) *ClusterBuilder {
 // EntityGraveSteps is how many ticks an entity ID waits before it is given again.
 func (b *ClusterBuilder) EntityGraveSteps() uint64 { return b.entityGraveSteps }
 
-// WithZoneLayerGraveSteps sets how many ticks the ID of a zonelayer that was removed waits before
-// it is given again. It must be longer than anything that can still name the zonelayer, such as a
-// message that waits to be sent to it.
-func (b *ClusterBuilder) WithZoneLayerGraveSteps(steps uint64) *ClusterBuilder {
-	b.zoneLayerGraveSteps = steps
+// WithStateGraveSteps sets how many ticks the ID of a state that the world gave (a zonelayer) and
+// that was removed waits before it is given again. It must be longer than anything that can still
+// name the state, such as a message that waits to be sent to it.
+func (b *ClusterBuilder) WithStateGraveSteps(steps uint64) *ClusterBuilder {
+	b.stateGraveSteps = steps
 	return b
 }
 
@@ -259,7 +259,7 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
 	}
-	worldState := worldstate.NewState(b.world.ID, b.zoneLayerGraveSteps)
+	worldState := worldstate.NewState(b.world.ID, b.stateGraveSteps)
 	var zoneEngines []*engine.Engine[*zonestate.State]
 	var layerEngines []*engine.Engine[*zonelayerstate.State]
 	for _, zp := range b.zones {

@@ -19,18 +19,6 @@ func NewEntityIDs(graveSteps uint64) EntityIDs {
 	return ids.New[uint32](graveSteps, math.MaxUint32)
 }
 
-// ZoneLayerIDs is what the world gives the local numbers of the IDs of its zonelayers with: from 1
-// up to what the number of a state ID holds. A zonelayer that is removed gives its number back, and
-// it is given again only after the steps of the grave, which must be longer than anything that can
-// still name the state (a message that waits to be sent to it, for one).
-type ZoneLayerIDs = ids.Allocator[uint32]
-
-// NewZoneLayerIDs makes the allocator of the zonelayers of a world, with the given steps of the
-// grave.
-func NewZoneLayerIDs(graveSteps uint64) ZoneLayerIDs {
-	return ids.New[uint32](graveSteps, 1<<24-1)
-}
-
 // HashIDs works what an allocator holds into a hash. Its live IDs are not in it: they are the IDs
 // of what the state holds, which the hash of the state covers already, and a checkpoint is refused
 // when the two differ.
@@ -67,16 +55,16 @@ func CheckEntityIDs(owner sim.StateID, a *EntityIDs, entityIDs []EntityID) error
 }
 
 // CheckZoneLayerIDs reports an error when the zonelayers that a world knows are not exactly the
-// live IDs of its allocator: a checkpoint in which they differ cannot be one that was written.
-func CheckZoneLayerIDs(a *ZoneLayerIDs, zoneLayerIDs []sim.StateID) error {
-	if a.LiveCount() != len(zoneLayerIDs) {
+// live zonelayer IDs that it gave: a checkpoint in which they differ cannot be one that was
+// written.
+func CheckZoneLayerIDs(stateIDs *sim.StateIDs, zoneLayerIDs []sim.StateID) error {
+	if live := stateIDs.LiveCount(ZoneLayerType); live != len(zoneLayerIDs) {
 		return fmt.Errorf(
-			"the world knows %d zonelayers and its IDs say %d are live",
-			len(zoneLayerIDs), a.LiveCount(),
+			"the world knows %d zonelayers and its IDs say %d are live", len(zoneLayerIDs), live,
 		)
 	}
 	for _, id := range zoneLayerIDs {
-		if id.Type() != ZoneLayerType || !a.IsLive(id.Local()) {
+		if id.Type() != ZoneLayerType || !stateIDs.IsLive(id) {
 			return fmt.Errorf("the zonelayer %d is not a live ID of the world", id)
 		}
 	}

@@ -7,13 +7,12 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
 // Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
-// it gives its zonelayers, the private messages, and the inventory of every character. The events
-// are not data (R18) and are not written.
+// it gives the states it makes, the private messages, and the inventory of every character. The
+// events are not data (R18) and are not written.
 func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
@@ -25,7 +24,7 @@ func (s *State) Encode(w *binary.Writer) error {
 	for _, id := range s.zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	s.zoneLayerIDs.Encode(w)
+	s.stateIDs.Encode(w)
 	rows := s.privateChat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
@@ -78,13 +77,13 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	if s.zoneLayerIDs, err = ids.Decode[uint32](r); err != nil {
+	if s.stateIDs, err = sim.DecodeStateIDs(r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckZoneLayerIDs(&s.zoneLayerIDs, s.zoneLayers); err != nil {
+	if err = state.CheckZoneLayerIDs(&s.stateIDs, s.zoneLayers); err != nil {
 		return nil, err
 	}
 	if n, err = count(r); err != nil {
