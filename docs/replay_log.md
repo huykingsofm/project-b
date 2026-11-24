@@ -22,7 +22,7 @@
 | `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick, the hash of its state included when it is due; a log in files hands the frame of the tick to the goroutine that writes it |
 
 - The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
-- The tick of a frame is the one after the last of the log: a log has no gap, and a frame that does not follow is refused and the log marked as failed. `Log.Last(engine)` is the tick of the last frame, written or not: the state of a state ID that is given again (see [ids](ids.md)) is made at it, and an engine begins at the tick of its state, so the ID goes on after the last tick of its last life, a tick of an ID is never the tick of two lives, and what depends on a tick of it means one engine.
+- The tick of a frame is the one after the last of the log, and the first of a log is the tick 1 (the state of a new engine is at the tick 0): a log has no gap, and a frame that does not follow is refused and the log marked as failed. `Log.Last(engine)` is the tick of the last frame, written or not, and 0 for a log with none.
 - `Engine.Remove` (`Cluster.Remove`) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
 
 ## Which tick is on the disk
@@ -31,8 +31,8 @@
 |---|---|
 | `FileLog.Durable(engine)` | the tick of the last frame that is on the disk, so a crash loses nothing at or before it; the last tick of the log that was there when it was opened counts; 0 for an engine with no log |
 
-- A frame is a batch, so the number of batches that the segment log says are on the disk (`Synced`) is a count of frames. The log keeps the ticks of the frames it handed over, in order, and answers the tick of the last one that is counted. That holds across a gap, such as an engine that was removed and came back at a later tick.
-- The answer is a lower bound: it is behind the tick that was last written by up to what one `SyncEvery` holds, and it never goes back. It reads an atomic and a short list under a mutex, and is safe to call from any goroutine, an engine that does not tick any more included.
+- The tick of a frame is its ID in the segment log, so `Synced` (the ID of the last record on the disk) is the answer as it is.
+- The answer is a lower bound: it is behind the tick that was last written by up to what one `SyncEvery` holds, and it never goes back. It reads an atomic, and is safe to call from any goroutine, an engine that does not tick any more included.
 
 ## Which tick is safe
 
@@ -64,10 +64,15 @@ What an engine writes in a tick is one frame, which is one record of the segment
 
 | Part | Layout |
 |---|---|
-| frame (the payload of a segment log record) | `[tick uvarint]` and then the records of the tick, in the order they were appended |
+| frame (the payload of a segment log record) | the records of the tick, in the order they were appended; its tick is the ID of the segment log record |
 | record | `[length uvarint][kind u8][body]`, the length being that of the kind and the body |
 
-The tick is once in the frame, and a record does not carry it. A tick with no record has a frame that holds its tick and nothing else, so the batches of a log are its ticks one by one, and the number of batches that are on the disk (`segmentlog.Writer.Synced`) says up to which tick nothing is lost. The engine is not in a record: it is the engine of the log. The meta of a segment holds the format, the engine, the seed and the tick of its first frame; the format is 2.
+| Where | What it holds |
+|---|---|
+| the tick of a frame | the ID of its record in the segment log: the begin in the header of each segment says the tick of its first frame, so no frame and no record carries the tick |
+| a tick with no record | a frame with no record at all, so the batches of a log are its ticks one by one, and the number of batches that are on the disk (`segmentlog.Writer.Synced`) says up to which tick nothing is lost |
+| the engine | not in a record: it is the engine of the log |
+| the meta of a segment | the format (2), the engine and the seed |
 
 | In code | What it is |
 |---|---|

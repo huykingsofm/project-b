@@ -1,7 +1,6 @@
 package segmentlog
 
 import (
-	"encoding/binary"
 	"os"
 	"path/filepath"
 	"sync"
@@ -21,11 +20,10 @@ type Options struct {
 	SyncEvery time.Duration
 	// Backlog is how many batches can wait for the goroutine that writes; at least one.
 	Backlog int
-	// SegmentMeta returns the meta that is written in the header of a new segment. It is given the
-	// first payload that the segment will hold, so the meta can say what the segment starts at (a
-	// tick, say), and it is called by the goroutine of the Writer, so it must not use what the
-	// caller changes. Nil means an empty meta. A meta is at most 64 KiB; a longer one is cut.
-	SegmentMeta func(first []byte) []byte
+	// Meta is written in the header of every new segment: what the user of the log wants to know
+	// of a segment without reading its records (an engine, a seed). Nil means an empty meta. A meta
+	// is at most 64 KiB; a longer one is cut.
+	Meta []byte
 	// OnSync is called, by the goroutine of the Writer, after batches were forced to disk, with how
 	// many batches this sync put on the disk, so that whoever waits for them (see Synced) need not
 	// look again and again. It is called only when there were some. It must not wait. Nil means
@@ -35,7 +33,9 @@ type Options struct {
 
 // batch is the records of one Commit.
 type batch struct {
-	buf []byte // the frames of the records
+	buf     []byte // the frames of the records
+	firstID uint64 // the ID of the first record
+	lastID  uint64 // the ID of the last record
 }
 
 // Writer appends records to the segments of a log. Append and Commit only fill and hand over a
@@ -47,23 +47,25 @@ type Writer struct {
 	dir  string
 	opts Options
 
-	mu             sync.Mutex // protects pending, pendingRecords and closed
+	mu             sync.Mutex // protects the fields up to closed
 	pending        []byte
 	pendingRecords int
+	pendingFirst   uint64 // the ID of the first record of pending
+	nextID         uint64 // the ID of the next record
 	closed         bool
 	next           uint64 // the index of the next segment; used by the goroutine that writes
 	batches        chan batch
 	free           chan []byte
 	done           chan struct{}
 	stalled        atomic.Uint64
-	synced         atomic.Uint64 // how many batches are on the disk
+	synced         atomic.Uint64 // the ID of the last record on the disk, or 0
 	failure        atomic.Pointer[error]
 }
 
 // Open opens the log in dir, which it creates when it does not exist. A crash can leave the last
 // segment with a record that is not whole, or with no records: Open cuts the first off and removes
 // the second, so that what is read afterwards is whole. The segment that the Writer starts is a new
-// one, at the tick of the first record it is given.
+// one, whose begin is the ID of the first record it is given.
 func Open(dir string, opts Options) (*Writer, error) {
 	if opts.SegmentBytes <= 0 || opts.SyncEvery <= 0 {
 		return nil, ErrBadOptions
@@ -88,23 +90,43 @@ func Open(dir string, opts Options) (*Writer, error) {
 	if len(segments) > 0 {
 		w.next = segments[len(segments)-1].Index + 1
 	}
+	last, err := LastFrameID(dir)
+	if err != nil {
+		return nil, err
+	}
+	w.nextID = last + 1
+	w.synced.Store(last) // what is in the log is on the disk
 	go w.run()
 	return w, nil
 }
 
-// Append adds a record to the buffer of the batch that Commit hands over.
-func (w *Writer) Append(payload []byte) error {
+// Append adds a record to the buffer of the batch that Commit hands over, and returns its ID: the
+// one after the last record of the log, appended or in it when it was opened, or 1 for a log that
+// has none.
+func (w *Writer) Append(payload []byte) (uint64, error) {
 	if len(payload) > maxRecord {
-		return ErrTooLarge
+		return 0, ErrTooLarge
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
-		return ErrClosed
+		return 0, ErrClosed
+	}
+	if w.pendingRecords == 0 {
+		w.pendingFirst = w.nextID
 	}
 	w.pending = appendFrame(w.pending, payload)
 	w.pendingRecords++
-	return nil
+	w.nextID++
+	return w.nextID - 1, nil
+}
+
+// LastID is the ID of the last record of the log, appended or in it when it was opened, or 0 when
+// the log has none.
+func (w *Writer) LastID() uint64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.nextID - 1
 }
 
 // Commit hands the records that were appended since the last Commit to the goroutine that writes
@@ -128,7 +150,7 @@ func (w *Writer) handOver() {
 	// a batch is its records and a commit
 	w.pending = appendCommit(w.pending, uint32(w.pendingRecords))
 	w.pendingRecords = 0
-	b := batch{buf: w.pending}
+	b := batch{buf: w.pending, firstID: w.pendingFirst, lastID: w.nextID - 1}
 	select {
 	case w.pending = <-w.free:
 		w.pending = w.pending[:0]
@@ -144,11 +166,11 @@ func (w *Writer) handOver() {
 	}
 }
 
-// Synced is how many batches are on the disk: of the batches that Commit handed over, from the
-// first, the ones that were written and forced to disk, so a batch that is counted is not lost to
-// a crash. A Commit with no record appended since the last one is not a batch. It is behind the
-// batches handed over by what is written and not synced yet, which is at most the batches of one
-// SyncEvery. When the writer has failed it stops where it was.
+// Synced is the ID of the last record that is on the disk, or 0 when none is: of the batches that
+// Commit handed over, from the first, the ones that were written and forced to disk, so a record
+// whose ID is no greater is not lost to a crash. What was in the log when the writer was opened
+// counts. It is behind the records handed over by what is written and not synced yet, which is at
+// most the batches of one SyncEvery. When the writer has failed it stops where it was.
 func (w *Writer) Synced() uint64 { return w.synced.Load() }
 
 // Stalled is how many times Commit had to wait because the goroutine that writes was behind.
@@ -188,19 +210,21 @@ func (w *Writer) fail(err error) {
 func (w *Writer) run() {
 	defer close(w.done)
 	var (
-		f       *os.File
-		size    int64
-		dirty   bool
-		written uint64 // the batches written to a file, synced or not
+		f        *os.File
+		size     int64
+		dirty    bool
+		written  = w.synced.Load() // the ID of the last record written to a file, synced or not
+		unsynced uint64            // the batches written and not synced
 	)
 	syncFile := func() {
 		if err := f.Sync(); err != nil {
 			w.fail(err)
 		} else {
-			before := w.synced.Swap(written)
-			if w.opts.OnSync != nil && written > before {
-				w.opts.OnSync(written - before)
+			w.synced.Store(written)
+			if w.opts.OnSync != nil && unsynced > 0 {
+				w.opts.OnSync(unsynced)
 			}
+			unsynced = 0
 		}
 		dirty = false
 	}
@@ -231,7 +255,7 @@ func (w *Writer) run() {
 				}
 				if f == nil {
 					var err error
-					if f, size, err = w.create(b.buf); err != nil {
+					if f, size, err = w.create(b.firstID); err != nil {
 						w.fail(err)
 					}
 				}
@@ -241,7 +265,8 @@ func (w *Writer) run() {
 					} else {
 						size += int64(len(b.buf))
 						dirty = true
-						written++
+						written = b.lastID
+						unsynced++
 					}
 				}
 			}
@@ -257,14 +282,9 @@ func (w *Writer) run() {
 	}
 }
 
-// create makes the next segment, with its header. The meta is asked for the first payload of the
-// batch.
-func (w *Writer) create(frames []byte) (*os.File, int64, error) {
-	var meta []byte
-	if w.opts.SegmentMeta != nil {
-		meta = w.opts.SegmentMeta(firstPayload(frames))
-		meta = meta[:min(len(meta), maxMeta)]
-	}
+// create makes the next segment, with its header, for a batch whose first record has the ID begin.
+func (w *Writer) create(begin uint64) (*os.File, int64, error) {
+	meta := w.opts.Meta[:min(len(w.opts.Meta), maxMeta)]
 	f, err := os.OpenFile(
 		filepath.Join(w.dir, segmentName(w.next)), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644,
 	)
@@ -276,20 +296,11 @@ func (w *Writer) create(frames []byte) (*os.File, int64, error) {
 		f.Close()
 		return nil, 0, err
 	}
-	header := appendHeader(nil, meta)
+	header := appendHeader(nil, begin, meta)
 	if _, err := f.Write(header); err != nil {
 		f.Close()
 		return nil, 0, err
 	}
 	w.next++
 	return f, int64(len(header)), nil
-}
-
-// firstPayload is the payload of the first record of a batch of frames.
-func firstPayload(frames []byte) []byte {
-	if len(frames) < frameHead {
-		return nil
-	}
-	n := int(binary.LittleEndian.Uint32(frames))
-	return frames[frameHead:min(frameHead+n, len(frames))]
 }

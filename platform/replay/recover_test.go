@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
 // ticks writes the ticks from to to of an engine, each with the records that at says (none for a
@@ -23,7 +24,7 @@ func lastTicksOf(t *testing.T, dir string, engines ...sim.StateID) map[sim.State
 	t.Helper()
 	out := map[sim.StateID]uint64{}
 	for _, e := range engines {
-		last, err := lastFrameTickOf(findEngineDir(dir, e))
+		last, err := segmentlog.LastFrameID(findEngineDir(dir, e))
 		if err != nil {
 			t.Fatal(err)
 		}

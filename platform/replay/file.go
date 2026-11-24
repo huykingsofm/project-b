@@ -40,9 +40,11 @@ type FileLogOptions struct {
 // log that failed is not enough to replay from.
 //
 // What an engine writes in a tick is one frame, which is one record of the segment log and so one
-// batch: `[tick][record]...`, a record being `[length][kind][body]`. Every tick has a frame, an
-// empty one when the engine recorded nothing, so the batches of a log are its ticks one by one.
-// The meta of a segment is the version, the engine, the seed and the tick of its first frame.
+// batch: `[record]...`, a record being `[length][kind][body]`. The tick of a frame is its ID in the
+// segment log, which counts the frames of the log and keeps the ID of the first frame of each
+// segment in its header, so the frame does not hold it. Every tick has a frame, an empty one when
+// the engine recorded nothing, so the batches of a log are its ticks one by one. The meta of a
+// segment is the version, the engine and the seed.
 type FileLog struct {
 	dir  string
 	opts FileLogOptions
@@ -69,12 +71,8 @@ type engineLog struct {
 	// The next fields are used by the goroutine of the engine only.
 	records binary.Writer // the records of the tick, each with its length
 	scratch binary.Writer // one record, while it is written
-	frame   binary.Writer // the frame, while it is handed over
 	tick    uint64        // the tick of the records so far
 	started bool          // whether there are records of the tick so far
-
-	handed handedTicks // the ticks of the frames handed over
-	opened uint64      // the tick of the last frame that was in the log when it was opened
 
 	dependencies dependencyList        // what the engine depends on, at the ticks not safe yet
 	tickDeps     []sim.StateDependency // what it depends on at the tick that is being recorded
@@ -82,12 +80,13 @@ type engineLog struct {
 	last         atomic.Uint64         // the tick of the last frame; see FileLog.Last
 }
 
-// Durable is the tick up to which what the engine recorded is on the disk.
+// Durable is the tick up to which what the engine recorded is on the disk: the ID of the last frame
+// that the segment log says is, since the ID of a frame is its tick.
 func (l *engineLog) Durable() uint64 {
 	if l.w == nil {
 		return 0
 	}
-	return max(l.opened, l.handed.Durable(l.w.Synced()))
+	return l.w.Synced()
 }
 
 // OpenError is why the log of the engine could not be opened, or nil.
@@ -130,29 +129,30 @@ func (l *engineLog) Add(tick uint64, body Body) error {
 	return nil
 }
 
-// End hands the frame of the tick to the goroutine that writes: the tick and then the records, as
-// one record of the segment log and one batch. The frame is empty when nothing was recorded.
+// End hands the frame of the tick to the goroutine that writes: the records, as one record of the
+// segment log, which has the tick as its ID, and one batch. The frame is empty when nothing was
+// recorded.
 func (l *engineLog) End(tick uint64) error {
 	if l.started && tick != l.tick {
 		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
 		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
 	}
-	if last := l.last.Load(); last != 0 && tick != last+1 {
+	if last := l.last.Load(); tick != last+1 {
 		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
 		return fmt.Errorf("the tick %d does not follow the tick %d, the last of the log",
 			tick, last)
 	}
-	l.frame.B = l.frame.B[:0]
-	l.frame.Uvarint(tick)
-	l.frame.B = append(l.frame.B, l.records.B...)
+	id, err := l.w.Append(l.records.B)
 	l.records.B, l.started = l.records.B[:0], false
-	if err := l.w.Append(l.frame.B); err != nil {
+	if err != nil {
 		return err
+	}
+	if id != tick { // the segment log counts the frames and the checks above count the ticks
+		return fmt.Errorf("the frame of the tick %d has the ID %d in the log", tick, id)
 	}
 	if err := l.w.Commit(); err != nil {
 		return err
 	}
-	l.handed.Add(tick)
 	l.last.Store(tick)
 	if len(l.tickDeps) > 0 {
 		l.dependencies.Add(tick, l.tickDeps)
@@ -233,21 +233,17 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 	logDir := filepath.Join(f.dir, engineDirName(engine))
 	w, err := segmentlog.Open(logDir, segmentlog.Options{
 		SegmentBytes: f.opts.SegmentBytes, SyncEvery: f.opts.SyncEvery, Backlog: f.opts.Backlog,
-		SegmentMeta: func(first []byte) []byte {
-			return segmentMeta(engine, f.opts.Seed, first)
-		},
+		Meta:   segmentMeta(engine, f.opts.Seed),
 		OnSync: func(uint64) { f.wake() },
 	})
 	l := &engineLog{w: w, openErr: err}
+	// what is in the log already is on the disk, and the engine goes on after its last frame
+	var opened uint64
 	if err == nil {
-		// what is in the log already is on the disk, and the engine goes on after it
-		if l.opened, err = lastFrameTickOf(logDir); err != nil {
-			l.w.Close()
-			l.w, l.openErr = nil, err
-		}
+		opened = w.LastID()
 	}
-	l.safe.Store(l.opened)
-	l.last.Store(l.opened)
+	l.safe.Store(opened)
+	l.last.Store(opened)
 	f.engines.Store(engine, l)
 	f.started.Do(func() {
 		f.running = true
@@ -315,24 +311,20 @@ func (f *FileLog) Close() error {
 	return errors.Join(errs...)
 }
 
-// segmentMeta is the meta of a segment that starts with the payload first: the format, the ID of
-// the engine, the seed and the tick of that record.
-func segmentMeta(engine sim.StateID, seed uint64, first []byte) []byte {
+// segmentMeta is the meta of a segment: the format, the ID of the engine and the seed.
+func segmentMeta(engine sim.StateID, seed uint64) []byte {
 	var w binary.Writer
 	w.Uvarint(uint64(formatVersion))
 	w.Uvarint(uint64(engine))
 	w.Fixed64(seed)
-	tick, _ := payloadTick(first)
-	w.Uvarint(tick)
 	return w.B
 }
 
 // segmentInfo is what the meta of a segment says.
 type segmentInfo struct {
-	Version   codec.Version // of the data of the records of the segment
-	Engine    sim.StateID
-	Seed      uint64
-	FirstTick uint64
+	Version codec.Version // of the data of the records of the segment
+	Engine  sim.StateID
+	Seed    uint64
 }
 
 func parseSegmentMeta(meta []byte) (segmentInfo, error) {
@@ -344,10 +336,9 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 		)
 	}
 	info := segmentInfo{
-		Version:   version,
-		Engine:    r.Uint[sim.StateID](),
-		Seed:      r.Fixed64(),
-		FirstTick: r.Uvarint(),
+		Version: version,
+		Engine:  r.Uint[sim.StateID](),
+		Seed:    r.Fixed64(),
 	}
 	return info, r.Err()
 }

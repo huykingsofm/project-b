@@ -20,7 +20,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/testkit"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
@@ -462,10 +461,7 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	// sent at ticks 10 and 30 was taken by the world and by the third zonelayer
 	const kept = 7
 	layerDir := filepath.Join(dir, "zonelayer-"+fmt.Sprint(testkit.Layer1.Local()))
-	err = segmentlog.CutAfter(layerDir, func(payload []byte) bool {
-		return binary.NewReader(payload).Uvarint() <= kept
-	})
-	if err != nil {
+	if err = segmentlog.CutAfter(layerDir, kept); err != nil {
 		t.Fatal(err)
 	}
 	limits, err := replay.CutToRecoveryLine(dir, c.Env.Codecs)

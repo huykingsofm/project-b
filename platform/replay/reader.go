@@ -17,7 +17,6 @@ type FileLogReader struct {
 	engine    sim.StateID
 	codecs    *sim.Codecs
 	r         *segmentlog.Reader
-	fromTick  uint64
 	rec       Record
 	frame     *binary.Reader // what is left of the frame that the current record is in
 	frameTick uint64
@@ -28,21 +27,16 @@ type FileLogReader struct {
 }
 
 // ReadFileLog reads the log that a FileLog wrote under dir for an engine, from fromTick: it starts
-// in the segment that holds that tick, using the meta of the segments, and gives only the records
-// of that tick and later ones.
+// in the segment that holds that tick, found by the headers of the segments, and gives only the
+// records of that tick and later ones.
 func ReadFileLog(
 	dir string, engine sim.StateID, fromTick uint64, codecs *sim.Codecs,
 ) (*FileLogReader, error) {
-	logDir := findEngineDir(dir, engine)
-	start := func(meta []byte) bool {
-		info, err := parseSegmentMeta(meta)
-		return err == nil && info.FirstTick <= fromTick
-	}
-	r, err := segmentlog.OpenReader(logDir, start)
+	r, err := segmentlog.OpenReader(findEngineDir(dir, engine), fromTick)
 	if err != nil {
 		return nil, err
 	}
-	return &FileLogReader{engine: engine, codecs: codecs, r: r, fromTick: fromTick}, nil
+	return &FileLogReader{engine: engine, codecs: codecs, r: r}, nil
 }
 
 // Next moves to the next record and reports whether there is one. It reports false at the end of
@@ -83,16 +77,7 @@ func (l *FileLogReader) Next() bool {
 			}
 			l.info, l.infoIndex, l.haveInfo = info, index, true
 		}
-		frame := binary.NewReader(l.r.Payload())
-		tick := frame.Uvarint()
-		if err := frame.Err(); err != nil {
-			l.err = fmt.Errorf("segment %d: a frame with no tick: %w", l.infoIndex, err)
-			return false
-		}
-		if tick < l.fromTick {
-			continue
-		}
-		l.frame, l.frameTick = frame, tick
+		l.frame, l.frameTick = binary.NewReader(l.r.Payload()), l.r.ID()
 	}
 	if l.err == nil {
 		l.err = l.r.Err()
@@ -138,7 +123,7 @@ func engineDirs(dir string) (map[sim.StateID]string, error) {
 
 // firstSegmentInfo is what the meta of the first segment of a log says.
 func firstSegmentInfo(logDir string) (segmentInfo, bool) {
-	r, err := segmentlog.OpenReader(logDir, func([]byte) bool { return true })
+	r, err := segmentlog.OpenReader(logDir, 0)
 	if err != nil {
 		return segmentInfo{}, false
 	}

@@ -232,18 +232,14 @@ func TestATickWithNoRecordIsAFrameWithOnlyItsTick(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (ConfigRead{Version: 3}) {
 		t.Fatalf("records %v, error %v; want the one of tick 2", got, err)
 	}
-	r, err := segmentlog.OpenReader(engineDir(dir, engine), nil)
+	r, err := segmentlog.OpenReader(engineDir(dir, engine), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
 	var ticks []uint64
 	for r.Next() {
-		tick, err := payloadTick(r.Payload())
-		if err != nil {
-			t.Fatal(err)
-		}
-		ticks = append(ticks, tick)
+		ticks = append(ticks, r.ID())
 	}
 	if !reflect.DeepEqual(ticks, []uint64{1, 2, 3}) {
 		t.Fatalf("the frames are of the ticks %v, want one for each of 1, 2 and 3", ticks)
@@ -254,16 +250,16 @@ func TestRecordsOfAnotherTickAreAnErrorAndAreNotWritten(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 5, ConfigRead{Version: 1})
-	log.Append(engine, 6, ConfigRead{Version: 2}) // not the tick of the frame
+	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.Append(engine, 2, ConfigRead{Version: 2}) // not the tick of the frame
 	if log.Err() == nil {
 		t.Fatal("a record of another tick was not refused")
 	}
-	log.EndTick(engine, 5)
+	log.EndTick(engine, 1)
 	log.Close()
 	got, _ := readLog(t, dir, engine, 0)
-	if len(got) != 1 || got[0].Tick != 5 {
-		t.Fatalf("records %v, want only the one of tick 5", got)
+	if len(got) != 1 || got[0].Tick != 1 {
+		t.Fatalf("records %v, want only the one of tick 1", got)
 	}
 }
 
@@ -353,21 +349,6 @@ func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
 	defer again.Close()
 	if got := again.Durable(engine); got != 7 {
 		t.Fatalf("Durable of a log that was there = %d, want 7", got)
-	}
-}
-
-func TestDurableFollowsTheTicksOfTheFramesAcrossAGap(t *testing.T) {
-	var h handedTicks
-	for _, tick := range []uint64{1, 2, 10, 11} { // an engine that was removed and came back at 10
-		h.Add(tick)
-	}
-	for synced, want := range []uint64{0, 1, 2, 10, 11} {
-		if got := h.Durable(uint64(synced)); got != want {
-			t.Fatalf("Durable with %d batches on the disk = %d, want %d", synced, got, want)
-		}
-	}
-	if got := h.Durable(2); got != 11 {
-		t.Fatalf("Durable went back to %d", got)
 	}
 }
 
@@ -481,22 +462,35 @@ func TestAFrameMustFollowTheLastOfTheLogAndLastSaysWhichThatIs(t *testing.T) {
 	if log.Last(engine) != 0 {
 		t.Fatalf("Last of an engine with no frame = %d", log.Last(engine))
 	}
-	log.Append(engine, 4, ConfigRead{Version: 1}) // a log may begin at any tick
-	log.EndTick(engine, 4)
-	log.EndTick(engine, 5)
-	if log.Last(engine) != 5 || log.Err() != nil {
+	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.EndTick(engine, 1)
+	log.EndTick(engine, 2)
+	if log.Last(engine) != 2 || log.Err() != nil {
 		t.Fatalf("Last = %d, error %v", log.Last(engine), log.Err())
 	}
-	log.Append(engine, 7, ConfigRead{Version: 2})
-	log.EndTick(engine, 7) // not the tick after 5: it is not written
-	if log.Err() == nil || log.Last(engine) != 5 {
+	log.Append(engine, 4, ConfigRead{Version: 2})
+	log.EndTick(engine, 4) // not the tick after 2: it is not written
+	if log.Err() == nil || log.Last(engine) != 2 {
 		t.Fatalf("a frame that does not follow was accepted: Last = %d, error %v",
 			log.Last(engine), log.Err())
 	}
 	log.Close()
 	again := NewFileLog(dir, testFileLogOptions)
 	defer again.Close()
-	if got := again.Last(engine); got != 5 {
-		t.Fatalf("Last of a log that was there = %d, want 5", got)
+	if got := again.Last(engine); got != 2 {
+		t.Fatalf("Last of a log that was there = %d, want 2", got)
 	}
+}
+
+func TestTheFirstFrameOfALogIsTheTickOne(t *testing.T) {
+	dir := t.TempDir()
+	engine := sim.StateID(21)
+	log := NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 4, ConfigRead{Version: 1})
+	log.EndTick(engine, 4) // a log has the tick 1 as its first
+	if log.Err() == nil || log.Last(engine) != 0 {
+		t.Fatalf("a first frame of the tick 4 was accepted: Last = %d, error %v",
+			log.Last(engine), log.Err())
+	}
+	log.Close()
 }

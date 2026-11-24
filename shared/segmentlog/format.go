@@ -1,13 +1,19 @@
 // Package segmentlog is an append-only log of records, divided into segment files. A record is a
 // payload that the package does not look into, and a segment has a header with a meta that the
-// package does not look into either: whoever uses the log decides what is in them (a tick, an
-// engine, a seed). It imports only the logging package of the project.
+// package does not look into either: whoever uses the log decides what is in them (an engine, a
+// seed). It imports only the logging package of the project.
+//
+// Each record has an ID, a number that the log counts from 1: the first record of a segment has the
+// ID that its header says (its begin), and each record after it the next number, across segments
+// too, so the IDs of a log have no gap. Whoever uses the log can make the ID mean something (a
+// tick), and then need not write it in the payload.
 //
 // A directory holds the segments of one log, each named `seg-<index>.log` with the index in 20
 // digits, counted from 0 in the order the segments were made, so the names sort in that order. A
 // segment is a header and then records:
 //
-//	header: magic "PBSL", format version u16, meta length u32, meta, crc32 of all before it
+//	header: magic "PBSL", format version u16, begin u64, meta length u32, meta,
+//	        crc32 of all before it
 //	record: payload length u32, crc32 of the payload, payload
 //	commit: 0xFFFFFFFF u32, crc32 of the count, count u32 (the records since the last commit)
 //
@@ -58,11 +64,12 @@ var (
 
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)
 
-// appendHeader appends the header of a segment.
-func appendHeader(b []byte, meta []byte) []byte {
+// appendHeader appends the header of a segment whose first record has the ID begin.
+func appendHeader(b []byte, begin uint64, meta []byte) []byte {
 	start := len(b)
 	b = append(b, magic...)
 	b = binary.LittleEndian.AppendUint16(b, formatVersion)
+	b = binary.LittleEndian.AppendUint64(b, begin)
 	b = binary.LittleEndian.AppendUint32(b, uint32(len(meta)))
 	b = append(b, meta...)
 	return binary.LittleEndian.AppendUint32(b, crc32.Checksum(b[start:], castagnoli))

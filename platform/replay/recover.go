@@ -27,7 +27,7 @@ func RecoveryLine(dir string, codecs *sim.Codecs) (map[sim.StateID]uint64, error
 	limits := map[sim.StateID]uint64{}
 	depends := map[sim.StateID][]dependencyAt{}
 	for _, engine := range engines {
-		if limits[engine], err = lastFrameTickOf(findEngineDir(dir, engine)); err != nil {
+		if limits[engine], err = segmentlog.LastFrameID(findEngineDir(dir, engine)); err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", engine, err)
 		}
 		r, err := ReadFileLog(dir, engine, 0, codecs)
@@ -75,18 +75,14 @@ func CutToRecoveryLine(dir string, codecs *sim.Codecs) (map[sim.StateID]uint64, 
 	}
 	for engine, limit := range limits {
 		logDir := findEngineDir(dir, engine)
-		last, err := lastFrameTickOf(logDir)
+		last, err := segmentlog.LastFrameID(logDir)
 		if err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", engine, err)
 		}
 		if last <= limit {
 			continue
 		}
-		keep := func(payload []byte) bool {
-			tick, err := payloadTick(payload)
-			return err == nil && tick <= limit
-		}
-		if err := segmentlog.CutAfter(logDir, keep); err != nil {
+		if err := segmentlog.CutAfter(logDir, limit); err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", engine, err)
 		}
 	}

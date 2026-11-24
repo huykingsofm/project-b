@@ -28,7 +28,7 @@ What is left of the recovery of a cluster: the logs can be cut to the recovery l
  sender when it flushes; a copy that was taken before is not acked by being dropped |
 | Retire | an engine that is destroyed writes a frame that holds `Retired`; an ID that is given again goes on counting ticks after the last tick of its last life, so a tick of an ID is never the tick of two lives; the allocator keeps that last tick for each ID |
 | Recovery line | each engine is cut before the first tick with a dependency above the durable tick of its source, until nothing changes; then replayed once from its latest checkpoint at or below its limit; a checkpoint above is dropped; all checkpoints are kept for now |
-| Cut | `CutAfter(tick)` on a log, called with the limit that recovery worked out; a cut loses the whole tick, commands included; the hash is checked only up to the limit |
+| Cut | `segmentlog.CutAfter(dir, limit)` on a log, called with the limit that recovery worked out; the segment is found by the begins of the headers, so a cut does not read the log; a cut loses the whole tick, commands included; the hash is checked only up to the limit |
 | Logs of a cluster | all engines have a log or none has |
 | To measure | the size of the unsettled messages in a checkpoint; the time of a recovery |
 

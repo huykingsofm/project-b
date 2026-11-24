@@ -14,12 +14,14 @@ import (
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
-// opts keeps the first 8 bytes of the first payload of a segment as its meta; the payloads of these
-// tests start with the tick, so the meta of a segment is the tick it starts at.
+// opts has a meta of 8 bytes in every segment. The payloads of most of these tests start with a
+// tick; the records of a log that starts at the tick 1 have the tick as their ID.
 var opts = segmentlog.Options{
-	SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
-	SegmentMeta: func(first []byte) []byte { return bytes.Clone(first[:min(8, len(first))]) },
+	SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4, Meta: []byte("testmeta"),
 }
+
+// headerSize is the size of the header of a segment of a log made with opts.
+var headerSize = 18 + len(opts.Meta) + 4
 
 func open(t testing.TB, dir string, o segmentlog.Options) *segmentlog.Writer {
 	t.Helper()
@@ -34,7 +36,7 @@ func open(t testing.TB, dir string, o segmentlog.Options) *segmentlog.Writer {
 func write(t testing.TB, w *segmentlog.Writer, from, to uint64) {
 	t.Helper()
 	for tick := from; tick < to; tick++ {
-		if err := w.Append(payload(tick)); err != nil {
+		if _, err := w.Append(payload(tick)); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.Commit(); err != nil {
@@ -47,18 +49,10 @@ func payload(tick uint64) []byte {
 	return fmt.Appendf(binary.LittleEndian.AppendUint64(nil, tick), "record of tick %d", tick)
 }
 
-// fromTick is what OpenReader is given to start at the segment that holds a tick: a segment is at
-// or before it when the tick it starts at, which is its meta, is no later.
-func fromTick(tick uint64) func(meta []byte) bool {
-	return func(meta []byte) bool {
-		return len(meta) == 8 && binary.LittleEndian.Uint64(meta) <= tick
-	}
-}
-
 // readAll returns the payloads of the log from a tick, and the error that stopped the read.
 func readAll(t testing.TB, dir string, from uint64) ([][]byte, error) {
 	t.Helper()
-	r, err := segmentlog.OpenReader(dir, fromTick(from))
+	r, err := segmentlog.OpenReader(dir, from)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,10 +89,10 @@ func TestRecordsComeBackInOrderWithTheMetaAndTheIndexOfTheirSegment(t *testing.T
 	}
 	wantTicks(t, got, 10, 60)
 
-	r, _ := segmentlog.OpenReader(dir, nil)
+	r, _ := segmentlog.OpenReader(dir, 0)
 	defer r.Close()
-	if !r.Next() || !bytes.Equal(r.Meta(), payload(10)[:8]) || r.SegmentIndex() != 0 {
-		t.Fatalf("meta %v, segment %d", r.Meta(), r.SegmentIndex())
+	if !r.Next() || !bytes.Equal(r.Meta(), opts.Meta) || r.SegmentIndex() != 0 || r.ID() != 1 {
+		t.Fatalf("meta %q, segment %d, ID %d", r.Meta(), r.SegmentIndex(), r.ID())
 	}
 }
 
@@ -141,27 +135,31 @@ func TestASegmentIsClosedWhenItIsBigAndTheNextIsNamedByTheNextIndex(t *testing.T
 	wantTicks(t, got, 0, 100)
 }
 
-func TestReadingFromATickStartsInTheSegmentThatHoldsIt(t *testing.T) {
+func TestReadingFromAnIDStartsInTheSegmentThatHoldsItAndGivesTheRecordsFromIt(t *testing.T) {
 	dir := t.TempDir()
 	o := opts
 	o.SegmentBytes = 200
 	w := open(t, dir, o)
-	write(t, w, 0, 100)
+	write(t, w, 1, 101) // the ID of the record of the tick t is t
 	w.Close()
 
 	segs, _ := segmentlog.Segments(dir)
-	r, _ := segmentlog.OpenReader(dir, nil)
-	starts := map[uint64]uint64{} // the tick each segment starts at
+	r, _ := segmentlog.OpenReader(dir, 0)
+	starts := map[uint64]uint64{} // the ID each segment begins at
 	for r.Next() {
-		starts[r.SegmentIndex()] = binary.LittleEndian.Uint64(r.Meta())
+		if _, ok := starts[r.SegmentIndex()]; !ok {
+			starts[r.SegmentIndex()] = r.ID()
+		}
 	}
 	r.Close()
 	mid := starts[segs[len(segs)/2].Index]
-	got, err := readAll(t, dir, mid+1)
-	if err != nil {
-		t.Fatal(err)
+	for _, from := range []uint64{mid, mid + 1, mid - 1, 0, 1, 99, 100, 101, 1000} {
+		got, err := readAll(t, dir, from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantTicks(t, got, min(max(from, 1), 101), 101)
 	}
-	wantTicks(t, got, mid, 100) // the whole segment, from its first record
 }
 
 func TestACrashThatLeavesHalfARecordIsReadAsTheEndOfTheLogAndRepairedByOpen(t *testing.T) {
@@ -251,14 +249,14 @@ func TestALogThatDoesNotExistIsEmpty(t *testing.T) {
 
 func TestAClosedWriterRefusesAndOptionsAndPayloadsThatCannotWorkAreRefused(t *testing.T) {
 	w := open(t, t.TempDir(), opts)
-	if err := w.Append(make([]byte, 1<<24+1)); !errors.Is(err, segmentlog.ErrTooLarge) {
+	if _, err := w.Append(make([]byte, 1<<24+1)); !errors.Is(err, segmentlog.ErrTooLarge) {
 		t.Fatalf("a payload that is too large: %v", err)
 	}
 	w.Close()
 	if err := w.Close(); !errors.Is(err, segmentlog.ErrClosed) {
 		t.Fatalf("second Close: %v", err)
 	}
-	if err := w.Append([]byte("x")); !errors.Is(err, segmentlog.ErrClosed) {
+	if _, err := w.Append([]byte("x")); !errors.Is(err, segmentlog.ErrClosed) {
 		t.Fatalf("Append after Close: %v", err)
 	}
 	if err := w.Commit(); !errors.Is(err, segmentlog.ErrClosed) {
@@ -271,30 +269,18 @@ func TestAClosedWriterRefusesAndOptionsAndPayloadsThatCannotWorkAreRefused(t *te
 	}
 }
 
-func TestAMetaThatIsTooLongIsCutAndNilStartsAtTheFirstSegment(t *testing.T) {
+func TestAMetaThatIsTooLongIsCut(t *testing.T) {
 	dir := t.TempDir()
 	o := opts
-	o.SegmentMeta = func([]byte) []byte { return make([]byte, 70000) }
+	o.Meta = make([]byte, 70000)
 	w := open(t, dir, o)
 	write(t, w, 0, 3)
 	w.Close()
-	r, _ := segmentlog.OpenReader(dir, nil)
+	r, _ := segmentlog.OpenReader(dir, 0)
 	defer r.Close()
 	if !r.Next() || len(r.Meta()) != 1<<16 {
 		t.Fatalf("meta of %d bytes", len(r.Meta()))
 	}
-}
-
-func TestAStartThatIsFalseForEverySegmentReadsFromTheFirst(t *testing.T) {
-	dir := t.TempDir()
-	w := open(t, dir, opts)
-	write(t, w, 5, 10)
-	w.Close()
-	got, err := readAll(t, dir, 1) // every segment starts after tick 1
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantTicks(t, got, 5, 10)
 }
 
 func TestAWriterThatCannotWriteReportsItsFirstErrorAndWritesNothingMore(t *testing.T) {
@@ -449,7 +435,7 @@ func BenchmarkRead(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for n := 0; n < b.N; {
-		r, _ := segmentlog.OpenReader(dir, nil)
+		r, _ := segmentlog.OpenReader(dir, 0)
 		for r.Next() && n < b.N {
 			n++
 		}
@@ -463,7 +449,7 @@ func writeBatches(t testing.TB, w *segmentlog.Writer, from, to uint64, per int) 
 	t.Helper()
 	for tick := from; tick < to; tick++ {
 		for range per {
-			if err := w.Append(payload(tick)); err != nil {
+			if _, err := w.Append(payload(tick)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -610,10 +596,10 @@ func TestAHeaderThatWasNeverWrittenIsRemovedButOneThatIsNotRightIsKeptAndReporte
 			content[4] = 2
 		case "crc that is wrong":
 			content = bytes.Clone(whole)
-			content[10] ^= 0xff // a byte of the meta
+			content[18] ^= 0xff // a byte of the meta
 		// the header of a real segment, then zeros where the batch was not written
 		case "a header and zeros":
-			content = append(bytes.Clone(whole[:22]), make([]byte, 100)...)
+			content = append(bytes.Clone(whole[:headerSize]), make([]byte, 100)...)
 		}
 		os.WriteFile(next, content, 0o644)
 
@@ -651,7 +637,7 @@ func TestAHeaderThatWasNeverWrittenIsRemovedButOneThatIsNotRightIsKeptAndReporte
 
 // readAll2 reads a log from its start and returns its payloads and the error that stopped the read.
 func readAll2(dir string) ([][]byte, error) {
-	r, err := segmentlog.OpenReader(dir, nil)
+	r, err := segmentlog.OpenReader(dir, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -785,12 +771,7 @@ func TestASegmentThatIsClosedSyncsItsBatches(t *testing.T) {
 	}
 }
 
-// keepUpTo keeps the records of the ticks up to one, which are the first 8 bytes of their payload.
-func keepUpTo(last uint64) func([]byte) bool {
-	return func(p []byte) bool { return binary.LittleEndian.Uint64(p) <= last }
-}
-
-func TestCutAfterKeepsTheTicksUpToOneAndWhatIsCutIsKept(t *testing.T) {
+func TestCutAfterKeepsTheRecordsUpToAnIDAndWhatIsCutIsKept(t *testing.T) {
 	for _, last := range []uint64{0, 1, 17, 18, 59, 60, 100} { // across and at the ends of segments
 		dir := t.TempDir()
 		o := opts
@@ -800,7 +781,7 @@ func TestCutAfterKeepsTheTicksUpToOneAndWhatIsCutIsKept(t *testing.T) {
 		if err := w.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if err := segmentlog.CutAfter(dir, keepUpTo(last)); err != nil {
+		if err := segmentlog.CutAfter(dir, last); err != nil {
 			t.Fatalf("a cut after %d: %v", last, err)
 		}
 		got, err := readAll(t, dir, 0)
@@ -811,22 +792,75 @@ func TestCutAfterKeepsTheTicksUpToOneAndWhatIsCutIsKept(t *testing.T) {
 			t.Fatalf("a cut after %d leaves %d records, want %d", last, len(got), want)
 		}
 		wantTicks(t, got, 1, 1+uint64(len(got)))
-		// what was cut is in a file that the log does not see, and the log is written on after it
+		// what was cut is in a file that the log does not see
 		if last < 60 {
 			if matches, _ := filepath.Glob(filepath.Join(dir, "*.discarded-*")); len(matches) == 0 {
 				t.Fatalf("a cut after %d kept nothing of what it cut", last)
 			}
 		}
+		// and the log is written on after it, with the ID after the last one that is left
 		w2 := open(t, dir, o)
-		write(t, w2, last+1, last+4)
+		if got := w2.LastID(); got != min(last, 60) {
+			t.Fatalf("after a cut after %d the last ID is %d", last, got)
+		}
+		next := min(last, 60) + 1
+		write(t, w2, next, next+3)
 		if err := w2.Close(); err != nil {
 			t.Fatal(err)
 		}
 		again, err := readAll(t, dir, 0)
-		if err != nil || uint64(len(again)) != min(last, 60)+3 && last < 60 {
+		if err != nil || uint64(len(again)) != min(last, 60)+3 {
 			t.Fatalf("after a cut after %d and 3 more: %d records, error %v", last, len(again), err)
 		}
 	}
+}
+
+// The cut looks at the headers to find the segment, and reads that one only: a segment before it
+// that is damaged is not read, so the cut does not fail on it.
+func TestCutAfterReadsOnlyTheSegmentThatHoldsTheCut(t *testing.T) {
+	dir := t.TempDir()
+	o := opts
+	o.SegmentBytes = 200
+	w := open(t, dir, o)
+	write(t, w, 1, 201)
+	w.Close()
+	segs, _ := segmentlog.Segments(dir)
+	if len(segs) < 6 {
+		t.Fatalf("%d segments", len(segs))
+	}
+	data, _ := os.ReadFile(segs[1].Path)
+	data[len(data)-1] ^= 0xff // the commit of the last batch of the second segment
+	os.WriteFile(segs[1].Path, data, 0o644)
+	if _, err := readAll(t, dir, 0); !errors.Is(err, segmentlog.ErrCorrupt) {
+		t.Fatalf("a read of the damaged segment: %v", err)
+	}
+	if err := segmentlog.CutAfter(dir, 150); err != nil {
+		t.Fatalf("a cut after 150, which is in a segment that is not damaged: %v", err)
+	}
+	got, err := readAll(t, dir, 150)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTicks(t, got, 150, 151)
+}
+
+func TestCutAfterCutsAtTheStartOfTheBatchOfTheFirstRecordThatGoes(t *testing.T) {
+	dir := t.TempDir()
+	w := open(t, dir, opts)
+	writeBatches(t, w, 0, 6, 3) // the tick t has the IDs 3t, 3t+1 and 3t+2
+	w.Close()
+	if err := segmentlog.CutAfter(dir, 10); err != nil { // 10 is the second record of the tick 3
+		t.Fatal(err)
+	}
+	counts, err := readTicks(t, dir)
+	if err != nil || len(counts) != 3 || counts[3] != 0 {
+		t.Fatalf("%d ticks, error %v: the batch after the ID 10 must go", len(counts), err)
+	}
+	w = open(t, dir, opts)
+	if last := w.LastID(); last != 9 {
+		t.Fatalf("the last ID is %d, want 9", last)
+	}
+	w.Close()
 }
 
 func TestCutAfterThatCutsNothingChangesNothing(t *testing.T) {
@@ -835,15 +869,82 @@ func TestCutAfterThatCutsNothingChangesNothing(t *testing.T) {
 	write(t, w, 1, 11)
 	w.Close()
 	before, _ := os.ReadDir(dir)
-	if err := segmentlog.CutAfter(dir, keepUpTo(1000)); err != nil {
+	if err := segmentlog.CutAfter(dir, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := segmentlog.CutAfter(dir, 10); err != nil { // the last record is kept
 		t.Fatal(err)
 	}
 	after, _ := os.ReadDir(dir)
 	if len(before) != len(after) {
 		t.Fatalf("%d files before and %d after", len(before), len(after))
 	}
-	if err := segmentlog.CutAfter(filepath.Join(dir, "nothing"), keepUpTo(1)); err != nil {
+	if err := segmentlog.CutAfter(filepath.Join(dir, "nothing"), 1); err != nil {
 		t.Fatalf("a log that does not exist: %v", err)
+	}
+}
+
+func TestTheLogNumbersItsRecordsFromOneAndGoesOnFromTheLastOne(t *testing.T) {
+	dir := t.TempDir()
+	o := opts
+	o.SegmentBytes = 100
+	w := open(t, dir, o)
+	if w.LastID() != 0 || w.Synced() != 0 {
+		t.Fatalf("an empty log has the last ID %d and %d synced", w.LastID(), w.Synced())
+	}
+	for want := uint64(1); want <= 10; want++ {
+		if id, err := w.Append(payload(want)); err != nil || id != want {
+			t.Fatalf("the record %d got the ID %d, error %v", want, id, err)
+		}
+		w.Commit()
+	}
+	if w.LastID() != 10 {
+		t.Fatalf("the last ID is %d, want 10", w.LastID())
+	}
+	w.Close()
+
+	// what the log holds is what the next writer goes on from, and the reader tells the IDs
+	if last, err := segmentlog.LastFrameID(dir); err != nil || last != 10 {
+		t.Fatalf("LastFrameID = %d, %v, want 10", last, err)
+	}
+	w = open(t, dir, o)
+	if w.LastID() != 10 || w.Synced() != 10 {
+		t.Fatalf("a log that was there: last ID %d, %d synced, want 10", w.LastID(), w.Synced())
+	}
+	if id, _ := w.Append(payload(11)); id != 11 {
+		t.Fatalf("the record after the log was opened got the ID %d, want 11", id)
+	}
+	w.Commit()
+	w.Close()
+	r, _ := segmentlog.OpenReader(dir, 0)
+	defer r.Close()
+	n := uint64(0)
+	for r.Next() {
+		n++
+		if r.ID() != n || binary.LittleEndian.Uint64(r.Payload()) != n {
+			t.Fatalf("the record %d has the ID %d", n, r.ID())
+		}
+	}
+	if r.Err() != nil || n != 11 {
+		t.Fatalf("%d records, error %v", n, r.Err())
+	}
+}
+
+func TestLastFrameIDOfALogWhoseLastSegmentHasNoBatchIsInThePreviousOne(t *testing.T) {
+	dir := t.TempDir()
+	if last, err := segmentlog.LastFrameID(filepath.Join(dir, "nothing")); err != nil || last != 0 {
+		t.Fatalf("a log that does not exist: %d, %v", last, err)
+	}
+	o := opts
+	o.SegmentBytes = 100
+	w := open(t, dir, o)
+	write(t, w, 1, 30)
+	w.Close()
+	segs, _ := segmentlog.Segments(dir)
+	os.WriteFile(filepath.Join(dir, fmt.Sprintf("seg-%020d.log", segs[len(segs)-1].Index+1)),
+		[]byte("PBS"), 0o644) // a header that was not finished
+	if last, err := segmentlog.LastFrameID(dir); err != nil || last != 29 {
+		t.Fatalf("LastFrameID = %d, %v, want 29", last, err)
 	}
 }
 

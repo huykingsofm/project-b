@@ -253,13 +253,6 @@ var decoders = map[Kind]func(
 	KindRetired:    decodeRetired,
 }
 
-// payloadTick is the tick of the frame that a payload holds: a frame starts with its tick.
-func payloadTick(payload []byte) (uint64, error) {
-	r := binary.NewReader(payload)
-	tick := r.Uvarint()
-	return tick, r.Err()
-}
-
 // encodeRecord writes a record: its kind and then its body. The tick is the one of the frame the
 // record is in, and the engine the one of the log it is written to.
 func encodeRecord(w *binary.Writer, body Body) error {
