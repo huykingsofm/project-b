@@ -18,7 +18,7 @@ func newState(t *testing.T) *zone.State {
 	}
 	return zone.NewState(
 		1, 9, 1000,
-		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}), 2, 3,
+		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}),
 	)
 }
 

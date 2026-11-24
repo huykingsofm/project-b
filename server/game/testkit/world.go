@@ -52,9 +52,8 @@ func WorldBuilder(t testing.TB, seed uint64, regenEvery uint64) *game.ClusterBui
 		WithWorld(game.WorldParams{ID: World}).
 		WithZone(
 			game.ZoneParams{
-				ID:       Zone1,
-				Tiles:    tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit1}),
-				Adjacent: []sim.StateID{Zone2},
+				ID:    Zone1,
+				Tiles: tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit1}),
 			},
 		).
 		WithZoneLayers(
@@ -62,9 +61,8 @@ func WorldBuilder(t testing.TB, seed uint64, regenEvery uint64) *game.ClusterBui
 		).
 		WithZone(
 			game.ZoneParams{
-				ID:       Zone2,
-				Tiles:    tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit2}),
-				Adjacent: []sim.StateID{Zone1},
+				ID:    Zone2,
+				Tiles: tilemaptest.New(t, 10, 5, spawn, nil, []tilemap.ExitDefinition{exit2}),
 			},
 		).
 		WithZoneLayers(

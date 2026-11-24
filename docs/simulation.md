@@ -19,7 +19,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | State | Holds | State package |
 |---|---|---|
 | world | private messages between players, inventories, every zone and zonelayer of the world | `server/game/sim/state/world` |
-| zone | the world it is in, the zones its exits lead to, the map, the exit entities, the zonelayers and capacity, zone chat | `server/game/sim/state/zone` |
+| zone | the world it is in, the map, the exit entities (each says the zone it leads to), the zonelayers and capacity, zone chat | `server/game/sim/state/zone` |
 | zonelayer | the zone and the world it is in, one copy of a zone's map with its entities, cooldowns, chat | `server/game/sim/state/zonelayer` |
 
 - Each state has events, a plan, actions and an engine of its own.

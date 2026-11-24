@@ -22,11 +22,11 @@ type WorldParams struct {
 	ID sim.StateID
 }
 
-// ZoneParams are the parameters of a zone to build: its map, and which zones its exits lead to.
+// ZoneParams are the parameters of a zone to build: its ID and its map, whose exits say which zones
+// they lead to.
 type ZoneParams struct {
-	ID       sim.StateID
-	Tiles    *tilemap.TileMap
-	Adjacent []sim.StateID
+	ID    sim.StateID
+	Tiles *tilemap.TileMap
 }
 
 // ZoneLayerParams are the parameters of the zonelayers of one zone: how many it starts with, how
@@ -264,9 +264,7 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	var layerEngines []*engine.Engine[*zonelayerstate.State]
 	for _, zp := range b.zones {
 		worldState.AddZone(zp.ID)
-		zoneState := zonestate.NewState(
-			zp.ID, b.world.ID, b.entityGraveSteps, zp.Tiles, zp.Adjacent...,
-		)
+		zoneState := zonestate.NewState(zp.ID, b.world.ID, b.entityGraveSteps, zp.Tiles)
 		lp := layers[zp.ID]
 		for range lp.Count {
 			layerID, ok := worldState.AddZoneLayer()

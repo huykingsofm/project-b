@@ -21,10 +21,6 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.worldID))
 	w.Uvarint(s.tick)
-	w.Uvarint(uint64(len(s.adjacent)))
-	for _, zoneID := range s.adjacent {
-		w.Uvarint(uint64(zoneID))
-	}
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
 		if id.Owner() != s.id {
@@ -81,12 +77,6 @@ func DecodeState(
 	}
 	n, err := count(r)
 	if err != nil {
-		return nil, err
-	}
-	for range n {
-		s.adjacent = append(s.adjacent, r.Uint[sim.StateID]())
-	}
-	if n, err = count(r); err != nil {
 		return nil, err
 	}
 	for range n {

@@ -13,7 +13,6 @@ package zone
 
 import (
 	"iter"
-	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -46,7 +45,6 @@ type State struct {
 	// Data.
 	id         sim.StateID
 	worldID    sim.StateID
-	adjacent   []sim.StateID // the zones that the exits of this one lead to
 	tick       uint64
 	tiles      *tilemap.TileMap
 	entities   table.Table[state.EntityID, state.Entity]
@@ -64,10 +62,9 @@ type State struct {
 // entityGraveSteps ticks.
 func NewState(
 	zoneID, worldID sim.StateID, entityGraveSteps uint64, tiles *tilemap.TileMap,
-	adjacent ...sim.StateID,
 ) *State {
 	s := &State{
-		id: zoneID, worldID: worldID, adjacent: slices.Clone(adjacent), tiles: tiles,
+		id: zoneID, worldID: worldID, tiles: tiles,
 		chat:      ring.New[ChatMessage](chatKeep),
 		entityIDs: state.NewEntityIDs(entityGraveSteps),
 	}
@@ -88,7 +85,6 @@ func (s *State) clone() *State {
 	return &State{
 		id:         s.id,
 		worldID:    s.worldID,
-		adjacent:   slices.Clone(s.adjacent),
 		tick:       s.tick,
 		tiles:      s.tiles,
 		entities:   s.entities.Clone(),
@@ -113,7 +109,6 @@ func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool
 type ReadOnlyZoneState interface {
 	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
 	WorldID() sim.StateID
-	AdjacentZones() []sim.StateID
 	TileMap() tilemap.ReadOnlyTileMap
 	ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot]
 }
@@ -136,10 +131,6 @@ func (s *State) NextTick() {
 
 // WorldID is the ID of the world that the zone is in.
 func (s *State) WorldID() sim.StateID { return s.worldID }
-
-// AdjacentZones returns the zones that the exits of the zone lead to. The slice is a view: do not
-// change it.
-func (s *State) AdjacentZones() []sim.StateID { return s.adjacent }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }

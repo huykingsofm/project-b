@@ -2,7 +2,6 @@ package zone_test
 
 import (
 	"bytes"
-	"slices"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -39,9 +38,8 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 	if got.Hash() != st.Hash() || got.TileMap() != tiles {
 		t.Fatal("the state that came back has another hash, or another map")
 	}
-	if got.WorldID() != st.WorldID() || got.WorldID() == 0 ||
-		!slices.Equal(got.AdjacentZones(), st.AdjacentZones()) {
-		t.Fatalf("the zone knows world %d and zones %v", got.WorldID(), got.AdjacentZones())
+	if got.WorldID() != st.WorldID() || got.WorldID() == 0 {
+		t.Fatalf("the zone knows world %d", got.WorldID())
 	}
 	var again binary.Writer
 	if err := got.Encode(&again); err != nil || !bytes.Equal(again.B, w.B) {

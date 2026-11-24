@@ -14,7 +14,7 @@ func TestAClonedZoneStateSharesNoMemoryWithTheStateExceptTheMapThatNeverChanges(
 	}
 	st := NewState(
 		1, 9, 1000,
-		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}), 2, 3,
+		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}),
 	)
 	st.AddZoneLayer(1, 4)
 	copied := st.Clone().(*State)
