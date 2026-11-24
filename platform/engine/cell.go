@@ -8,6 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/channels"
+	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/rand"
@@ -30,38 +31,23 @@ type ConfigSource interface {
 // router it sends through, the configuration it reads, the replay log it writes, and the
 // bouncer that runs what a message says a failed delivery means.
 type cell struct {
+	cellData // what a checkpoint holds of the cell
+
 	me sim.StateID
 
-	router MessageRouter
-	bounce bouncer
-	in     IncomingChannel // what the engine itself reads; the router holds the other end
-
-	cfg            ConfigSource
-	cfgVersionSeen uint64
-
+	router    MessageRouter
+	bounce    bouncer
+	in        IncomingChannel // what the engine itself reads; the router holds the other end
+	cfg       ConfigSource
 	replayLog replay.Log
+	view      *StableView // what the engine reads of the other engines, kept for the tick
 
-	view *StableView // what the engine reads of the other engines, kept for the tick
-
-	sentSeq     uint64
-	lastRecvSeq map[sim.StateID]uint64 // the last Seq taken from each sender
-	// unsettledMessages is what the engine has sent or is to send, until it is acked as safe
-	unsettledMessages *unsettledMessages
 	// takenMessages are the messages this engine took in ticks that are not safe yet, in order:
 	// when a tick is safe the number of each message it took is acked to its sender.
 	takenMessages []takenMessage
 	// ackBoard is where the receivers say what they hold safe, and where this engine says it of
 	// what it took; nil for an engine that holds nothing for an ack (a replay).
 	ackBoard *AckBoard
-
-	rng *rand.Rand // the random numbers of the engine and where they are
-}
-
-// takenMessage is a message that an engine took, with the tick at which it took it.
-type takenMessage struct {
-	tick   uint64
-	sender sim.StateID
-	seq    uint64
 }
 
 func newCell(
@@ -79,10 +65,9 @@ func newCell(
 	// The seed of the cluster and the ID of the engine decide the random numbers, so the same
 	// inputs give the same run.
 	return cell{
+		rng: rand.NewPCG(seed, uint64(me)), lastRecvSeq: map[sim.StateID]uint64{},
 		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
-		lastRecvSeq: map[sim.StateID]uint64{}, rng: rand.NewPCG(seed, uint64(me)),
-		unsettledMessages: &unsettledMessages{},
-		ackBoard:          acks,
+		ackBoard: acks,
 	}
 }
 
@@ -110,11 +95,11 @@ func (c *cell) snapshot(tick uint64) *config.Snapshot {
 // that the engines of a cluster do not all hash in the same tick and make a peak of work there. A
 // log that records nothing is given the hash all the same: it is a place holder, and what it is
 // given costs nothing it could save.
-func (c *cell) endTick(cfg *config.Snapshot, tick uint64, hash func() uint64) {
+func (c *cell) endTick(cfg *config.Snapshot, tick uint64, hash uint64) {
 	every := uint64(replayLogHashEvery.Get(cfg))
 	offset := uint64(c.me)
 	if (tick+offset)%every == 0 {
-		c.replayLog.Append(c.me, tick, replay.Hash{Value: hash()})
+		c.replayLog.Append(c.me, tick, replay.Hash{Value: hash})
 	}
 	c.replayLog.EndTick(c.me, tick)
 	c.publishAcks()
@@ -260,90 +245,104 @@ func (c *cell) retire() {
 	}
 }
 
-// engineHash is the hash of an engine: of everything a checkpoint of it holds that the engine goes
-// on from: its state, what it waits for (the scheduler), and what only it knows (the place of its
-// random numbers, the number of its messages and the last it took from each sender, the version of
-// the configuration it read, and the messages it holds to send again). A restore that differs
-// from the engine it came from in any of them has another hash, and a replay finds it.
-func (c *cell) engineHash[S sim.State](
-	stateHash uint64, sched *sim.Scheduler[S],
-) uint64 {
-	h := sim.NewHasher()
-	h.U64(stateHash)
-	sched.Hash(&h)
-	c.hashInto(&h)
-	return h.Sum()
-}
-
-// hashInto adds what every engine knows besides its state to a hash, as the bytes that a
-// checkpoint writes for it, so that the hash covers exactly what the checkpoint carries.
-func (c *cell) hashInto(h *sim.Hasher) {
-	var w binary.Writer
-	if err := c.encode(&w, false); err != nil {
-		h.String("a cell that cannot be written") // the hash still tells it from another
+// restoreFrom gives the cell what a checkpoint says. It cannot fail: all of it was read and checked
+// before the engine was made.
+func (c *cell) restoreFrom(data cellData) {
+	c.cellData = data
+	if c.ackBoard == nil {
 		return
 	}
-	h.Bytes(w.B)
+	// what the checkpoint says it took is in a place that no crash takes back: the state was
+	// restored from it
+	for sender, seq := range c.lastRecvSeq {
+		c.ackBoard.Raise(c.me, sender, seq)
+	}
 }
 
-// checkpoint writes the checkpoint of an engine, given its state.
-func (c *cell) checkpoint[S sim.State](
-	tick uint64, st S, sched *sim.Scheduler[S],
-) ([]byte, error) {
-	var w binary.Writer
-	w.Uvarint(1) // the version of the data
-	w.Uvarint(uint64(c.me))
-	w.Uvarint(tick)
-	if err := st.Encode(&w); err != nil {
-		return nil, fmt.Errorf("%v: the state: %w", c.me, err)
-	}
-	if err := sched.Encode(&w); err != nil {
-		return nil, fmt.Errorf("%v: the scheduler: %w", c.me, err)
-	}
-	if err := c.encode(&w, true); err != nil {
-		return nil, fmt.Errorf("%v: %w", c.me, err)
-	}
-	return w.B, nil
+// cellData is what every engine knows besides its state, and what a checkpoint writes of the
+// cell: the rest of a cell is where it is, which a checkpoint does not carry.
+type cellData struct {
+	rng            *rand.Rand // the random numbers of the engine and where they are
+	sentSeq        uint64     // the number of the last message the engine sent
+	cfgVersionSeen uint64     // the version of the configuration the engine read last
+	// lastRecvSeq is the last Seq taken from each sender
+	lastRecvSeq map[sim.StateID]uint64
+	// unsettledMessages is what the engine has sent or is to send, until it is acked as safe
+	unsettledMessages unsettledMessages
 }
 
-// encode writes what every engine knows besides its state: the place of its random numbers, the
+// Encode writes what every engine knows besides its state: the place of its random numbers, the
 // number of its messages and the last that it took from each sender, the version of the
-// configuration it read, and its unsettled messages: the messages that are to go and, with
-// withSent, the ones that went and were not acked. The hash leaves out the second: when a message
-// is acked depends on when the log of its receiver is synced, which a replay does not repeat.
-func (c *cell) encode(w *binary.Writer, withSent bool) error {
-	if err := c.rng.Encode(w); err != nil {
+// configuration it read, and its unsettled messages: the messages that are to go and the ones that
+// went and were not acked.
+func (d *cellData) Encode(w *binary.Writer) error {
+	if err := d.rng.Encode(w); err != nil {
 		return fmt.Errorf("its random numbers: %w", err)
 	}
-	w.Uvarint(c.sentSeq)
-	w.Uvarint(c.cfgVersionSeen)
-	senders := make([]sim.StateID, 0, len(c.lastRecvSeq))
-	for sender := range c.lastRecvSeq {
+	w.Uvarint(d.sentSeq)
+	w.Uvarint(d.cfgVersionSeen)
+	senders := make([]sim.StateID, 0, len(d.lastRecvSeq))
+	for sender := range d.lastRecvSeq {
 		senders = append(senders, sender)
 	}
 	slices.Sort(senders)
 	w.Uvarint(uint64(len(senders)))
 	for _, sender := range senders {
 		w.Uvarint(uint64(sender))
-		w.Uvarint(c.lastRecvSeq[sender])
+		w.Uvarint(d.lastRecvSeq[sender])
 	}
-	return c.unsettledMessages.Encode(w, withSent)
+	return d.unsettledMessages.Encode(w)
 }
 
-// restore gives the cell what a checkpoint says. It cannot fail: all of it was read and checked
-// before the engine was made.
-func (c *cell) restore(rc restoredCell) {
-	c.rng = rc.Rand()
-	c.sentSeq, c.cfgVersionSeen = rc.SentSeq(), rc.CfgVersionSeen()
-	c.lastRecvSeq = rc.LastRecvSeq()
-	held := rc.UnsettledMessages()
-	c.unsettledMessages.SetUnsent(held.Unsent())
-	c.unsettledMessages.SetSent(held.Sent())
-	// what the checkpoint says it took is in a place that no crash takes back: the state was
-	// restored from it
-	for sender, seq := range c.lastRecvSeq {
-		if c.ackBoard != nil {
-			c.ackBoard.Raise(c.me, sender, seq)
-		}
+// Hash adds what every engine knows besides its state to a hash, as the bytes that a checkpoint
+// writes for it, so that the hash covers exactly what the checkpoint carries, but for the messages
+// that went and were not acked: when a message is acked depends on when the log of its receiver
+// is synced, which a replay does not repeat. It returns the error of a cell that cannot be written,
+// after it adds a mark of that to the hash, so the hash still tells it from another.
+func (d *cellData) Hash(h *sim.Hasher) error {
+	held := *d
+	held.unsettledMessages = held.unsettledMessages.withoutSent()
+	var w binary.Writer
+	if err := held.Encode(&w); err != nil {
+		h.String("a cell that cannot be written")
+		return err
 	}
+	h.Bytes(w.B)
+	return nil
+}
+
+// decodeCellData reads what Encode wrote.
+func decodeCellData(
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
+) (cellData, error) {
+	rng, err := rand.Decode(r)
+	if err != nil {
+		return cellData{}, fmt.Errorf("its random numbers: %w", err)
+	}
+	d := cellData{rng: rng}
+	d.sentSeq = r.Uvarint()
+	d.cfgVersionSeen = r.Uvarint()
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return cellData{}, err
+	}
+	if n > uint64(r.Left()) { // a sender takes at least one byte
+		return cellData{}, fmt.Errorf("%w: %d senders", binary.ErrShort, n)
+	}
+	d.lastRecvSeq = make(map[sim.StateID]uint64, n)
+	for range n {
+		sender := r.Uint[sim.StateID]()
+		d.lastRecvSeq[sender] = r.Uvarint()
+	}
+	if d.unsettledMessages, err = decodeUnsettledMessages(c, r, version); err != nil {
+		return cellData{}, err
+	}
+	return d, r.Err()
+}
+
+// takenMessage is a message that an engine took, with the tick at which it took it.
+type takenMessage struct {
+	tick   uint64
+	sender sim.StateID
+	seq    uint64
 }

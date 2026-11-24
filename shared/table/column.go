@@ -102,11 +102,6 @@ type column2[K comparable, V any, A, B comparable] struct {
 	byA   stablemap.Map[A, *node[K, B]]
 }
 
-type node[K, B comparable] struct {
-	all bucket[K]
-	byB stablemap.Map[B, bucket[K]]
-}
-
 func (c *column2[K, V, A, B]) add(k K, v V) {
 	a, b, ok := c.keyOf(v)
 	if !ok {
@@ -185,4 +180,9 @@ func (c *column2[K, V, A, B]) keysOf(a A, b B) []K {
 	}
 	s, _ := n.byB.Get(b)
 	return s
+}
+
+type node[K, B comparable] struct {
+	all bucket[K]
+	byB stablemap.Map[B, bucket[K]]
 }

@@ -43,13 +43,6 @@ type Record struct {
 	Body   Body
 }
 
-// Dependent is what a body says when what an engine recorded makes it depend on another engine.
-type Dependent interface {
-	// Dependency is the engine and the tick that the body depends on, and false when it depends on
-	// none.
-	Dependency() (sim.StateDependency, bool)
-}
-
 // Dependency is what the record makes the engine depend on, or false when it makes it depend on
 // nothing: a message depends on the tick at which its sender sent it, and a read of a copy of the
 // state of another engine on the tick of the copy.
@@ -68,10 +61,15 @@ func (r Record) Kind() Kind {
 	return r.Body.Kind()
 }
 
+// Dependent is what a body says when what an engine recorded makes it depend on another engine.
+type Dependent interface {
+	// Dependency is the engine and the tick that the body depends on, and false when it depends on
+	// none.
+	Dependency() (sim.StateDependency, bool)
+}
+
 // Inbound is a message that the engine took, whole.
 type Inbound struct{ Message sim.Message }
-
-func (Inbound) Kind() Kind { return KindInbound }
 
 func (b Inbound) Encode(w *binary.Writer) error { return sim.EncodeMessage(w, b.Message) }
 
@@ -87,6 +85,8 @@ func (b Inbound) Same(other Body) bool {
 	return ok && SameMessage(b.Message, o.Message)
 }
 
+func (Inbound) Kind() Kind { return KindInbound }
+
 func decodeInbound(
 	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error) {
@@ -96,8 +96,6 @@ func decodeInbound(
 
 // Command is a command of a client that the engine took.
 type Command struct{ Command sim.BaseCommand }
-
-func (Command) Kind() Kind { return KindCommand }
 
 func (b Command) Encode(w *binary.Writer) error { return sim.EncodeCommand(w, b.Command) }
 
@@ -113,6 +111,8 @@ func (b Command) Same(other Body) bool {
 	return bytes.Equal(x.B, y.B)
 }
 
+func (Command) Kind() Kind { return KindCommand }
+
 func decodeCommand(
 	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error) {
@@ -123,14 +123,14 @@ func decodeCommand(
 // ConfigRead is the version of the configuration that the engine first read at the tick.
 type ConfigRead struct{ Version uint64 }
 
-func (ConfigRead) Kind() Kind { return KindConfig }
-
 func (b ConfigRead) Encode(w *binary.Writer) error {
 	w.Uvarint(b.Version)
 	return nil
 }
 
 func (b ConfigRead) Same(other Body) bool { o, ok := other.(ConfigRead); return ok && b == o }
+
+func (ConfigRead) Kind() Kind { return KindConfig }
 
 func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return ConfigRead{Version: r.Uvarint()}, r.Err()
@@ -139,14 +139,14 @@ func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, e
 // Hash is the hash of the state of the engine at the end of the tick.
 type Hash struct{ Value uint64 }
 
-func (Hash) Kind() Kind { return KindHash }
-
 func (b Hash) Encode(w *binary.Writer) error {
 	w.Fixed64(b.Value)
 	return nil
 }
 
 func (b Hash) Same(other Body) bool { o, ok := other.(Hash); return ok && b == o }
+
+func (Hash) Kind() Kind { return KindHash }
 
 func decodeHash(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return Hash{Value: r.Fixed64()}, r.Err()
@@ -158,8 +158,6 @@ type StableRead struct {
 	Source   sim.StateID
 	CopyTick uint64
 }
-
-func (StableRead) Kind() Kind { return KindStableRead }
 
 // Dependency is the engine that was read and the tick of the copy; a read that found no copy (a
 // tick of 0) depends on nothing.
@@ -175,6 +173,8 @@ func (b StableRead) Encode(w *binary.Writer) error {
 
 func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
 
+func (StableRead) Kind() Kind { return KindStableRead }
+
 func decodeStableRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return StableRead{Source: r.Uint[sim.StateID](), CopyTick: r.Uvarint()}, r.Err()
 }
@@ -186,8 +186,6 @@ type Returned struct {
 	Reason sim.DeliveryFailure
 }
 
-func (Returned) Kind() Kind { return KindReturned }
-
 func (b Returned) Encode(w *binary.Writer) error {
 	b.Header.Encode(w)
 	w.Uint8(uint8(b.Reason))
@@ -195,6 +193,8 @@ func (b Returned) Encode(w *binary.Writer) error {
 }
 
 func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok && b == o }
+
+func (Returned) Kind() Kind { return KindReturned }
 
 func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	header := sim.DecodeHeader(r)

@@ -154,9 +154,9 @@ No line of code or comment is longer than 100 columns (a tab is 4); `lll` checks
 
 A function that meets an error returns it, wrapped with where it went through (`%w`), or logs it, never both: the error is logged once, by the one that handles it last (a cluster that stops, a loop that drops a message, `main`).
 
-### [R35. The methods of a type are in the file of the type (hard)](r35-methods-with-their-type.md)
+### [R35. The methods of a type are in the file of the type, right below it (hard)](r35-methods-with-their-type.md)
 
-A type and its methods are in one file: the declaration, the constructor and every method. A method is not put in another file of the package, and a type that is too big is split into types, each with its file.
+A type and its methods are in one file, one after the other: the declaration, the constructor and every method, with nothing of another type between them. A method is not put in another file of the package, and a type that is too big is split into types, each with its file.
 
 ## 5. Ways of working
 

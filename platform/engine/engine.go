@@ -9,7 +9,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/channels"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -188,7 +187,7 @@ func (e *Engine[S]) Step() error {
 	}
 	e.stable.Publish(e.st.Clone())
 	e.flushUnsettledMessages(cfg, e.tick, e.reg.Take())
-	e.endTick(cfg, e.tick, e.Hash)
+	e.endTick(cfg, e.tick, e.Hash(sim.NewHasher()))
 	return nil
 }
 
@@ -229,51 +228,18 @@ func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	}
 }
 
-// Hash is the hash of the engine: its state, what it waits for, and what only the engine knows (see
-// engineHash). A replay compares it with the one the log holds.
-func (e *Engine[S]) Hash() uint64 {
-	return e.cell.engineHash(e.st.Hash(), &e.sched)
-}
-
-// Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
-// by the goroutine of the engine or while the engine does not run.
-func (e *Engine[S]) Checkpoint() ([]byte, error) {
-	return e.cell.checkpoint(e.tick, e.st, &e.sched)
-}
-
-// Restore makes the engine of a state from a checkpoint, in the environment given, at the tick of
-// the checkpoint. The state is read with the codecs of the environment. What the engine does again
-// and again is an action that waits in the checkpoint like any other.
-func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
-	r := binary.NewReader(data)
-	version, id, tick, err := readCheckpointStart(r, sim.StateTypeOf[S]())
-	if err != nil {
-		return nil, err
-	}
-	decoded, err := env.Codecs.DecodeStateOfType(sim.StateTypeOf[S](), r, version)
-	if err != nil {
-		return nil, fmt.Errorf("%d: the state: %w", id, err)
-	}
-	st, ok := decoded.(S)
-	if !ok {
-		return nil, fmt.Errorf("%d: the state is a %T, not the one asked for", id, decoded)
-	}
-	if st.ID() != id {
-		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.ID())
-	}
-	if st.Tick() != tick {
-		return nil, fmt.Errorf(
-			"%d: %w: the state is at tick %d, and the checkpoint at %d",
-			id, ErrTickMismatch, st.Tick(), tick,
+// Hash is the hash of the engine: of everything a checkpoint of it holds that the engine goes on
+// from: its state, what it waits for, and what only it knows (the place of its random numbers, the
+// number of its messages and the last it took from each sender, the version of the configuration it
+// read, and the messages it holds to send again). A restore that differs from the engine it came
+// from in any of them has another hash, and a replay finds it.
+func (e *Engine[S]) Hash(h sim.Hasher) uint64 {
+	h.U64(e.st.Hash())
+	e.sched.Hash(&h)
+	if err := e.cell.cellData.Hash(&h); err != nil {
+		logging.Error(
+			"the hash of the engine cannot cover what its cell holds", "engine", e.me, "err", err,
 		)
 	}
-	rest, err := env.readCheckpointRest[S](r, version)
-	if err != nil {
-		return nil, fmt.Errorf("%d: %w", id, err)
-	}
-	e := New(st, env, seed)
-	e.tick = tick
-	e.sched = rest.Scheduler()
-	e.cell.restore(rest.Cell())
-	return e, nil
+	return h.Sum()
 }

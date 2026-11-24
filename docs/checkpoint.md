@@ -6,8 +6,8 @@
 
 | Call | What it does |
 |---|---|
-| `Engine[S].Checkpoint()` | writes the checkpoint of the engine; called between two ticks, by the goroutine of the engine or while it does not run |
-| `engine.Restore[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
+| `engine.CheckpointEngine(e)` | writes the checkpoint of an engine: the start (below), then its state, its scheduler and what only the engine knows (`cellData.Encode`); called between two ticks, by the goroutine of the engine or while it does not run |
+| `engine.RestoreEngine[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
 
 - A restore registers the engine in the router of `env`, as `engine.New` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
 - What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.

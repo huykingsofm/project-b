@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/rand"
 )
 
 func newToyEnv(t testing.TB) *Env {
@@ -161,24 +163,24 @@ func TestRestoringACheckpointOfAnotherTypeOfStateOrCutIsAnErrorAndRegistersNothi
 	c, engines := toyCluster(t, 1)
 	engines[0].ScheduleAt(30, &forwardAction{To: 1, N: 2, Again: 10})
 	c.Step()
-	data, err := engines[0].Checkpoint()
+	data, err := CheckpointEngine(engines[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := newToyEnv(t)
-	if _, err := Restore[*toyState](data, env, 1); err != nil {
+	if _, err := RestoreEngine[*toyState](data, env, 1); err != nil {
 		t.Fatal(err)
 	}
 	for n := range data { // every proper prefix
 		fresh := newToyEnv(t)
-		if _, err := Restore[*toyState](data[:n], fresh, 1); err == nil {
+		if _, err := RestoreEngine[*toyState](data[:n], fresh, 1); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 		if _, ok := fresh.Router.(*Router).data.Load().chans[1]; ok {
 			t.Fatalf("a checkpoint that was cut at %d registered an engine in the router", n)
 		}
 	}
-	if _, err := Restore[*otherToy](data, newToyEnv(t), 1); err == nil {
+	if _, err := RestoreEngine[*otherToy](data, newToyEnv(t), 1); err == nil {
 		t.Fatal("a checkpoint was restored as an engine of another type of state")
 	}
 }
@@ -191,20 +193,20 @@ func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.
 	for range 8 {
 		c.Step()
 	}
-	data, err := a.Checkpoint()
+	data, err := CheckpointEngine(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// the restored engine runs in a cluster of its own, with an engine 2 of its own
 	env := newToyEnv(t)
-	r, err := Restore[*toyState](data, env, 1)
+	r, err := RestoreEngine[*toyState](data, env, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Hash() != a.Hash() || r.Tick() != a.Tick() || r.State().Total != a.State().Total {
-		t.Fatalf("hash %d tick %d, want %d and %d", r.Hash(), r.Tick(), a.Hash(), a.Tick())
+	if hashOf(r) != hashOf(a) || r.Tick() != a.Tick() || r.State().Total != a.State().Total {
+		t.Fatalf("hash %d tick %d, want %d and %d", hashOf(r), r.Tick(), hashOf(a), a.Tick())
 	}
-	again, err := r.Checkpoint()
+	again, err := CheckpointEngine(r)
 	if err != nil || string(again) != string(data) {
 		t.Fatalf("a restored engine writes another checkpoint: %v", err)
 	}
@@ -216,24 +218,24 @@ func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.
 func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
 	_, engines := toyCluster(t, 1)
 	e := engines[0]
-	before := e.Hash()
+	before := hashOf(e)
 	e.cell.sentSeq++
-	if e.Hash() == before {
+	if hashOf(e) == before {
 		t.Fatal("the number of its messages is not in the hash")
 	}
-	before = e.Hash()
+	before = hashOf(e)
 	e.cell.lastRecvSeq[7] = 3
-	if e.Hash() == before {
+	if hashOf(e) == before {
 		t.Fatal("the last number taken from a sender is not in the hash")
 	}
-	before = e.Hash()
+	before = hashOf(e)
 	e.unsettledMessages.AddUnsent(sim.NewActionMessage[*toyState](1, onfail.Drop{}))
-	if e.Hash() == before {
+	if hashOf(e) == before {
 		t.Fatal("a message held to be sent again is not in the hash")
 	}
-	before = e.Hash()
+	before = hashOf(e)
 	e.unsettledMessages.SetSent([]sim.Message{sim.NewActionMessage[*toyState](2, onfail.Drop{})})
-	if e.Hash() != before {
+	if hashOf(e) != before {
 		t.Fatal("a message that was sent and is not acked is in the hash: when it is acked " +
 			"depends on when the log of its receiver is synced, which a replay does not repeat")
 	}
@@ -254,17 +256,17 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 		sim.NewActionMessage(3, onfail.Retry{}, &toyAction{N: 2}).
 			Stamp(sim.Header{From: 1, Seq: 39, Tick: 6}),
 	})
-	data, err := e.Checkpoint()
+	data, err := CheckpointEngine(e)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := Restore[*toyState](data, newToyEnv(t), 1)
+	r, err := RestoreEngine[*toyState](data, newToyEnv(t), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unsent, sent := len(r.unsettledMessages.Unsent()), len(r.unsettledMessages.Sent())
 	if r.cell.sentSeq != 41 || unsent != 1 || sent != 1 ||
-		r.cell.lastRecvSeq[99] != 1 || r.Hash() != e.Hash() {
+		r.cell.lastRecvSeq[99] != 1 || hashOf(r) != hashOf(e) {
 		t.Fatalf("seq %d, %d to go, %d sent, last %v",
 			r.cell.sentSeq, unsent, sent, r.cell.lastRecvSeq)
 	}
@@ -272,3 +274,38 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 		t.Fatalf("the message that was sent came back as %+v, want its number and tick", got)
 	}
 }
+
+// BenchmarkEngineHash is the hash of an engine that holds messages to send and messages that went
+// and were not acked: what is taken at the period of the hash of the replay log.
+func BenchmarkEngineHash(b *testing.B) {
+	env := newToyEnv(b)
+	e := New(&toyState{id: 1}, env, 1)
+	cfg := config.Defaults()
+	for i := range uint64(20) {
+		e.cell.unsettledMessages.AddUnsent(toMessage(2, i+1))
+		e.cell.unsettledMessages.MarkSent(toMessage(2, 100+i), 1, cfg)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		hashOf(e)
+	}
+}
+
+func TestTheHashOfACellThatCannotBeWrittenSaysSoAndStillTellsItFromAnother(t *testing.T) {
+	good := cellData{rng: rand.NewPCG(1, 2), lastRecvSeq: map[sim.StateID]uint64{}}
+	bad := good
+	bad.unsettledMessages.AddUnsent(nil) // a message that has no codec
+	a, b := sim.NewHasher(), sim.NewHasher()
+	if err := good.Hash(&a); err != nil {
+		t.Fatal(err)
+	}
+	if err := bad.Hash(&b); !errors.Is(err, sim.ErrNoCodec) {
+		t.Fatalf("the hash of a cell that cannot be written: %v, want ErrNoCodec", err)
+	}
+	if a == b {
+		t.Fatal("a cell that cannot be written has the hash of one that can")
+	}
+}
+
+// hashOf is the hash of an engine, from a new hasher.
+func hashOf[S sim.State](e *Engine[S]) uint64 { return e.Hash(sim.NewHasher()) }

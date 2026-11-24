@@ -17,18 +17,6 @@ type bouncer struct {
 	dropped  uint64
 }
 
-// bouncerAt is the bouncer as the kinds of OnFail see it in a tick: with the configuration of the
-// tick, which says how many times a message is tried.
-type bouncerAt struct {
-	*bouncer
-	cfg *config.Snapshot
-}
-
-var _ sim.Bouncer = bouncerAt{}
-
-// MaxAttempts is how many times a message is tried.
-func (b bouncerAt) MaxAttempts() int { return sim.MaxAttempts.Get(b.cfg) }
-
 // handle runs what the message says to do about the failure. A message with no OnFail is dropped
 // and logged.
 func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.DeliveryFailure) {
@@ -72,3 +60,15 @@ func (b *bouncer) Stop() { b.stopping = true }
 // SetNotice sets what tells an actor something: what a notice of a message that could not be
 // delivered is given to.
 func (b *bouncer) SetNotice(notice func(actor any, key string, args []any)) { b.notice = notice }
+
+// bouncerAt is the bouncer as the kinds of OnFail see it in a tick: with the configuration of the
+// tick, which says how many times a message is tried.
+type bouncerAt struct {
+	*bouncer
+	cfg *config.Snapshot
+}
+
+// MaxAttempts is how many times a message is tried.
+func (b bouncerAt) MaxAttempts() int { return sim.MaxAttempts.Get(b.cfg) }
+
+var _ sim.Bouncer = bouncerAt{}

@@ -63,17 +63,6 @@ func (s *Scheduler[S]) FindByID(id ActionID) (Action[S], bool) {
 	return found, ok
 }
 
-// ReadOnlyScheduler is what the outside of an engine may ask of its scheduler: what waits in it.
-// Only the engine changes the scheduler, at the end of its tick.
-type ReadOnlyScheduler[S State] interface {
-	// FindByID returns the action of the ID that waits for the earliest tick.
-	FindByID(id ActionID) (Action[S], bool)
-	// Pending returns how many actions wait for a tick.
-	Pending() int
-}
-
-var _ ReadOnlyScheduler[State] = (*Scheduler[State])(nil)
-
 // Encode writes what the scheduler waits for: the last tick it gave out, and the actions
 // set for a later tick, by tick and in the order they were set. An action that sets itself again
 // is among them, so what the engine does again and again is written with the rest.
@@ -145,3 +134,14 @@ func (s *Scheduler[S]) Hash(h *Hasher) {
 		h.actionsWith(s.at[tick], &w)
 	}
 }
+
+// ReadOnlyScheduler is what the outside of an engine may ask of its scheduler: what waits in it.
+// Only the engine changes the scheduler, at the end of its tick.
+type ReadOnlyScheduler[S State] interface {
+	// FindByID returns the action of the ID that waits for the earliest tick.
+	FindByID(id ActionID) (Action[S], bool)
+	// Pending returns how many actions wait for a tick.
+	Pending() int
+}
+
+var _ ReadOnlyScheduler[State] = (*Scheduler[State])(nil)

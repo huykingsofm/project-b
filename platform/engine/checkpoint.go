@@ -6,7 +6,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/rand"
 )
 
 // A checkpoint is what an engine needs to go on from the tick it was taken at, as bytes: the start
@@ -19,9 +18,75 @@ import (
 // What the engine does again and again is an action that waits, so it is in the scheduler and
 // there is nothing else to write for it.
 
-// readCheckpointStart reads the start of a checkpoint and checks that it is the checkpoint of an
+// CheckpointEngine writes the checkpoint of an engine: the start, which says which engine it is and
+// the tick it is at, then its state, what it waits for (the scheduler), and what only it knows. It
+// is called between two ticks, by the goroutine of the engine or while the engine does not run.
+func CheckpointEngine[S sim.State](e *Engine[S]) ([]byte, error) {
+	var w binary.Writer
+	w.Uvarint(1) // the version of the data
+	w.Uvarint(uint64(e.me))
+	w.Uvarint(e.tick)
+	if err := e.st.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: the state: %w", e.me, err)
+	}
+	if err := e.sched.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: the scheduler: %w", e.me, err)
+	}
+	if err := e.cell.cellData.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: %w", e.me, err)
+	}
+	return w.B, nil
+}
+
+// RestoreEngine makes the engine of a state from a checkpoint, in the environment given, at the
+// tick of the checkpoint. The state is read with the codecs of the environment. What the engine
+// does again and again is an action that waits in the checkpoint like any other. Nothing of an
+// engine is made, and so nothing is registered in a router, until all of the checkpoint has been
+// read and checked: a bad checkpoint returns an error and registers nothing.
+func RestoreEngine[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
+	r := binary.NewReader(data)
+	version, id, tick, err := readCheckpointHeader(r, sim.StateTypeOf[S]())
+	if err != nil {
+		return nil, err
+	}
+	decodedState, err := env.Codecs.DecodeStateOfType(sim.StateTypeOf[S](), r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%d: the state: %w", id, err)
+	}
+	state, ok := decodedState.(S)
+	if !ok {
+		return nil, fmt.Errorf("%d: the state is a %T, not the one asked for", id, decodedState)
+	}
+	if state.ID() != id {
+		return nil, fmt.Errorf("%d: the state is of the engine %d", id, state.ID())
+	}
+	if state.Tick() != tick {
+		return nil, fmt.Errorf(
+			"%d: %w: the state is at tick %d, and the checkpoint at %d",
+			id, ErrTickMismatch, state.Tick(), tick,
+		)
+	}
+	var sched sim.Scheduler[S]
+	if err := sched.Decode(env.Codecs, r, version); err != nil {
+		return nil, fmt.Errorf("%d: the scheduler: %w", id, err)
+	}
+	cellData, err := decodeCellData(env.Codecs, r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%d: %w", id, err)
+	}
+	if r.Left() != 0 {
+		return nil, fmt.Errorf("%d: %d bytes are left after the checkpoint", id, r.Left())
+	}
+	e := New(state, env, seed)
+	e.tick = tick
+	e.sched = sched
+	e.cell.restoreFrom(cellData)
+	return e, nil
+}
+
+// readCheckpointHeader reads the start of a checkpoint and checks that it is the checkpoint of an
 // engine whose state is of the type.
-func readCheckpointStart(
+func readCheckpointHeader(
 	r *binary.Reader, want sim.StateType,
 ) (codec.Version, sim.StateID, uint64, error) {
 	version := r.Uint[codec.Version]()
@@ -43,71 +108,4 @@ func readCheckpointStart(
 		)
 	}
 	return version, id, tick, nil
-}
-
-// restored is what follows the state of an engine in a checkpoint, read and checked but not yet
-// given to an engine: nothing of an engine is made, and so nothing is registered in a router, until
-// all of the checkpoint has been read.
-type restored[S sim.State] struct {
-	sched sim.Scheduler[S]
-	cell  restoredCell
-}
-
-// restoredCell is what a checkpoint says of what every engine knows besides its state.
-type restoredCell struct {
-	rng               *rand.Rand
-	sentSeq           uint64
-	cfgVersionSeen    uint64
-	lastRecvSeq       map[sim.StateID]uint64
-	unsettledMessages unsettledMessages
-}
-
-// PCG is where the random numbers of the engine were.
-func (rc restoredCell) Rand() *rand.Rand { return rc.rng }
-
-// SentSeq is the number of the last message the engine sent.
-func (rc restoredCell) SentSeq() uint64 { return rc.sentSeq }
-
-// CfgVersionSeen is the version of the configuration the engine read last.
-func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
-
-// LastRecvSeq is the last number that the engine took from each sender.
-func (rc restoredCell) LastRecvSeq() map[sim.StateID]uint64 { return rc.lastRecvSeq }
-
-// UnsettledMessages is what the engine had sent or was to send.
-func (rc restoredCell) UnsettledMessages() unsettledMessages { return rc.unsettledMessages }
-
-// Scheduler is what the engine waited for.
-func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }
-
-// Cell is what every engine knows besides its state.
-func (r *restored[S]) Cell() restoredCell { return r.cell }
-
-// decodeCell reads what encode wrote.
-func decodeCell(
-	c *sim.Codecs, r *binary.Reader, version codec.Version,
-) (restoredCell, error) {
-	rng, err := rand.Decode(r)
-	if err != nil {
-		return restoredCell{}, fmt.Errorf("its random numbers: %w", err)
-	}
-	rc := restoredCell{rng: rng}
-	rc.sentSeq = r.Uvarint()
-	rc.cfgVersionSeen = r.Uvarint()
-	n := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return restoredCell{}, err
-	}
-	if n > uint64(r.Left()) { // a sender takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d senders", binary.ErrShort, n)
-	}
-	rc.lastRecvSeq = make(map[sim.StateID]uint64, n)
-	for range n {
-		sender := r.Uint[sim.StateID]()
-		rc.lastRecvSeq[sender] = r.Uvarint()
-	}
-	if rc.unsettledMessages, err = decodeUnsettledMessages(c, r, version); err != nil {
-		return restoredCell{}, err
-	}
-	return rc, r.Err()
 }

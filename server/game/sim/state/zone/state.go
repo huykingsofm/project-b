@@ -32,11 +32,24 @@ type ZoneLayerSlot struct {
 	capacity int32
 }
 
+// ID is the ID of the zonelayer.
+func (z ZoneLayerSlot) ID() sim.StateID { return z.id }
+
+// Capacity is how many characters the zonelayer takes.
+func (z ZoneLayerSlot) Capacity() int32 { return z.capacity }
+
 // ChatMessage is something a character said in the zone.
 type ChatMessage struct {
 	fromID state.CharacterID
 	text   string
 	tick   uint64
+}
+
+// NewChatMessage makes a message that a character said in a zone at a tick.
+func NewChatMessage(fromID state.CharacterID, text string, tick uint64) ChatMessage {
+	return ChatMessage{
+		fromID: fromID, text: text, tick: tick,
+	}
 }
 
 // chatKeep is how many messages a zone keeps of what was said in it.
@@ -102,17 +115,6 @@ func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool
 	return exit, ok
 }
 
-// ReadOnlyZoneState is the read methods of the state of a zone: what an action may use of a copy
-// that another engine published, which it must never change (R26, R28).
-type ReadOnlyZoneState interface {
-	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
-	WorldID() sim.StateID
-	TileMap() tilemap.ReadOnlyTileMap
-	ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot]
-}
-
-var _ ReadOnlyZoneState = (*State)(nil)
-
 // TileMap returns the map of the zone.
 func (s *State) TileMap() tilemap.ReadOnlyTileMap { return s.tiles }
 
@@ -153,19 +155,6 @@ func (s *State) SendMessage(m ChatMessage) {
 	s.chat.Add(m)
 	s.events.Add(event.ChatMessageSent{FromID: m.fromID, Text: m.text, Tick: m.tick})
 }
-
-// NewChatMessage makes a message that a character said in a zone at a tick.
-func NewChatMessage(fromID state.CharacterID, text string, tick uint64) ChatMessage {
-	return ChatMessage{
-		fromID: fromID, text: text, tick: tick,
-	}
-}
-
-// ID is the ID of the zonelayer.
-func (z ZoneLayerSlot) ID() sim.StateID { return z.id }
-
-// Capacity is how many characters the zonelayer takes.
-func (z ZoneLayerSlot) Capacity() int32 { return z.capacity }
 
 // ExitEntityCount is how many exits the zone holds.
 func (s *State) ExitEntityCount() int { return s.entities.Len() }
@@ -228,3 +217,14 @@ func (s *State) Hash() uint64 {
 	h.U64(uint64(s.chat.Len()))
 	return h.Sum()
 }
+
+// ReadOnlyZoneState is the read methods of the state of a zone: what an action may use of a copy
+// that another engine published, which it must never change (R26, R28).
+type ReadOnlyZoneState interface {
+	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
+	WorldID() sim.StateID
+	TileMap() tilemap.ReadOnlyTileMap
+	ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot]
+}
+
+var _ ReadOnlyZoneState = (*State)(nil)

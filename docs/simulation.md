@@ -61,7 +61,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 |---|---|
 | `Cluster.Step` | the router stops (every message bounces as `DeliveryFailureStopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
 | `Cluster.Run` | the engine that failed retires and returns its error; every other engine stops as if the context had ended; the error is logged once, by `Run` |
-| an engine is made | it starts at the tick of its state; `Restore` refuses a checkpoint whose state is not at the tick in its header |
+| an engine is made | it starts at the tick of its state; `RestoreEngine` refuses a checkpoint whose state is not at the tick in its header |
 
 ## Actions
 

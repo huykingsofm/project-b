@@ -86,7 +86,7 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer
-	if err := o.Encode(&w, true); err != nil {
+	if err := o.Encode(&w); err != nil {
 		t.Fatal(err)
 	}
 	r := binary.NewReader(w.B)
@@ -106,7 +106,8 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 		}
 	}
 	var withoutSent binary.Writer
-	if err := o.Encode(&withoutSent, false); err != nil || len(withoutSent.B) >= len(w.B) {
+	held := o.withoutSent()
+	if err := held.Encode(&withoutSent); err != nil || len(withoutSent.B) >= len(w.B) {
 		t.Fatalf("what the hash is given is not smaller: %d and %d, %v",
 			len(withoutSent.B), len(w.B), err)
 	}
@@ -225,12 +226,12 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
-	data, err := b.Checkpoint()
+	data, err := CheckpointEngine(b)
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := newToyEnv(t)
-	restored, err := Restore[*toyState](data, env, 1)
+	restored, err := RestoreEngine[*toyState](data, env, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

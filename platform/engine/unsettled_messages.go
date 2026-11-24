@@ -156,15 +156,12 @@ func (u *unsettledMessages) Receivers() []sim.StateID {
 
 // Encode writes the messages that are to go, and then the ones that went and were not acked, each
 // whole. What it waits for each is not written: after a restore every one is sent again.
-func (u *unsettledMessages) Encode(w *binary.Writer, withSent bool) error {
+func (u *unsettledMessages) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(len(u.unsent)))
 	for _, m := range u.unsent {
 		if err := sim.EncodeMessage(w, m); err != nil {
 			return fmt.Errorf("a message that is to go: %w", err)
 		}
-	}
-	if !withSent {
-		return nil
 	}
 	w.Uvarint(uint64(len(u.sent)))
 	for _, s := range u.sent {
@@ -173,6 +170,14 @@ func (u *unsettledMessages) Encode(w *binary.Writer, withSent bool) error {
 		}
 	}
 	return nil
+}
+
+// withoutSent is a copy that holds the messages that are to go and none of those that went. It
+// shares the messages with the original.
+func (u *unsettledMessages) withoutSent() unsettledMessages {
+	c := *u
+	c.sent = nil
+	return c
 }
 
 // decodeUnsettledMessages reads what Encode wrote with the sent messages.
@@ -213,8 +218,6 @@ type AckBoard struct {
 	slots sync.Map // ackKey to *atomic.Uint64: a pair is added once and never removed
 }
 
-type ackKey struct{ receiver, sender sim.StateID }
-
 // NewAckBoard makes an empty board.
 func NewAckBoard() *AckBoard { return &AckBoard{} }
 
@@ -243,3 +246,5 @@ func (b *AckBoard) Acked(receiver, sender sim.StateID) uint64 {
 	}
 	return 0
 }
+
+type ackKey struct{ receiver, sender sim.StateID }

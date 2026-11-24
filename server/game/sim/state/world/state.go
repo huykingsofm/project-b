@@ -23,12 +23,28 @@ type PrivateChatMessage struct {
 	tick   uint64
 }
 
+// NewPrivateChatMessage makes a private message that a player said to another at a tick.
+func NewPrivateChatMessage(
+	fromID, toID state.PlayerID, text string, tick uint64,
+) PrivateChatMessage {
+	return PrivateChatMessage{
+		fromID: fromID, toID: toID,
+		text: text, tick: tick,
+	}
+}
+
 // InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
 // is empty.
 type InventorySlot struct {
 	itemID state.ItemID
 	count  uint32
 }
+
+// ItemID is the kind of item that the slot holds.
+func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
+
+// Count is how many items the slot holds; 0 is an empty slot.
+func (i InventorySlot) Count() uint32 { return i.count }
 
 // Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R29).
 type Inventory struct {
@@ -72,16 +88,6 @@ func NewState(worldID sim.StateID) *State {
 		stateIDCounters: sim.NewStateIDCounters(),
 	}
 }
-
-// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
-// copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyWorldState interface {
-	Hash() uint64
-	ZoneIDs() []sim.StateID
-	ZoneLayerIDs() []sim.StateID
-}
-
-var _ ReadOnlyWorldState = (*State)(nil)
 
 // clone returns a copy of the data, with an empty event.
 func (s *State) clone() *State {
@@ -189,57 +195,6 @@ func (s *State) AddItemToCharacter(
 	return left
 }
 
-// topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
-// stackLimit in each, and returns how many are left.
-func topUpInventorySlotsOfKind(
-	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
-) uint32 {
-	for i := range slots {
-		if left == 0 {
-			return 0
-		}
-		if slots[i].count == 0 || slots[i].itemID != itemID {
-			continue
-		}
-		put := min(left, stackLimit-min(slots[i].count, stackLimit))
-		slots[i].count += put
-		left -= put
-	}
-	return left
-}
-
-// fillEmptyInventorySlots puts items in the empty slots, in order, up to stackLimit in each, and
-// returns how many are left.
-func fillEmptyInventorySlots(
-	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
-) uint32 {
-	for i := range slots {
-		if left == 0 {
-			return 0
-		}
-		if slots[i].count != 0 {
-			continue
-		}
-		put := min(left, stackLimit)
-		if put == 0 {
-			return left
-		}
-		slots[i] = InventorySlot{itemID: itemID, count: put}
-		left -= put
-	}
-	return left
-}
-
-// NewPrivateChatMessage makes a private message that a player said to another at a tick.
-func NewPrivateChatMessage(
-	fromID, toID state.PlayerID, text string, tick uint64,
-) PrivateChatMessage {
-	return PrivateChatMessage{
-		fromID: fromID, toID: toID,
-		text: text, tick: tick,
-	}
-}
-
 // PrivateMessageCount is how many private messages the world keeps.
 func (s *State) PrivateMessageCount() int { return s.privateChat.Len() }
 
@@ -260,12 +215,6 @@ func (s *State) InventorySlots(characterID state.CharacterID) []InventorySlot {
 	inventory, _ := s.inventories.Get(characterID)
 	return slices.Clone(inventory.slots)
 }
-
-// ItemID is the kind of item that the slot holds.
-func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
-
-// Count is how many items the slot holds; 0 is an empty slot.
-func (i InventorySlot) Count() uint32 { return i.count }
 
 // Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
 // it gives the states it makes, the private messages, and the inventory of every character. The
@@ -323,4 +272,55 @@ func (s *State) Hash() uint64 {
 		}
 	}
 	return h.Sum()
+}
+
+// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
+// copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyWorldState interface {
+	Hash() uint64
+	ZoneIDs() []sim.StateID
+	ZoneLayerIDs() []sim.StateID
+}
+
+var _ ReadOnlyWorldState = (*State)(nil)
+
+// topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
+// stackLimit in each, and returns how many are left.
+func topUpInventorySlotsOfKind(
+	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
+) uint32 {
+	for i := range slots {
+		if left == 0 {
+			return 0
+		}
+		if slots[i].count == 0 || slots[i].itemID != itemID {
+			continue
+		}
+		put := min(left, stackLimit-min(slots[i].count, stackLimit))
+		slots[i].count += put
+		left -= put
+	}
+	return left
+}
+
+// fillEmptyInventorySlots puts items in the empty slots, in order, up to stackLimit in each, and
+// returns how many are left.
+func fillEmptyInventorySlots(
+	slots []InventorySlot, itemID state.ItemID, left uint32, stackLimit uint32,
+) uint32 {
+	for i := range slots {
+		if left == 0 {
+			return 0
+		}
+		if slots[i].count != 0 {
+			continue
+		}
+		put := min(left, stackLimit)
+		if put == 0 {
+			return left
+		}
+		slots[i] = InventorySlot{itemID: itemID, count: put}
+		left -= put
+	}
+	return left
 }

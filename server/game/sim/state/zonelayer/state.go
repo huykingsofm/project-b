@@ -59,14 +59,6 @@ func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 	return s
 }
 
-// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
-// a copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyZoneLayerState interface {
-	CharacterCount() int
-}
-
-var _ ReadOnlyZoneLayerState = (*State)(nil)
-
 // clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
 func (s *State) clone() *State {
 	return &State{
@@ -421,3 +413,11 @@ func (s *State) Hash() uint64 {
 	}
 	return h.Sum()
 }
+
+// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
+// a copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyZoneLayerState interface {
+	CharacterCount() int
+}
+
+var _ ReadOnlyZoneLayerState = (*State)(nil)

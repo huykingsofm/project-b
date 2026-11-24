@@ -9,8 +9,6 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/shared/codec"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -155,23 +153,4 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 	if failure != nil {
 		logging.Error("the cluster stopped", "err", failure)
 	}
-}
-
-// readCheckpointRest reads what follows the state of an engine: what it waits for, and what only it
-// knows.
-func (env *Env) readCheckpointRest[S sim.State](
-	r *binary.Reader, version codec.Version,
-) (*restored[S], error) {
-	var rest restored[S]
-	if err := rest.sched.Decode(env.Codecs, r, version); err != nil {
-		return nil, fmt.Errorf("the scheduler: %w", err)
-	}
-	var err error
-	if rest.cell, err = decodeCell(env.Codecs, r, version); err != nil {
-		return nil, err
-	}
-	if r.Left() != 0 {
-		return nil, fmt.Errorf("%d bytes are left after the checkpoint", r.Left())
-	}
-	return &rest, nil
 }
