@@ -22,19 +22,18 @@ type ZoneLayerCharacterEnterAction struct {
 	At        state.Vec
 }
 
-func (a *ZoneLayerCharacterEnterAction) ID() sim.ActionID { return ZoneLayerCharacterEnterActionID }
-func (a *ZoneLayerCharacterEnterAction) Priority() int16  { return PriorityResolve }
-func (a *ZoneLayerCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
+func (a ZoneLayerCharacterEnterAction) ID() sim.ActionID { return ZoneLayerCharacterEnterActionID }
+func (a ZoneLayerCharacterEnterAction) Priority() int16  { return PriorityResolve }
+func (a ZoneLayerCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterEnterAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	c.Character = a.Character.Clone()
-	return &c
+// Clone returns the action with a clone of the character it holds.
+func (a ZoneLayerCharacterEnterAction) Clone() sim.Action[*zonelayerstate.State] {
+	a.Character = a.Character.Clone()
+	return a
 }
 
 // Apply gives the character a body.
-func (a *ZoneLayerCharacterEnterAction) Apply(
+func (a ZoneLayerCharacterEnterAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -54,7 +53,7 @@ func (a *ZoneLayerCharacterEnterAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterEnterAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterEnterAction) Encode(w *binary.Writer) {
 	a.Character.Encode(w)
 	a.At.Encode(w)
 }
@@ -62,11 +61,11 @@ func (a *ZoneLayerCharacterEnterAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterEnterAction reads what Encode wrote.
 func decodeZoneLayerCharacterEnterAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterEnterAction, error) {
+) (ZoneLayerCharacterEnterAction, error) {
 	c, err := zonelayerstate.DecodeCharacter(r, version)
 	if err != nil {
-		return nil, err
+		return ZoneLayerCharacterEnterAction{}, err
 	}
-	a := &ZoneLayerCharacterEnterAction{Character: c, At: state.DecodeVec(r, version)}
+	a := ZoneLayerCharacterEnterAction{Character: c, At: state.DecodeVec(r, version)}
 	return a, r.Err()
 }

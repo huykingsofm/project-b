@@ -14,7 +14,7 @@ import (
 )
 
 func toMessage(to sim.StateID, seq uint64) sim.Message {
-	return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1}).
+	return sim.NewActionMessage(to, onfail.Drop{}, toyAction{N: 1}).
 		Stamp(sim.Header{From: 1, Seq: seq, Tick: seq})
 }
 
@@ -83,7 +83,7 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 		t.Fatal(err)
 	}
 	var o unsettledMessages
-	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 3}))
+	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer
 	if err := o.Encode(&w); err != nil {
@@ -151,7 +151,7 @@ func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t 
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
 	held := &a.peer.data.unsettledMessages
 	first := uint64(unsettledResendFirst.Get(config.Defaults()))
-	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
 	c.Step()
 	if b.State().Total != 7 || held.Len() != 1 {
 		t.Fatalf("b has %d and a holds %d, want 7 and 1",
@@ -183,7 +183,7 @@ func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
 	held := &a.peer.data.unsettledMessages
 	for _, tick := range []uint64{1, 4, 7} {
-		a.ScheduleAt(tick, &forwardAction{To: 2, N: 1})
+		a.ScheduleAt(tick, forwardAction{To: 2, N: 1})
 	}
 	for range 8 {
 		c.Step()
@@ -205,7 +205,7 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
 	held := &a.peer.data.unsettledMessages
 	first := uint64(unsettledResendFirst.Get(config.Defaults()))
-	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
 	c.Step()
 	c.Env.Router.Retire(b.StateID())
 	for a.Tick() < first+3 {
@@ -227,7 +227,7 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 
 func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
-	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
 	c.Step()
 	data, err := b.Checkpoint().Encode()
 	if err != nil {

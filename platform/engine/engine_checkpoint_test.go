@@ -122,7 +122,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	w := &recordingWriter{}
 	c, engines := toyClusterThatCheckpoints(t, w, 1)
 	e := engines[0]
-	e.ScheduleAt(100, &toyAction{N: 1000}) // waits in the scheduler
+	e.ScheduleAt(100, toyAction{N: 1000}) // waits in the scheduler
 	var want []byte
 	var hashAt uint64
 	for len(w.offered) == 0 {
@@ -139,7 +139,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	taken := w.offered[0]
 	for range 12 { // the state, the scheduler and the random numbers all move on
 		e.Send(toyCommand{N: 7})
-		e.ScheduleAt(e.Tick()+50, &toyAction{N: 3})
+		e.ScheduleAt(e.Tick()+50, toyAction{N: 3})
 		e.rng.Uint64()
 		if err := c.Step(); err != nil {
 			t.Fatal(err)
@@ -183,16 +183,16 @@ func restoreEngine[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S],
 func TestACheckpointSharesNoMemoryWithTheEngineItWasTakenFrom(t *testing.T) {
 	c, engines := toyCluster(t, 1)
 	e := engines[0]
-	e.ScheduleAt(40, &toyAction{N: 1})
-	e.ScheduleAt(40, &forwardAction{To: 2, N: 3})
+	e.ScheduleAt(40, toyAction{N: 1})
+	e.ScheduleAt(40, forwardAction{To: 2, N: 3})
 	e.peer.data.lastRecvSeq.Set(7, 3)
 	e.peer.data.unsettledMessages.AddUnsent(
-		sim.NewActionMessage(2, onfail.Notify{Key: "k", Args: []string{"a"}}, &toyAction{N: 2}),
+		sim.NewActionMessage(2, onfail.Notify{Key: "k", Args: []string{"a"}}, toyAction{N: 2}),
 	)
 	e.peer.data.unsettledMessages.SetSent([]sim.Message{
 		sim.NewActionMessage(3, onfail.Compensate{
-			With: sim.NewActionMessage(1, onfail.Drop{}, &toyAction{N: 4}),
-		}, &toyAction{N: 5}).Stamp(sim.Header{From: 1, Seq: 1}),
+			With: sim.NewActionMessage(1, onfail.Drop{}, toyAction{N: 4}),
+		}, toyAction{N: 5}).Stamp(sim.Header{From: 1, Seq: 1}),
 	})
 	if err := c.Step(); err != nil {
 		t.Fatal(err)
@@ -222,7 +222,7 @@ func (*otherToy) Type() sim.StateType { return toyType + 1 }
 
 func TestRestoringACheckpointOfAnotherTypeOfStateOrCutIsAnErrorAndRegistersNothing(t *testing.T) {
 	c, engines := toyCluster(t, 1)
-	engines[0].ScheduleAt(30, &forwardAction{To: 1, N: 2, Again: 10})
+	engines[0].ScheduleAt(30, forwardAction{To: 1, N: 2, Again: 10})
 	c.Step()
 	data, err := engines[0].Checkpoint().Encode()
 	if err != nil {
@@ -249,7 +249,7 @@ func TestRestoringACheckpointOfAnotherTypeOfStateOrCutIsAnErrorAndRegistersNothi
 func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.T) {
 	c, engines := toyCluster(t, 1, 2)
 	a := engines[0]
-	a.ScheduleAt(3, &forwardAction{To: 2, N: 4, Again: 5})
+	a.ScheduleAt(3, forwardAction{To: 2, N: 4, Again: 5})
 	a.Send(toyCommand{N: 3})
 	for range 8 {
 		c.Step()
@@ -290,11 +290,11 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 	e.peer.data.sentSeq = 41
 	e.peer.data.lastRecvSeq.Set(99, 1)
 	e.peer.data.unsettledMessages.SetUnsent([]sim.Message{
-		sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 1}).
+		sim.NewActionMessage(2, onfail.Retry{}, toyAction{N: 1}).
 			Stamp(sim.Header{From: 1, Seq: 40}),
 	})
 	e.peer.data.unsettledMessages.SetSent([]sim.Message{
-		sim.NewActionMessage(3, onfail.Retry{}, &toyAction{N: 2}).
+		sim.NewActionMessage(3, onfail.Retry{}, toyAction{N: 2}).
 			Stamp(sim.Header{From: 1, Seq: 39, Tick: 6}),
 	})
 	data, err := e.Checkpoint().Encode()

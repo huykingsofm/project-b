@@ -19,7 +19,7 @@ func mustCodecs(t testing.TB) *Codecs {
 
 func TestAnActionComesBackAsItWasWritten(t *testing.T) {
 	c := mustCodecs(t)
-	for _, a := range []BaseAction{&addAction{N: -5}, &anonymousAction{name: "x", priority: -9}} {
+	for _, a := range []BaseAction{addAction{N: -5}, anonymousAction{name: "x", priority: -9}} {
 		var w binary.Writer
 		if err := EncodeAction(&w, a); err != nil {
 			t.Fatalf("%T: %v", a, err)
@@ -49,7 +49,7 @@ func TestACodecRefusesANumberOrATypeThatTwoKindsShare(t *testing.T) {
 }
 
 func toyMessages() []Message {
-	add := func(n int64) Action[*toyState] { return &addAction{N: n} }
+	add := func(n int64) Action[*toyState] { return addAction{N: n} }
 	undo := NewActionMessage(5, testDrop{}, add(1))
 	return []Message{
 		NewActionMessage(5, testDrop{}, add(1), add(2)).
@@ -59,7 +59,7 @@ func toyMessages() []Message {
 		NewActionMessage[*toyState](
 			5, testCompensate{With: NewActionMessage[*toyState](1, testCompensate{With: undo})},
 		),
-		NewActionMessage(NewStateID(otherType, 9), testDrop{}, &otherAction{}),
+		NewActionMessage(NewStateID(otherType, 9), testDrop{}, otherAction{}),
 	}
 }
 
@@ -111,7 +111,7 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 	w.Uvarint(0) // attempts
 	w.Uvarint(uint64(testDropID))
 	w.Uvarint(1)
-	if err := EncodeAction(&w, &otherAction{}); err != nil { // an action of the other type
+	if err := EncodeAction(&w, otherAction{}); err != nil { // an action of the other type
 		t.Fatal(err)
 	}
 	_, err := c.DecodeMessage(binary.NewReader(w.B), 1)
@@ -167,7 +167,7 @@ func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testin
 	if !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
 	}
-	m := NewActionMessage(1, testDrop{}, &addAction{}, noEncodeAction{})
+	m := NewActionMessage(1, testDrop{}, addAction{}, noEncodeAction{})
 	if err := EncodeMessage(&w, m); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a message with such an action: %v, %d bytes written", err, len(w.B))
 	}
@@ -241,8 +241,8 @@ func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) 
 func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
 	var r Registry[*toyState]
 	other := NewStateID(otherType, 9)
-	r.Send(other, testDrop{}, &otherAction{})
-	r.Send(5, testDrop{}, &addAction{N: 1})
+	r.Send(other, testDrop{}, otherAction{})
+	r.Send(5, testDrop{}, addAction{N: 1})
 	sent := r.Take()
 	if len(sent) != 2 || sent[0].Dest() != other || sent[1].Dest() != 5 || r.Take() != nil {
 		t.Fatalf("the outbox held %+v", sent)

@@ -13,15 +13,15 @@ import (
 // anActionOfEachKind has an action of every kind of the package.
 func anActionOfEachKind() []sim.BaseAction {
 	return []sim.BaseAction{
-		&WorldChatPrivateSendAction{}, &WorldCharacterItemAddAction{},
-		&ZoneChatSendAction{}, &ZoneCharacterEnterAction{},
-		&ZoneLayerChatSendAction{}, &ZoneLayerCharacterEnterAction{},
-		&ZoneLayerCharacterMoveAction{},
-		&ZoneLayerCharacterNormalAttackTriggerAction{}, &ZoneLayerCharacterDamageAction{},
-		&ZoneLayerCharacterShieldGrantAction{},
-		&ZoneLayerCharacterRegenAction{}, &ZoneLayerCharacterExitToAction{},
-		&ZoneLayerCharacterItemPickupAction{},
-		&ZoneLayerItemEntityAddAction{}, &ZoneLayerItemEntityRemoveAction{},
+		WorldChatPrivateSendAction{}, WorldCharacterItemAddAction{},
+		ZoneChatSendAction{}, ZoneCharacterEnterAction{},
+		ZoneLayerChatSendAction{}, ZoneLayerCharacterEnterAction{},
+		ZoneLayerCharacterMoveAction{},
+		ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{},
+		ZoneLayerCharacterShieldGrantAction{},
+		ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{},
+		ZoneLayerCharacterItemPickupAction{},
+		ZoneLayerItemEntityAddAction{}, ZoneLayerItemEntityRemoveAction{},
 	}
 }
 

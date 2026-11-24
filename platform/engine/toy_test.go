@@ -58,19 +58,19 @@ type toyAction struct {
 	Author int
 }
 
-func (*toyAction) ID() sim.ActionID { return toyActionID }
-func (*toyAction) Priority() int16  { return 0 }
-func (a *toyAction) Actor() any     { return a.Author }
-func (a *toyAction) Apply(
+func (toyAction) ID() sim.ActionID { return toyActionID }
+func (toyAction) Priority() int16  { return 0 }
+func (a toyAction) Actor() any     { return a.Author }
+func (a toyAction) Apply(
 	_ *sim.Context, s *toyState, _ *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
 	s.Total += a.N
 }
-func (a *toyAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (a *toyAction) Encode(w *binary.Writer)      { w.Varint(a.N); w.Varint(int64(a.Author)) }
+func (a toyAction) Clone() sim.Action[*toyState] { return a }
+func (a toyAction) Encode(w *binary.Writer)      { w.Varint(a.N); w.Varint(int64(a.Author)) }
 
-func decodeToyAction(r *binary.Reader, _ codec.Version) (*toyAction, error) {
-	a := &toyAction{N: r.Varint(), Author: int(r.Varint())}
+func decodeToyAction(r *binary.Reader, _ codec.Version) (toyAction, error) {
+	a := toyAction{N: r.Varint(), Author: int(r.Varint())}
 	return a, r.Err()
 }
 
@@ -85,7 +85,7 @@ func (c toyCommand) Encode(w *binary.Writer) error {
 	return nil
 }
 func (c toyCommand) Translate() []sim.Action[*toyState] {
-	return []sim.Action[*toyState]{&toyAction{N: c.N}}
+	return []sim.Action[*toyState]{toyAction{N: c.N}}
 }
 func (c toyCommand) Clone() sim.Command[*toyState] { return c }
 
@@ -105,19 +105,19 @@ type forwardAction struct {
 
 const forwardActionID sim.ActionID = 60002
 
-func (*forwardAction) ID() sim.ActionID { return forwardActionID }
-func (*forwardAction) Priority() int16  { return 0 }
-func (*forwardAction) Actor() any       { return nil }
-func (a *forwardAction) Apply(
+func (forwardAction) ID() sim.ActionID { return forwardActionID }
+func (forwardAction) Priority() int16  { return 0 }
+func (forwardAction) Actor() any       { return nil }
+func (a forwardAction) Apply(
 	c *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
-	r.Send(a.To, onfail.Retry{}, &toyAction{N: a.N})
+	r.Send(a.To, onfail.Retry{}, toyAction{N: a.N})
 	if a.Again > 0 {
 		r.ToSelfAt(c.Tick+a.Again, a)
 	}
 }
-func (a *forwardAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (a *forwardAction) Encode(w *binary.Writer) {
+func (a forwardAction) Clone() sim.Action[*toyState] { return a }
+func (a forwardAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.To))
 	w.Varint(a.N)
 	w.Uvarint(a.Again)
@@ -125,8 +125,8 @@ func (a *forwardAction) Encode(w *binary.Writer) {
 
 func decodeForwardAction(
 	r *binary.Reader, _ codec.Version,
-) (*forwardAction, error) {
-	a := &forwardAction{To: sim.StateID(r.Uvarint()), N: r.Varint(), Again: r.Uvarint()}
+) (forwardAction, error) {
+	a := forwardAction{To: sim.StateID(r.Uvarint()), N: r.Varint(), Again: r.Uvarint()}
 	return a, r.Err()
 }
 
@@ -135,23 +135,23 @@ type readAction struct{ From sim.StateID }
 
 const readActionID sim.ActionID = 60003
 
-func (*readAction) ID() sim.ActionID { return readActionID }
-func (*readAction) Priority() int16  { return 0 }
-func (*readAction) Actor() any       { return nil }
-func (a *readAction) Apply(
+func (readAction) ID() sim.ActionID { return readActionID }
+func (readAction) Priority() int16  { return 0 }
+func (readAction) Actor() any       { return nil }
+func (a readAction) Apply(
 	_ *sim.Context, s *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
 	if other, err := r.Get[*toyState](a.From); err == nil {
 		s.Total = other.Total
 	}
 }
-func (a *readAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (a *readAction) Encode(w *binary.Writer)      { w.Uvarint(uint64(a.From)) }
+func (a readAction) Clone() sim.Action[*toyState] { return a }
+func (a readAction) Encode(w *binary.Writer)      { w.Uvarint(uint64(a.From)) }
 
 func decodeReadAction(
 	r *binary.Reader, _ codec.Version,
-) (*readAction, error) {
-	a := &readAction{From: sim.StateID(r.Uvarint())}
+) (readAction, error) {
+	a := readAction{From: sim.StateID(r.Uvarint())}
 	return a, r.Err()
 }
 

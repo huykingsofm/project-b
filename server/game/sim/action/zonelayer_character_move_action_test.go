@@ -39,7 +39,7 @@ func newMoveTestWorld(
 func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	st, reg := newMoveTestWorld(t, true)
 	plan := sim.NewPlan[*zonelayerstate.State]()
-	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
+	run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
 
 	run.Apply(&sim.Context{Tick: 10}, st, reg, plan)
 	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 15 {
@@ -49,8 +49,14 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 		t.Fatalf("position = %+v, want one step east", e.Position())
 	}
 
-	// A run that is cancelled frees the character at once.
-	var cancellable sim.Cancellable[*zonelayerstate.State] = run
+	// The run set itself for the next tick, as a copy that holds its place in the cooldown; that
+	// copy, cancelled, frees the character at once.
+	self := reg.TakeSelf()
+	if len(self) != 1 {
+		t.Fatalf("the run set itself %d times for a later tick, want once", len(self))
+	}
+	next := self[0].Action.(ZoneLayerCharacterMoveAction)
+	var cancellable sim.Cancellable[*zonelayerstate.State] = next
 	cancellable.ApplyCancel(&sim.Context{Tick: 12}, st, reg)
 	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 12 {
 		t.Fatalf("after the cancel the cooldown ends at %d, want 12", got)
@@ -59,18 +65,19 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 
 func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 	st, reg := newMoveTestWorld(t, false)
-	run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
+	run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
 	run.Apply(&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {
 		t.Fatalf("the character moved without a map: %+v", e.Position())
 	}
 	self := reg.TakeSelf()
-	if len(self) != 1 || self[0].Action != sim.Action[*zonelayerstate.State](run) {
+	if len(self) != 1 {
 		t.Fatal("the run did not set itself for the next tick")
 	}
-	if run.Ticks != 3 {
-		t.Fatalf("the run used %d ticks without moving", 3-run.Ticks)
+	next := self[0].Action.(ZoneLayerCharacterMoveAction)
+	if next.CharacterID != 1 || next.Ticks != 3 {
+		t.Fatalf("the run set itself again as %+v, want the same run with its 3 ticks", next)
 	}
 }
 
@@ -93,9 +100,14 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 		st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
 		start, _ := st.CharacterEntityByCharacterID(1)
 
-		run := &ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 2}
+		run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 2}
 		run.Apply(&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State]())
-		run.Apply(&sim.Context{Tick: 11}, st, reg, sim.NewPlan[*zonelayerstate.State]())
+		// what runs at the next tick is the copy that the run set for it
+		self := reg.TakeSelf()
+		if len(self) != 1 {
+			t.Fatalf("the run set itself %d times for the next tick, want once", len(self))
+		}
+		self[0].Action.Apply(&sim.Context{Tick: 11}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
 		end, _ := st.CharacterEntityByCharacterID(1)
 		if got := end.Position().X - start.Position().X; got != 2*speed {
@@ -114,7 +126,7 @@ func TestACharacterWithNoSpeedDoesNotMove(t *testing.T) {
 	ch, _ := st.RemoveCharacterEntity(1)
 	ch.SetSpeed(0)
 	st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
-	(&ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).Apply(
+	(ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).Apply(
 		&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State](),
 	)
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {

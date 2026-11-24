@@ -27,20 +27,19 @@ type ZoneLayerCharacterExitToAction struct {
 	ExitEntityID state.EntityID
 }
 
-func (a *ZoneLayerCharacterExitToAction) ID() sim.ActionID {
+func (a ZoneLayerCharacterExitToAction) ID() sim.ActionID {
 	return ZoneLayerCharacterExitToActionID
 }
-func (a *ZoneLayerCharacterExitToAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneLayerCharacterExitToAction) Actor() any      { return a.CharacterID }
+func (a ZoneLayerCharacterExitToAction) Priority() int16 { return PriorityIntent }
+func (a ZoneLayerCharacterExitToAction) Actor() any      { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply takes the character out and sends it to the zonelayer that has room.
-func (a *ZoneLayerCharacterExitToAction) Apply(
+func (a ZoneLayerCharacterExitToAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -74,18 +73,18 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 		// action that puts it anywhere.
 		selfID, back := s.ID(), body.Position()
 		undo := sim.NewActionMessage(
-			selfID, onfail.Drop{}, &ZoneLayerCharacterEnterAction{Character: character, At: back},
+			selfID, onfail.Drop{}, ZoneLayerCharacterEnterAction{Character: character, At: back},
 		)
 		r.Send(
 			zoneLayerID, onfail.Compensate{With: undo},
-			&ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival()},
+			ZoneLayerCharacterEnterAction{Character: character, At: exit.Arrival()},
 		)
 		return
 	}
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	a.ExitEntityID.Encode(w)
 }
@@ -93,13 +92,13 @@ func (a *ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterExitToAction reads what Encode wrote.
 func decodeZoneLayerCharacterExitToAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterExitToAction, error) {
+) (ZoneLayerCharacterExitToAction, error) {
 	characterID := r.Uint[state.CharacterID]()
 	exitEntityID, err := state.DecodeEntityID(r)
 	if err != nil {
-		return nil, err
+		return ZoneLayerCharacterExitToAction{}, err
 	}
-	return &ZoneLayerCharacterExitToAction{
+	return ZoneLayerCharacterExitToAction{
 		CharacterID: characterID, ExitEntityID: exitEntityID,
 	}, r.Err()
 }

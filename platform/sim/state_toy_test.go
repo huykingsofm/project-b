@@ -71,22 +71,22 @@ type anonymousAction struct {
 	priority int16
 }
 
-func (a *anonymousAction) ID() ActionID    { return testID }
-func (a *anonymousAction) Priority() int16 { return a.priority }
-func (a *anonymousAction) Actor() any      { return nil }
-func (a *anonymousAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
+func (a anonymousAction) ID() ActionID    { return testID }
+func (a anonymousAction) Priority() int16 { return a.priority }
+func (a anonymousAction) Actor() any      { return nil }
+func (a anonymousAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
 }
-func (a *anonymousAction) Clone() Action[*toyState] { c := *a; return &c }
+func (a anonymousAction) Clone() Action[*toyState] { return a }
 
-func (a *anonymousAction) Encode(w *binary.Writer) {
+func (a anonymousAction) Encode(w *binary.Writer) {
 	w.String(a.name)
 	w.Varint(int64(a.priority))
 }
 
 func decodeAnonymousAction(
 	r *binary.Reader, _ codec.Version,
-) (*anonymousAction, error) {
-	a := &anonymousAction{name: r.String(), priority: int16(r.Varint())}
+) (anonymousAction, error) {
+	a := anonymousAction{name: r.String(), priority: int16(r.Varint())}
 	return a, r.Err()
 }
 
@@ -103,17 +103,17 @@ type addAction struct{ N int64 }
 
 const addID ActionID = 60002
 
-func (a *addAction) ID() ActionID    { return addID }
-func (a *addAction) Priority() int16 { return 0 }
-func (a *addAction) Actor() any      { return nil }
-func (a *addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Plan[*toyState]) {
+func (a addAction) ID() ActionID    { return addID }
+func (a addAction) Priority() int16 { return 0 }
+func (a addAction) Actor() any      { return nil }
+func (a addAction) Apply(_ *Context, s *toyState, _ *Registry[*toyState], _ *Plan[*toyState]) {
 	s.Total += a.N
 }
-func (a *addAction) Clone() Action[*toyState] { c := *a; return &c }
-func (a *addAction) Encode(w *binary.Writer)  { w.Varint(a.N) }
+func (a addAction) Clone() Action[*toyState] { return a }
+func (a addAction) Encode(w *binary.Writer)  { w.Varint(a.N) }
 
-func decodeAddAction(r *binary.Reader, _ codec.Version) (*addAction, error) {
-	a := &addAction{N: r.Varint()}
+func decodeAddAction(r *binary.Reader, _ codec.Version) (addAction, error) {
+	a := addAction{N: r.Varint()}
 	return a, r.Err()
 }
 
@@ -122,18 +122,18 @@ type otherAction struct{}
 
 const otherActionID ActionID = 60003
 
-func (*otherAction) ID() ActionID    { return otherActionID }
-func (*otherAction) Priority() int16 { return 0 }
-func (*otherAction) Actor() any      { return nil }
-func (*otherAction) Apply(*Context, *otherState, *Registry[*otherState], *Plan[*otherState]) {
+func (otherAction) ID() ActionID    { return otherActionID }
+func (otherAction) Priority() int16 { return 0 }
+func (otherAction) Actor() any      { return nil }
+func (otherAction) Apply(*Context, *otherState, *Registry[*otherState], *Plan[*otherState]) {
 }
-func (a *otherAction) Clone() Action[*otherState] { c := *a; return &c }
-func (*otherAction) Encode(*binary.Writer)        {}
+func (a otherAction) Clone() Action[*otherState] { return a }
+func (otherAction) Encode(*binary.Writer)        {}
 
 func decodeOtherAction(
 	_ *binary.Reader, _ codec.Version,
-) (*otherAction, error) {
-	return &otherAction{}, nil
+) (otherAction, error) {
+	return otherAction{}, nil
 }
 
 // addCommand is a command that asks for an add.
@@ -147,7 +147,7 @@ func (c addCommand) Encode(w *binary.Writer) error {
 	return nil
 }
 func (c addCommand) Translate() []Action[*toyState] {
-	return []Action[*toyState]{&addAction{N: c.N}}
+	return []Action[*toyState]{addAction{N: c.N}}
 }
 func (c addCommand) Clone() Command[*toyState] { return c }
 
@@ -159,7 +159,7 @@ func decodeAddCommand(r *binary.Reader, _ codec.Version) (addCommand, error) {
 // nameOf is the name of an anonymousAction or an authoredAction.
 func nameOf(a Action[*toyState]) string {
 	switch a := a.(type) {
-	case *anonymousAction:
+	case anonymousAction:
 		return a.name
 	case *authoredAction:
 		return a.name

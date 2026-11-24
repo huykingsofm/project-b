@@ -22,7 +22,7 @@ func (c ZoneChatSendCommand) Clone() sim.Command[*zonestate.State] { return c }
 
 func (c ZoneChatSendCommand) Translate() []sim.Action[*zonestate.State] {
 	return []sim.Action[*zonestate.State]{
-		&action.ZoneChatSendAction{FromID: c.FromID, Text: c.Text},
+		action.ZoneChatSendAction{FromID: c.FromID, Text: c.Text},
 	}
 }
 

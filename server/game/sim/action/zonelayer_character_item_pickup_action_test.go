@@ -28,7 +28,7 @@ func pickup(
 	st *zonelayerstate.State,
 	reg *sim.Registry[*zonelayerstate.State],
 ) {
-	a := &ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
+	a := ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
 	a.Apply(&sim.Context{Tick: tick}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 }
 
@@ -102,15 +102,15 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 		t.Fatal("the stack is still on the ground")
 	}
 	toWorld := messages[0].(*sim.ActionMessage[*worldstate.State])
-	add, ok := toWorld.Actions[0].(*WorldCharacterItemAddAction)
+	add, ok := toWorld.Actions[0].(WorldCharacterItemAddAction)
 	if !ok {
 		t.Fatalf("the message does not carry a WorldCharacterItemAddAction: %+v", messages[0])
 	}
 	want := WorldCharacterItemAddAction{
 		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID(), At: at, Expiry: 40,
 	}
-	if *add != want {
-		t.Fatalf("the message is %+v, want %+v", *add, want)
+	if add != want {
+		t.Fatalf("the message is %+v, want %+v", add, want)
 	}
 }
 
@@ -126,13 +126,13 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 		t.Fatalf("a failed delivery means %T, want to compensate", sent.OnFail())
 	}
 	scoped := back.With.(*sim.ActionMessage[*zonelayerstate.State])
-	put, ok := scoped.Actions[0].(*ZoneLayerItemEntityAddAction)
+	put, ok := scoped.Actions[0].(ZoneLayerItemEntityAddAction)
 	if !ok {
 		t.Fatalf("the compensation does not carry a ZoneLayerItemEntityAddAction: %+v", back.With)
 	}
 	want := ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}
-	if *put != want {
-		t.Fatalf("the compensation is %+v, want %+v", *put, want)
+	if put != want {
+		t.Fatalf("the compensation is %+v, want %+v", put, want)
 	}
 	put.Apply(&sim.Context{Tick: 12}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 	var found entityItem

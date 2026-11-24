@@ -42,10 +42,10 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 	from := sim.StateID(3)
 	inbound := sim.NewActionMessage[*toyState](
 		3, onfail.Compensate{With: sim.NewActionMessage[*toyState](
-			1, onfail.Drop{}, &toyRegenAction{},
+			1, onfail.Drop{}, toyRegenAction{},
 		)},
-		&toyMoveAction{CharacterID: 7, Dir: 1, Ticks: 3},
-		&toyChatAction{FromID: 7, Text: "xin chào"},
+		toyMoveAction{CharacterID: 7, Dir: 1, Ticks: 3},
+		toyChatAction{FromID: 7, Text: "xin chào"},
 	).Stamp(sim.Header{From: from, Seq: tick * 10})
 	enter := toyEnter{Name: "Binh", Cooldown: tick + 6}
 	move := toyMove{CharacterID: 7, Dir: 1, Ticks: 3}

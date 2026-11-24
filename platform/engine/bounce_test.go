@@ -34,7 +34,7 @@ func bounced(
 		stopping: stopping,
 		notice:   func(a any, k string, args []any) { told = append(told, notice{a, k, args}) },
 	}}
-	m := sim.NewActionMessage(1, onFail, &toyAction{N: 1, Author: 5})
+	m := sim.NewActionMessage(1, onFail, toyAction{N: 1, Author: 5})
 	for range attempts {
 		m = m.Again()
 	}
@@ -45,7 +45,7 @@ func bounced(
 func TestWhatAMessageSaysToDoWhenItIsNotDeliveredIsDoneByItsOwnKind(t *testing.T) {
 	max := sim.MaxAttempts.Get(config.Defaults())
 	other := sim.StateID(2)
-	undo := sim.NewActionMessage(3, onfail.Drop{}, &toyAction{N: -1})
+	undo := sim.NewActionMessage(3, onfail.Drop{}, toyAction{N: -1})
 
 	t.Run("drop forgets it and counts it", func(t *testing.T) {
 		b, _, _ := bounced(onfail.Drop{}, 0, false)

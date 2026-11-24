@@ -8,10 +8,10 @@ import (
 
 func TestSmallerPriorityRunsFirstAndEqualOnesInArrivalOrder(t *testing.T) {
 	p := NewPlan[*toyState]()
-	p.Append(&anonymousAction{name: "c", priority: 0})
-	p.Append(&anonymousAction{name: "a", priority: -10})
-	p.Append(&anonymousAction{name: "d", priority: 0})
-	p.Append(&anonymousAction{name: "e", priority: 50})
+	p.Append(anonymousAction{name: "c", priority: 0})
+	p.Append(anonymousAction{name: "a", priority: -10})
+	p.Append(anonymousAction{name: "d", priority: 0})
+	p.Append(anonymousAction{name: "e", priority: 50})
 	if got := names(p, anonymousName); !slices.Equal(got, []string{"a", "c", "d", "e"}) {
 		t.Fatalf("order = %v", got)
 	}
@@ -19,8 +19,8 @@ func TestSmallerPriorityRunsFirstAndEqualOnesInArrivalOrder(t *testing.T) {
 
 func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 	p := NewPlan[*toyState]()
-	p.Append(&anonymousAction{name: "first", priority: 0})
-	p.Append(&anonymousAction{name: "last", priority: 10})
+	p.Append(anonymousAction{name: "first", priority: 0})
+	p.Append(anonymousAction{name: "last", priority: 10})
 	var got []string
 	for {
 		e, ok := p.Next(4)
@@ -30,7 +30,7 @@ func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 		got = append(got, nameOf(e.Action()))
 		if nameOf(e.Action()) == "first" {
 			p.Append(
-				&anonymousAction{name: "early", priority: -100},
+				anonymousAction{name: "early", priority: -100},
 			) // cannot run before what already ran
 		}
 	}
@@ -78,7 +78,7 @@ func TestFindByIDAndCancel(t *testing.T) {
 
 func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.T) {
 	p := NewPlan[*toyState]()
-	p.Append(&anonymousAction{name: "command"})
+	p.Append(anonymousAction{name: "command"})
 	var ran []uint8
 	for {
 		e, ok := p.Next(2)
@@ -86,7 +86,7 @@ func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.
 			break
 		}
 		ran = append(ran, e.depth)
-		p.Append(&anonymousAction{name: "child"}) // every action that runs adds one
+		p.Append(anonymousAction{name: "child"}) // every action that runs adds one
 	}
 	if !slices.Equal(ran, []uint8{0, 1, 2}) {
 		t.Fatalf("depths that ran = %v, want [0 1 2]", ran)
@@ -137,7 +137,7 @@ func pendingTypedNames(p *Plan[*toyState]) []string {
 
 func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *testing.T) {
 	p := NewPlan[*toyState]()
-	p.Append(&anonymousAction{name: "a"})
+	p.Append(anonymousAction{name: "a"})
 	p.Append(&typedAction{anonymousAction{name: "t1"}})
 	second := &typedAction{anonymousAction{name: "t2"}}
 	p.Append(second)
@@ -235,9 +235,9 @@ func TestAWalkOfThePlanMakesNothingToCollect(t *testing.T) {
 func TestBuildGivesTheOrderOfAnAppendOfEachActionAndTheEntriesAreAtDepthZero(t *testing.T) {
 	actions := func() []Action[*toyState] {
 		return []Action[*toyState]{
-			&anonymousAction{name: "c", priority: 0}, &anonymousAction{name: "a", priority: -10},
-			&anonymousAction{name: "d", priority: 0}, &anonymousAction{name: "e", priority: 50},
-			&anonymousAction{name: "b", priority: -10},
+			anonymousAction{name: "c", priority: 0}, anonymousAction{name: "a", priority: -10},
+			anonymousAction{name: "d", priority: 0}, anonymousAction{name: "e", priority: 50},
+			anonymousAction{name: "b", priority: -10},
 		}
 	}
 	one := NewPlan[*toyState]()

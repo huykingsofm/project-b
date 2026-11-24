@@ -16,8 +16,8 @@ import (
 func benchMessage(seq uint64) sim.Message {
 	return sim.NewActionMessage[*toyState](
 		3, onfail.Drop{},
-		&toyMoveAction{CharacterID: 7, Dir: 1, Ticks: 3},
-		&toyChatAction{FromID: 7, Text: "xin chào mọi người"},
+		toyMoveAction{CharacterID: 7, Dir: 1, Ticks: 3},
+		toyChatAction{FromID: 7, Text: "xin chào mọi người"},
 	).Stamp(sim.Header{From: sim.StateID(11), Seq: seq})
 }
 

@@ -14,7 +14,7 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 	reg := &sim.Registry[*worldstate.State]{}
 	at := state.Vec{X: 2500, Y: 2500}
 	// The defaults are 20 slots of 99, so 20 slots of 99 fill it.
-	fill := &WorldCharacterItemAddAction{
+	fill := WorldCharacterItemAddAction{
 		CharacterID: 1, ItemID: 7, Count: 20 * 99, FromZoneLayerID: 5, At: at, Expiry: 40,
 	}
 	fill.Apply(&sim.Context{Tick: 10}, s, reg, sim.NewPlan[*worldstate.State]())
@@ -22,7 +22,7 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 		t.Fatalf("%d messages were sent while the inventory had room, want none", got)
 	}
 
-	more := &WorldCharacterItemAddAction{
+	more := WorldCharacterItemAddAction{
 		CharacterID: 1, ItemID: 7, Count: 5, FromZoneLayerID: 5, At: at, Expiry: 40,
 	}
 	more.Apply(&sim.Context{Tick: 11}, s, reg, sim.NewPlan[*worldstate.State]())
@@ -37,9 +37,9 @@ func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 	if back.To != 5 {
 		t.Fatalf("the message goes to %+v, want zonelayer 5", back.To)
 	}
-	put := back.Actions[0].(*ZoneLayerItemEntityAddAction)
+	put := back.Actions[0].(ZoneLayerItemEntityAddAction)
 	want := ZoneLayerItemEntityAddAction{ItemID: 7, Count: 5, At: at, Expiry: 40}
-	if *put != want {
-		t.Fatalf("what goes back is %+v, want %+v", *put, want)
+	if put != want {
+		t.Fatalf("what goes back is %+v, want %+v", put, want)
 	}
 }

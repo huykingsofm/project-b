@@ -23,7 +23,7 @@ func (c ZoneCharacterEnterCommand) Clone() sim.Command[*zonestate.State] {
 }
 
 func (c ZoneCharacterEnterCommand) Translate() []sim.Action[*zonestate.State] {
-	return []sim.Action[*zonestate.State]{&action.ZoneCharacterEnterAction{Character: c.Character}}
+	return []sim.Action[*zonestate.State]{action.ZoneCharacterEnterAction{Character: c.Character}}
 }
 
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.

@@ -22,18 +22,17 @@ type ZoneLayerItemEntityAddAction struct {
 	Expiry uint64
 }
 
-func (a *ZoneLayerItemEntityAddAction) ID() sim.ActionID { return ZoneLayerItemEntityAddActionID }
-func (a *ZoneLayerItemEntityAddAction) Priority() int16  { return PriorityResolve }
-func (a *ZoneLayerItemEntityAddAction) Actor() any       { return nil }
+func (a ZoneLayerItemEntityAddAction) ID() sim.ActionID { return ZoneLayerItemEntityAddActionID }
+func (a ZoneLayerItemEntityAddAction) Priority() int16  { return PriorityResolve }
+func (a ZoneLayerItemEntityAddAction) Actor() any       { return nil }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerItemEntityAddAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerItemEntityAddAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply puts the items on the ground and sets their removal.
-func (a *ZoneLayerItemEntityAddAction) Apply(
+func (a ZoneLayerItemEntityAddAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -42,12 +41,12 @@ func (a *ZoneLayerItemEntityAddAction) Apply(
 	}
 	id := s.AddItemEntity(a.ItemID, a.Count, a.At, a.Expiry)
 	if a.Expiry > 0 {
-		r.ToSelfAt(c.Tick+a.Expiry, &ZoneLayerItemEntityRemoveAction{EntityID: id})
+		r.ToSelfAt(c.Tick+a.Expiry, ZoneLayerItemEntityRemoveAction{EntityID: id})
 	}
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
+func (a ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.ItemID))
 	w.Uvarint(uint64(a.Count))
 	a.At.Encode(w)
@@ -57,8 +56,8 @@ func (a *ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
 // decodeZoneLayerItemEntityAddAction reads what Encode wrote.
 func decodeZoneLayerItemEntityAddAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerItemEntityAddAction, error) {
-	a := &ZoneLayerItemEntityAddAction{
+) (ZoneLayerItemEntityAddAction, error) {
+	a := ZoneLayerItemEntityAddAction{
 		ItemID: r.Uint[state.ItemID](),
 		Count:  r.Uint[uint32](),
 		At:     state.DecodeVec(r, version),
