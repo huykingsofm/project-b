@@ -6,7 +6,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/logging"
 )
 
 // ZoneLayerItemEntityAddAction puts a stack of items on the ground of the zonelayer and sets the
@@ -35,14 +34,7 @@ func (a *ZoneLayerItemEntityAddAction) Apply(
 	if a.Count == 0 {
 		return
 	}
-	id, ok := s.AddItemEntity(a.ItemID, a.Count, a.At, a.Expiry)
-	if !ok {
-		logging.Error(
-			"an item could not be put on the ground: the zonelayer has no entity ID left",
-			"zonelayer", s.ID(), "item", a.ItemID,
-		)
-		return
-	}
+	id := s.AddItemEntity(a.ItemID, a.Count, a.At, a.Expiry)
 	if a.Expiry > 0 {
 		r.ToSelfAt(c.Tick+a.Expiry, &ZoneLayerItemEntityRemoveAction{EntityID: id})
 	}

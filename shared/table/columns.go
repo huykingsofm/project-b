@@ -47,20 +47,6 @@ func (cs *columns[K, V]) clone() columns[K, V] {
 	return out
 }
 
-// firstKeyed is what a column of two keys is for a lookup by its first key, whatever its second.
-type firstKeyed[K comparable, A comparable] interface{ keysOfFirst(a A) []K }
-
-// columnAt returns the column of the type C, that is, the column of a key type.
-func columnAt[K comparable, V any, C column[K, V]](cs *columns[K, V]) (C, bool) {
-	for _, c := range cs.list {
-		if typed, ok := c.(C); ok {
-			return typed, true
-		}
-	}
-	var zero C
-	return zero, false
-}
-
 // declare adds a column of one key, and puts in it the values that are there already.
 func (cs *columns[K, V]) declare1[IK comparable](
 	keyOf func(V) (IK, bool), existing iter.Seq2[K, V],
@@ -122,4 +108,18 @@ func (cs *columns[K, V]) keys2First[A comparable](a A) []K {
 		}
 	}
 	return nil
+}
+
+// firstKeyed is what a column of two keys is for a lookup by its first key, whatever its second.
+type firstKeyed[K comparable, A comparable] interface{ keysOfFirst(a A) []K }
+
+// columnAt returns the column of the type C, that is, the column of a key type.
+func columnAt[K comparable, V any, C column[K, V]](cs *columns[K, V]) (C, bool) {
+	for _, c := range cs.list {
+		if typed, ok := c.(C); ok {
+			return typed, true
+		}
+	}
+	var zero C
+	return zero, false
 }

@@ -55,7 +55,7 @@ func BenchmarkEncodeRecord(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				w.B = w.B[:0]
-				if err := encodeRecord(&w, rec); err != nil {
+				if err := encodeRecord(&w, rec.Body); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -67,13 +67,14 @@ func BenchmarkDecodeRecord(b *testing.B) {
 	engine, codecs := sim.StateID(1), toyCodecs()
 	for name, rec := range benchRecords {
 		var w binary.Writer
-		if err := encodeRecord(&w, rec); err != nil {
+		if err := encodeRecord(&w, rec.Body); err != nil {
 			b.Fatal(err)
 		}
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				if _, err := decodeRecord(codecs, engine, formatVersion, w.B); err != nil {
+				_, err := decodeRecord(codecs, engine, formatVersion, rec.Tick, w.B)
+				if err != nil {
 					b.Fatal(err)
 				}
 			}

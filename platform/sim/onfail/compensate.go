@@ -13,7 +13,7 @@ type Compensate struct{ With sim.Message }
 func (Compensate) ID() sim.OnFailID { return CompensateID }
 
 // Handle sends the message that undoes the first.
-func (f Compensate) Handle(b sim.Bouncer, _ sim.Message, _ sim.Reason) {
+func (f Compensate) Handle(b sim.Bouncer, _ sim.Message, _ sim.DeliveryFailure) {
 	b.Resend(f.With)
 }
 

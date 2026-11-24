@@ -11,6 +11,7 @@ import (
 // segmentScanner reads the header and then the records of a segment.
 type segmentScanner struct {
 	r       *bufio.Reader
+	begin   uint64 // the ID of the first record of the segment
 	meta    []byte
 	offset  int64 // where the next entry starts: the end of what has been read whole
 	payload []byte
@@ -37,17 +38,18 @@ var errHeaderCut = fmt.Errorf("%w: the header is cut off", ErrCorrupt)
 
 func newSegmentScanner(r io.Reader) (*segmentScanner, error) {
 	s := &segmentScanner{r: bufio.NewReaderSize(r, 64<<10)}
-	var head [10]byte
+	var head [18]byte
 	if _, err := io.ReadFull(s.r, head[:]); err != nil {
 		return nil, errHeaderCut
 	}
 	if string(head[:4]) != magic || binary.LittleEndian.Uint16(head[4:6]) != formatVersion {
-		if head == [10]byte{} {
+		if head == [len(head)]byte{} {
 			return nil, errHeaderCut
 		}
 		return nil, fmt.Errorf("%w: not a segment of this format", ErrCorrupt)
 	}
-	metaLen := binary.LittleEndian.Uint32(head[6:10])
+	s.begin = binary.LittleEndian.Uint64(head[6:14])
+	metaLen := binary.LittleEndian.Uint32(head[14:18])
 	if metaLen > maxMeta {
 		return nil, fmt.Errorf("%w: the meta is %d bytes", ErrCorrupt, metaLen)
 	}
@@ -63,6 +65,11 @@ func newSegmentScanner(r io.Reader) (*segmentScanner, error) {
 	s.offset = int64(len(head) + len(rest))
 	s.committedEnd = s.offset
 	return s, nil
+}
+
+// recordID is the ID of the record that next read last, which is not a commit.
+func (s *segmentScanner) recordID() uint64 {
+	return s.begin + uint64(s.committedRecords) + uint64(s.sinceCommit) - 1
 }
 
 // next reads the next entry, a record or a commit (s.commit says which). It returns io.EOF at the
@@ -104,7 +111,8 @@ func (s *segmentScanner) next() error {
 	if _, err := io.ReadFull(s.r, s.buf); err != nil {
 		return errTorn
 	}
-	if crc32.Checksum(s.buf, castagnoli) != binary.LittleEndian.Uint32(head[4:]) {
+	id := s.begin + uint64(s.committedRecords) + uint64(s.sinceCommit)
+	if frameChecksum(id, length, s.buf) != binary.LittleEndian.Uint32(head[4:]) {
 		return errTorn
 	}
 	s.payload = s.buf

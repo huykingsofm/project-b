@@ -17,52 +17,52 @@ var ErrUnknownCode = errors.New(
 	"sim: the number is not one of an action, a command, a state or an OnFail",
 )
 
-// Header says who sent a message and which message of its sender it was, so that a replay can put
-// the messages of an engine back in the order they came and a receiver can tell two messages apart.
+// Header says who sent a message, which message of its sender it was, and at which tick of its
+// sender it was sent. The first two let a replay put the messages of an engine back in the order
+// they came and a receiver tell two messages apart; the tick says which tick of the sender the
+// receiver depends on once it takes the message (see StateDependency).
 type Header struct {
 	From StateID
 	Seq  uint64
+	Tick uint64 // the tick of the sender at which it sent the message; 0 for one that was not sent
 }
 
 // Encode writes a header.
 func (h Header) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(h.From))
 	w.Uvarint(h.Seq)
+	w.Uvarint(h.Tick)
 }
 
 // DecodeHeader reads what Header.Encode wrote.
 func DecodeHeader(r *binary.Reader) Header {
-	return Header{From: r.Uint[StateID](), Seq: r.Uvarint()}
+	return Header{From: r.Uint[StateID](), Seq: r.Uvarint(), Tick: r.Uvarint()}
 }
 
-// Reason says why a message could not be delivered.
-type Reason uint8
+// DeliveryFailure says why a message could not be delivered.
+type DeliveryFailure uint8
 
 // The reasons.
 const (
-	// Retired: the engine was removed.
-	Retired Reason = iota + 1
-	// NotBuilt: the engine does not exist yet, or the ID names none.
-	NotBuilt
-	// Moved: what the message is about has gone to another engine.
-	Moved
-	// Stopping: the engine, or the cluster, is stopping.
-	Stopping
-	// Full: the inbox of the engine is full.
-	Full
+	// DeliveryFailureRetired: the engine was removed.
+	DeliveryFailureRetired DeliveryFailure = iota + 1
+	// DeliveryFailureNotStarted: the engine does not exist yet, or the ID names none.
+	DeliveryFailureNotStarted
+	// DeliveryFailureStopping: the engine, or the cluster, is stopping.
+	DeliveryFailureStopping
+	// DeliveryFailureFull: the inbox of the engine is full.
+	DeliveryFailureFull
 )
 
-func (r Reason) String() string {
+func (r DeliveryFailure) String() string {
 	switch r {
-	case Retired:
+	case DeliveryFailureRetired:
 		return "retired"
-	case NotBuilt:
-		return "not built"
-	case Moved:
-		return "moved"
-	case Stopping:
+	case DeliveryFailureNotStarted:
+		return "not started"
+	case DeliveryFailureStopping:
 		return "stopping"
-	case Full:
+	case DeliveryFailureFull:
 		return "full"
 	}
 	return "unknown"
@@ -109,7 +109,7 @@ type OnFail interface {
 	ID() OnFailID
 	// Handle does what a failed delivery means, given the engine that sent the message, the
 	// message and why it could not be delivered.
-	Handle(b Bouncer, m Message, r Reason)
+	Handle(b Bouncer, m Message, r DeliveryFailure)
 	// Encode writes what the kind holds, not its ID: Codecs.EncodeOnFail writes the ID first.
 	Encode(w *binary.Writer) error
 }

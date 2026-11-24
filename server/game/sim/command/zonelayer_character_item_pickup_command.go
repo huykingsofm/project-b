@@ -33,7 +33,7 @@ func (c ZoneLayerCharacterItemPickupCommand) Translate() []sim.Action[*zonelayer
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
 func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
-	w.Uvarint(uint64(c.ItemEntityID))
+	c.ItemEntityID.Encode(w)
 	return nil
 }
 
@@ -41,8 +41,12 @@ func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binary.Writer) error {
 func decodeZoneLayerCharacterItemPickupCommand(
 	r *binary.Reader, version codec.Version,
 ) (ZoneLayerCharacterItemPickupCommand, error) {
-	c := ZoneLayerCharacterItemPickupCommand{
-		CharacterID: r.Uint[state.CharacterID](), ItemEntityID: r.Uint[state.EntityID](),
+	characterID := r.Uint[state.CharacterID]()
+	itemEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterItemPickupCommand{}, err
 	}
-	return c, r.Err()
+	return ZoneLayerCharacterItemPickupCommand{
+		CharacterID: characterID, ItemEntityID: itemEntityID,
+	}, r.Err()
 }

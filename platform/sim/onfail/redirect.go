@@ -13,7 +13,7 @@ func (Redirect) ID() sim.OnFailID { return RedirectID }
 
 // Handle sends it, once more tried, to the other engine, unless the engine stops or the message was
 // tried too often.
-func (f Redirect) Handle(b sim.Bouncer, m sim.Message, r sim.Reason) {
+func (f Redirect) Handle(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) {
 	if resendable(b, m, r) {
 		b.Resend(m.Redirected(f.To).Again())
 	}

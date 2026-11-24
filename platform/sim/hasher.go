@@ -1,6 +1,11 @@
 package sim
 
-import "math/bits"
+import (
+	"fmt"
+	"math/bits"
+
+	"github.com/huykingsofm/project-b/shared/codec/binary"
+)
 
 // Hasher builds a number that depends on the values written to it and on nothing else. It is meant
 // to be fast, not strong: it takes a whole 64-bit word in one step (a rotate, an xor and a
@@ -46,4 +51,26 @@ func (h Hasher) Sum() uint64 {
 	x *= 0xd6e8feb86659fd93
 	x ^= x >> 32
 	return x
+}
+
+// Actions adds a list of actions to the hash: each as the bytes it is written as, which say
+// everything it holds, the parts that only it knows included. An action that cannot be written adds
+// its type, so the hash still tells it from another.
+func (h *Hasher) Actions[S State](actions []Action[S]) {
+	var w binary.Writer
+	h.actionsWith(actions, &w)
+}
+
+// actionsWith is Actions with the bytes to write each action to, which a caller that hashes
+// many lists makes once.
+func (h *Hasher) actionsWith[S State](actions []Action[S], w *binary.Writer) {
+	h.U64(uint64(len(actions)))
+	for _, a := range actions {
+		w.B = w.B[:0]
+		if EncodeAction(w, a) != nil {
+			h.String(fmt.Sprintf("%T", a))
+			continue
+		}
+		h.Bytes(w.B)
+	}
 }

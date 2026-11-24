@@ -48,7 +48,7 @@ func newReplayRun(b Builder, logs Logs, opts Options) (*replayRun, error) {
 	}
 	r.router = &replayRouter{
 		Router: engine.NewRouter(), want: idx.want, returned: idx.returned,
-		sent: map[msgKey]sim.Message{}, refuse: map[msgKey]sim.Reason{}, div: div,
+		sent: map[msgKey]sim.Message{}, refuse: map[msgKey]sim.DeliveryFailure{}, div: div,
 	}
 	r.stable = newReplayStable(idx.uses)
 	r.verify = &verifyLog{windows: r.windows, pos: map[sim.StateID]int{}, div: div}

@@ -13,7 +13,7 @@ func TestAClonedZoneStateSharesNoMemoryWithTheStateExceptTheMapThatNeverChanges(
 		Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2,
 	}
 	st := NewState(
-		1, 9, 1000,
+		1, 9,
 		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}),
 	)
 	st.AddZoneLayer(1, 4)

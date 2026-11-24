@@ -7,7 +7,6 @@ import (
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/logging"
 )
 
 // ZoneLayerCharacterEnterAction puts a character in the zonelayer: gives it a body at a position.
@@ -44,12 +43,7 @@ func (a *ZoneLayerCharacterEnterAction) Apply(
 	if !zone.TileMap().FreeForBody(at, a.Character.Radius()) {
 		at = zone.TileMap().SpawnPosition()
 	}
-	if _, ok := s.AddCharacterEntity(a.Character, at); !ok {
-		logging.Error(
-			"a character could not enter: the zonelayer has no entity ID left",
-			"zonelayer", s.ID(), "character", a.Character.CharacterID(),
-		)
-	}
+	s.AddCharacterEntity(a.Character, at)
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.

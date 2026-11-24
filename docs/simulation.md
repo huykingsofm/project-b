@@ -12,7 +12,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - The platform imports nothing of the game (R1, R2). The game imports the platform, and `server/cmd` wires them.
 - The platform knows no world, zone or zonelayer: there is one engine, `Engine[S]`, for any type of state `S`, and a message, a command or an action of one type of state cannot reach an engine of another (the compiler checks it where the types are known, the codecs where they are not).
-- Every state has an ID of its own, a `sim.StateID`, made of the type of the state (8 bits) and a number among the states of its type (24 bits), so it is unique among all states and says what type its state is; it is the address of a message and the key that another engine reads the published state by. `sim.StateType` says what kind of state it is.
+- Every state has an ID of its own, a `sim.StateID`, made of the type of the state (8 bits) and a number among the states of its type (56 bits, counted up and never given again), so it is unique among all states and says what type its state is; it is the address of a message and the key that another engine reads the published state by. `sim.StateType` says what kind of state it is.
 
 ## States of this game
 
@@ -28,7 +28,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 ## State and events
 
 - A state is data. Every field of a state, and of every value it holds (a character, an entity, a message, an inventory slot), is private: it is read with a method and changed only by a method that the state offers, and the methods that change it write the events. A value is made by a constructor (`NewCharacter`, `NewChatMessage`, `NewPrivateChatMessage`) and its setters are for what is not yet in a state.
-- A state implements `sim.State`: `ID()`, `Type()`, `String()`, `Tick()`, `NextTick()`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
+- A state implements `sim.State`: `ID()`, `Type()`, `Tick()`, `NextTick()`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
 - The events are the list of what a client should hear (`sim.Events[E]` holds a `[]E`). They are not cloned or published.
 - Every event has `Audience()`:
 
@@ -54,13 +54,14 @@ The simulation core touches nothing outside: no gateway, no database, no network
 4. Tell the actions that were cancelled; put what the actions set for the engine in the scheduler.
 5. Hand the events to the emitter.
 6. Publish a `Clone` of the state (other engines read the latest copy).
-7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`.
+7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`; send again the unsettled messages that went and were not acked ([unsettled messages](unsettled_messages.md));
+8. Write the hash when it is due, and close the tick for the replay log; say to the senders what is safe.
 
 | When a tick fails | What happens |
 |---|---|
-| `Cluster.Step` | the router stops (every message bounces as `Stopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
+| `Cluster.Step` | the router stops (every message bounces as `DeliveryFailureStopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
 | `Cluster.Run` | the engine that failed retires and returns its error; every other engine stops as if the context had ended; the error is logged once, by `Run` |
-| an engine is made | it starts at the tick of its state; `Restore` refuses a checkpoint whose state is not at the tick in its header |
+| an engine is made | it starts at the tick of its state; `RestoreEngine` refuses a checkpoint whose state is not at the tick in its header |
 
 ## Actions
 

@@ -21,14 +21,6 @@ import "github.com/huykingsofm/project-b/platform/sim"
 // follows from the state and the inputs and is made again by the replay. Randomness comes from the
 // seed of the engine and time from its tick count.
 type Log interface {
-	// Wants reports whether the log wants records of the kind. A kind that costs something to
-	// make is made only when it is: a hash costs as much as the state is big, so an engine asks
-	// before it takes one, and a log that records nothing is not made to.
-	Wants(kind Kind) bool
-	// Describe tells the log, once, what the type of the state of an engine is called, before the
-	// engine records anything: a log that writes to a file names a directory after the name and the
-	// number of the state.
-	Describe(engine sim.StateID, name string)
 	// Append records what the engine took, sent or read at the tick: a message in full (Inbound),
 	// one of its own that came back undelivered (Returned), a command of a client (Command), the
 	// version of the configuration it first read (ConfigRead), the hash of its state (Hash), or
@@ -39,15 +31,18 @@ type Log interface {
 	// EndTick says that the engine has recorded all it will record for the tick. A log that writes
 	// to a file hands what it has kept for the tick to the goroutine that writes it.
 	EndTick(engine sim.StateID, tick uint64)
+	// Safe says up to which tick of the engine what it recorded and what it depends on is on the
+	// disk, so that a crash does not take it back: all of what it did at a tick up to it, and at
+	// the ticks of the engines it depends on that it took, is kept. A log that records nothing says
+	// every tick is, since nothing it could do would make it more so.
+	Safe(engine sim.StateID) uint64
 }
 
 // NopLog records nothing.
 type NopLog struct{}
 
-func (NopLog) Wants(Kind) bool { return false }
-
-// Describe does nothing.
-func (NopLog) Describe(sim.StateID, string) {}
-
 func (NopLog) Append(sim.StateID, uint64, Body) {}
 func (NopLog) EndTick(sim.StateID, uint64)      {}
+
+// Safe says every tick is: a log that records nothing cannot make a tick more safe.
+func (NopLog) Safe(sim.StateID) uint64 { return ^uint64(0) }

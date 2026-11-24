@@ -10,41 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
-// Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
-// it gives the states it makes, the private messages, and the inventory of every character. The
-// events are not data (R18) and are not written.
-func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
-	w.Uvarint(s.tick)
-	w.Uvarint(uint64(len(s.zones)))
-	for _, id := range s.zones {
-		w.Uvarint(uint64(id))
-	}
-	w.Uvarint(uint64(len(s.zoneLayers)))
-	for _, id := range s.zoneLayers {
-		w.Uvarint(uint64(id))
-	}
-	s.stateIDAllocators.Encode(w)
-	rows := s.privateChat.Rows()
-	w.Uvarint(uint64(len(rows)))
-	for _, m := range rows {
-		w.Uvarint(uint64(m.fromID))
-		w.Uvarint(uint64(m.toID))
-		w.String(m.text)
-		w.Uvarint(m.tick)
-	}
-	w.Uvarint(uint64(s.inventories.Len()))
-	for characterID, inventory := range s.inventories.All() {
-		w.Uvarint(uint64(characterID))
-		w.Uvarint(uint64(len(inventory.slots)))
-		for _, slot := range inventory.slots {
-			w.Uvarint(uint64(slot.itemID))
-			w.Uvarint(uint64(slot.count))
-		}
-	}
-	return nil
-}
-
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
 func count(r *binary.Reader) (uint64, error) {
@@ -77,19 +42,25 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	if s.stateIDAllocators, err = sim.DecodeStateIDAllocators(r); err != nil {
-		return nil, err
-	}
+	s.lastStateID = r.Uvarint()
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
+	if s.lastStateID > sim.MaxLocalStateID {
+		return nil, fmt.Errorf("the world has given the number %d: too large", s.lastStateID)
+	}
+	seen := make(map[sim.StateID]bool, len(s.zoneLayers))
 	for _, zoneLayerID := range s.zoneLayers {
 		if zoneLayerID.Type() != state.ZoneLayerType {
 			return nil, fmt.Errorf("the zonelayer %d is a state of another type", zoneLayerID)
 		}
-		if err = s.stateIDAllocators.MarkLive(zoneLayerID); err != nil {
-			return nil, err
+		if zoneLayerID.Local() == 0 || zoneLayerID.Local() > s.lastStateID {
+			return nil, fmt.Errorf("the zonelayer %d was never given", zoneLayerID)
 		}
+		if seen[zoneLayerID] {
+			return nil, fmt.Errorf("the zonelayer %d is there twice", zoneLayerID)
+		}
+		seen[zoneLayerID] = true
 	}
 	if n, err = count(r); err != nil {
 		return nil, err

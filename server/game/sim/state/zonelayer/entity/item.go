@@ -44,7 +44,7 @@ func (e ItemEntity) Hash(h *sim.Hasher) {
 }
 
 func (e ItemEntity) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(e.entityID.Local()))
+	w.Uvarint(e.entityID.Local)
 	e.pos.Encode(w)
 	w.Varint(int64(e.rad))
 	w.Uvarint(uint64(e.itemID))
@@ -56,7 +56,7 @@ func decodeItemEntity(
 	r *binary.Reader, version codec.Version, owner sim.StateID,
 ) (state.Entity, error) {
 	e := ItemEntity{
-		entityID: state.NewEntityID(owner, r.Uint[uint32]()),
+		entityID: state.NewEntityID(owner, r.Uvarint()),
 		pos:      state.DecodeVec(r, version),
 		rad:      r.Int[int32](),
 		itemID:   r.Uint[state.ItemID](),

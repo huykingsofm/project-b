@@ -13,7 +13,7 @@ func (Escalate) ID() sim.OnFailID { return EscalateID }
 
 // Handle gives it to the other engine, once more tried, unless the engine stops or the message was
 // tried too often: two engines that escalate to each other would send it back and forth for ever.
-func (f Escalate) Handle(b sim.Bouncer, m sim.Message, r sim.Reason) {
+func (f Escalate) Handle(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) {
 	if resendable(b, m, r) {
 		b.Resend(m.Redirected(f.To).Again())
 	}

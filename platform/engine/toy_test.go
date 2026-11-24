@@ -13,6 +13,12 @@ import (
 // the toy state is of the type 0, so a plain number is the ID of a toy state
 const toyType sim.StateType = 0
 
+func init() {
+	for t, name := range map[sim.StateType]string{toyType: "toy", toyType + 1: "other"} {
+		sim.MapStateTypeToName(t, name)
+	}
+}
+
 type toyState struct {
 	id    sim.StateID
 	tick  uint64
@@ -21,7 +27,6 @@ type toyState struct {
 
 func (s *toyState) ID() sim.StateID   { return s.id }
 func (*toyState) Type() sim.StateType { return toyType }
-func (*toyState) String() string      { return "toy" }
 func (s *toyState) Tick() uint64      { return s.tick }
 func (s *toyState) NextTick()         { s.tick++ }
 func (s *toyState) Clone() sim.State  { c := *s; return &c }

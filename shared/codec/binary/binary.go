@@ -46,6 +46,12 @@ func (w *Writer) String(s string) {
 	w.B = append(w.B, s...)
 }
 
+// Bytes appends the length of the bytes and then the bytes.
+func (w *Writer) Bytes(b []byte) {
+	w.Uvarint(uint64(len(b)))
+	w.B = append(w.B, b...)
+}
+
 // Reader reads values from bytes.
 type Reader struct {
 	b   []byte
@@ -166,4 +172,20 @@ func (r *Reader) String() string {
 	s := string(r.b[:n])
 	r.b = r.b[n:]
 	return s
+}
+
+// Bytes reads what Writer.Bytes wrote, as a view of the bytes of the Reader, not a copy: it is good
+// for as long as they are.
+func (r *Reader) Bytes() []byte {
+	n := r.Uvarint()
+	if r.err != nil {
+		return nil
+	}
+	if n > uint64(len(r.b)) {
+		r.fail(ErrShort)
+		return nil
+	}
+	b := r.b[:n:n]
+	r.b = r.b[n:]
+	return b
 }

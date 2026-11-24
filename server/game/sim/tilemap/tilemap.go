@@ -72,86 +72,6 @@ type TileMap struct {
 	exits         []Exit
 }
 
-// The largest map: positions are int32 units, so a side of 2^20 tiles (2^30 units) fits; a map of
-// 4096 by 4096 tiles takes 2 MiB of bits.
-const (
-	maxSide  = 1 << 20
-	maxTiles = 4096 * 4096
-)
-
-// ErrInvalid is wrapped by the error of New when a map is not well formed.
-var ErrInvalid = errors.New("tilemap: the map is not well formed")
-
-// New makes a map of width by height tiles with the given spawn tile, walls and exits. It returns
-// an error that wraps ErrInvalid and says what is wrong when the map is not well formed: the size
-// is at least one tile each way and no larger than the limits above, the walls, the spawn and the
-// exits are inside the map, the spawn is not a wall, and an exit has its Min before its Max.
-func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) (*TileMap, error) {
-	if width < 1 || height < 1 {
-		return nil, fmt.Errorf(
-			"%w: a map is at least one tile each way, got %d by %d", ErrInvalid, width, height,
-		)
-	}
-	if width > maxSide || height > maxSide || int64(width)*int64(height) > maxTiles {
-		return nil, fmt.Errorf(
-			"%w: a map is at most %d tiles on a side and %d tiles in all, got %d by %d",
-			ErrInvalid,
-			maxSide,
-			maxTiles,
-			width,
-			height,
-		)
-	}
-	blocked, err := bitset.New(int(width) * int(height))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
-	}
-	m := &TileMap{width: width, height: height, spawn: spawn.center(), blocked: blocked}
-	for _, t := range walls {
-		if !m.inside(t) {
-			return nil, fmt.Errorf(
-				"%w: the wall %+v is outside the map of %d by %d", ErrInvalid, t, width, height,
-			)
-		}
-		m.blocked.Set(int(t.Y)*int(width) + int(t.X))
-	}
-	if !m.inside(spawn) || m.isWall(spawn) {
-		return nil, fmt.Errorf("%w: the spawn %+v is outside the map or a wall", ErrInvalid, spawn)
-	}
-	for _, d := range exits {
-		if !m.inside(d.Min) || !m.inside(d.Max) || d.Min.X > d.Max.X || d.Min.Y > d.Max.Y {
-			return nil, fmt.Errorf(
-				"%w: the exit from %+v to %+v is outside the map or has its Min after its Max",
-				ErrInvalid,
-				d.Min,
-				d.Max,
-			)
-		}
-		m.exits = append(m.exits, Exit{
-			Area: state.Rect{
-				Min: state.Vec{X: d.Min.X * tileSize, Y: d.Min.Y * tileSize},
-				Max: state.Vec{X: (d.Max.X+1)*tileSize - 1, Y: (d.Max.Y+1)*tileSize - 1},
-			},
-			ToZoneID: d.ToZoneID,
-			Arrival:  d.Arrival.center(),
-		})
-	}
-	return m, nil
-}
-
-// SpawnPosition is where characters appear: the middle of the spawn tile, which is never a wall.
-// ReadOnlyTileMap is the read methods of a TileMap, which is what an action may use of the map of a
-// zone it reads from the stable view. The map never changes after it is made, and this says so.
-type ReadOnlyTileMap interface {
-	SpawnPosition() state.Vec
-	Free(v state.Vec) bool
-	FreeForBody(position state.Vec, radius int32) bool
-	Reach(from state.Vec, dir state.Dir, distance int32, radius int32) state.Vec
-	Exits() []Exit
-}
-
-var _ ReadOnlyTileMap = (*TileMap)(nil)
-
 func (m *TileMap) SpawnPosition() state.Vec { return m.spawn }
 
 func (m *TileMap) inside(t Tile) bool {
@@ -273,6 +193,89 @@ func (m *TileMap) canMove(from, to state.Vec, radius int32) bool {
 	return true
 }
 
+// Exits returns the exits of the map, which a zone makes entities of.
+func (m *TileMap) Exits() []Exit { return slices.Clone(m.exits) }
+
+// The largest map: positions are int32 units, so a side of 2^20 tiles (2^30 units) fits; a map of
+// 4096 by 4096 tiles takes 2 MiB of bits.
+const (
+	maxSide  = 1 << 20
+	maxTiles = 4096 * 4096
+)
+
+// ErrInvalid is wrapped by the error of New when a map is not well formed.
+var ErrInvalid = errors.New("tilemap: the map is not well formed")
+
+// New makes a map of width by height tiles with the given spawn tile, walls and exits. It returns
+// an error that wraps ErrInvalid and says what is wrong when the map is not well formed: the size
+// is at least one tile each way and no larger than the limits above, the walls, the spawn and the
+// exits are inside the map, the spawn is not a wall, and an exit has its Min before its Max.
+func New(width, height int32, spawn Tile, walls []Tile, exits []ExitDefinition) (*TileMap, error) {
+	if width < 1 || height < 1 {
+		return nil, fmt.Errorf(
+			"%w: a map is at least one tile each way, got %d by %d", ErrInvalid, width, height,
+		)
+	}
+	if width > maxSide || height > maxSide || int64(width)*int64(height) > maxTiles {
+		return nil, fmt.Errorf(
+			"%w: a map is at most %d tiles on a side and %d tiles in all, got %d by %d",
+			ErrInvalid,
+			maxSide,
+			maxTiles,
+			width,
+			height,
+		)
+	}
+	blocked, err := bitset.New(int(width) * int(height))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	m := &TileMap{width: width, height: height, spawn: spawn.center(), blocked: blocked}
+	for _, t := range walls {
+		if !m.inside(t) {
+			return nil, fmt.Errorf(
+				"%w: the wall %+v is outside the map of %d by %d", ErrInvalid, t, width, height,
+			)
+		}
+		m.blocked.Set(int(t.Y)*int(width) + int(t.X))
+	}
+	if !m.inside(spawn) || m.isWall(spawn) {
+		return nil, fmt.Errorf("%w: the spawn %+v is outside the map or a wall", ErrInvalid, spawn)
+	}
+	for _, d := range exits {
+		if !m.inside(d.Min) || !m.inside(d.Max) || d.Min.X > d.Max.X || d.Min.Y > d.Max.Y {
+			return nil, fmt.Errorf(
+				"%w: the exit from %+v to %+v is outside the map or has its Min after its Max",
+				ErrInvalid,
+				d.Min,
+				d.Max,
+			)
+		}
+		m.exits = append(m.exits, Exit{
+			Area: state.Rect{
+				Min: state.Vec{X: d.Min.X * tileSize, Y: d.Min.Y * tileSize},
+				Max: state.Vec{X: (d.Max.X+1)*tileSize - 1, Y: (d.Max.Y+1)*tileSize - 1},
+			},
+			ToZoneID: d.ToZoneID,
+			Arrival:  d.Arrival.center(),
+		})
+	}
+	return m, nil
+}
+
+// SpawnPosition is where characters appear: the middle of the spawn tile, which is never a wall.
+// ReadOnlyTileMap is the read methods of a TileMap, which is what an action may use of the map of a
+// zone it reads from the stable view. The map never changes after it is made, and this says so.
+type ReadOnlyTileMap interface {
+	SpawnPosition() state.Vec
+	Free(v state.Vec) bool
+	FreeForBody(position state.Vec, radius int32) bool
+	Reach(from state.Vec, dir state.Dir, distance int32, radius int32) state.Vec
+	Exits() []Exit
+}
+
+var _ ReadOnlyTileMap = (*TileMap)(nil)
+
 // signOf is -1, 0 or 1 for the sign of n.
 func signOf(n int32) int32 {
 	switch {
@@ -294,6 +297,3 @@ func unitsToBoundary(position, sign int64) int64 {
 	}
 	return position - tile*int64(tileSize) + 1
 }
-
-// Exits returns the exits of the map, which a zone makes entities of.
-func (m *TileMap) Exits() []Exit { return slices.Clone(m.exits) }

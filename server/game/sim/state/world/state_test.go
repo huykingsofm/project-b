@@ -9,11 +9,10 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	add := func(char state.CharacterID, item state.ItemID, count uint32) uint32 {
 		return st.AddItemToCharacter(char, item, count, 3, 10)
 	}
@@ -59,7 +58,7 @@ func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *test
 }
 
 func TestOnlyWhatWasAddedIsTold(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 15, 1, 10) // 10 fit, 5 do not
 	events := st.TakeEvents()
 	added, ok := events[0].(event.CharacterItemAdded)
@@ -74,7 +73,7 @@ func TestOnlyWhatWasAddedIsTold(t *testing.T) {
 
 // R29: nothing in a state is shared with its clone.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	before := st.Hash()
 	copied := st.Clone().(*world.State)
@@ -90,7 +89,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 }
 
 func TestAClonedWorldStateSharesNoMemoryWithTheState(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "hi", 0))
 	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
@@ -107,8 +106,8 @@ func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
 }
 
 func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
-	st := world.NewState(1, 1000)
-	first, second := must.Ok(st.AddZoneLayer()), must.Ok(st.AddZoneLayer())
+	st := world.NewState(1)
+	first, second := st.AddZoneLayer(), st.AddZoneLayer()
 	if first != sim.NewStateID(state.ZoneLayerType, 1) ||
 		second != sim.NewStateID(state.ZoneLayerType, 2) {
 		t.Fatalf("the IDs are %d and %d", first, second)
@@ -118,9 +117,9 @@ func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 	}
 }
 
-func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testing.T) {
-	st := world.NewState(1, 2)
-	first := must.Ok(st.AddZoneLayer())
+func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing.T) {
+	st := world.NewState(1)
+	first := st.AddZoneLayer()
 	if !st.RemoveZoneLayer(first) {
 		t.Fatal("a zonelayer of the world was not removed")
 	}
@@ -129,15 +128,15 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testi
 	}
 	for tick := uint64(1); tick <= 5; tick++ {
 		st.NextTick()
-		if got := must.Ok(st.AddZoneLayer()); got == first {
+		if got := st.AddZoneLayer(); got == first {
 			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
 		}
 	}
 }
 
 func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
-	st := world.NewState(1, 2)
-	must.Ok(st.AddZoneLayer())
+	st := world.NewState(1)
+	st.AddZoneLayer()
 	for name, id := range map[string]sim.StateID{
 		"a zonelayer it never gave": sim.NewStateID(state.ZoneLayerType, 9),
 		"a zone":                    sim.NewStateID(state.ZoneType, 1),

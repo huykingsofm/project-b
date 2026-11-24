@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/testkit"
+	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
 // readAll reads the files of a log into memory, to count what they hold.
@@ -436,4 +438,62 @@ func TestFilesMadeWithAnotherSeedThanTheBuilderHasAreRefused(t *testing.T) {
 func layerOf(c *engine.Cluster, id sim.StateID) *engine.Engine[*zonelayerstate.State] {
 	e, _ := c.Get[*zonelayerstate.State](id)
 	return e
+}
+
+func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithNoDivergence(
+	t *testing.T,
+) {
+	dir := t.TempDir()
+	c, _, file, cfg := testkit.NewTeeWorld(t, dir)
+	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	engines, err := replay.Engines(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole, err := replay.RecoveryLine(dir, c.Env.Codecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a crash: the first zonelayer lost its log after tick 7, and the others kept theirs; what it
+	// sent at ticks 10 and 30 was taken by the world and by the third zonelayer
+	const kept = 7
+	layerDir := filepath.Join(dir, "zonelayer-"+fmt.Sprint(testkit.Layer1.Local()))
+	if err = segmentlog.CutAfter(layerDir, kept); err != nil {
+		t.Fatal(err)
+	}
+	limits, err := replay.CutToRecoveryLine(dir, c.Env.Codecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limits[testkit.Layer1] != kept {
+		t.Fatalf("the zonelayer is cut at %d, want %d", limits[testkit.Layer1], kept)
+	}
+	cut := 0
+	for _, e := range engines {
+		if e != testkit.Layer1 && limits[e] < whole[e] {
+			cut++
+		}
+	}
+	if cut == 0 {
+		t.Fatal("no engine took what the zonelayer sent after tick 7: the test checks nothing")
+	}
+	logs, err := runner.FileLogs(dir, c.Env.Codecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Divergences) != 0 {
+		t.Fatalf("the cut logs do not replay:\n%s", strings.Join(result.Divergences, "\n"))
+	}
+	for _, e := range engines {
+		if result.Ticks[e] > limits[e] {
+			t.Fatalf("%v was replayed to %d, past its limit %d", e, result.Ticks[e], limits[e])
+		}
+	}
 }

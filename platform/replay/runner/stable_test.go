@@ -16,7 +16,6 @@ type stampState struct {
 
 func (s *stampState) ID() sim.StateID           { return s.id }
 func (*stampState) Type() sim.StateType         { return 1 }
-func (*stampState) String() string              { return "stamp" }
 func (s *stampState) Tick() uint64              { return s.tick }
 func (s *stampState) NextTick()                 { s.tick++ }
 func (s *stampState) Clone() sim.State          { return s }

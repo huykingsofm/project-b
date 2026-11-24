@@ -11,8 +11,14 @@ type Retry struct{}
 
 func (Retry) ID() sim.OnFailID { return RetryID }
 
-// Handle sends it again, unless the engine stops or the message was tried too often.
-func (Retry) Handle(b sim.Bouncer, m sim.Message, r sim.Reason) {
+// Handle sends it again, unless the engine stops, the message was tried too often, or the engine
+// it is for was retired, which sending it again would not change: it is dropped then, and it was
+// asked once what to do.
+func (Retry) Handle(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) {
+	if r == sim.DeliveryFailureRetired {
+		b.Drop()
+		return
+	}
 	if resendable(b, m, r) {
 		b.Resend(m.Again())
 	}

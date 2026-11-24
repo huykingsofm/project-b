@@ -79,16 +79,19 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
-	w.Uvarint(uint64(a.ItemEntityID))
+	a.ItemEntityID.Encode(w)
 }
 
 // decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupAction(
 	r *binary.Reader, version codec.Version,
 ) (*ZoneLayerCharacterItemPickupAction, error) {
-	a := &ZoneLayerCharacterItemPickupAction{
-		CharacterID:  r.Uint[state.CharacterID](),
-		ItemEntityID: r.Uint[state.EntityID](),
+	characterID := r.Uint[state.CharacterID]()
+	itemEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return nil, err
 	}
-	return a, r.Err()
+	return &ZoneLayerCharacterItemPickupAction{
+		CharacterID: characterID, ItemEntityID: itemEntityID,
+	}, r.Err()
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
@@ -22,12 +23,28 @@ type PrivateChatMessage struct {
 	tick   uint64
 }
 
+// NewPrivateChatMessage makes a private message that a player said to another at a tick.
+func NewPrivateChatMessage(
+	fromID, toID state.PlayerID, text string, tick uint64,
+) PrivateChatMessage {
+	return PrivateChatMessage{
+		fromID: fromID, toID: toID,
+		text: text, tick: tick,
+	}
+}
+
 // InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
 // is empty.
 type InventorySlot struct {
 	itemID state.ItemID
 	count  uint32
 }
+
+// ItemID is the kind of item that the slot holds.
+func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
+
+// Count is how many items the slot holds; 0 is an empty slot.
+func (i InventorySlot) Count() uint32 { return i.count }
 
 // Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R29).
 type Inventory struct {
@@ -51,10 +68,10 @@ type State struct {
 	// added: the world is where an engine learns which other engines there are.
 	zones      []sim.StateID
 	zoneLayers []sim.StateID
-	// stateIDAllocators gives the IDs of the states that the world makes while it runs (its
-	// zonelayers), and takes them back.
-	stateIDAllocators sim.StateIDAllocators
-	privateChat       ring.Ring[PrivateChatMessage]
+	// lastStateID is the number that the last state that the world made while it runs (a
+	// zonelayer) was given, counted up from 1 and never given again.
+	lastStateID uint64
+	privateChat ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
 	// (R28).
@@ -64,52 +81,34 @@ type State struct {
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of an empty world. The ID of a state that the world gives and that is
-// removed is given again only after stateGraveSteps ticks.
-func NewState(worldID sim.StateID, stateGraveSteps uint64) *State {
+// NewState makes the state of an empty world.
+func NewState(worldID sim.StateID) *State {
 	return &State{
 		id: worldID, privateChat: ring.New[PrivateChatMessage](chatKeep),
-		stateIDAllocators: sim.NewStateIDAllocators(stateGraveSteps),
 	}
 }
-
-// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
-// copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyWorldState interface {
-	Hash() uint64
-	ZoneIDs() []sim.StateID
-	ZoneLayerIDs() []sim.StateID
-}
-
-var _ ReadOnlyWorldState = (*State)(nil)
 
 // clone returns a copy of the data, with an empty event.
 func (s *State) clone() *State {
 	return &State{
-		id:                s.id,
-		tick:              s.tick,
-		zones:             slices.Clone(s.zones),
-		zoneLayers:        slices.Clone(s.zoneLayers),
-		stateIDAllocators: s.stateIDAllocators.Clone(),
-		privateChat:       s.privateChat.Clone(),
-		inventories:       s.inventories.CloneFunc(Inventory.Clone),
+		id:          s.id,
+		tick:        s.tick,
+		zones:       slices.Clone(s.zones),
+		zoneLayers:  slices.Clone(s.zoneLayers),
+		lastStateID: s.lastStateID,
+		privateChat: s.privateChat.Clone(),
+		inventories: s.inventories.CloneFunc(Inventory.Clone),
 	}
 }
 
-// NextTick takes the state to the next tick, and the IDs in the grave one step.
-func (s *State) NextTick() {
-	s.tick++
-	s.stateIDAllocators.Step()
-}
+// NextTick takes the state to the next tick.
+func (s *State) NextTick() { s.tick++ }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }
 
 // Type is the type of the state of a world.
 func (s *State) Type() sim.StateType { return state.WorldType }
-
-// String is the name of the type of the state of a world.
-func (s *State) String() string { return "world" }
 
 // Tick is the tick that the state is at.
 func (s *State) Tick() uint64 { return s.tick }
@@ -136,22 +135,18 @@ func (s *State) AddZone(zoneID sim.StateID) {
 	}
 }
 
-// AddZoneLayer gives a zonelayer an ID and makes the world know it. It reports false, and does
-// nothing, when the world has no ID left to give.
-func (s *State) AddZoneLayer() (sim.StateID, bool) {
-	id, ok := s.stateIDAllocators.Give(state.ZoneLayerType)
-	if !ok {
-		return 0, false
-	}
+// AddZoneLayer gives a zonelayer an ID and makes the world know it.
+func (s *State) AddZoneLayer() sim.StateID {
+	s.lastStateID++
+	id := sim.NewStateID(state.ZoneLayerType, s.lastStateID)
 	s.zoneLayers = append(s.zoneLayers, id)
-	return id, true
+	return id
 }
 
-// RemoveZoneLayer makes the world forget a zonelayer, and gives its number back: it is given again
-// only after the steps of the grave. It reports false for an ID that is not one of a zonelayer of
-// the world.
+// RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false
+// for an ID that is not one of a zonelayer of the world.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) bool {
-	if zoneLayerID.Type() != state.ZoneLayerType || !s.stateIDAllocators.Release(zoneLayerID) {
+	if zoneLayerID.Type() != state.ZoneLayerType || !slices.Contains(s.zoneLayers, zoneLayerID) {
 		return false
 	}
 	s.zoneLayers = slices.DeleteFunc(
@@ -196,6 +191,95 @@ func (s *State) AddItemToCharacter(
 	return left
 }
 
+// PrivateMessageCount is how many private messages the world keeps.
+func (s *State) PrivateMessageCount() int { return s.privateChat.Len() }
+
+// ItemsHeld is how many items of a kind a character holds, in all the slots of its inventory.
+func (s *State) ItemsHeld(characterID state.CharacterID, itemID state.ItemID) uint32 {
+	inventory, _ := s.inventories.Get(characterID)
+	var total uint32
+	for _, slot := range inventory.slots {
+		if slot.count > 0 && slot.itemID == itemID {
+			total += slot.count
+		}
+	}
+	return total
+}
+
+// InventorySlots returns the slots of the inventory of a character, in order, empty ones included.
+func (s *State) InventorySlots(characterID state.CharacterID) []InventorySlot {
+	inventory, _ := s.inventories.Get(characterID)
+	return slices.Clone(inventory.slots)
+}
+
+// Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
+// it gives the states it makes, the private messages, and the inventory of every character. The
+// events are not data (R18) and are not written.
+func (s *State) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(len(s.zones)))
+	for _, id := range s.zones {
+		w.Uvarint(uint64(id))
+	}
+	w.Uvarint(uint64(len(s.zoneLayers)))
+	for _, id := range s.zoneLayers {
+		w.Uvarint(uint64(id))
+	}
+	w.Uvarint(s.lastStateID)
+	rows := s.privateChat.Rows()
+	w.Uvarint(uint64(len(rows)))
+	for _, m := range rows {
+		w.Uvarint(uint64(m.fromID))
+		w.Uvarint(uint64(m.toID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
+	}
+	w.Uvarint(uint64(s.inventories.Len()))
+	for characterID, inventory := range s.inventories.All() {
+		w.Uvarint(uint64(characterID))
+		w.Uvarint(uint64(len(inventory.slots)))
+		for _, slot := range inventory.slots {
+			w.Uvarint(uint64(slot.itemID))
+			w.Uvarint(uint64(slot.count))
+		}
+	}
+	return nil
+}
+
+// Hash returns a number that depends on the data of the state and on nothing else.
+func (s *State) Hash() uint64 {
+	h := sim.NewHasher()
+	h.U64(uint64(s.id))
+	h.U64(s.tick)
+	h.U64(s.lastStateID)
+	for _, id := range s.zones {
+		h.U64(uint64(id))
+	}
+	for _, id := range s.zoneLayers {
+		h.U64(uint64(id))
+	}
+	h.U64(uint64(s.privateChat.Len()))
+	for characterID, inventory := range s.inventories.All() {
+		h.U64(uint64(characterID))
+		for _, inventorySlot := range inventory.slots {
+			h.U64(uint64(inventorySlot.itemID))
+			h.U64(uint64(inventorySlot.count))
+		}
+	}
+	return h.Sum()
+}
+
+// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
+// copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyWorldState interface {
+	Hash() uint64
+	ZoneIDs() []sim.StateID
+	ZoneLayerIDs() []sim.StateID
+}
+
+var _ ReadOnlyWorldState = (*State)(nil)
+
 // topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
 // stackLimit in each, and returns how many are left.
 func topUpInventorySlotsOfKind(
@@ -236,40 +320,3 @@ func fillEmptyInventorySlots(
 	}
 	return left
 }
-
-// NewPrivateChatMessage makes a private message that a player said to another at a tick.
-func NewPrivateChatMessage(
-	fromID, toID state.PlayerID, text string, tick uint64,
-) PrivateChatMessage {
-	return PrivateChatMessage{
-		fromID: fromID, toID: toID,
-		text: text, tick: tick,
-	}
-}
-
-// PrivateMessageCount is how many private messages the world keeps.
-func (s *State) PrivateMessageCount() int { return s.privateChat.Len() }
-
-// ItemsHeld is how many items of a kind a character holds, in all the slots of its inventory.
-func (s *State) ItemsHeld(characterID state.CharacterID, itemID state.ItemID) uint32 {
-	inventory, _ := s.inventories.Get(characterID)
-	var total uint32
-	for _, slot := range inventory.slots {
-		if slot.count > 0 && slot.itemID == itemID {
-			total += slot.count
-		}
-	}
-	return total
-}
-
-// InventorySlots returns the slots of the inventory of a character, in order, empty ones included.
-func (s *State) InventorySlots(characterID state.CharacterID) []InventorySlot {
-	inventory, _ := s.inventories.Get(characterID)
-	return slices.Clone(inventory.slots)
-}
-
-// ItemID is the kind of item that the slot holds.
-func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
-
-// Count is how many items the slot holds; 0 is an empty slot.
-func (i InventorySlot) Count() uint32 { return i.count }

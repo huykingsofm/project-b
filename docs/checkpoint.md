@@ -1,13 +1,13 @@
 # Checkpoint of an engine
 
-`platform/engine/checkpoint.go`, with the codecs of the states (`server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
+`platform/engine/checkpoint.go`, with the codecs of the states (`Encode` in `server/game/sim/state/*/state.go`, the decoder in `server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
 
 ## Entry points
 
 | Call | What it does |
 |---|---|
-| `Engine[S].Checkpoint()` | writes the checkpoint of the engine; called between two ticks, by the goroutine of the engine or while it does not run |
-| `engine.Restore[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
+| `engine.CheckpointEngine(e)` | writes the checkpoint of an engine: the start (below), then its state, its scheduler and what only the engine knows (`cellData.Encode`); called between two ticks, by the goroutine of the engine or while it does not run |
+| `engine.RestoreEngine[S](data, env, seed)` | makes the engine of a state of type `S` from a checkpoint, at its tick; the state is read with `env.Codecs`, which for a zone knows the map of the zone (`game.NewCodecs(tilesOf)`) |
 
 - A restore registers the engine in the router of `env`, as `engine.New` does, and only after all of the checkpoint has been read and checked: a bad checkpoint returns an error and registers nothing.
 - What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
@@ -25,10 +25,10 @@ In this order:
 | state | the data of the state, by its `Encode` (below) |
 | scheduler | the last tick it gave out, and the actions set for the ticks to come (the next one included), by tick and in order |
 | random numbers | where the generator of the engine is (the PCG), as its own bytes |
-| `seq` | the number of the last message the engine sent |
+| `sentSeq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |
-| `lastSeq` | the last number taken from each sender, in the order of the state IDs |
-| messages held | the messages the bouncer holds to send again, each written whole |
+| `lastRecvSeq` | the last number taken from each sender, in the order of the state IDs |
+| unsettled messages | the messages that are to go, and the messages that went and were not acked, each written whole ([unsettled messages](unsettled_messages.md)) |
 
 ## What is not written
 
@@ -58,7 +58,7 @@ In this order:
 |---|---|
 | state | the hash of the state |
 | scheduler, self list | each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it |
-| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `seq`, `lastSeq`, the version of the configuration, the messages held |
+| what only the engine knows | the bytes the checkpoint writes for it: random numbers, `sentSeq`, `lastRecvSeq`, the version of the configuration, the messages that are to go |
 
 - A restore that differs from the engine it came from in any of them has another hash, and a replay finds it.
 

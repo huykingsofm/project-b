@@ -21,6 +21,7 @@ const (
 	KindHash
 	KindStableRead
 	KindReturned
+	KindRetired
 )
 
 // Body is what a record holds besides the engine that made it and the tick it was made at. Each
@@ -42,6 +43,16 @@ type Record struct {
 	Body   Body
 }
 
+// Dependency is what the record makes the engine depend on, or false when it makes it depend on
+// nothing: a message depends on the tick at which its sender sent it, and a read of a copy of the
+// state of another engine on the tick of the copy.
+func (r Record) Dependency() (sim.StateDependency, bool) {
+	if d, ok := r.Body.(Dependent); ok {
+		return d.Dependency()
+	}
+	return sim.StateDependency{}, false
+}
+
 // Kind is the kind of the body of the record, or 0 when there is none.
 func (r Record) Kind() Kind {
 	if r.Body == nil {
@@ -50,17 +61,31 @@ func (r Record) Kind() Kind {
 	return r.Body.Kind()
 }
 
+// Dependent is what a body says when what an engine recorded makes it depend on another engine.
+type Dependent interface {
+	// Dependency is the engine and the tick that the body depends on, and false when it depends on
+	// none.
+	Dependency() (sim.StateDependency, bool)
+}
+
 // Inbound is a message that the engine took, whole.
 type Inbound struct{ Message sim.Message }
 
-func (Inbound) Kind() Kind { return KindInbound }
-
 func (b Inbound) Encode(w *binary.Writer) error { return sim.EncodeMessage(w, b.Message) }
+
+// Dependency is the sender of the message and the tick at which it sent it; a message that was not
+// stamped has none.
+func (b Inbound) Dependency() (sim.StateDependency, bool) {
+	h := b.Message.Head()
+	return sim.StateDependency{Source: h.From, Tick: h.Tick}, h.Tick > 0
+}
 
 func (b Inbound) Same(other Body) bool {
 	o, ok := other.(Inbound)
 	return ok && SameMessage(b.Message, o.Message)
 }
+
+func (Inbound) Kind() Kind { return KindInbound }
 
 func decodeInbound(
 	c *sim.Codecs, r *binary.Reader, version codec.Version,
@@ -71,8 +96,6 @@ func decodeInbound(
 
 // Command is a command of a client that the engine took.
 type Command struct{ Command sim.BaseCommand }
-
-func (Command) Kind() Kind { return KindCommand }
 
 func (b Command) Encode(w *binary.Writer) error { return sim.EncodeCommand(w, b.Command) }
 
@@ -88,6 +111,8 @@ func (b Command) Same(other Body) bool {
 	return bytes.Equal(x.B, y.B)
 }
 
+func (Command) Kind() Kind { return KindCommand }
+
 func decodeCommand(
 	c *sim.Codecs, r *binary.Reader, version codec.Version,
 ) (Body, error) {
@@ -98,14 +123,14 @@ func decodeCommand(
 // ConfigRead is the version of the configuration that the engine first read at the tick.
 type ConfigRead struct{ Version uint64 }
 
-func (ConfigRead) Kind() Kind { return KindConfig }
-
 func (b ConfigRead) Encode(w *binary.Writer) error {
 	w.Uvarint(b.Version)
 	return nil
 }
 
 func (b ConfigRead) Same(other Body) bool { o, ok := other.(ConfigRead); return ok && b == o }
+
+func (ConfigRead) Kind() Kind { return KindConfig }
 
 func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return ConfigRead{Version: r.Uvarint()}, r.Err()
@@ -114,14 +139,14 @@ func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, e
 // Hash is the hash of the state of the engine at the end of the tick.
 type Hash struct{ Value uint64 }
 
-func (Hash) Kind() Kind { return KindHash }
-
 func (b Hash) Encode(w *binary.Writer) error {
 	w.Fixed64(b.Value)
 	return nil
 }
 
 func (b Hash) Same(other Body) bool { o, ok := other.(Hash); return ok && b == o }
+
+func (Hash) Kind() Kind { return KindHash }
 
 func decodeHash(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return Hash{Value: r.Fixed64()}, r.Err()
@@ -134,7 +159,11 @@ type StableRead struct {
 	CopyTick uint64
 }
 
-func (StableRead) Kind() Kind { return KindStableRead }
+// Dependency is the engine that was read and the tick of the copy; a read that found no copy (a
+// tick of 0) depends on nothing.
+func (b StableRead) Dependency() (sim.StateDependency, bool) {
+	return sim.StateDependency{Source: b.Source, Tick: b.CopyTick}, b.CopyTick > 0
+}
 
 func (b StableRead) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(b.Source))
@@ -144,6 +173,8 @@ func (b StableRead) Encode(w *binary.Writer) error {
 
 func (b StableRead) Same(other Body) bool { o, ok := other.(StableRead); return ok && b == o }
 
+func (StableRead) Kind() Kind { return KindStableRead }
+
 func decodeStableRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	return StableRead{Source: r.Uint[sim.StateID](), CopyTick: r.Uvarint()}, r.Err()
 }
@@ -152,10 +183,8 @@ func decodeStableRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, e
 // message, and the reason.
 type Returned struct {
 	Header sim.Header
-	Reason sim.Reason
+	Reason sim.DeliveryFailure
 }
-
-func (Returned) Kind() Kind { return KindReturned }
 
 func (b Returned) Encode(w *binary.Writer) error {
 	b.Header.Encode(w)
@@ -165,9 +194,26 @@ func (b Returned) Encode(w *binary.Writer) error {
 
 func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok && b == o }
 
+func (Returned) Kind() Kind { return KindReturned }
+
 func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	header := sim.DecodeHeader(r)
-	return Returned{Header: header, Reason: sim.Reason(r.Uint8())}, r.Err()
+	return Returned{Header: header, Reason: sim.DeliveryFailure(r.Uint8())}, r.Err()
+}
+
+// Retired says that the engine was removed for good: it is the only record of the last frame of
+// its log, which comes after the last tick it ran. A log that ends with it is of an engine that
+// does not go on. Its state ID is never given again.
+type Retired struct{}
+
+func (Retired) Kind() Kind { return KindRetired }
+
+func (Retired) Encode(*binary.Writer) error { return nil }
+
+func (Retired) Same(other Body) bool { _, ok := other.(Retired); return ok }
+
+func decodeRetired(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
+	return Retired{}, r.Err()
 }
 
 // SameMessage reports whether two messages are the same one, by what they are written as: that is
@@ -204,33 +250,26 @@ var decoders = map[Kind]func(
 	KindHash:       decodeHash,
 	KindStableRead: decodeStableRead,
 	KindReturned:   decodeReturned,
+	KindRetired:    decodeRetired,
 }
 
-// payloadTick is the tick of the record that a payload holds.
-func payloadTick(payload []byte) (uint64, error) {
-	r := binary.NewReader(payload)
-	r.Uint8()
-	tick := r.Uvarint()
-	return tick, r.Err()
-}
-
-// encodeRecord writes a record: its kind, its tick and then its body. The engine is not in it: it
-// is the engine of the log the record is written to.
-func encodeRecord(w *binary.Writer, r Record) error {
-	if r.Body == nil {
+// encodeRecord writes a record: its kind and then its body. The tick is the one of the frame the
+// record is in, and the engine the one of the log it is written to.
+func encodeRecord(w *binary.Writer, body Body) error {
+	if body == nil {
 		return fmt.Errorf("the record has no body")
 	}
-	w.Uint8(uint8(r.Body.Kind()))
-	w.Uvarint(r.Tick)
-	return r.Body.Encode(w)
+	w.Uint8(uint8(body.Kind()))
+	return body.Encode(w)
 }
 
-// decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine.
+// decodeRecord reads what encodeRecord wrote, of the data version given, for the log of an engine
+// and a frame of a tick.
 func decodeRecord(
-	c *sim.Codecs, engine sim.StateID, version codec.Version, payload []byte,
+	c *sim.Codecs, engine sim.StateID, version codec.Version, tick uint64, data []byte,
 ) (Record, error) {
-	r := binary.NewReader(payload)
-	kind, tick := Kind(r.Uint8()), r.Uvarint()
+	r := binary.NewReader(data)
+	kind := Kind(r.Uint8())
 	if err := r.Err(); err != nil {
 		return Record{}, err
 	}

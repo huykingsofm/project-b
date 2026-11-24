@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/huykingsofm/project-b/platform/sim"
-
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
@@ -17,8 +17,9 @@ type FileLogReader struct {
 	engine    sim.StateID
 	codecs    *sim.Codecs
 	r         *segmentlog.Reader
-	fromTick  uint64
 	rec       Record
+	frame     *binary.Reader // what is left of the frame that the current record is in
+	frameTick uint64
 	info      segmentInfo // of the segment of the current record
 	infoIndex uint64
 	haveInfo  bool
@@ -26,27 +27,42 @@ type FileLogReader struct {
 }
 
 // ReadFileLog reads the log that a FileLog wrote under dir for an engine, from fromTick: it starts
-// in the segment that holds that tick, using the meta of the segments, and gives only the records
-// of that tick and later ones.
+// in the segment that holds that tick, found by the headers of the segments, and gives only the
+// records of that tick and later ones.
 func ReadFileLog(
 	dir string, engine sim.StateID, fromTick uint64, codecs *sim.Codecs,
 ) (*FileLogReader, error) {
-	logDir := findEngineDir(dir, engine)
-	start := func(meta []byte) bool {
-		info, err := parseSegmentMeta(meta)
-		return err == nil && info.FirstTick <= fromTick
-	}
-	r, err := segmentlog.OpenReader(logDir, start)
+	r, err := segmentlog.OpenReader(findEngineDir(dir, engine), fromTick)
 	if err != nil {
 		return nil, err
 	}
-	return &FileLogReader{engine: engine, codecs: codecs, r: r, fromTick: fromTick}, nil
+	return &FileLogReader{engine: engine, codecs: codecs, r: r}, nil
 }
 
 // Next moves to the next record and reports whether there is one. It reports false at the end of
-// the log, and when there is an error, which Err returns.
+// the log, and when there is an error, which Err returns. A tick with no record has a frame and no
+// record, so it is passed over.
 func (l *FileLogReader) Next() bool {
-	for l.err == nil && l.r.Next() {
+	for l.err == nil {
+		if l.frame != nil && l.frame.Left() > 0 {
+			data := l.frame.Bytes()
+			if err := l.frame.Err(); err != nil {
+				l.err = fmt.Errorf(
+					"segment %d: the frame of the tick %d: %w", l.infoIndex, l.frameTick, err,
+				)
+				return false
+			}
+			rec, err := decodeRecord(l.codecs, l.engine, l.info.Version, l.frameTick, data)
+			if err != nil {
+				l.err = fmt.Errorf("segment %d: the tick %d: %w", l.infoIndex, l.frameTick, err)
+				return false
+			}
+			l.rec = rec
+			return true
+		}
+		if !l.r.Next() {
+			break
+		}
 		if index := l.r.SegmentIndex(); !l.haveInfo || index != l.infoIndex {
 			info, err := parseSegmentMeta(l.r.Meta())
 			if err != nil {
@@ -61,16 +77,7 @@ func (l *FileLogReader) Next() bool {
 			}
 			l.info, l.infoIndex, l.haveInfo = info, index, true
 		}
-		rec, err := decodeRecord(l.codecs, l.engine, l.info.Version, l.r.Payload())
-		if err != nil {
-			l.err = fmt.Errorf("segment %d: %w", l.r.SegmentIndex(), err)
-			return false
-		}
-		if rec.Tick < l.fromTick {
-			continue
-		}
-		l.rec = rec
-		return true
+		l.frame, l.frameTick = binary.NewReader(l.r.Payload()), l.r.ID()
 	}
 	if l.err == nil {
 		l.err = l.r.Err()
@@ -106,7 +113,7 @@ func engineDirs(dir string) (map[sim.StateID]string, error) {
 			continue
 		}
 		info, ok := firstSegmentInfo(filepath.Join(dir, e.Name()))
-		if !ok || e.Name() != engineDirName(e.Name()[:dash], info.Engine) {
+		if !ok || e.Name() != engineDirName(info.Engine) {
 			continue
 		}
 		out[info.Engine] = e.Name()
@@ -116,7 +123,7 @@ func engineDirs(dir string) (map[sim.StateID]string, error) {
 
 // firstSegmentInfo is what the meta of the first segment of a log says.
 func firstSegmentInfo(logDir string) (segmentInfo, bool) {
-	r, err := segmentlog.OpenReader(logDir, func([]byte) bool { return true })
+	r, err := segmentlog.OpenReader(logDir, 0)
 	if err != nil {
 		return segmentInfo{}, false
 	}
@@ -128,18 +135,10 @@ func firstSegmentInfo(logDir string) (segmentInfo, bool) {
 	return info, err == nil
 }
 
-// findEngineDir returns the directory of the log of an engine under dir. An engine that has no log
-// has no directory, and the path it would have is returned, which reads as an empty log.
+// findEngineDir returns the directory of the log of an engine under dir, which its ID names. An
+// engine that has no log has no directory, which reads as an empty log.
 func findEngineDir(dir string, engine sim.StateID) string {
-	dirs, err := engineDirs(dir)
-	if err != nil {
-		return filepath.Join(dir, engineDirName("engine", engine))
-	}
-	name, ok := dirs[engine]
-	if !ok {
-		return filepath.Join(dir, engineDirName("engine", engine))
-	}
-	return filepath.Join(dir, name)
+	return filepath.Join(dir, engineDirName(engine))
 }
 
 // Engines returns the engines that have a log under dir, in the order of their IDs. A directory

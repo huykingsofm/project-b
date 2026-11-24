@@ -9,6 +9,7 @@
 package zonelayer
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -16,6 +17,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablebimap"
@@ -35,19 +37,19 @@ type State struct {
 	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
-	bodies            stablebimap.BiMap[state.CharacterID, state.EntityID]
-	entityIDAllocator state.EntityIDAllocator
+	bodies stablebimap.BiMap[state.CharacterID, state.EntityID]
+	// lastEntityID is the number that the last entity of the zonelayer was given, counted up from
+	// 1: it is never given again.
+	lastEntityID uint64
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of an empty zonelayer. An entity that leaves gives its ID back, and it
-// is given again only after entityGraveSteps ticks.
-func NewState(zoneLayerID, zoneID, worldID sim.StateID, entityGraveSteps uint64) *State {
+// NewState makes the state of an empty zonelayer.
+func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
-		entityIDAllocator: state.NewEntityIDAllocator(zoneLayerID, entityGraveSteps),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -58,40 +60,26 @@ func NewState(zoneLayerID, zoneID, worldID sim.StateID, entityGraveSteps uint64)
 	return s
 }
 
-// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
-// a copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyZoneLayerState interface {
-	CharacterCount() int
-}
-
-var _ ReadOnlyZoneLayerState = (*State)(nil)
-
 // clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:          s.entities.Clone(),
-		characters:        s.characters.Clone(),
-		chat:              s.chat.Clone(),
-		bodies:            s.bodies.Clone(),
-		entityIDAllocator: s.entityIDAllocator.Clone(),
+		entities:     s.entities.Clone(),
+		characters:   s.characters.Clone(),
+		chat:         s.chat.Clone(),
+		bodies:       s.bodies.Clone(),
+		lastEntityID: s.lastEntityID,
 	}
 }
 
-// NextTick takes the state to the next tick, and the IDs in the grave one step.
-func (s *State) NextTick() {
-	s.tick++
-	s.entityIDAllocator.Step()
-}
+// NextTick takes the state to the next tick.
+func (s *State) NextTick() { s.tick++ }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }
 
 // Type is the type of the state of a zonelayer.
 func (s *State) Type() sim.StateType { return state.ZoneLayerType }
-
-// String is the name of the type of the state of a zonelayer.
-func (s *State) String() string { return "zonelayer" }
 
 // Tick is the tick that the state is at.
 func (s *State) Tick() uint64 { return s.tick }
@@ -176,13 +164,10 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 	}
 }
 
-// AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
-// false, and does nothing, when the state has no ID left to give.
-func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
-	id, ok := s.entityIDAllocator.Give()
-	if !ok {
-		return 0, false
-	}
+// AddCharacterEntity gives a character a body at a position, and returns the entity.
+func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
+	s.lastEntityID++
+	id := state.NewEntityID(s.id, s.lastEntityID)
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
@@ -196,7 +181,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, b
 			EntityID: e.ID(), CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.Radius(),
 		},
 	)
-	return e.ID(), true
+	return e.ID()
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -209,7 +194,6 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 	entityID, _ := s.bodies.GetByV1(characterID)
 	body, _ := s.entities.Get(entityID)
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID)
 	s.characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
 	s.events.Add(
@@ -219,19 +203,16 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 }
 
 // AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
-// ever), and returns its entity. It reports false, and does nothing, when the state has no ID left
-// to give.
+// ever), and returns its entity.
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
-) (state.EntityID, bool) {
-	id, ok := s.entityIDAllocator.Give()
-	if !ok {
-		return 0, false
-	}
+) state.EntityID {
+	s.lastEntityID++
+	id := state.NewEntityID(s.id, s.lastEntityID)
 	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
-	return e.ID(), true
+	return e.ID()
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.
@@ -241,7 +222,6 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bo
 		return entity.ItemEntity{}, false
 	}
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID)
 	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Position()})
 	return item, true
 }
@@ -360,3 +340,79 @@ func (s *State) EntityIDsOfKind(kind state.KindID) []state.EntityID {
 
 // ChatMessageCount is how many chat messages the zonelayer keeps.
 func (s *State) ChatMessageCount() int { return s.chat.Len() }
+
+// Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
+// said, which character has which body, and the ID the next entity gets. The events are not data
+// (R18) and are not written. It returns an error, and the writer holds a partial state, when an
+// entity cannot be written.
+func (s *State) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(uint64(s.zoneID))
+	w.Uvarint(uint64(s.worldID))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(s.entities.Len()))
+	for id, e := range s.entities.All() {
+		if id.Owner != s.id {
+			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
+		}
+		if err := entity.Encode(w, e); err != nil {
+			return err
+		}
+	}
+	w.Uvarint(uint64(s.characters.Len()))
+	for id, c := range s.characters.All() {
+		w.Uvarint(uint64(id))
+		c.Encode(w)
+	}
+	rows := s.chat.Rows()
+	w.Uvarint(uint64(len(rows)))
+	for _, m := range rows {
+		w.Uvarint(uint64(m.fromID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
+	}
+	w.Uvarint(uint64(s.bodies.Len()))
+	for characterID, entityID := range s.bodies.AllV1() {
+		w.Uvarint(uint64(characterID))
+		w.Uvarint(entityID.Local)
+	}
+	w.Uvarint(s.lastEntityID)
+	return nil
+}
+
+// Hash returns a number that depends on the data of the state and on nothing else: a replay runs
+// an engine again on the inputs that were recorded and compares it with the one taken the first
+// time. It walks the containers in their own order, which is fixed.
+func (s *State) Hash() uint64 {
+	h := sim.NewHasher()
+	h.U64(uint64(s.id))
+	h.U64(uint64(s.zoneID))
+	h.U64(uint64(s.worldID))
+	h.U64(s.tick)
+	h.U64(s.lastEntityID)
+	for _, e := range s.entities.All() {
+		e.Hash(&h)
+	}
+	for characterID, entityID := range s.bodies.AllV1() {
+		h.U64(uint64(characterID))
+		entityID.Hash(&h)
+	}
+	for _, c := range s.characters.All() {
+		h.U64(uint64(c.characterID))
+		h.String(c.name)
+		h.U64(uint64(uint32(c.speed)))
+		for key, until := range c.cooldowns.All() {
+			h.U64(uint64(key))
+			h.U64(until)
+		}
+	}
+	return h.Sum()
+}
+
+// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
+// a copy that another engine published, which it must never change (R26, R28).
+type ReadOnlyZoneLayerState interface {
+	CharacterCount() int
+}
+
+var _ ReadOnlyZoneLayerState = (*State)(nil)

@@ -2,8 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math/rand/v2"
-	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -20,55 +18,75 @@ import (
 // What the engine does again and again is an action that waits, so it is in the scheduler and
 // there is nothing else to write for it.
 
-// engineHash is the hash of an engine: of everything a checkpoint of it holds that the engine goes
-// on from: its state, what it waits for (the scheduler), and what only it knows (the place of its
-// random numbers, the number of its messages and the last it took from each sender, the version of
-// the configuration it read, and the messages it holds to send again). A restore that differs
-// from the engine it came from in any of them has another hash, and a replay finds it.
-func (c *cell) engineHash[S sim.State](
-	stateHash uint64, sched *sim.Scheduler[S],
-) uint64 {
-	h := sim.NewHasher()
-	h.U64(stateHash)
-	sched.Hash(&h)
-	c.hashInto(&h)
-	return h.Sum()
-}
-
-// hashInto adds what every engine knows besides its state to a hash, as the bytes that a
-// checkpoint writes for it, so that the hash covers exactly what the checkpoint carries.
-func (c *cell) hashInto(h *sim.Hasher) {
-	var w binary.Writer
-	if err := c.encode(&w); err != nil {
-		h.String("a cell that cannot be written") // the hash still tells it from another
-		return
-	}
-	h.Bytes(w.B)
-}
-
-// checkpoint writes the checkpoint of an engine, given its state.
-func (c *cell) checkpoint[S sim.State](
-	tick uint64, st S, sched *sim.Scheduler[S],
-) ([]byte, error) {
+// CheckpointEngine writes the checkpoint of an engine: the start, which says which engine it is and
+// the tick it is at, then its state, what it waits for (the scheduler), and what only it knows. It
+// is called between two ticks, by the goroutine of the engine or while the engine does not run.
+func CheckpointEngine[S sim.State](e *Engine[S]) ([]byte, error) {
 	var w binary.Writer
 	w.Uvarint(1) // the version of the data
-	w.Uvarint(uint64(c.me))
-	w.Uvarint(tick)
-	if err := st.Encode(&w); err != nil {
-		return nil, fmt.Errorf("%v: the state: %w", c.me, err)
+	w.Uvarint(uint64(e.me))
+	w.Uvarint(e.tick)
+	if err := e.st.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: the state: %w", e.me, err)
 	}
-	if err := sched.Encode(&w); err != nil {
-		return nil, fmt.Errorf("%v: the scheduler: %w", c.me, err)
+	if err := e.sched.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: the scheduler: %w", e.me, err)
 	}
-	if err := c.encode(&w); err != nil {
-		return nil, fmt.Errorf("%v: %w", c.me, err)
+	if err := e.cell.cellData.Encode(&w); err != nil {
+		return nil, fmt.Errorf("%v: %w", e.me, err)
 	}
 	return w.B, nil
 }
 
-// readCheckpointStart reads the start of a checkpoint and checks that it is the checkpoint of an
+// RestoreEngine makes the engine of a state from a checkpoint, in the environment given, at the
+// tick of the checkpoint. The state is read with the codecs of the environment. What the engine
+// does again and again is an action that waits in the checkpoint like any other. Nothing of an
+// engine is made, and so nothing is registered in a router, until all of the checkpoint has been
+// read and checked: a bad checkpoint returns an error and registers nothing.
+func RestoreEngine[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
+	r := binary.NewReader(data)
+	version, id, tick, err := readCheckpointHeader(r, sim.StateTypeOf[S]())
+	if err != nil {
+		return nil, err
+	}
+	decodedState, err := env.Codecs.DecodeStateOfType(sim.StateTypeOf[S](), r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%d: the state: %w", id, err)
+	}
+	state, ok := decodedState.(S)
+	if !ok {
+		return nil, fmt.Errorf("%d: the state is a %T, not the one asked for", id, decodedState)
+	}
+	if state.ID() != id {
+		return nil, fmt.Errorf("%d: the state is of the engine %d", id, state.ID())
+	}
+	if state.Tick() != tick {
+		return nil, fmt.Errorf(
+			"%d: %w: the state is at tick %d, and the checkpoint at %d",
+			id, ErrTickMismatch, state.Tick(), tick,
+		)
+	}
+	var sched sim.Scheduler[S]
+	if err := sched.Decode(env.Codecs, r, version); err != nil {
+		return nil, fmt.Errorf("%d: the scheduler: %w", id, err)
+	}
+	cellData, err := decodeCellData(env.Codecs, r, version)
+	if err != nil {
+		return nil, fmt.Errorf("%d: %w", id, err)
+	}
+	if r.Left() != 0 {
+		return nil, fmt.Errorf("%d: %d bytes are left after the checkpoint", id, r.Left())
+	}
+	e := New(state, env, seed)
+	e.tick = tick
+	e.sched = sched
+	e.cell.restoreFrom(cellData)
+	return e, nil
+}
+
+// readCheckpointHeader reads the start of a checkpoint and checks that it is the checkpoint of an
 // engine whose state is of the type.
-func readCheckpointStart(
+func readCheckpointHeader(
 	r *binary.Reader, want sim.StateType,
 ) (codec.Version, sim.StateID, uint64, error) {
 	version := r.Uint[codec.Version]()
@@ -90,118 +108,4 @@ func readCheckpointStart(
 		)
 	}
 	return version, id, tick, nil
-}
-
-// restored is what follows the state of an engine in a checkpoint, read and checked but not yet
-// given to an engine: nothing of an engine is made, and so nothing is registered in a router, until
-// all of the checkpoint has been read.
-type restored[S sim.State] struct {
-	sched sim.Scheduler[S]
-	cell  restoredCell
-}
-
-// restoredCell is what a checkpoint says of what every engine knows besides its state.
-type restoredCell struct {
-	pcg            *rand.PCG
-	seq            uint64
-	cfgVersionSeen uint64
-	lastSeq        map[sim.StateID]uint64
-	pending        []sim.Message
-}
-
-// readCheckpointRest reads what follows the state of an engine: what it waits for, and what only it
-// knows.
-func (env *Env) readCheckpointRest[S sim.State](
-	r *binary.Reader, version codec.Version,
-) (*restored[S], error) {
-	var rest restored[S]
-	if err := rest.sched.Decode(env.Codecs, r, version); err != nil {
-		return nil, fmt.Errorf("the scheduler: %w", err)
-	}
-	var err error
-	if rest.cell, err = decodeCell(env.Codecs, r, version); err != nil {
-		return nil, err
-	}
-	if r.Left() != 0 {
-		return nil, fmt.Errorf("%d bytes are left after the checkpoint", r.Left())
-	}
-	return &rest, nil
-}
-
-// encode writes what every engine knows besides its state: the place of its random numbers, the
-// number of its messages and the last that it took from each sender, the version of the
-// configuration it read, and the messages that it holds to send again.
-func (c *cell) encode(w *binary.Writer) error {
-	random, err := c.pcg.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("its random numbers: %w", err)
-	}
-	w.String(string(random))
-	w.Uvarint(c.seq)
-	w.Uvarint(c.cfgVersionSeen)
-	senders := make([]sim.StateID, 0, len(c.lastSeq))
-	for sender := range c.lastSeq {
-		senders = append(senders, sender)
-	}
-	slices.Sort(senders)
-	w.Uvarint(uint64(len(senders)))
-	for _, sender := range senders {
-		w.Uvarint(uint64(sender))
-		w.Uvarint(c.lastSeq[sender])
-	}
-	w.Uvarint(uint64(len(c.bounce.pending)))
-	for _, m := range c.bounce.pending {
-		if err := sim.EncodeMessage(w, m); err != nil {
-			return fmt.Errorf("a message it holds to send again: %w", err)
-		}
-	}
-	return nil
-}
-
-// decodeCell reads what encode wrote.
-func decodeCell(
-	c *sim.Codecs, r *binary.Reader, version codec.Version,
-) (restoredCell, error) {
-	rc := restoredCell{pcg: rand.NewPCG(0, 0)}
-	if err := rc.pcg.UnmarshalBinary([]byte(r.String())); err != nil {
-		return restoredCell{}, fmt.Errorf("its random numbers: %w", err)
-	}
-	rc.seq = r.Uvarint()
-	rc.cfgVersionSeen = r.Uvarint()
-	n := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return restoredCell{}, err
-	}
-	if n > uint64(r.Left()) { // a sender takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d senders", binary.ErrShort, n)
-	}
-	rc.lastSeq = make(map[sim.StateID]uint64, n)
-	for range n {
-		sender := r.Uint[sim.StateID]()
-		rc.lastSeq[sender] = r.Uvarint()
-	}
-	n = r.Uvarint()
-	if err := r.Err(); err != nil {
-		return restoredCell{}, err
-	}
-	if n > uint64(r.Left()) { // a message takes at least one byte
-		return restoredCell{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
-	}
-	for range n {
-		m, err := c.DecodeMessage(r, version)
-		if err != nil {
-			return restoredCell{}, fmt.Errorf("a message it holds to send again: %w", err)
-		}
-		rc.pending = append(rc.pending, m)
-	}
-	return rc, r.Err()
-}
-
-// restore gives the cell what a checkpoint says. It cannot fail: all of it was read and checked
-// before the engine was made.
-func (c *cell) restore(rc restoredCell) {
-	*c.pcg = *rc.pcg
-	c.seq, c.cfgVersionSeen = rc.seq, rc.cfgVersionSeen
-	c.lastSeq = rc.lastSeq
-	c.bounce.pending = rc.pending
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
 	"github.com/huykingsofm/project-b/server/game/testkit"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 // tile is the width of a tile in units; the map keeps it private, so a test that wants to name a
@@ -298,6 +297,8 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 ) {
 	c, _, j, _ := testkit.NewWorld(t, 1, 0)
 	testkit.WalkToTheEastExit(t, c, 1)
+	// the zonelayer is removed: the world forgets it, and the router has no engine for it
+	c.World.State().RemoveZoneLayer(testkit.Layer3)
 	c.Env.Router.Retire(testkit.Layer3)
 
 	c.ZoneLayer(testkit.Layer1).Send(
@@ -318,8 +319,8 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	body := got.Body.(replay.Returned)
 	layer := testkit.Layer1
 	if got.Engine != layer || body.Header.From != layer ||
-		body.Header.Seq == 0 || body.Reason != sim.Retired {
-		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as Retired", got)
+		body.Header.Seq == 0 || body.Reason != sim.DeliveryFailureRetired {
+		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as retired", got)
 	}
 	var settledAt uint64
 	for _, r := range j.Records {
@@ -453,8 +454,8 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testing.T) {
 	c, rec, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
-	itemID := must.Ok(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -479,8 +480,8 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
-	itemID := must.Ok(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -501,8 +502,8 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	at := state.Vec{X: 2500, Y: 2500}
-	itemID := must.Ok(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 3, at, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 3, at, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -527,8 +528,8 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
-	itemID := must.Ok(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20)
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)

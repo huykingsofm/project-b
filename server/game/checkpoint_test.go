@@ -88,25 +88,25 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 	if _, waits := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID); !waits {
 		t.Fatal("the zonelayer waits for no heal: the test checks nothing")
 	}
-	data, err := l.Checkpoint()
+	data, err := engine.CheckpointEngine(l)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// in the environment of the cluster, as the engine it came from: it reads the zone as it does
-	r, err := engine.Restore[*zonelayerstate.State](data, c.Env, 7)
+	r, err := engine.RestoreEngine[*zonelayerstate.State](data, c.Env, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Hash() != l.Hash() || r.Tick() != l.Tick() || r.State().Hash() != l.State().Hash() {
+	if hashOf(r) != hashOf(l) || r.Tick() != l.Tick() || r.State().Hash() != l.State().Hash() {
 		t.Fatal("the restored engine has another hash, or another tick")
 	}
-	if again, err := r.Checkpoint(); err != nil || !bytes.Equal(again, data) {
+	if again, err := engine.CheckpointEngine(r); err != nil || !bytes.Equal(again, data) {
 		t.Fatalf("the restored engine is written differently: %v", err)
 	}
 	for tick := 1; tick <= 60; tick++ { // the item is taken off, the run ends, the heal comes twice
 		l.Step()
 		r.Step()
-		if r.Hash() != l.Hash() {
+		if hashOf(r) != hashOf(l) {
 			t.Fatalf("%d ticks after the restore the hash differs", tick)
 		}
 	}
@@ -114,30 +114,30 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 
 func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	world, err := c.World.Checkpoint()
+	world, err := engine.CheckpointEngine(c.World)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := engine.Restore[*worldstate.State](world, aFreshEnv(c), 7)
-	if err != nil || w.Hash() != c.World.Hash() || w.Tick() != c.World.Tick() {
+	w, err := engine.RestoreEngine[*worldstate.State](world, aFreshEnv(c), 7)
+	if err != nil || hashOf(w) != hashOf(c.World) || w.Tick() != c.World.Tick() {
 		t.Fatalf("the world: %v", err)
 	}
 	if len(w.State().ZoneIDs()) != 1 || len(w.State().ZoneLayerIDs()) != 1 {
 		t.Fatalf("the restored world knows %+v", w.State())
 	}
-	if again, err := w.Checkpoint(); err != nil || !bytes.Equal(again, world) {
+	if again, err := engine.CheckpointEngine(w); err != nil || !bytes.Equal(again, world) {
 		t.Fatalf("the restored world is written differently: %v", err)
 	}
-	zone, err := c.Zone(testkit.Zone1).Checkpoint()
+	zone, err := engine.CheckpointEngine(c.Zone(testkit.Zone1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	z, err := engine.Restore[*zonestate.State](zone, aFreshEnv(c), 7)
-	if err != nil || z.Hash() != c.Zone(testkit.Zone1).Hash() ||
+	z, err := engine.RestoreEngine[*zonestate.State](zone, aFreshEnv(c), 7)
+	if err != nil || hashOf(z) != hashOf(c.Zone(testkit.Zone1)) ||
 		z.Tick() != c.Zone(testkit.Zone1).Tick() {
 		t.Fatalf("the zone: %v", err)
 	}
-	if again, err := z.Checkpoint(); err != nil || !bytes.Equal(again, zone) {
+	if again, err := engine.CheckpointEngine(z); err != nil || !bytes.Equal(again, zone) {
 		t.Fatalf("the restored zone is written differently: %v", err)
 	}
 	zoneState := c.Zone(testkit.Zone1).State()
@@ -148,23 +148,24 @@ func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 
 func TestACheckpointThatIsCutOrOfAnotherTypeOfStateIsAnErrorAndNeverAPanic(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	data, err := c.ZoneLayer(theLayer).Checkpoint()
+	data, err := engine.CheckpointEngine(c.ZoneLayer(theLayer))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for n := range data { // every proper prefix
-		if _, err := engine.Restore[*zonelayerstate.State](data[:n], aFreshEnv(c), 7); err == nil {
+		_, err := engine.RestoreEngine[*zonelayerstate.State](data[:n], aFreshEnv(c), 7)
+		if err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 	}
 	longer := append(append([]byte{}, data...), 0)
-	if _, err := engine.Restore[*zonelayerstate.State](longer, aFreshEnv(c), 7); err == nil {
+	if _, err := engine.RestoreEngine[*zonelayerstate.State](longer, aFreshEnv(c), 7); err == nil {
 		t.Fatal("a checkpoint with a byte more was restored")
 	}
-	if _, err := engine.Restore[*worldstate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := engine.RestoreEngine[*worldstate.State](data, aFreshEnv(c), 7); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as the world")
 	}
-	if _, err := engine.Restore[*zonestate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := engine.RestoreEngine[*zonestate.State](data, aFreshEnv(c), 7); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as a zone")
 	}
 }
@@ -173,7 +174,7 @@ func TestACheckpointThatIsCutOrOfAnotherTypeOfStateIsAnErrorAndNeverAPanic(t *te
 // bounces as an engine that is not built, and does not wait in a queue that nothing reads.
 func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	c := aWorldWithActionsThatWait(t)
-	data, err := c.ZoneLayer(theLayer).Checkpoint()
+	data, err := engine.CheckpointEngine(c.ZoneLayer(theLayer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,16 +183,16 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	)
 	for n := range data { // every proper prefix, which is bad after the state or before it
 		env := aFreshEnv(c)
-		if _, err := engine.Restore[*zonelayerstate.State](data[:n], env, 7); err == nil {
+		if _, err := engine.RestoreEngine[*zonelayerstate.State](data[:n], env, 7); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
-		if reason, ok := env.Router.Deliver(say); ok || reason != sim.NotBuilt {
+		if reason, ok := env.Router.Deliver(say); ok || reason != sim.DeliveryFailureNotStarted {
 			t.Fatalf("a checkpoint cut at %d of %d bytes registered an engine: %v, %v",
 				n, len(data), reason, ok)
 		}
 	}
 	env := aFreshEnv(c)
-	if _, err := engine.Restore[*zonelayerstate.State](data, env, 7); err != nil {
+	if _, err := engine.RestoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
 		t.Fatal(err)
 	}
 	if reason, ok := env.Router.Deliver(say); !ok {
@@ -215,11 +216,11 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 	if err := game.EnsureRegen(l, 0); err == nil {
 		t.Fatal("no healing was accepted while a heal waits")
 	}
-	data, err := l.Checkpoint()
+	data, err := engine.CheckpointEngine(l)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := engine.Restore[*zonelayerstate.State](data, c.Env, 7)
+	r, err := engine.RestoreEngine[*zonelayerstate.State](data, c.Env, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +275,7 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 		l.ScheduleAt(
 			uint64(500+i),
 			&action.ZoneLayerItemEntityRemoveAction{
-				EntityID: state.NewEntityID(theLayer, uint32(i)),
+				EntityID: state.NewEntityID(theLayer, uint64(i)),
 			},
 		)
 	}
@@ -283,14 +284,14 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 
 func BenchmarkCheckpointZoneLayer(b *testing.B) {
 	l := aBigZoneLayer(b)
-	data, err := l.Checkpoint()
+	data, err := engine.CheckpointEngine(l)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := l.Checkpoint(); err != nil {
+		if _, err := engine.CheckpointEngine(l); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -299,7 +300,7 @@ func BenchmarkCheckpointZoneLayer(b *testing.B) {
 func BenchmarkRestoreZoneLayer(b *testing.B) {
 	c := aWorldToCheckpoint(b)
 	l := aBigZoneLayer(b)
-	data, err := l.Checkpoint()
+	data, err := engine.CheckpointEngine(l)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -307,7 +308,7 @@ func BenchmarkRestoreZoneLayer(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.Restore[*zonelayerstate.State](data, env, 7); err != nil {
+		if _, err := engine.RestoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -317,7 +318,7 @@ func BenchmarkHashZoneLayerWithWhatItWaitsFor(b *testing.B) {
 	l := aBigZoneLayer(b)
 	b.ReportAllocs()
 	for b.Loop() {
-		l.Hash()
+		hashOf(l)
 	}
 }
 
@@ -349,14 +350,14 @@ func aBigWorld(t testing.TB) *engine.Engine[*worldstate.State] {
 
 func BenchmarkCheckpointWorld(b *testing.B) {
 	w := aBigWorld(b)
-	data, err := w.Checkpoint()
+	data, err := engine.CheckpointEngine(w)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := w.Checkpoint(); err != nil {
+		if _, err := engine.CheckpointEngine(w); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -365,7 +366,7 @@ func BenchmarkCheckpointWorld(b *testing.B) {
 func BenchmarkRestoreWorld(b *testing.B) {
 	c := aWorldToCheckpoint(b)
 	w := aBigWorld(b)
-	data, err := w.Checkpoint()
+	data, err := engine.CheckpointEngine(w)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func BenchmarkRestoreWorld(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := engine.Restore[*worldstate.State](data, env, 7); err != nil {
+		if _, err := engine.RestoreEngine[*worldstate.State](data, env, 7); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -383,7 +384,7 @@ func BenchmarkHashWorld(b *testing.B) {
 	w := aBigWorld(b)
 	b.ReportAllocs()
 	for b.Loop() {
-		w.Hash()
+		hashOf(w)
 	}
 }
 
@@ -404,3 +405,6 @@ func BenchmarkCloneZoneLayer(b *testing.B) {
 		l.State().Clone()
 	}
 }
+
+// hashOf is the hash of an engine, from a new hasher.
+func hashOf[S sim.State](e *engine.Engine[S]) uint64 { return e.Hash(sim.NewHasher()) }

@@ -15,7 +15,7 @@ type Notify struct {
 func (Notify) ID() sim.OnFailID { return NotifyID }
 
 // Handle tells the actor of the sim.
-func (f Notify) Handle(b sim.Bouncer, m sim.Message, _ sim.Reason) {
+func (f Notify) Handle(b sim.Bouncer, m sim.Message, _ sim.DeliveryFailure) {
 	b.Tell(m.Subject(), f.Key, f.Args)
 }
 

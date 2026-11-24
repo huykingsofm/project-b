@@ -23,7 +23,7 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 		t.Fatal("the incoming channel did not give what was sent")
 	}
 
-	r := ReturnedMessage{Message: m, Reason: sim.Full}
+	r := ReturnedMessage{Message: m, Reason: sim.DeliveryFailureFull}
 	if !out.SendBack(r) {
 		t.Fatal("the returned message was refused")
 	}
@@ -32,5 +32,26 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 	}
 	if got := <-in.Back; got != r {
 		t.Fatal("the incoming channel did not give what came back")
+	}
+}
+
+func TestARouterSaysAnIDWithNoEngineIsNotStartedUntilItsEngineIsRetired(t *testing.T) {
+	message := func(to sim.StateID) sim.Message {
+		return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1})
+	}
+	_, out := NewChannel(5, 4)
+	rt := NewRouter()
+	if reason, ok := rt.Deliver(message(5)); ok || reason != sim.DeliveryFailureNotStarted {
+		t.Fatalf("an ID with no engine bounced as %v, %v", reason, ok)
+	}
+	rt.Register(out)
+	rt.Retire(5)
+	for to, want := range map[sim.StateID]sim.DeliveryFailure{
+		5: sim.DeliveryFailureRetired,
+		6: sim.DeliveryFailureNotStarted,
+	} {
+		if reason, ok := rt.Deliver(message(to)); ok || reason != want {
+			t.Errorf("a message to %d bounced as %v, %v; want %v", to, reason, ok, want)
+		}
 	}
 }

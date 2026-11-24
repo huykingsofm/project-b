@@ -81,16 +81,19 @@ func (a *ZoneLayerCharacterExitToAction) Apply(
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a *ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
-	w.Uvarint(uint64(a.ExitEntityID))
+	a.ExitEntityID.Encode(w)
 }
 
 // decodeZoneLayerCharacterExitToAction reads what Encode wrote.
 func decodeZoneLayerCharacterExitToAction(
 	r *binary.Reader, version codec.Version,
 ) (*ZoneLayerCharacterExitToAction, error) {
-	a := &ZoneLayerCharacterExitToAction{
-		CharacterID:  r.Uint[state.CharacterID](),
-		ExitEntityID: r.Uint[state.EntityID](),
+	characterID := r.Uint[state.CharacterID]()
+	exitEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return nil, err
 	}
-	return a, r.Err()
+	return &ZoneLayerCharacterExitToAction{
+		CharacterID: characterID, ExitEntityID: exitEntityID,
+	}, r.Err()
 }

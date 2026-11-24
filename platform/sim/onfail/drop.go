@@ -12,7 +12,7 @@ type Drop struct{}
 func (Drop) ID() sim.OnFailID { return DropID }
 
 // Handle drops the sim.
-func (Drop) Handle(b sim.Bouncer, _ sim.Message, _ sim.Reason) { b.Drop() }
+func (Drop) Handle(b sim.Bouncer, _ sim.Message, _ sim.DeliveryFailure) { b.Drop() }
 
 func (Drop) Encode(*binary.Writer) error { return nil }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/channels"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -40,22 +39,37 @@ type Engine[S sim.State] struct {
 var ErrTickMismatch = errors.New("the tick of the state is not the tick of the engine")
 
 // New makes the engine of a state, at the tick the state is at. The tick is its own: the caller
-// gives the ticks with Run or calls Step.
+// gives the ticks with Run or calls Step. The log of the engine refuses a frame that does not
+// follow its last, so a state that is made again for an engine with a log is at the tick of it.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
-	env.ReplayLog.Describe(me, st.String())
 	e := &Engine[S]{
 		cell: newCell(
-			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
+			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed, env.Acks,
 		), st: st, tick: st.Tick(),
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, plans: planPoolOf[S](),
 	}
 	e.reg.Me, e.reg.Stable = me, e.view
+	e.bounce.resend = e.sendToUnsettled
 	if n, ok := any(st).(Noticer); ok {
-		e.bounce.notice = func(actor any, key string, args []any) { n.Notice(actor, key, args...) }
+		e.bounce.SetNotice(
+			func(actor any, key string, args []any) { n.Notice(actor, key, args...) },
+		)
 	}
 	return e
+}
+
+// Remove ends the engine for good, as opposed to stopping it with the context of Run: its log gets
+// a last frame, of the tick after the last it ran, that holds that it was removed; what it
+// published is forgotten, nothing more is delivered to it, and what is waiting in its queue comes
+// back to its senders. The engine is not used after.
+func (e *Engine[S]) Remove() {
+	e.tick++
+	e.replayLog.Append(e.me, e.tick, replay.Retired{})
+	e.replayLog.EndTick(e.me, e.tick)
+	e.stable.Remove(e.me)
+	e.retire()
 }
 
 // Send gives the engine a command, without waiting. It reports false when the queue is full.
@@ -100,7 +114,7 @@ func (e *Engine[S]) Tick() uint64 { return e.tick }
 func (e *Engine[S]) Type() sim.StateType { return sim.StateTypeOf[S]() }
 
 // TypeName is the name of the type of the state of the engine.
-func (e *Engine[S]) TypeName() string { return e.st.String() }
+func (e *Engine[S]) TypeName() string { return e.Type().String() }
 
 // Scheduler returns what the engine waits for, to be read: the actions set for a tick to come, the
 // next one included. It is read between two ticks, by the goroutine of the engine or while the
@@ -120,7 +134,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.sched.At(tick, 
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
-//  7. send the messages that the actions put in the outbox.
+//  7. send the messages that the actions put in the outbox;
+//  8. write the hash of the engine, when it is due, and close the tick for the replay log.
 //
 // It first takes the state to the next tick, and returns an error, having done nothing else, when
 // the state does not then say the tick that the engine is at: a state whose NextTick is wrong can
@@ -135,10 +150,10 @@ func (e *Engine[S]) Step() error {
 		)
 	}
 	cfg := e.snapshot(e.tick)
-	ctx := &sim.Context{Tick: e.tick, Rand: e.rng, Cfg: cfg}
+	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand, Cfg: cfg}
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
-	e.settle(cfg, e.tick)
+	e.handleReturnedMessages(cfg, e.tick)
 
 	e.start = e.start[:0]
 	e.planScheduled()
@@ -171,9 +186,8 @@ func (e *Engine[S]) Step() error {
 		e.emitter.Emit(e.me, e.tick, events)
 	}
 	e.stable.Publish(e.st.Clone())
-	e.recordHash(cfg, e.tick, e.Hash)
-	e.flush(cfg, e.tick, e.reg.Take())
-	e.endTick(e.tick)
+	e.flushUnsettledMessages(cfg, e.tick, e.reg.Take())
+	e.endTick(cfg, e.tick, e.Hash(sim.NewHasher()))
 	return nil
 }
 
@@ -214,51 +228,18 @@ func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	}
 }
 
-// Hash is the hash of the engine: its state, what it waits for, and what only the engine knows (see
-// engineHash). A replay compares it with the one the log holds.
-func (e *Engine[S]) Hash() uint64 {
-	return e.cell.engineHash(e.st.Hash(), &e.sched)
-}
-
-// Checkpoint writes what the engine needs to go on from this tick. It is called between two ticks,
-// by the goroutine of the engine or while the engine does not run.
-func (e *Engine[S]) Checkpoint() ([]byte, error) {
-	return e.cell.checkpoint(e.tick, e.st, &e.sched)
-}
-
-// Restore makes the engine of a state from a checkpoint, in the environment given, at the tick of
-// the checkpoint. The state is read with the codecs of the environment. What the engine does again
-// and again is an action that waits in the checkpoint like any other.
-func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
-	r := binary.NewReader(data)
-	version, id, tick, err := readCheckpointStart(r, sim.StateTypeOf[S]())
-	if err != nil {
-		return nil, err
-	}
-	decoded, err := env.Codecs.DecodeStateOfType(sim.StateTypeOf[S](), r, version)
-	if err != nil {
-		return nil, fmt.Errorf("%d: the state: %w", id, err)
-	}
-	st, ok := decoded.(S)
-	if !ok {
-		return nil, fmt.Errorf("%d: the state is a %T, not the one asked for", id, decoded)
-	}
-	if st.ID() != id {
-		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.ID())
-	}
-	if st.Tick() != tick {
-		return nil, fmt.Errorf(
-			"%d: %w: the state is at tick %d, and the checkpoint at %d",
-			id, ErrTickMismatch, st.Tick(), tick,
+// Hash is the hash of the engine: of everything a checkpoint of it holds that the engine goes on
+// from: its state, what it waits for, and what only it knows (the place of its random numbers, the
+// number of its messages and the last it took from each sender, the version of the configuration it
+// read, and the messages it holds to send again). A restore that differs from the engine it came
+// from in any of them has another hash, and a replay finds it.
+func (e *Engine[S]) Hash(h sim.Hasher) uint64 {
+	h.U64(e.st.Hash())
+	e.sched.Hash(&h)
+	if err := e.cell.cellData.Hash(&h); err != nil {
+		logging.Error(
+			"the hash of the engine cannot cover what its cell holds", "engine", e.me, "err", err,
 		)
 	}
-	rest, err := env.readCheckpointRest[S](r, version)
-	if err != nil {
-		return nil, fmt.Errorf("%d: %w", id, err)
-	}
-	e := New(st, env, seed)
-	e.tick = tick
-	e.sched = rest.sched
-	e.cell.restore(rest.cell)
-	return e, nil
+	return h.Sum()
 }

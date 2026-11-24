@@ -17,8 +17,8 @@ type MessageRouter interface {
 	Register(o OutgoingChannel)
 	Retire(a sim.StateID)
 	Stop()
-	Deliver(l sim.Message) (sim.Reason, bool)
-	Return(l sim.Message, r sim.Reason)
+	Deliver(l sim.Message) (sim.DeliveryFailure, bool)
+	Return(l sim.Message, r sim.DeliveryFailure)
 }
 
 var _ MessageRouter = (*Router)(nil)
@@ -71,7 +71,8 @@ func (rt *Router) Register(o OutgoingChannel) {
 	})
 }
 
-// Retire makes an engine unreachable for good: a message to it bounces as Retired.
+// Retire makes an engine unreachable for good: a message to it bounces as
+// DeliveryFailureRetired.
 func (rt *Router) Retire(a sim.StateID) {
 	rt.update(func(n *routerData) {
 		delete(n.chans, a)
@@ -83,27 +84,28 @@ func (rt *Router) Retire(a sim.StateID) {
 func (rt *Router) Stop() { rt.stopping.Store(true) }
 
 // Deliver puts a message in the channel of its ID. When it cannot, it says why.
-func (rt *Router) Deliver(l sim.Message) (sim.Reason, bool) {
+func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 	if rt.stopping.Load() {
-		return sim.Stopping, false
+		return sim.DeliveryFailureStopping, false
 	}
 	data := rt.data.Load()
 	ch, ok := data.chans[l.Dest()]
 	if !ok {
+		// an engine that was retired is gone; any other ID has no engine yet
 		if data.retired[l.Dest()] {
-			return sim.Retired, false
+			return sim.DeliveryFailureRetired, false
 		}
-		return sim.NotBuilt, false
+		return sim.DeliveryFailureNotStarted, false
 	}
 	if !ch.Send(l) {
-		return sim.Full, false
+		return sim.DeliveryFailureFull, false
 	}
 	return 0, true
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that
 // is gone or full loses it, and it is counted.
-func (rt *Router) Return(l sim.Message, r sim.Reason) {
+func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 	from := l.Head().From
 	ch, ok := rt.data.Load().chans[from]
 	if !ok {

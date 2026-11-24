@@ -106,7 +106,8 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 	var w binary.Writer
 	w.Uvarint(1) // to: a toy state, by its type
 	w.Uvarint(0)
-	w.Uvarint(0) // the header: the sender and the number
+	w.Uvarint(0) // the header: the sender, the number and the tick
+	w.Uvarint(0)
 	w.Uvarint(0) // attempts
 	w.Uvarint(uint64(testDropID))
 	w.Uvarint(1)

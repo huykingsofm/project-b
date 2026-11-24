@@ -17,7 +17,7 @@ func newState(t *testing.T) *zone.State {
 		Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2,
 	}
 	return zone.NewState(
-		1, 9, 1000,
+		1, 9,
 		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}),
 	)
 }
@@ -26,7 +26,7 @@ func TestTheExitsOfTheMapStandInTheZoneAsEntities(t *testing.T) {
 	st := newState(t)
 	first := state.NewEntityID(1, 1)
 	exit, ok := st.ExitEntityByID(first)
-	if !ok || exit.ToZoneID() != 2 || exit.ID() != first || first.Owner() != 1 {
+	if !ok || exit.ToZoneID() != 2 || exit.ID() != first || first.Owner != 1 {
 		t.Fatalf("ExitEntityByID(%d) = %+v, %v", first, exit, ok)
 	}
 	if _, ok := st.ExitEntityByID(state.NewEntityID(1, 2)); ok {

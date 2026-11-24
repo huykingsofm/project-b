@@ -35,8 +35,8 @@ func (a *ZoneLayerCharacterDamageAction) Apply(
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(a.SourceID))
-	w.Uvarint(uint64(a.VictimID))
+	a.SourceID.Encode(w)
+	a.VictimID.Encode(w)
 	w.Varint(int64(a.Amount))
 }
 
@@ -44,10 +44,16 @@ func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
 func decodeZoneLayerCharacterDamageAction(
 	r *binary.Reader, version codec.Version,
 ) (*ZoneLayerCharacterDamageAction, error) {
+	sourceID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return nil, err
+	}
+	victimID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return nil, err
+	}
 	a := &ZoneLayerCharacterDamageAction{
-		SourceID: r.Uint[state.EntityID](),
-		VictimID: r.Uint[state.EntityID](),
-		Amount:   r.Int[int32](),
+		SourceID: sourceID, VictimID: victimID, Amount: r.Int[int32](),
 	}
 	return a, r.Err()
 }

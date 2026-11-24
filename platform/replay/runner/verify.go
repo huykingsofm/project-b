@@ -40,18 +40,15 @@ func (v *verifyLog) expect(engine sim.StateID, got replay.Record) {
 	}
 }
 
-// Wants reports true for every kind: the replay works out a hash to compare it.
-func (v *verifyLog) Wants(replay.Kind) bool { return true }
-
-// Describe does nothing: a replay compares records and writes none.
-func (v *verifyLog) Describe(sim.StateID, string) {}
-
 // Append checks what the engine records against the next record of its log.
 func (v *verifyLog) Append(e sim.StateID, tick uint64, body replay.Body) {
 	v.expect(e, replay.Record{Tick: tick, Body: body})
 }
 
 // EndTick checks that the engine made every record that the log has for the tick.
+// Safe says every tick is: a replay compares records and keeps none.
+func (v *verifyLog) Safe(sim.StateID) uint64 { return ^uint64(0) }
+
 func (v *verifyLog) EndTick(e sim.StateID, _ uint64) {
 	w := v.windows[e]
 	if w == nil {

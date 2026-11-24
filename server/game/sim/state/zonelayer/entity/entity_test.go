@@ -22,7 +22,7 @@ func TestEveryKindHasItsOwnIDAndNoneIsZero(t *testing.T) {
 }
 
 func TestTheBoundingBoxComesFromThePositionAndTheRadius(t *testing.T) {
-	c := CharacterEntity{entityID: 1, pos: state.Vec{X: 5000, Y: 4000}, rad: 2000}
+	c := CharacterEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 5000, Y: 4000}, rad: 2000}
 	want := state.Rect{Min: state.Vec{X: 3000, Y: 2000}, Max: state.Vec{X: 7000, Y: 6000}}
 	if got := c.BoundingBox(); got != want {
 		t.Fatalf("BoundingBox = %+v, want %+v", got, want)
@@ -38,16 +38,20 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 		e.Hash(&h)
 		return h.Sum()
 	}
-	a := ItemEntity{entityID: 1, pos: state.Vec{X: 1, Y: 1}, itemID: 5}
+	a := ItemEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}, itemID: 5}
 	h1 := hash(a)
 	h2 := hash(a)
 	if h1 != h2 {
 		t.Fatal("the same entity hashes differently")
 	}
 	for name, b := range map[string]state.Entity{
-		"item kind":   ItemEntity{entityID: 1, pos: state.Vec{X: 1, Y: 1}, itemID: 6},
-		"position":    ItemEntity{entityID: 1, pos: state.Vec{X: 2, Y: 1}, itemID: 5},
-		"entity kind": CharacterEntity{entityID: 1, pos: state.Vec{X: 1, Y: 1}},
+		"item kind": ItemEntity{
+			entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}, itemID: 6,
+		},
+		"position": ItemEntity{
+			entityID: aLayerEntityID(1), pos: state.Vec{X: 2, Y: 1}, itemID: 5,
+		},
+		"entity kind": CharacterEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}},
 	} {
 		if hash(a) == hash(b) {
 			t.Fatalf("a different %s hashes the same", name)

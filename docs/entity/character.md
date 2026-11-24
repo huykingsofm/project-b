@@ -41,7 +41,7 @@ Its fields are private too:
 
 | Method | Effect | Events |
 |---|---|---|
-| `AddCharacterEntity(character, at)` | gives the character a new body at `at`; returns its ID, and false when the state has none to give | `CharacterEntered` |
+| `AddCharacterEntity(character, at)` | gives the character a new body at `at`; returns its ID | `CharacterEntered` |
 | `RemoveCharacterEntity(characterID)` | takes the character and its body out, whole | `CharacterLeft` |
 | `CharacterEntityByCharacterID(characterID)` | the body of a character | |
 | `CharacterByID(characterID)` | the character, health taken from the body | |
