@@ -91,21 +91,16 @@ func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 	data := rt.data.Load()
 	ch, ok := data.chans[l.Dest()]
 	if !ok {
-		return rt.whyNoEngine(data, l.Dest()), false
+		// an engine that was retired is gone; any other ID has no engine yet
+		if data.retired[l.Dest()] {
+			return sim.DeliveryFailureRetired, false
+		}
+		return sim.DeliveryFailureNotStarted, false
 	}
 	if !ch.Send(l) {
 		return sim.DeliveryFailureFull, false
 	}
 	return 0, true
-}
-
-// whyNoEngine says why a message to an ID with no engine cannot be delivered: the engine was
-// retired, or it does not exist yet.
-func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.DeliveryFailure {
-	if data.retired[id] {
-		return sim.DeliveryFailureRetired
-	}
-	return sim.DeliveryFailureNotStarted
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that
