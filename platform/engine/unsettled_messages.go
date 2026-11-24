@@ -16,9 +16,15 @@ import (
 // message it has taken, so a second copy costs a channel slot and nothing else; the numbers are
 // those of an ack that comes within a sync of the log of the receiver, which is a second or so.
 var (
-	outboxResendFirst = config.NewVar("outbox.resend_first_ticks", 20, config.Range(1, 1000000))
-	outboxResendStep  = config.NewVar("outbox.resend_step_ticks", 20, config.Range(1, 1000000))
-	outboxResendMost  = config.NewVar("outbox.resend_most_ticks", 200, config.Range(1, 1000000))
+	unsettledResendFirst = config.NewVar(
+		"unsettled_messages.resend_first_ticks", 20, config.Range(1, 1000000),
+	)
+	unsettledResendStep = config.NewVar(
+		"unsettled_messages.resend_step_ticks", 20, config.Range(1, 1000000),
+	)
+	unsettledResendMost = config.NewVar(
+		"unsettled_messages.resend_most_ticks", 200, config.Range(1, 1000000),
+	)
 )
 
 // sentMessage is a message that went into the channel of its receiver and has not been acked yet.
@@ -28,36 +34,36 @@ type sentMessage struct {
 	wait    uint64 // how long it waited for the last time
 }
 
-// outbox holds what an engine has sent or is to send, for as long as it can be lost: the messages
-// that are to go (a message that its OnFail sends again, which gets a new number when it goes) and
-// the messages that went and have not been acked as safe (each is sent again, with the number it
-// has, until the receiver has it in a place that no crash takes back). Both are in a checkpoint.
-// Only the goroutine of the engine uses it.
-type outbox struct {
+// unsettledMessages holds what an engine has sent or is to send, for as long as it can be lost: the
+// messages that are to go (a message that its OnFail sends again, which gets a new number when it
+// goes) and the messages that went and have not been acked as safe (each is sent again, with the
+// number it has, until the receiver has it in a place that no crash takes back). Both are in a
+// checkpoint. Only the goroutine of the engine uses it.
+type unsettledMessages struct {
 	unsent []sim.Message
 	sent   []sentMessage // in the order they were sent, which is the order of their numbers
 }
 
 // AddUnsent puts a message that is to go at the next flush.
-func (o *outbox) AddUnsent(m sim.Message) { o.unsent = append(o.unsent, m) }
+func (u *unsettledMessages) AddUnsent(m sim.Message) { u.unsent = append(u.unsent, m) }
 
 // Unsent is the messages that are to go, in the order they will. The list is a view.
-func (o *outbox) Unsent() []sim.Message { return o.unsent }
+func (u *unsettledMessages) Unsent() []sim.Message { return u.unsent }
 
 // SetUnsent sets the messages that are to go, as a checkpoint says.
-func (o *outbox) SetUnsent(messages []sim.Message) { o.unsent = messages }
+func (u *unsettledMessages) SetUnsent(messages []sim.Message) { u.unsent = messages }
 
 // TakeUnsent returns the messages that are to go and forgets them.
-func (o *outbox) TakeUnsent() []sim.Message {
-	out := o.unsent
-	o.unsent = nil
+func (u *unsettledMessages) TakeUnsent() []sim.Message {
+	out := u.unsent
+	u.unsent = nil
 	return out
 }
 
 // Sent is the messages that went and have not been acked, in the order they went.
-func (o *outbox) Sent() []sim.Message {
-	out := make([]sim.Message, len(o.sent))
-	for i, s := range o.sent {
+func (u *unsettledMessages) Sent() []sim.Message {
+	out := make([]sim.Message, len(u.sent))
+	for i, s := range u.sent {
 		out[i] = s.message
 	}
 	return out
@@ -65,26 +71,26 @@ func (o *outbox) Sent() []sim.Message {
 
 // SetSent sets the messages that went and have not been acked, as a checkpoint says: each is sent
 // again at the next flush.
-func (o *outbox) SetSent(messages []sim.Message) {
-	o.sent = make([]sentMessage, len(messages))
+func (u *unsettledMessages) SetSent(messages []sim.Message) {
+	u.sent = make([]sentMessage, len(messages))
 	for i, m := range messages {
-		o.sent[i] = sentMessage{message: m}
+		u.sent[i] = sentMessage{message: m}
 	}
 }
 
-// Len is how many messages the outbox holds.
-func (o *outbox) Len() int { return len(o.unsent) + len(o.sent) }
+// Len is how many messages it holds.
+func (u *unsettledMessages) Len() int { return len(u.unsent) + len(u.sent) }
 
 // MarkSent says that a message went into the channel of its receiver at a tick.
-func (o *outbox) MarkSent(m sim.Message, tick uint64, cfg *config.Snapshot) {
-	wait := uint64(outboxResendFirst.Get(cfg))
-	o.sent = append(o.sent, sentMessage{message: m, due: tick + wait, wait: wait})
+func (u *unsettledMessages) MarkSent(m sim.Message, tick uint64, cfg *config.Snapshot) {
+	wait := uint64(unsettledResendFirst.Get(cfg))
+	u.sent = append(u.sent, sentMessage{message: m, due: tick + wait, wait: wait})
 }
 
 // Due returns the indexes of the messages that are to be sent again at the tick, in order.
-func (o *outbox) Due(tick uint64) []int {
+func (u *unsettledMessages) Due(tick uint64) []int {
 	var due []int
-	for i, s := range o.sent {
+	for i, s := range u.sent {
 		if s.due <= tick {
 			due = append(due, i)
 		}
@@ -93,53 +99,53 @@ func (o *outbox) Due(tick uint64) []int {
 }
 
 // Message is the message that went, by its index.
-func (o *outbox) Message(i int) sim.Message { return o.sent[i].message }
+func (u *unsettledMessages) Message(i int) sim.Message { return u.sent[i].message }
 
 // Reschedule says that the message at the index was sent again at the tick: the next time it waits
 // the step longer, up to the most.
-func (o *outbox) Reschedule(i int, tick uint64, cfg *config.Snapshot) {
-	s := &o.sent[i]
-	s.wait = min(s.wait+uint64(outboxResendStep.Get(cfg)), uint64(outboxResendMost.Get(cfg)))
+func (u *unsettledMessages) Reschedule(i int, tick uint64, cfg *config.Snapshot) {
+	s := &u.sent[i]
+	s.wait = min(s.wait+uint64(unsettledResendStep.Get(cfg)), uint64(unsettledResendMost.Get(cfg)))
 	s.due = tick + s.wait
 }
 
 // Remove forgets the messages at the indexes, which Due returned, in order.
-func (o *outbox) Remove(indexes []int) {
+func (u *unsettledMessages) Remove(indexes []int) {
 	if len(indexes) == 0 {
 		return
 	}
-	kept := o.sent[:0]
+	kept := u.sent[:0]
 	next := 0
-	for i, s := range o.sent {
+	for i, s := range u.sent {
 		if next < len(indexes) && indexes[next] == i {
 			next++
 			continue
 		}
 		kept = append(kept, s)
 	}
-	clear(o.sent[len(kept):])
-	o.sent = kept
+	clear(u.sent[len(kept):])
+	u.sent = kept
 }
 
 // Ack forgets the messages for a receiver that have a number up to the one given: the receiver has
 // them in a place that no crash takes back.
-func (o *outbox) Ack(receiver sim.StateID, upTo uint64) {
-	kept := o.sent[:0]
-	for _, s := range o.sent {
+func (u *unsettledMessages) Ack(receiver sim.StateID, upTo uint64) {
+	kept := u.sent[:0]
+	for _, s := range u.sent {
 		if s.message.Dest() == receiver && s.message.Head().Seq <= upTo {
 			continue
 		}
 		kept = append(kept, s)
 	}
-	clear(o.sent[len(kept):])
-	o.sent = kept
+	clear(u.sent[len(kept):])
+	u.sent = kept
 }
 
 // Receivers is the receivers that have a message that was not acked, each once, in order.
-func (o *outbox) Receivers() []sim.StateID {
+func (u *unsettledMessages) Receivers() []sim.StateID {
 	var out []sim.StateID
 	seen := map[sim.StateID]bool{}
-	for _, s := range o.sent {
+	for _, s := range u.sent {
 		if d := s.message.Dest(); !seen[d] {
 			seen[d] = true
 			out = append(out, d)
@@ -149,10 +155,10 @@ func (o *outbox) Receivers() []sim.StateID {
 }
 
 // Encode writes the messages that are to go, and then the ones that went and were not acked, each
-// whole. What the outbox waits for each is not written: after a restore every one is sent again.
-func (o *outbox) Encode(w *binary.Writer, withSent bool) error {
-	w.Uvarint(uint64(len(o.unsent)))
-	for _, m := range o.unsent {
+// whole. What it waits for each is not written: after a restore every one is sent again.
+func (u *unsettledMessages) Encode(w *binary.Writer, withSent bool) error {
+	w.Uvarint(uint64(len(u.unsent)))
+	for _, m := range u.unsent {
 		if err := sim.EncodeMessage(w, m); err != nil {
 			return fmt.Errorf("a message that is to go: %w", err)
 		}
@@ -160,8 +166,8 @@ func (o *outbox) Encode(w *binary.Writer, withSent bool) error {
 	if !withSent {
 		return nil
 	}
-	w.Uvarint(uint64(len(o.sent)))
-	for _, s := range o.sent {
+	w.Uvarint(uint64(len(u.sent)))
+	for _, s := range u.sent {
 		if err := sim.EncodeMessage(w, s.message); err != nil {
 			return fmt.Errorf("a message that went and was not acked: %w", err)
 		}
@@ -169,32 +175,34 @@ func (o *outbox) Encode(w *binary.Writer, withSent bool) error {
 	return nil
 }
 
-// decodeOutbox reads what Encode wrote with the sent messages.
-func decodeOutbox(c *sim.Codecs, r *binary.Reader, version codec.Version) (outbox, error) {
-	var o outbox
+// decodeUnsettledMessages reads what Encode wrote with the sent messages.
+func decodeUnsettledMessages(
+	c *sim.Codecs, r *binary.Reader, version codec.Version,
+) (unsettledMessages, error) {
+	var u unsettledMessages
 	for _, what := range []string{"that is to go", "that went and was not acked"} {
 		n := r.Uvarint()
 		if err := r.Err(); err != nil {
-			return outbox{}, err
+			return unsettledMessages{}, err
 		}
 		if n > uint64(r.Left()) { // a message takes at least one byte
-			return outbox{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
+			return unsettledMessages{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
 		}
 		messages := make([]sim.Message, 0, n)
 		for range n {
 			m, err := c.DecodeMessage(r, version)
 			if err != nil {
-				return outbox{}, fmt.Errorf("a message %s: %w", what, err)
+				return unsettledMessages{}, fmt.Errorf("a message %s: %w", what, err)
 			}
 			messages = append(messages, m)
 		}
 		if what == "that is to go" {
-			o.SetUnsent(messages)
+			u.SetUnsent(messages)
 		} else {
-			o.SetSent(messages)
+			u.SetSent(messages)
 		}
 	}
-	return o, r.Err()
+	return u, r.Err()
 }
 
 // AckBoard is where a receiver says, for each sender, up to which of its numbers it has taken

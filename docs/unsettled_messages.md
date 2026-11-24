@@ -1,8 +1,8 @@
-# Outbox and acks
+# Unsettled messages and acks
 
-`platform/engine/outbox.go`, `platform/engine/cell.go` (`flush`, `publishAcks`), `platform/replay/safe.go`. What an engine keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. Not to be mistaken for `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
+`platform/engine/unsettled_messages.go`, `platform/engine/cell.go` (`flush`, `publishAcks`), `platform/replay/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
 
-## What the outbox holds
+## What they hold
 
 | Part | What it is | When it goes |
 |---|---|---|
@@ -17,7 +17,7 @@
 
 | When | What the engine does |
 |---|---|
-| a message went and is not acked after `outbox.resend_first_ticks` (20) ticks of its sender | sends it again, the same message with the same number and tick; then after the wait grows by `outbox.resend_step_ticks` (20), up to `outbox.resend_most_ticks` (200) |
+| a message went and is not acked after `unsettled_messages.resend_first_ticks` (20) ticks of its sender | sends it again, the same message with the same number and tick; then after the wait grows by `unsettled_messages.resend_step_ticks` (20), up to `unsettled_messages.resend_most_ticks` (200) |
 | the router says the receiver is full or not started | the message waits again |
 | the router says the receiver is gone (`DeliveryFailureRetired`, `DeliveryFailureNotGiven`) | the message is let go of and comes back to the engine as a message that could not be delivered (`Router.Return`), so its `OnFail` runs once, at the tick that the replay log records |
 

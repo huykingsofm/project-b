@@ -18,7 +18,7 @@ func toMessage(to sim.StateID, seq uint64) sim.Message {
 }
 
 func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *testing.T) {
-	var o outbox
+	var o unsettledMessages
 	cfg := config.Defaults()
 	o.MarkSent(toMessage(2, 1), 5, cfg)
 	o.MarkSent(toMessage(3, 2), 5, cfg)
@@ -39,11 +39,11 @@ func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *t
 }
 
 func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *testing.T) {
-	var o outbox
+	var o unsettledMessages
 	cfg := config.Defaults()
-	first := uint64(outboxResendFirst.Get(cfg))
-	step := uint64(outboxResendStep.Get(cfg))
-	most := uint64(outboxResendMost.Get(cfg))
+	first := uint64(unsettledResendFirst.Get(cfg))
+	step := uint64(unsettledResendStep.Get(cfg))
+	most := uint64(unsettledResendMost.Get(cfg))
 	o.MarkSent(toMessage(2, 1), 100, cfg)
 	if len(o.Due(100+first-1)) != 0 || len(o.Due(100+first)) != 1 {
 		t.Fatalf("it is not due at %d and due at %d", 100+first-1, 100+first)
@@ -64,7 +64,7 @@ func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *t
 }
 
 func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testing.T) {
-	var o outbox
+	var o unsettledMessages
 	cfg := config.Defaults()
 	for seq := uint64(1); seq <= 5; seq++ {
 		o.MarkSent(toMessage(2, seq), 0, cfg)
@@ -76,12 +76,12 @@ func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testi
 	}
 }
 
-func TestTheOutboxComesBackFromItsBytesWithTheMessagesThatWentSentAgainAtOnce(t *testing.T) {
+func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t *testing.T) {
 	codecs, err := toyCodecs()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var o outbox
+	var o unsettledMessages
 	o.AddUnsent(sim.NewActionMessage[*toyState](2, onfail.Retry{}, &toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer
@@ -89,7 +89,7 @@ func TestTheOutboxComesBackFromItsBytesWithTheMessagesThatWentSentAgainAtOnce(t 
 		t.Fatal(err)
 	}
 	r := binary.NewReader(w.B)
-	got, err := decodeOutbox(codecs, r, 1)
+	got, err := decodeUnsettledMessages(codecs, r, 1)
 	if err != nil || r.Left() != 0 {
 		t.Fatalf("error %v, %d bytes left", err, r.Left())
 	}
@@ -100,7 +100,7 @@ func TestTheOutboxComesBackFromItsBytesWithTheMessagesThatWentSentAgainAtOnce(t 
 		t.Fatal("a message that went is not sent again at once after a restore")
 	}
 	for n := range w.B { // every proper prefix
-		if _, err := decodeOutbox(codecs, binary.NewReader(w.B[:n]), 1); err == nil {
+		if _, err := decodeUnsettledMessages(codecs, binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
@@ -148,13 +148,13 @@ func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engi
 
 func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
-	first := uint64(outboxResendFirst.Get(config.Defaults()))
+	first := uint64(unsettledResendFirst.Get(config.Defaults()))
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
-	if b.State().Total != 7 || a.out.Len() != 1 {
-		t.Fatalf("b has %d and a holds %d messages, want 7 and 1", b.State().Total, a.out.Len())
+	if b.State().Total != 7 || a.unsettled.Len() != 1 {
+		t.Fatalf("b has %d and a holds %d, want 7 and 1", b.State().Total, a.unsettled.Len())
 	}
-	sent := a.out.Sent()[0].Head()
+	sent := a.unsettled.Sent()[0].Head()
 	if sent.From != 1 || sent.Tick != 1 {
 		t.Fatalf("the message went with the header %+v", sent)
 	}
@@ -164,15 +164,15 @@ func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t 
 	if b.State().Total != 7 {
 		t.Fatalf("b took a second copy: it has %d", b.State().Total)
 	}
-	if a.out.Len() != 1 || a.out.Sent()[0].Head() != sent {
+	if a.unsettled.Len() != 1 || a.unsettled.Sent()[0].Head() != sent {
 		t.Fatalf("a holds %d messages, and the first has the header %+v, want it unchanged",
-			a.out.Len(), a.out.Sent()[0].Head())
+			a.unsettled.Len(), a.unsettled.Sent()[0].Head())
 	}
 	log.safe[2] = b.Tick() // the tick at which b took it is safe
 	c.Step()               // b says it
 	c.Step()               // a reads it
-	if a.out.Len() != 0 {
-		t.Fatalf("a holds %d messages after the ack, want none", a.out.Len())
+	if a.unsettled.Len() != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", a.unsettled.Len())
 	}
 }
 
@@ -184,28 +184,28 @@ func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
 	for range 8 {
 		c.Step()
 	}
-	if a.out.Len() != 3 || b.State().Total != 3 {
-		t.Fatalf("a holds %d messages and b has %d, want 3 and 3", a.out.Len(), b.State().Total)
+	if a.unsettled.Len() != 3 || b.State().Total != 3 {
+		t.Fatalf("a holds %d and b has %d, want 3 and 3", a.unsettled.Len(), b.State().Total)
 	}
 	log.safe[2] = 5 // b took the messages at the ticks 1 and 4, which are safe, not the one at 7
 	c.Step()
 	c.Step()
-	if a.out.Len() != 1 || a.out.Sent()[0].Head().Tick != 7 {
-		t.Fatalf("a holds %d messages: want only the one that b took at tick 7", a.out.Len())
+	if a.unsettled.Len() != 1 || a.unsettled.Sent()[0].Head().Tick != 7 {
+		t.Fatalf("a holds %d messages: want only the one that b took at tick 7", a.unsettled.Len())
 	}
 }
 
 func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
-	first := uint64(outboxResendFirst.Get(config.Defaults()))
+	first := uint64(unsettledResendFirst.Get(config.Defaults()))
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
 	c.Env.Router.Retire(b.StateID())
 	for a.Tick() < first+3 {
 		c.Step()
 	}
-	if a.out.Len() != 0 {
-		t.Fatalf("a still holds %d messages for a receiver that is gone", a.out.Len())
+	if a.unsettled.Len() != 0 {
+		t.Fatalf("a still holds %d messages for a receiver that is gone", a.unsettled.Len())
 	}
 	returned := 0
 	for _, r := range c.Env.ReplayLog.(*aLogThatSaysWhatIsSafe).Records {
@@ -233,7 +233,7 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	}
 	// the state of b was restored from the checkpoint: what it took is in a place that no crash
 	// takes back, so a sender is told of it without waiting
-	if got := env.Acks.Slot(2, 1).Load(); got != a.out.Sent()[0].Head().Seq {
+	if got := env.Acks.Slot(2, 1).Load(); got != a.unsettled.Sent()[0].Head().Seq {
 		t.Fatalf("a restored b acks %d to a, want the number of the message it took", got)
 	}
 	if restored.State().Total != 7 {

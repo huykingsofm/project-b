@@ -40,7 +40,8 @@ type cell struct {
 	pcg            *rand.PCG              // the random numbers of the engine and where they are
 	rng            *rand.Rand
 	bounce         bouncer
-	out            *outbox // what the engine has sent or is to send, until it is acked as safe
+	// unsettled is what the engine has sent or is to send, until it is acked as safe
+	unsettled *unsettledMessages
 
 	// acks is where the receivers say what they hold safe, and where this engine says it of what
 	// it took; nil for an engine that holds nothing for an ack (a replay).
@@ -75,11 +76,12 @@ func newCell(
 	// The seed of the cluster and the ID of the engine decide the random numbers, so the same
 	// inputs give the same run.
 	pcg := rand.NewPCG(seed, uint64(me))
-	held := &outbox{}
+	held := &unsettledMessages{}
 	return cell{
 		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
 		lastSeq: map[sim.StateID]uint64{}, pcg: pcg, rng: rand.New(pcg),
-		bounce: bouncer{out: held}, out: held, acks: acks, acked: map[sim.StateID]uint64{},
+		bounce: bouncer{unsettled: held}, unsettled: held,
+		acks: acks, acked: map[sim.StateID]uint64{},
 		ackedSlots: map[sim.StateID]*atomic.Uint64{}, senderSlots: map[sim.StateID]*atomic.Uint64{},
 	}
 }
@@ -180,7 +182,7 @@ func (c *cell) receivedActions[S sim.State](tick uint64) []sim.Action[S] {
 // of the send.
 func (c *cell) flush(cfg *config.Snapshot, tick uint64, fresh []sim.Message) {
 	c.acknowledged()
-	for _, m := range append(c.out.TakeUnsent(), fresh...) {
+	for _, m := range append(c.unsettled.TakeUnsent(), fresh...) {
 		c.seq++
 		m = m.Stamp(sim.Header{From: c.me, Seq: c.seq, Tick: tick})
 		reason, ok := c.router.Deliver(m)
@@ -190,7 +192,7 @@ func (c *cell) flush(cfg *config.Snapshot, tick uint64, fresh []sim.Message) {
 			continue
 		}
 		if c.acks != nil { // a message that is not acked is not held: nothing would ever let it go
-			c.out.MarkSent(m, tick, cfg)
+			c.unsettled.MarkSent(m, tick, cfg)
 		}
 	}
 	c.sendAgain(cfg, tick)
@@ -201,13 +203,13 @@ func (c *cell) acknowledged() {
 	if c.acks == nil {
 		return
 	}
-	for _, receiver := range c.out.Receivers() {
+	for _, receiver := range c.unsettled.Receivers() {
 		slot, ok := c.senderSlots[receiver]
 		if !ok {
 			slot = c.acks.Slot(receiver, c.me)
 			c.senderSlots[receiver] = slot
 		}
-		c.out.Ack(receiver, slot.Load())
+		c.unsettled.Ack(receiver, slot.Load())
 	}
 }
 
@@ -216,16 +218,16 @@ func (c *cell) acknowledged() {
 // when the receiver is retired while the message waits in its queue.
 func (c *cell) sendAgain(cfg *config.Snapshot, tick uint64) {
 	var gone []int
-	for _, i := range c.out.Due(tick) {
-		m := c.out.Message(i)
+	for _, i := range c.unsettled.Due(tick) {
+		m := c.unsettled.Message(i)
 		if reason, ok := c.router.Deliver(m); !ok && reason.Gone() {
 			c.router.Return(m, reason)
 			gone = append(gone, i)
 			continue
 		}
-		c.out.Reschedule(i, tick, cfg) // delivered, or full or not started: it waits again
+		c.unsettled.Reschedule(i, tick, cfg) // delivered, or full or not started: it waits again
 	}
-	c.out.Remove(gone)
+	c.unsettled.Remove(gone)
 }
 
 // publishAcks says to each sender the number up to which this engine holds its messages safe: the

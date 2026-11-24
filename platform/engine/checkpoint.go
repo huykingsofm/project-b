@@ -106,7 +106,7 @@ type restoredCell struct {
 	seq            uint64
 	cfgVersionSeen uint64
 	lastSeq        map[sim.StateID]uint64
-	outbox         outbox
+	unsettled      unsettledMessages
 }
 
 // PCG is where the random numbers of the engine were.
@@ -121,8 +121,8 @@ func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
 // LastSeq is the last number that the engine took from each sender.
 func (rc restoredCell) LastSeq() map[sim.StateID]uint64 { return rc.lastSeq }
 
-// Outbox is what the engine had sent or was to send.
-func (rc restoredCell) Outbox() outbox { return rc.outbox }
+// Unsettled is what the engine had sent or was to send.
+func (rc restoredCell) Unsettled() unsettledMessages { return rc.unsettled }
 
 // Scheduler is what the engine waited for.
 func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }
@@ -151,9 +151,9 @@ func (env *Env) readCheckpointRest[S sim.State](
 
 // encode writes what every engine knows besides its state: the place of its random numbers, the
 // number of its messages and the last that it took from each sender, the version of the
-// configuration it read, and its outbox: the messages that are to go and, with withSent, the ones
-// that went and were not acked. The hash leaves out the second: when a message is acked depends on
-// when the log of its receiver is synced, which a replay does not repeat.
+// configuration it read, and its unsettled messages: the messages that are to go and, with
+// withSent, the ones that went and were not acked. The hash leaves out the second: when a message
+// is acked depends on when the log of its receiver is synced, which a replay does not repeat.
 func (c *cell) encode(w *binary.Writer, withSent bool) error {
 	random, err := c.pcg.MarshalBinary()
 	if err != nil {
@@ -172,7 +172,7 @@ func (c *cell) encode(w *binary.Writer, withSent bool) error {
 		w.Uvarint(uint64(sender))
 		w.Uvarint(c.lastSeq[sender])
 	}
-	return c.out.Encode(w, withSent)
+	return c.unsettled.Encode(w, withSent)
 }
 
 // decodeCell reads what encode wrote.
@@ -198,7 +198,7 @@ func decodeCell(
 		rc.lastSeq[sender] = r.Uvarint()
 	}
 	var err error
-	if rc.outbox, err = decodeOutbox(c, r, version); err != nil {
+	if rc.unsettled, err = decodeUnsettledMessages(c, r, version); err != nil {
 		return restoredCell{}, err
 	}
 	return rc, r.Err()
@@ -210,9 +210,9 @@ func (c *cell) restore(rc restoredCell) {
 	*c.pcg = *rc.PCG()
 	c.seq, c.cfgVersionSeen = rc.Seq(), rc.CfgVersionSeen()
 	c.lastSeq = rc.LastSeq()
-	held := rc.Outbox()
-	c.out.SetUnsent(held.Unsent())
-	c.out.SetSent(held.Sent())
+	held := rc.Unsettled()
+	c.unsettled.SetUnsent(held.Unsent())
+	c.unsettled.SetSent(held.Sent())
 	// what the checkpoint says it took is in a place that no crash takes back: the state was
 	// restored from it
 	for sender, seq := range c.lastSeq {

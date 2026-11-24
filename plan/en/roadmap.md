@@ -20,17 +20,17 @@ What is left of the recovery of a cluster: the logs can be cut to the recovery l
 | Checkpoint files | a set of checkpoints for the cluster, written by a copy taken at the end of a tick outside the goroutine of the engine, at a period with an offset for each engine; all are kept for now |
 | Checkpoints above the line | the checkpoints of an engine whose tick is above its limit are dropped, since they hold what was cut |
 | Replay from a checkpoint | each engine is made from its latest checkpoint at or below its limit and run on its own log to its limit, instead of from tick 0 |
-| Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the outboxes are those of the checkpoints, and the acks are made again |
-| An outbox that is full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
+| Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the unsettled messages are those of the checkpoints, and the acks are made again |
+| Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
 | Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
-| To measure | the size of the outbox in a checkpoint; the time of a recovery, from tick 0 and from a checkpoint |
+| To measure | the size of the unsettled messages in a checkpoint; the time of a recovery, from tick 0 and from a checkpoint |
 
  sender when it flushes; a copy that was taken before is not acked by being dropped |
 | Retire | an engine that is destroyed writes a frame that holds `Retired`; an ID that is given again goes on counting ticks after the last tick of its last life, so a tick of an ID is never the tick of two lives; the allocator keeps that last tick for each ID |
 | Recovery line | each engine is cut before the first tick with a dependency above the durable tick of its source, until nothing changes; then replayed once from its latest checkpoint at or below its limit; a checkpoint above is dropped; all checkpoints are kept for now |
 | Cut | `CutAfter(tick)` on a log, called with the limit that recovery worked out; a cut loses the whole tick, commands included; the hash is checked only up to the limit |
 | Logs of a cluster | all engines have a log or none has |
-| To measure | the size of the outbox in a checkpoint; the time of a recovery |
+| To measure | the size of the unsettled messages in a checkpoint; the time of a recovery |
 
 ## Later
 

@@ -28,7 +28,7 @@ In this order:
 | `seq` | the number of the last message the engine sent |
 | configuration | the version of the configuration the engine first read last |
 | `lastSeq` | the last number taken from each sender, in the order of the state IDs |
-| outbox | the messages that are to go, and the messages that went and were not acked, each written whole ([outbox](outbox.md)) |
+| unsettled messages | the messages that are to go, and the messages that went and were not acked, each written whole ([unsettled messages](unsettled_messages.md)) |
 
 ## What is not written
 
