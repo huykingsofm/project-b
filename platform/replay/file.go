@@ -234,7 +234,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 	w, err := segmentlog.Open(logDir, segmentlog.Options{
 		SegmentBytes: f.opts.SegmentBytes, SyncEvery: f.opts.SyncEvery, Backlog: f.opts.Backlog,
 		Meta:   segmentMeta(engine, f.opts.Seed),
-		OnSync: func(uint64) { f.wake() },
+		OnSync: f.wake,
 	})
 	l := &engineLog{w: w, openErr: err}
 	// what is in the log already is on the disk, and the engine goes on after its last frame

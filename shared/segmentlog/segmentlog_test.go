@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -948,39 +949,54 @@ func TestLastFrameIDOfALogWhoseLastSegmentHasNoBatchIsInThePreviousOne(t *testin
 	}
 }
 
-func TestOnSyncIsToldHowManyBatchesEachSyncPutOnTheDisk(t *testing.T) {
+func TestOnSyncIsCalledOnceForASyncThatPutRecordsOnTheDiskAndSyncedSaysWhichOnes(t *testing.T) {
 	var mu sync.Mutex
-	var told []uint64
-	o := opts // a sync every hour: only Close syncs, so one call holds every batch
-	o.OnSync = func(batches uint64) {
+	var seen []uint64
+	o := opts // a sync every hour: only Close syncs, so one call holds every record
+	var w *segmentlog.Writer
+	o.OnSync = func() {
 		mu.Lock()
-		told = append(told, batches)
+		seen = append(seen, w.Synced())
 		mu.Unlock()
 	}
-	w := open(t, t.TempDir(), o)
+	w = open(t, t.TempDir(), o)
 	write(t, w, 0, 7)
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(told) != 1 || told[0] != 7 {
-		t.Fatalf("OnSync was told %v, want one sync of 7 batches", told)
+	if len(seen) != 1 || seen[0] != 7 {
+		t.Fatalf("OnSync was called %d times with Synced at %v, want once and 7", len(seen), seen)
 	}
 }
 
-func TestTheBatchesThatOnSyncIsToldAddUpToTheOnesOnTheDisk(t *testing.T) {
+func TestOnSyncIsNotCalledForASyncThatPutNothingOnTheDisk(t *testing.T) {
+	var calls atomic.Int32
+	o := opts
+	o.OnSync = func() { calls.Add(1) }
+	w := open(t, t.TempDir(), o)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("OnSync was called %d times for a log that wrote nothing", calls.Load())
+	}
+}
+
+func TestEverySyncThatOnSyncSaysHasMoreOnTheDiskThanTheOneBefore(t *testing.T) {
 	var mu sync.Mutex
-	var sum uint64
+	var seen []uint64
+	var w *segmentlog.Writer
 	o := opts
 	o.SyncEvery = time.Millisecond
 	o.SegmentBytes = 200 // a segment that is closed syncs too
-	o.OnSync = func(batches uint64) {
+	o.OnSync = func() {
 		mu.Lock()
-		sum += batches
+		seen = append(seen, w.Synced())
 		mu.Unlock()
 	}
-	w := open(t, t.TempDir(), o)
+	w = open(t, t.TempDir(), o)
 	for tick := range uint64(60) {
 		write(t, w, tick, tick+1)
 		if tick%7 == 0 {
@@ -992,7 +1008,12 @@ func TestTheBatchesThatOnSyncIsToldAddUpToTheOnesOnTheDisk(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if sum != 60 || w.Synced() != 60 {
-		t.Fatalf("OnSync was told %d batches and Synced is %d, want 60 and 60", sum, w.Synced())
+	if len(seen) == 0 || seen[len(seen)-1] != 60 || w.Synced() != 60 {
+		t.Fatalf("Synced was %v at the calls of OnSync and is %d, want 60", seen, w.Synced())
+	}
+	for i := 1; i < len(seen); i++ {
+		if seen[i] <= seen[i-1] {
+			t.Fatalf("OnSync was called with nothing new on the disk: %v", seen)
+		}
 	}
 }

@@ -35,7 +35,7 @@ One directory for each log. A segment is `seg-<index>.log`, the index in 20 digi
 | `Close()` | commits what is pending, waits until everything is written and synced; later calls return `ErrClosed` |
 | `Err()` | the first error of writing or syncing, or nil |
 | `Stalled()` | how many `Commit` calls had to wait for the goroutine that writes |
-| `Options.OnSync` | called by the goroutine that writes, after batches were forced to disk, with how many batches that sync put on the disk (only when there were some), so that whoever waits for them need not look again and again |
+| `Options.OnSync` | `func()`, called by the goroutine that writes, after records were forced to disk (only when there were some), so that whoever waits for them need not look again and again; `Synced()` says which |
 | `Synced()` | the ID of the last record that is on the disk (written and forced), or 0; what was in the log when it was opened counts; behind the records handed over by at most what one `SyncEvery` holds; it stops where it was when the writer has failed |
 
 | Option | Meaning |

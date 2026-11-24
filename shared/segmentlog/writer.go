@@ -24,11 +24,10 @@ type Options struct {
 	// of a segment without reading its records (an engine, a seed). Nil means an empty meta. A meta
 	// is at most 64 KiB; a longer one is cut.
 	Meta []byte
-	// OnSync is called, by the goroutine of the Writer, after batches were forced to disk, with how
-	// many batches this sync put on the disk, so that whoever waits for them (see Synced) need not
-	// look again and again. It is called only when there were some. It must not wait. Nil means
-	// none.
-	OnSync func(batches uint64)
+	// OnSync is called, by the goroutine of the Writer, after records were forced to disk, so that
+	// whoever waits for them (see Synced) need not look again and again. It is called only when
+	// there were some. It must not wait. Nil means none.
+	OnSync func()
 }
 
 // batch is the records of one Commit.
@@ -210,21 +209,19 @@ func (w *Writer) fail(err error) {
 func (w *Writer) run() {
 	defer close(w.done)
 	var (
-		f        *os.File
-		size     int64
-		dirty    bool
-		written  = w.synced.Load() // the ID of the last record written to a file, synced or not
-		unsynced uint64            // the batches written and not synced
+		f       *os.File
+		size    int64
+		dirty   bool
+		written = w.synced.Load() // the ID of the last record written to a file, synced or not
 	)
 	syncFile := func() {
 		if err := f.Sync(); err != nil {
 			w.fail(err)
 		} else {
-			w.synced.Store(written)
-			if w.opts.OnSync != nil && unsynced > 0 {
-				w.opts.OnSync(unsynced)
+			before := w.synced.Swap(written)
+			if w.opts.OnSync != nil && written > before {
+				w.opts.OnSync()
 			}
-			unsynced = 0
 		}
 		dirty = false
 	}
@@ -266,7 +263,6 @@ func (w *Writer) run() {
 						size += int64(len(b.buf))
 						dirty = true
 						written = b.lastID
-						unsynced++
 					}
 				}
 			}
