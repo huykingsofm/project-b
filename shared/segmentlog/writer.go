@@ -49,7 +49,6 @@ type Writer struct {
 	mu             sync.Mutex // protects pending, pendingRecords and closed
 	pending        []byte
 	pendingRecords int
-	handedOver     uint64 // how many batches Commit has handed over
 	closed         bool
 	next           uint64 // the index of the next segment; used by the goroutine that writes
 	batches        chan batch
@@ -128,7 +127,6 @@ func (w *Writer) handOver() {
 	// a batch is its records and a commit
 	w.pending = appendCommit(w.pending, uint32(w.pendingRecords))
 	w.pendingRecords = 0
-	w.handedOver++
 	b := batch{buf: w.pending}
 	select {
 	case w.pending = <-w.free:
@@ -145,18 +143,11 @@ func (w *Writer) handOver() {
 	}
 }
 
-// Handed is how many batches Commit has handed over to be written: a Commit with no record appended
-// since the last one is not a batch, and is not counted.
-func (w *Writer) Handed() uint64 {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.handedOver
-}
-
-// Synced is how many batches are on the disk: of the batches handed over, from the first, the ones
-// that were written and forced to disk, so a batch that is counted is not lost to a crash. It is
-// never more than Handed, and it is behind it by what is written and not synced yet, which is at
-// most the batches of one SyncEvery. When the writer has failed it stops where it was.
+// Synced is how many batches are on the disk: of the batches that Commit handed over, from the
+// first, the ones that were written and forced to disk, so a batch that is counted is not lost to
+// a crash. A Commit with no record appended since the last one is not a batch. It is behind the
+// batches handed over by what is written and not synced yet, which is at most the batches of one
+// SyncEvery. When the writer has failed it stops where it was.
 func (w *Writer) Synced() uint64 { return w.synced.Load() }
 
 // Stalled is how many times Commit had to wait because the goroutine that writes was behind.

@@ -13,7 +13,7 @@ import (
 )
 
 func toMessage(to sim.StateID, seq uint64) sim.Message {
-	return sim.NewActionMessage[*toyState](to, onfail.Drop{}, &toyAction{N: 1}).
+	return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1}).
 		Stamp(sim.Header{From: 1, Seq: seq, Tick: seq})
 }
 
@@ -82,7 +82,7 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 		t.Fatal(err)
 	}
 	var o UnsettledMessages
-	o.AddUnsent(sim.NewActionMessage[*toyState](2, onfail.Retry{}, &toyAction{N: 3}))
+	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer
 	if err := o.Encode(&w, true); err != nil {

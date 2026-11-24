@@ -48,7 +48,7 @@ func (d aDirectory) StateStatus(id sim.StateID) ids.Status {
 
 func TestARouterSaysWhyAnIDHasNoEngineByWhatItsDirectorySays(t *testing.T) {
 	message := func(to sim.StateID) sim.Message {
-		return sim.NewActionMessage[*toyState](to, onfail.Drop{}, &toyAction{N: 1})
+		return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1})
 	}
 	rt := NewRouter()
 	if reason, ok := rt.Deliver(message(5)); ok || reason != sim.DeliveryFailureNotStarted {

@@ -743,9 +743,6 @@ func TestSyncedCountsTheBatchesThatAreOnTheDisk(t *testing.T) {
 	if err := w.Commit(); err != nil { // nothing was appended: not a batch
 		t.Fatal(err)
 	}
-	if w.Handed() != 5 {
-		t.Fatalf("Handed = %d, want 5", w.Handed())
-	}
 	deadline := time.Now().Add(5 * time.Second)
 	for w.Synced() != 5 {
 		if time.Now().After(deadline) {
@@ -756,19 +753,22 @@ func TestSyncedCountsTheBatchesThatAreOnTheDisk(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
+	if w.Synced() != 5 { // the Commit with nothing appended was not a batch
+		t.Fatalf("Synced = %d after Close, want 5", w.Synced())
+	}
 }
 
 func TestCloseSyncsWhatIsLeftAndSyncedSaysSo(t *testing.T) {
 	w := open(t, t.TempDir(), opts) // a sync every hour: only Close syncs
 	write(t, w, 0, 3)
-	if w.Synced() > w.Handed() {
-		t.Fatalf("Synced %d is more than Handed %d", w.Synced(), w.Handed())
+	if w.Synced() > 3 {
+		t.Fatalf("Synced = %d, more than the 3 batches that were written", w.Synced())
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if w.Synced() != 3 || w.Handed() != 3 {
-		t.Fatalf("Synced = %d and Handed = %d, want 3 and 3", w.Synced(), w.Handed())
+	if w.Synced() != 3 {
+		t.Fatalf("Synced = %d after Close, want 3", w.Synced())
 	}
 }
 
