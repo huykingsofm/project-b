@@ -72,7 +72,7 @@ What an engine writes in a tick is one frame, which is one record of the segment
 | the tick of a frame | the ID of its record in the segment log: the begin in the header of each segment says the tick of its first frame, so no frame and no record carries the tick |
 | a tick with no record | a frame with no record at all, so the batches of a log are its ticks one by one, and the number of batches that are on the disk (`segmentlog.Writer.Synced`) says up to which tick nothing is lost |
 | the engine | not in a record: it is the engine of the log |
-| the meta of a segment | the format (2), the engine and the seed |
+| the meta of a segment | the format (1), the engine and the seed |
 
 | In code | What it is |
 |---|---|

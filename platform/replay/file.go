@@ -16,7 +16,7 @@ import (
 )
 
 // formatVersion is the version of the records and of the meta of a segment of the replay log.
-const formatVersion codec.Version = 2
+const formatVersion codec.Version = 1
 
 // FileLogOptions are the settings of a FileLog.
 type FileLogOptions struct {
