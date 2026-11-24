@@ -239,9 +239,9 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 		zoneState := zonestate.NewState(zp.ID, b.world.ID, zp.Tiles)
 		lp := layers[zp.ID]
 		for range lp.Count {
-			layerID, ok := worldState.AddZoneLayer()
-			if !ok {
-				return nil, errors.New("the world has no ID left to give a zonelayer")
+			layerID, err := worldState.AddZoneLayer()
+			if err != nil {
+				return nil, err
 			}
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
 			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID)

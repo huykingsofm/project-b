@@ -71,15 +71,13 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 		entityID := state.NewEntityID(id, r.Uvarint())
 		s.bodies.Link(characterID, entityID)
 	}
-	if s.entityIDCounter, err = state.DecodeEntityIDCounter(id, r); err != nil {
-		return nil, err
-	}
+	s.lastEntityID = r.Uvarint()
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
 	for _, entityID := range s.entities.Keys() {
-		if err = s.entityIDCounter.CheckGiven(entityID); err != nil {
-			return nil, err
+		if entityID.Owner != id || entityID.Local == 0 || entityID.Local > s.lastEntityID {
+			return nil, fmt.Errorf("the entity %v was never given by the state %d", entityID, id)
 		}
 	}
 	return s, nil

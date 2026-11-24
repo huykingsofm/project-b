@@ -25,7 +25,7 @@ The fields are private; the item is a value, made with `NewItemEntity(id, pos, i
 
 | Method | Effect | Events |
 |---|---|---|
-| `AddItemEntity(itemID, count, at, expiry)` | puts a stack on the ground with a new entity ID; returns the ID, and false when the state has none to give | `ItemAppeared` |
+| `AddItemEntity(itemID, count, at, expiry)` | puts a stack on the ground with a new entity ID; returns the ID | `ItemAppeared` |
 | `RemoveItemEntity(id)` | takes the stack off the ground | `ItemDisappeared` |
 | `ItemEntityByID(id)` | the stack | |
 

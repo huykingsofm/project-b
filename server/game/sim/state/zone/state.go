@@ -66,7 +66,8 @@ type State struct {
 	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
 	chat       ring.Ring[ChatMessage]
 
-	entityIDCounter state.EntityIDCounter
+	// lastEntityID is the number that the last entity of the zone was given, counted up from 1.
+	lastEntityID uint64
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
@@ -77,14 +78,11 @@ type State struct {
 func NewState(zoneID, worldID sim.StateID, tiles *tilemap.TileMap) *State {
 	s := &State{
 		id: zoneID, worldID: worldID, tiles: tiles,
-		chat:            ring.New[ChatMessage](chatKeep),
-		entityIDCounter: state.NewEntityIDCounter(zoneID),
+		chat: ring.New[ChatMessage](chatKeep),
 	}
 	for _, exit := range tiles.Exits() {
-		id, ok := s.entityIDCounter.Give()
-		if !ok {
-			break // a map has no more than a few exits: there is always an ID
-		}
+		s.lastEntityID++ // a map has no more than a few exits
+		id := state.NewEntityID(zoneID, s.lastEntityID)
 		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
 	}
 	return s
@@ -94,14 +92,14 @@ func NewState(zoneID, worldID sim.StateID, tiles *tilemap.TileMap) *State {
 // changes.
 func (s *State) clone() *State {
 	return &State{
-		id:              s.id,
-		worldID:         s.worldID,
-		tick:            s.tick,
-		tiles:           s.tiles,
-		entities:        s.entities.Clone(),
-		zoneLayers:      s.zoneLayers.Clone(),
-		chat:            s.chat.Clone(),
-		entityIDCounter: s.entityIDCounter.Clone(),
+		id:           s.id,
+		worldID:      s.worldID,
+		tick:         s.tick,
+		tiles:        s.tiles,
+		entities:     s.entities.Clone(),
+		zoneLayers:   s.zoneLayers.Clone(),
+		chat:         s.chat.Clone(),
+		lastEntityID: s.lastEntityID,
 	}
 }
 
@@ -196,7 +194,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.String(m.text)
 		w.Uvarint(m.tick)
 	}
-	s.entityIDCounter.Encode(w)
+	w.Uvarint(s.lastEntityID)
 	return nil
 }
 
@@ -206,7 +204,7 @@ func (s *State) Hash() uint64 {
 	h.U64(uint64(s.id))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)
-	s.entityIDCounter.Hash(&h)
+	h.U64(s.lastEntityID)
 	for _, l := range s.zoneLayers.All() {
 		h.U64(uint64(l.id))
 		h.U64(uint64(uint32(l.capacity)))

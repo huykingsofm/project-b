@@ -1,12 +1,12 @@
 package action
 
 import (
+	"github.com/huykingsofm/project-b/shared/testing/must"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t *testing.T) {
@@ -15,7 +15,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := must.Ok(st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048}))
+	body := must.NoError(st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048}))
 	st.DamageEntity(body, 30)
 	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health() }
 

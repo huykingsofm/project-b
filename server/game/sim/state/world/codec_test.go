@@ -2,6 +2,7 @@ package world_test
 
 import (
 	"bytes"
+	"github.com/huykingsofm/project-b/shared/testing/must"
 	"slices"
 	"testing"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
@@ -23,7 +23,7 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddZone(2)
 	st.AddZone(3)
 	st.AddZone(2) // a zone it knows is not added again
-	first := must.Ok(st.AddZoneLayer())
+	first := must.NoError(st.AddZoneLayer())
 	st.AddZoneLayer()
 	st.RemoveZoneLayer(first)
 
@@ -54,8 +54,7 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	}
 }
 
-// worldBytes writes a world that knows the zonelayers (no zone) and whose counter has given the
-// number last for the type of the zonelayers.
+// worldBytes writes a world that knows the zonelayers (no zone) and gave the numbers up to last.
 func worldBytes(zoneLayers []sim.StateID, last uint64) []byte {
 	var w binary.Writer
 	w.Uvarint(1) // the ID of the world
@@ -65,15 +64,13 @@ func worldBytes(zoneLayers []sim.StateID, last uint64) []byte {
 	for _, id := range zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	w.Uvarint(1) // one type has a counter
-	w.Uint8(uint8(state.ZoneLayerType))
-	w.Uvarint(last)
-	w.Uvarint(0) // no private message
-	w.Uvarint(0) // no inventory
+	w.Uvarint(last) // the number that the world gave last
+	w.Uvarint(0)    // no private message
+	w.Uvarint(0)    // no inventory
 	return w.B
 }
 
-func TestAWorldWhoseZoneLayersWereNotGivenByItsCounterIsAnError(t *testing.T) {
+func TestAWorldWhoseZoneLayersWereNotGivenUpToItsLastNumberIsAnError(t *testing.T) {
 	layer := func(n uint64) sim.StateID { return sim.NewStateID(state.ZoneLayerType, n) }
 	aZone := sim.NewStateID(state.ZoneType, 1)
 	given := worldBytes([]sim.StateID{layer(1), layer(3)}, 3)

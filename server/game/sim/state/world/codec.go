@@ -42,19 +42,19 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	if s.stateIDCounters, err = sim.DecodeStateIDCounters(r); err != nil {
-		return nil, err
-	}
+	s.lastStateID = r.Uvarint()
 	if err = r.Err(); err != nil {
 		return nil, err
+	}
+	if s.lastStateID > sim.MaxLocalStateID {
+		return nil, fmt.Errorf("the world has given the number %d: too large", s.lastStateID)
 	}
 	seen := make(map[sim.StateID]bool, len(s.zoneLayers))
 	for _, zoneLayerID := range s.zoneLayers {
 		if zoneLayerID.Type() != state.ZoneLayerType {
 			return nil, fmt.Errorf("the zonelayer %d is a state of another type", zoneLayerID)
 		}
-		given := s.stateIDCounters.Last(state.ZoneLayerType)
-		if zoneLayerID.Local() == 0 || zoneLayerID.Local() > given {
+		if zoneLayerID.Local() == 0 || zoneLayerID.Local() > s.lastStateID {
 			return nil, fmt.Errorf("the zonelayer %d was never given", zoneLayerID)
 		}
 		if seen[zoneLayerID] {

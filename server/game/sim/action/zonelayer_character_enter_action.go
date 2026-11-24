@@ -44,10 +44,10 @@ func (a *ZoneLayerCharacterEnterAction) Apply(
 	if !zone.TileMap().FreeForBody(at, a.Character.Radius()) {
 		at = zone.TileMap().SpawnPosition()
 	}
-	if _, ok := s.AddCharacterEntity(a.Character, at); !ok {
+	if _, err := s.AddCharacterEntity(a.Character, at); err != nil {
 		logging.Error(
-			"a character could not enter: the zonelayer has no entity ID left",
-			"zonelayer", s.ID(), "character", a.Character.CharacterID(),
+			"a character could not enter",
+			"zonelayer", s.ID(), "character", a.Character.CharacterID(), "err", err,
 		)
 	}
 }

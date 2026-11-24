@@ -35,11 +35,11 @@ func (a *ZoneLayerItemEntityAddAction) Apply(
 	if a.Count == 0 {
 		return
 	}
-	id, ok := s.AddItemEntity(a.ItemID, a.Count, a.At, a.Expiry)
-	if !ok {
+	id, err := s.AddItemEntity(a.ItemID, a.Count, a.At, a.Expiry)
+	if err != nil {
 		logging.Error(
-			"an item could not be put on the ground: the zonelayer has no entity ID left",
-			"zonelayer", s.ID(), "item", a.ItemID,
+			"an item could not be put on the ground",
+			"zonelayer", s.ID(), "item", a.ItemID, "err", err,
 		)
 		return
 	}

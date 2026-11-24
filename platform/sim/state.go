@@ -16,21 +16,24 @@ import (
 // ID of its state in it, so that it is unique as well (see EntityID in the game).
 type StateID uint64
 
-// maxLocalStateID is the greatest number that is local to a type: 2^56 - 1.
-const maxLocalStateID = 1<<56 - 1
+// MaxLocalStateID is the greatest number that is local to a type: 2^56 - 1.
+const MaxLocalStateID = 1<<56 - 1
 
-// NewStateID makes the ID of the state of a type with a number that is local to the type, which
-// must be at least 1 and at most 2^56 - 1: a number outside of that is cut, so a caller that counts
-// checks it first (see StateIDCounters).
+// NewStateID makes the ID of the state of a type with a number that is local to the type. It
+// panics for a number above MaxLocalStateID, which would be cut and name another state: whoever
+// counts the numbers of states while the program runs checks it first and returns an error.
 func NewStateID(t StateType, local uint64) StateID {
-	return StateID(uint64(t)<<56 | local&maxLocalStateID)
+	if local > MaxLocalStateID {
+		panic(fmt.Sprintf("the number %d is too large for the ID of a state", local))
+	}
+	return StateID(uint64(t)<<56 | local)
 }
 
 // Type is the type of the state that has the ID.
 func (id StateID) Type() StateType { return StateType(id >> 56) }
 
 // Local is the number of the state among the states of its type.
-func (id StateID) Local() uint64 { return uint64(id) & maxLocalStateID }
+func (id StateID) Local() uint64 { return uint64(id) & MaxLocalStateID }
 
 // StateType names a kind of state, by a number that the game registers with the codecs: see
 // Codecs.RegisterState. A number is never changed or reused, because checkpoints and the replay log

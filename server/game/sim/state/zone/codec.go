@@ -72,15 +72,13 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	if s.entityIDCounter, err = state.DecodeEntityIDCounter(s.id, r); err != nil {
-		return nil, err
-	}
+	s.lastEntityID = r.Uvarint()
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
 	for _, entityID := range s.entities.Keys() {
-		if err = s.entityIDCounter.CheckGiven(entityID); err != nil {
-			return nil, err
+		if entityID.Owner != s.id || entityID.Local == 0 || entityID.Local > s.lastEntityID {
+			return nil, fmt.Errorf("the entity %v was never given by the state %d", entityID, s.id)
 		}
 	}
 	return s, nil

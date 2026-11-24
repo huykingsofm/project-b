@@ -10,6 +10,7 @@ package zonelayer
 
 import (
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -37,8 +38,10 @@ type State struct {
 	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
-	bodies          stablebimap.BiMap[state.CharacterID, state.EntityID]
-	entityIDCounter state.EntityIDCounter
+	bodies stablebimap.BiMap[state.CharacterID, state.EntityID]
+	// lastEntityID is the number that the last entity of the zonelayer was given, counted up from
+	// 1: it is never given again.
+	lastEntityID uint64
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
@@ -48,7 +51,6 @@ type State struct {
 func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
-		entityIDCounter: state.NewEntityIDCounter(zoneLayerID),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -63,11 +65,11 @@ func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:        s.entities.Clone(),
-		characters:      s.characters.Clone(),
-		chat:            s.chat.Clone(),
-		bodies:          s.bodies.Clone(),
-		entityIDCounter: s.entityIDCounter.Clone(),
+		entities:     s.entities.Clone(),
+		characters:   s.characters.Clone(),
+		chat:         s.chat.Clone(),
+		bodies:       s.bodies.Clone(),
+		lastEntityID: s.lastEntityID,
 	}
 }
 
@@ -163,12 +165,22 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 	}
 }
 
-// AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
-// false, and does nothing, when the state has no ID left to give.
-func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
-	id, ok := s.entityIDCounter.Give()
-	if !ok {
-		return state.EntityID{}, false
+// giveEntityID returns the ID of the next entity of the zonelayer. It returns an error, and gives
+// nothing, when the numbers of the zonelayer are all given.
+func (s *State) giveEntityID() (state.EntityID, error) {
+	if s.lastEntityID == math.MaxUint64 {
+		return state.EntityID{}, fmt.Errorf("the zonelayer %d has no entity ID left", s.id)
+	}
+	s.lastEntityID++
+	return state.NewEntityID(s.id, s.lastEntityID), nil
+}
+
+// AddCharacterEntity gives a character a body at a position, and returns the entity. It returns an
+// error, and does nothing, when the zonelayer has no entity ID left.
+func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, error) {
+	id, err := s.giveEntityID()
+	if err != nil {
+		return state.EntityID{}, err
 	}
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
@@ -183,7 +195,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, b
 			EntityID: e.ID(), CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.Radius(),
 		},
 	)
-	return e.ID(), true
+	return e.ID(), nil
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -205,19 +217,19 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 }
 
 // AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
-// ever), and returns its entity. It reports false, and does nothing, when the state has no ID left
-// to give.
+// ever), and returns its entity. It returns an error, and does nothing, when the zonelayer has no
+// entity ID left.
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
-) (state.EntityID, bool) {
-	id, ok := s.entityIDCounter.Give()
-	if !ok {
-		return state.EntityID{}, false
+) (state.EntityID, error) {
+	id, err := s.giveEntityID()
+	if err != nil {
+		return state.EntityID{}, err
 	}
 	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
-	return e.ID(), true
+	return e.ID(), nil
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.
@@ -381,7 +393,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.Uvarint(uint64(characterID))
 		w.Uvarint(entityID.Local)
 	}
-	s.entityIDCounter.Encode(w)
+	w.Uvarint(s.lastEntityID)
 	return nil
 }
 
@@ -394,7 +406,7 @@ func (s *State) Hash() uint64 {
 	h.U64(uint64(s.zoneID))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)
-	s.entityIDCounter.Hash(&h)
+	h.U64(s.lastEntityID)
 	for _, e := range s.entities.All() {
 		e.Hash(&h)
 	}

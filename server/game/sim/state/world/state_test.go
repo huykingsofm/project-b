@@ -1,6 +1,7 @@
 package world_test
 
 import (
+	"github.com/huykingsofm/project-b/shared/testing/must"
 	"reflect"
 	"testing"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {
@@ -108,7 +108,7 @@ func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
 
 func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 	st := world.NewState(1)
-	first, second := must.Ok(st.AddZoneLayer()), must.Ok(st.AddZoneLayer())
+	first, second := must.NoError(st.AddZoneLayer()), must.NoError(st.AddZoneLayer())
 	if first != sim.NewStateID(state.ZoneLayerType, 1) ||
 		second != sim.NewStateID(state.ZoneLayerType, 2) {
 		t.Fatalf("the IDs are %d and %d", first, second)
@@ -120,7 +120,7 @@ func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 
 func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing.T) {
 	st := world.NewState(1)
-	first := must.Ok(st.AddZoneLayer())
+	first := must.NoError(st.AddZoneLayer())
 	if !st.RemoveZoneLayer(first) {
 		t.Fatal("a zonelayer of the world was not removed")
 	}
@@ -129,7 +129,7 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing
 	}
 	for tick := uint64(1); tick <= 5; tick++ {
 		st.NextTick()
-		if got := must.Ok(st.AddZoneLayer()); got == first {
+		if got := must.NoError(st.AddZoneLayer()); got == first {
 			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
 		}
 	}
@@ -137,7 +137,7 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing
 
 func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
 	st := world.NewState(1)
-	must.Ok(st.AddZoneLayer())
+	st.AddZoneLayer()
 	for name, id := range map[string]sim.StateID{
 		"a zonelayer it never gave": sim.NewStateID(state.ZoneLayerType, 9),
 		"a zone":                    sim.NewStateID(state.ZoneType, 1),

@@ -32,3 +32,13 @@ func panics(call func()) (did bool) {
 	call()
 	return false
 }
+
+func TestAStateIDWithANumberThatWouldBeCutIsRefused(t *testing.T) {
+	id := sim.NewStateID(3, sim.MaxLocalStateID)
+	if id.Local() != sim.MaxLocalStateID || id.Type() != 3 {
+		t.Fatalf("the greatest number: %v", id)
+	}
+	if !panics(func() { sim.NewStateID(3, sim.MaxLocalStateID+1) }) {
+		t.Fatal("a number above the greatest was cut and not refused")
+	}
+}

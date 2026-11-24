@@ -4,6 +4,7 @@
 package world
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -68,10 +69,10 @@ type State struct {
 	// added: the world is where an engine learns which other engines there are.
 	zones      []sim.StateID
 	zoneLayers []sim.StateID
-	// stateIDCounters gives the IDs of the states that the world makes while it runs (its
-	// zonelayers), each once.
-	stateIDCounters sim.StateIDCounters
-	privateChat     ring.Ring[PrivateChatMessage]
+	// lastStateID is the number that the last state that the world made while it runs (a
+	// zonelayer) was given, counted up from 1 and never given again.
+	lastStateID uint64
+	privateChat ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
 	// (R28).
@@ -85,20 +86,19 @@ type State struct {
 func NewState(worldID sim.StateID) *State {
 	return &State{
 		id: worldID, privateChat: ring.New[PrivateChatMessage](chatKeep),
-		stateIDCounters: sim.NewStateIDCounters(),
 	}
 }
 
 // clone returns a copy of the data, with an empty event.
 func (s *State) clone() *State {
 	return &State{
-		id:              s.id,
-		tick:            s.tick,
-		zones:           slices.Clone(s.zones),
-		zoneLayers:      slices.Clone(s.zoneLayers),
-		stateIDCounters: s.stateIDCounters.Clone(),
-		privateChat:     s.privateChat.Clone(),
-		inventories:     s.inventories.CloneFunc(Inventory.Clone),
+		id:          s.id,
+		tick:        s.tick,
+		zones:       slices.Clone(s.zones),
+		zoneLayers:  slices.Clone(s.zoneLayers),
+		lastStateID: s.lastStateID,
+		privateChat: s.privateChat.Clone(),
+		inventories: s.inventories.CloneFunc(Inventory.Clone),
 	}
 }
 
@@ -136,15 +136,16 @@ func (s *State) AddZone(zoneID sim.StateID) {
 	}
 }
 
-// AddZoneLayer gives a zonelayer an ID and makes the world know it. It reports false, and does
-// nothing, when the world has no ID left to give.
-func (s *State) AddZoneLayer() (sim.StateID, bool) {
-	id, ok := s.stateIDCounters.Give(state.ZoneLayerType)
-	if !ok {
-		return 0, false
+// AddZoneLayer gives a zonelayer an ID and makes the world know it. It returns an error, and does
+// nothing, when the world has no number left for the ID of a zonelayer.
+func (s *State) AddZoneLayer() (sim.StateID, error) {
+	if s.lastStateID >= sim.MaxLocalStateID {
+		return 0, fmt.Errorf("the world %d has no number left for the ID of a zonelayer", s.id)
 	}
+	s.lastStateID++
+	id := sim.NewStateID(state.ZoneLayerType, s.lastStateID)
 	s.zoneLayers = append(s.zoneLayers, id)
-	return id, true
+	return id, nil
 }
 
 // RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false
@@ -230,7 +231,7 @@ func (s *State) Encode(w *binary.Writer) error {
 	for _, id := range s.zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	s.stateIDCounters.Encode(w)
+	w.Uvarint(s.lastStateID)
 	rows := s.privateChat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
@@ -256,7 +257,7 @@ func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
 	h.U64(uint64(s.id))
 	h.U64(s.tick)
-	s.stateIDCounters.Hash(&h)
+	h.U64(s.lastStateID)
 	for _, id := range s.zones {
 		h.U64(uint64(id))
 	}
