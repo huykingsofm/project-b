@@ -846,3 +846,52 @@ func TestCutAfterThatCutsNothingChangesNothing(t *testing.T) {
 		t.Fatalf("a log that does not exist: %v", err)
 	}
 }
+
+func TestOnSyncIsToldHowManyBatchesEachSyncPutOnTheDisk(t *testing.T) {
+	var mu sync.Mutex
+	var told []uint64
+	o := opts // a sync every hour: only Close syncs, so one call holds every batch
+	o.OnSync = func(batches uint64) {
+		mu.Lock()
+		told = append(told, batches)
+		mu.Unlock()
+	}
+	w := open(t, t.TempDir(), o)
+	write(t, w, 0, 7)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(told) != 1 || told[0] != 7 {
+		t.Fatalf("OnSync was told %v, want one sync of 7 batches", told)
+	}
+}
+
+func TestTheBatchesThatOnSyncIsToldAddUpToTheOnesOnTheDisk(t *testing.T) {
+	var mu sync.Mutex
+	var sum uint64
+	o := opts
+	o.SyncEvery = time.Millisecond
+	o.SegmentBytes = 200 // a segment that is closed syncs too
+	o.OnSync = func(batches uint64) {
+		mu.Lock()
+		sum += batches
+		mu.Unlock()
+	}
+	w := open(t, t.TempDir(), o)
+	for tick := range uint64(60) {
+		write(t, w, tick, tick+1)
+		if tick%7 == 0 {
+			time.Sleep(2 * time.Millisecond) // let a sync come between some of them
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if sum != 60 || w.Synced() != 60 {
+		t.Fatalf("OnSync was told %d batches and Synced is %d, want 60 and 60", sum, w.Synced())
+	}
+}

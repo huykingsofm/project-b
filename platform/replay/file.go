@@ -236,7 +236,7 @@ func (f *FileLog) log(engine sim.StateID) (*engineLog, error) {
 		SegmentMeta: func(first []byte) []byte {
 			return segmentMeta(engine, f.opts.Seed, first)
 		},
-		OnSync: f.wake,
+		OnSync: func(uint64) { f.wake() },
 	})
 	l := &engineLog{w: w, openErr: err}
 	if err == nil {
