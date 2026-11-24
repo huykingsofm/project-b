@@ -48,8 +48,6 @@ const (
 	DeliveryFailureRetired DeliveryFailure = iota + 1
 	// DeliveryFailureNotStarted: the engine does not exist yet, or the ID names none.
 	DeliveryFailureNotStarted
-	// DeliveryFailureMoved: what the message is about has gone to another engine.
-	DeliveryFailureMoved
 	// DeliveryFailureStopping: the engine, or the cluster, is stopping.
 	DeliveryFailureStopping
 	// DeliveryFailureFull: the inbox of the engine is full.
@@ -62,8 +60,6 @@ func (r DeliveryFailure) String() string {
 		return "retired"
 	case DeliveryFailureNotStarted:
 		return "not started"
-	case DeliveryFailureMoved:
-		return "moved"
 	case DeliveryFailureStopping:
 		return "stopping"
 	case DeliveryFailureFull:

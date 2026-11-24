@@ -3,11 +3,12 @@ package replay
 import (
 	"errors"
 	"fmt"
-	"github.com/huykingsofm/project-b/platform/sim"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/huykingsofm/project-b/platform/sim"
 
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -59,106 +60,6 @@ type FileLog struct {
 	started  sync.Once
 	running  bool // whether that goroutine was started; protected by mu
 	closed   sync.Once
-}
-
-// engineLog is the log of one engine: the frame of the tick that is being recorded, and the writer
-// that the frames go to.
-type engineLog struct {
-	w *segmentlog.Writer // nil when the log of the engine could not be opened
-	// why it could not: the engine does not try again, as a writer that failed does not
-	openErr error
-
-	// The next fields are used by the goroutine of the engine only.
-	records binary.Writer // the records of the tick, each with its length
-	scratch binary.Writer // one record, while it is written
-	tick    uint64        // the tick of the records so far
-	started bool          // whether there are records of the tick so far
-
-	dependencies dependencyList        // what the engine depends on, at the ticks not safe yet
-	tickDeps     []sim.StateDependency // what it depends on at the tick that is being recorded
-	safe         atomic.Uint64         // see FileLog.Safe
-	last         atomic.Uint64         // the tick of the last frame; see FileLog.Last
-}
-
-// Durable is the tick up to which what the engine recorded is on the disk: the ID of the last frame
-// that the segment log says is, since the ID of a frame is its tick.
-func (l *engineLog) Durable() uint64 {
-	if l.w == nil {
-		return 0
-	}
-	return l.w.Synced()
-}
-
-// OpenError is why the log of the engine could not be opened, or nil.
-func (l *engineLog) OpenError() error { return l.openErr }
-
-// Usable reports whether the log of the engine was opened.
-func (l *engineLog) Usable() bool { return l.w != nil }
-
-// WriteError is the first error that writing the log has had, or nil.
-func (l *engineLog) WriteError() error {
-	if l.w == nil {
-		return nil
-	}
-	return l.w.Err()
-}
-
-// Close writes and syncs what was handed over.
-func (l *engineLog) Close() error {
-	if l.w == nil {
-		return nil
-	}
-	return l.w.Close()
-}
-
-// Add puts a record in the frame of the tick. A record that cannot be encoded is left out, and the
-// error says why.
-func (l *engineLog) Add(tick uint64, body Body) error {
-	if l.started && tick != l.tick {
-		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", tick, l.tick)
-	}
-	l.scratch.B = l.scratch.B[:0]
-	if err := encodeRecord(&l.scratch, body); err != nil {
-		return err
-	}
-	l.records.Bytes(l.scratch.B)
-	l.tick, l.started = tick, true
-	if dep, ok := (Record{Body: body}).Dependency(); ok {
-		l.tickDeps = append(l.tickDeps, dep)
-	}
-	return nil
-}
-
-// End hands the frame of the tick to the goroutine that writes: the records, as one record of the
-// segment log, which has the tick as its ID, and one batch. The frame is empty when nothing was
-// recorded.
-func (l *engineLog) End(tick uint64) error {
-	if l.started && tick != l.tick {
-		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
-		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
-	}
-	if last := l.last.Load(); tick != last+1 {
-		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
-		return fmt.Errorf("the tick %d does not follow the tick %d, the last of the log",
-			tick, last)
-	}
-	id, err := l.w.Append(l.records.B)
-	l.records.B, l.started = l.records.B[:0], false
-	if err != nil {
-		return err
-	}
-	if id != tick { // the segment log counts the frames and the checks above count the ticks
-		return fmt.Errorf("the frame of the tick %d has the ID %d in the log", tick, id)
-	}
-	if err := l.w.Commit(); err != nil {
-		return err
-	}
-	l.last.Store(tick)
-	if len(l.tickDeps) > 0 {
-		l.dependencies.Add(tick, l.tickDeps)
-		l.tickDeps = nil
-	}
-	return nil
 }
 
 // NewFileLog makes a replay log that writes under dir. Nothing is created until an engine records.
@@ -285,6 +186,77 @@ func (f *FileLog) EndTick(engine sim.StateID, tick uint64) {
 	}
 }
 
+// Safe is the tick of the engine up to which a crash takes back nothing it did and nothing it took:
+// what it recorded is on the disk, and so is what each message that it took from another engine,
+// and each copy of another engine that it read, says that engine did. It is behind Durable by what
+// the engines it depends on have not synced yet, and it never goes back. It is 0 for an engine
+// that has no log, and it is safe to call from any goroutine.
+func (f *FileLog) Safe(engine sim.StateID) uint64 {
+	l, err := f.log(engine)
+	if err != nil {
+		return 0
+	}
+	return l.safe.Load()
+}
+
+// settle works out again what is safe for every engine, until none changes: an engine whose tick
+// depends on a tick of another waits for that engine, and that engine may wait for another.
+func (f *FileLog) settle() {
+	var engineLogs []*engineLog
+	f.engines.Range(func(_, v any) bool {
+		engineLogs = append(engineLogs, v.(*engineLog))
+		return true
+	})
+	safeOf := func(id sim.StateID) uint64 {
+		if v, ok := f.engines.Load(id); ok {
+			return v.(*engineLog).safe.Load()
+		}
+		return 0
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, l := range engineLogs {
+			if safe := l.dependencies.Safe(l.Durable(), safeOf); safe > l.safe.Load() {
+				l.safe.Store(safe)
+				changed = true
+			}
+		}
+	}
+}
+
+// watch works out what is safe each time that a log has synced, until Close.
+func (f *FileLog) watch() {
+	defer close(f.watching)
+	for {
+		select {
+		case <-f.synced:
+			f.settle()
+		case <-f.stop:
+			return
+		}
+	}
+}
+
+// wake tells the goroutine that works out what is safe that a log has synced.
+func (f *FileLog) wake() {
+	select {
+	case f.synced <- struct{}{}:
+	default: // one that is waiting for it already
+	}
+}
+
+// Durable is the tick up to which what an engine recorded is on the disk, so that a crash loses
+// nothing at or before it: the tick of the last frame that was synced, which counts the last tick
+// of the log that was there when it was opened. It is 0 for an engine with no log. It reads an
+// atomic, and is safe to call from any goroutine.
+func (f *FileLog) Durable(engine sim.StateID) uint64 {
+	l, err := f.log(engine)
+	if err != nil {
+		return 0
+	}
+	return l.Durable()
+}
+
 // Close writes and syncs everything that was recorded, and returns the first error of the log.
 func (f *FileLog) Close() error {
 	var errs []error
@@ -309,6 +281,106 @@ func (f *FileLog) Close() error {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// engineLog is the log of one engine: the frame of the tick that is being recorded, and the writer
+// that the frames go to.
+type engineLog struct {
+	w *segmentlog.Writer // nil when the log of the engine could not be opened
+	// why it could not: the engine does not try again, as a writer that failed does not
+	openErr error
+
+	// The next fields are used by the goroutine of the engine only.
+	records binary.Writer // the records of the tick, each with its length
+	scratch binary.Writer // one record, while it is written
+	tick    uint64        // the tick of the records so far
+	started bool          // whether there are records of the tick so far
+
+	dependencies dependencyList        // what the engine depends on, at the ticks not safe yet
+	tickDeps     []sim.StateDependency // what it depends on at the tick that is being recorded
+	safe         atomic.Uint64         // see FileLog.Safe
+	last         atomic.Uint64         // the tick of the last frame, written or not
+}
+
+// Durable is the tick up to which what the engine recorded is on the disk: the ID of the last frame
+// that the segment log says is, since the ID of a frame is its tick.
+func (l *engineLog) Durable() uint64 {
+	if l.w == nil {
+		return 0
+	}
+	return l.w.Synced()
+}
+
+// OpenError is why the log of the engine could not be opened, or nil.
+func (l *engineLog) OpenError() error { return l.openErr }
+
+// Usable reports whether the log of the engine was opened.
+func (l *engineLog) Usable() bool { return l.w != nil }
+
+// WriteError is the first error that writing the log has had, or nil.
+func (l *engineLog) WriteError() error {
+	if l.w == nil {
+		return nil
+	}
+	return l.w.Err()
+}
+
+// Close writes and syncs what was handed over.
+func (l *engineLog) Close() error {
+	if l.w == nil {
+		return nil
+	}
+	return l.w.Close()
+}
+
+// Add puts a record in the frame of the tick. A record that cannot be encoded is left out, and the
+// error says why.
+func (l *engineLog) Add(tick uint64, body Body) error {
+	if l.started && tick != l.tick {
+		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", tick, l.tick)
+	}
+	l.scratch.B = l.scratch.B[:0]
+	if err := encodeRecord(&l.scratch, body); err != nil {
+		return err
+	}
+	l.records.Bytes(l.scratch.B)
+	l.tick, l.started = tick, true
+	if dep, ok := (Record{Body: body}).Dependency(); ok {
+		l.tickDeps = append(l.tickDeps, dep)
+	}
+	return nil
+}
+
+// End hands the frame of the tick to the goroutine that writes: the records, as one record of the
+// segment log, which has the tick as its ID, and one batch. The frame is empty when nothing was
+// recorded.
+func (l *engineLog) End(tick uint64) error {
+	if l.started && tick != l.tick {
+		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
+		return fmt.Errorf("a record of the tick %d is in the frame of the tick %d", l.tick, tick)
+	}
+	if last := l.last.Load(); tick != last+1 {
+		l.records.B, l.started, l.tickDeps = l.records.B[:0], false, nil
+		return fmt.Errorf("the tick %d does not follow the tick %d, the last of the log",
+			tick, last)
+	}
+	id, err := l.w.Append(l.records.B)
+	l.records.B, l.started = l.records.B[:0], false
+	if err != nil {
+		return err
+	}
+	if id != tick { // the segment log counts the frames and the checks above count the ticks
+		return fmt.Errorf("the frame of the tick %d has the ID %d in the log", tick, id)
+	}
+	if err := l.w.AsyncCommit(); err != nil {
+		return err
+	}
+	l.last.Store(tick)
+	if len(l.tickDeps) > 0 {
+		l.dependencies.Add(tick, l.tickDeps)
+		l.tickDeps = nil
+	}
+	return nil
 }
 
 // segmentMeta is the meta of a segment: the format, the ID of the engine and the seed.
@@ -341,14 +413,4 @@ func parseSegmentMeta(meta []byte) (segmentInfo, error) {
 		Seed:    r.Fixed64(),
 	}
 	return info, r.Err()
-}
-
-// Last is the tick of the last frame of the log of the engine, whether it is on the disk or not, or
-// 0 when it has none.
-func (f *FileLog) Last(engine sim.StateID) uint64 {
-	l, err := f.log(engine)
-	if err != nil {
-		return 0
-	}
-	return l.last.Load()
 }

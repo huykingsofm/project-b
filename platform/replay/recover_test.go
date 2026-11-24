@@ -90,9 +90,6 @@ func TestACutToTheRecoveryLineLeavesLogsThatEndAtThePointAndAreNotChangedByAnoth
 	// the log that was cut is written on after its last tick
 	reopened := NewFileLog(dir, testFileLogOptions)
 	defer reopened.Close()
-	if reopened.Last(b) != 4 {
-		t.Fatalf("Last = %d, want 4", reopened.Last(b))
-	}
 	reopened.EndTick(b, 5)
 	if reopened.Err() != nil {
 		t.Fatalf("the log that was cut could not be written on: %v", reopened.Err())

@@ -9,6 +9,7 @@
 package zonelayer
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -16,6 +17,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablebimap"
@@ -351,3 +353,71 @@ func (s *State) EntityIDsOfKind(kind state.KindID) []state.EntityID {
 
 // ChatMessageCount is how many chat messages the zonelayer keeps.
 func (s *State) ChatMessageCount() int { return s.chat.Len() }
+
+// Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
+// said, which character has which body, and the ID the next entity gets. The events are not data
+// (R18) and are not written. It returns an error, and the writer holds a partial state, when an
+// entity cannot be written.
+func (s *State) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(uint64(s.zoneID))
+	w.Uvarint(uint64(s.worldID))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(s.entities.Len()))
+	for id, e := range s.entities.All() {
+		if id.Owner != s.id {
+			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
+		}
+		if err := entity.Encode(w, e); err != nil {
+			return err
+		}
+	}
+	w.Uvarint(uint64(s.characters.Len()))
+	for id, c := range s.characters.All() {
+		w.Uvarint(uint64(id))
+		c.Encode(w)
+	}
+	rows := s.chat.Rows()
+	w.Uvarint(uint64(len(rows)))
+	for _, m := range rows {
+		w.Uvarint(uint64(m.fromID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
+	}
+	w.Uvarint(uint64(s.bodies.Len()))
+	for characterID, entityID := range s.bodies.AllV1() {
+		w.Uvarint(uint64(characterID))
+		w.Uvarint(entityID.Local)
+	}
+	s.entityIDCounter.Encode(w)
+	return nil
+}
+
+// Hash returns a number that depends on the data of the state and on nothing else: a replay runs
+// an engine again on the inputs that were recorded and compares it with the one taken the first
+// time. It walks the containers in their own order, which is fixed.
+func (s *State) Hash() uint64 {
+	h := sim.NewHasher()
+	h.U64(uint64(s.id))
+	h.U64(uint64(s.zoneID))
+	h.U64(uint64(s.worldID))
+	h.U64(s.tick)
+	s.entityIDCounter.Hash(&h)
+	for _, e := range s.entities.All() {
+		e.Hash(&h)
+	}
+	for characterID, entityID := range s.bodies.AllV1() {
+		h.U64(uint64(characterID))
+		entityID.Hash(&h)
+	}
+	for _, c := range s.characters.All() {
+		h.U64(uint64(c.characterID))
+		h.String(c.name)
+		h.U64(uint64(uint32(c.speed)))
+		for key, until := range c.cooldowns.All() {
+			h.U64(uint64(key))
+			h.U64(until)
+		}
+	}
+	return h.Sum()
+}

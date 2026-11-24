@@ -455,30 +455,33 @@ func TestACloseSettlesWhatIsSafeOfEveryEngine(t *testing.T) {
 	}
 }
 
-func TestAFrameMustFollowTheLastOfTheLogAndLastSaysWhichThatIs(t *testing.T) {
+func TestAFrameMustFollowTheLastOfTheLog(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	if log.Last(engine) != 0 {
-		t.Fatalf("Last of an engine with no frame = %d", log.Last(engine))
-	}
 	log.Append(engine, 1, ConfigRead{Version: 1})
 	log.EndTick(engine, 1)
 	log.EndTick(engine, 2)
-	if log.Last(engine) != 2 || log.Err() != nil {
-		t.Fatalf("Last = %d, error %v", log.Last(engine), log.Err())
+	if log.Err() != nil {
+		t.Fatalf("error %v", log.Err())
 	}
 	log.Append(engine, 4, ConfigRead{Version: 2})
 	log.EndTick(engine, 4) // not the tick after 2: it is not written
-	if log.Err() == nil || log.Last(engine) != 2 {
-		t.Fatalf("a frame that does not follow was accepted: Last = %d, error %v",
-			log.Last(engine), log.Err())
+	if log.Err() == nil {
+		t.Fatal("a frame that does not follow was accepted")
 	}
 	log.Close()
+	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 2 {
+		t.Fatalf("the last frame of the log is %d, error %v, want 2", last, err)
+	}
+	// a log that was there is written on after its last frame
 	again := NewFileLog(dir, testFileLogOptions)
-	defer again.Close()
-	if got := again.Last(engine); got != 2 {
-		t.Fatalf("Last of a log that was there = %d, want 2", got)
+	again.EndTick(engine, 3)
+	if err := again.Close(); err != nil {
+		t.Fatalf("the log that was there could not be written on: %v", err)
+	}
+	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 3 {
+		t.Fatalf("the last frame of the log is %d, error %v, want 3", last, err)
 	}
 }
 
@@ -488,9 +491,11 @@ func TestTheFirstFrameOfALogIsTheTickOne(t *testing.T) {
 	log := NewFileLog(dir, testFileLogOptions)
 	log.Append(engine, 4, ConfigRead{Version: 1})
 	log.EndTick(engine, 4) // a log has the tick 1 as its first
-	if log.Err() == nil || log.Last(engine) != 0 {
-		t.Fatalf("a first frame of the tick 4 was accepted: Last = %d, error %v",
-			log.Last(engine), log.Err())
+	if log.Err() == nil {
+		t.Fatal("a first frame of the tick 4 was accepted")
 	}
 	log.Close()
+	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 0 {
+		t.Fatalf("the last frame of the log is %d, error %v, want none", last, err)
+	}
 }

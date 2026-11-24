@@ -10,45 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
-// said, which character has which body, and the ID the next entity gets. The events are not data
-// (R18) and are not written. It returns an error, and the writer holds a partial state, when an
-// entity cannot be written.
-func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
-	w.Uvarint(uint64(s.zoneID))
-	w.Uvarint(uint64(s.worldID))
-	w.Uvarint(s.tick)
-	w.Uvarint(uint64(s.entities.Len()))
-	for id, e := range s.entities.All() {
-		if id.Owner != s.id {
-			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
-		}
-		if err := entity.Encode(w, e); err != nil {
-			return err
-		}
-	}
-	w.Uvarint(uint64(s.characters.Len()))
-	for id, c := range s.characters.All() {
-		w.Uvarint(uint64(id))
-		c.Encode(w)
-	}
-	rows := s.chat.Rows()
-	w.Uvarint(uint64(len(rows)))
-	for _, m := range rows {
-		w.Uvarint(uint64(m.fromID))
-		w.String(m.text)
-		w.Uvarint(m.tick)
-	}
-	w.Uvarint(uint64(s.bodies.Len()))
-	for characterID, entityID := range s.bodies.AllV1() {
-		w.Uvarint(uint64(characterID))
-		w.Uvarint(entityID.Local)
-	}
-	s.entityIDCounter.Encode(w)
-	return nil
-}
-
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
 func count(r *binary.Reader) (uint64, error) {

@@ -1,9 +1,10 @@
 package engine
 
 import (
-	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"reflect"
 	"testing"
+
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -15,17 +16,24 @@ type notice struct {
 	args  []any
 }
 
+// aBouncer is a bouncer with the unsettled messages that it sends a message to again.
+type aBouncer struct {
+	*bouncer
+	unsettled *unsettledMessages
+}
+
 // bounced runs what a message that came back as DeliveryFailureFull says to do, on a bouncer that
 // records what it is told.
 func bounced(
 	onFail sim.OnFail, attempts int, stopping bool,
-) (*bouncer, []notice, sim.Message) {
+) (aBouncer, []notice, sim.Message) {
 	var told []notice
-	b := &bouncer{
-		unsettled: &UnsettledMessages{},
-		stopping:  stopping,
-		notice:    func(a any, k string, args []any) { told = append(told, notice{a, k, args}) },
-	}
+	held := &unsettledMessages{}
+	b := aBouncer{unsettled: held, bouncer: &bouncer{
+		resend:   held.AddUnsent,
+		stopping: stopping,
+		notice:   func(a any, k string, args []any) { told = append(told, notice{a, k, args}) },
+	}}
 	m := sim.NewActionMessage(1, onFail, &toyAction{N: 1, Author: 5})
 	for range attempts {
 		m = m.Again()

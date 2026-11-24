@@ -40,7 +40,7 @@ func write(t testing.TB, w *segmentlog.Writer, from, to uint64) {
 		if _, err := w.Append(payload(tick)); err != nil {
 			t.Fatal(err)
 		}
-		if err := w.Commit(); err != nil {
+		if err := w.AsyncCommit(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -103,7 +103,7 @@ func TestSeveralRecordsOfOneCommitAreAllWritten(t *testing.T) {
 	for i := range uint64(5) {
 		w.Append(payload(3 + i))
 	}
-	w.Commit()
+	w.AsyncCommit()
 	w.Close()
 	got, _ := readAll(t, dir, 0)
 	wantTicks(t, got, 3, 8)
@@ -126,7 +126,7 @@ func TestASegmentIsClosedWhenItIsBigAndTheNextIsNamedByTheNextIndex(t *testing.T
 			t.Fatalf("segments are not numbered 0, 1, 2, ...: %+v", segs)
 		}
 	}
-	if filepath.Base(segs[1].Path) != "seg-00000000000000000001.log" {
+	if filepath.Base(segs[1].Path) != "seg-00000000000000000001.pbsl" {
 		t.Fatalf("name %q", segs[1].Path)
 	}
 	got, err := readAll(t, dir, 0)
@@ -220,13 +220,69 @@ func TestACorruptRecordInTheMiddleOfTheLogIsAnError(t *testing.T) {
 	}
 }
 
+func TestASegmentThatDoesNotBeginWhereTheOneBeforeItEndedIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	o := opts
+	o.SegmentBytes = 200
+	w := open(t, dir, o)
+	write(t, w, 1, 101) // the ID of the record of the tick t is t
+	w.Close()
+	segs, _ := segmentlog.Segments(dir)
+	if len(segs) < 5 {
+		t.Fatalf("%d segments", len(segs))
+	}
+	os.Remove(segs[2].Path) // a hole in the IDs
+
+	got, err := readAll(t, dir, 0)
+	if !errors.Is(err, segmentlog.ErrCorrupt) {
+		t.Fatalf("error %v, want ErrCorrupt", err)
+	}
+	if len(got) == 0 || len(got) >= 100 {
+		t.Fatalf("%d records read before the hole", len(got))
+	}
+	// a read that starts after the hole never sees it
+	got, err = readAll(t, dir, 100)
+	if err != nil {
+		t.Fatalf("a read from after the hole: %v", err)
+	}
+	wantTicks(t, got, 100, 101)
+}
+
+// The crc of a record covers its ID, which is not in the file, so a record that is at another place
+// than the one it was written at does not match.
+func TestARecordThatIsAtAnotherPlaceThanItWasWrittenAtIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	o := opts
+	o.SegmentBytes = 200
+	w := open(t, dir, o)
+	write(t, w, 1, 101)
+	w.Close()
+	segs, _ := segmentlog.Segments(dir)
+	data, _ := os.ReadFile(segs[0].Path)
+	// the first batches of the segment have the payload of a tick of one digit: the same size
+	batch := 8 + len(payload(1)) + 12
+	if len(payload(1)) != len(payload(2)) {
+		t.Fatalf("the payloads of the ticks 1 and 2 are of %d and %d bytes",
+			len(payload(1)), len(payload(2)))
+	}
+	// the second batch is gone
+	cut := append(bytes.Clone(data[:headerSize+batch]), data[headerSize+2*batch:]...)
+	os.WriteFile(segs[0].Path, cut, 0o644)
+
+	got, err := readAll(t, dir, 0)
+	if !errors.Is(err, segmentlog.ErrCorrupt) {
+		t.Fatalf("a log with a batch missing in its first segment: %v, want ErrCorrupt", err)
+	}
+	wantTicks(t, got, 1, 2) // the one before the hole
+}
+
 func TestOpenRemovesALastSegmentWithNoRecordsOrANoHeader(t *testing.T) {
 	dir := t.TempDir()
 	w := open(t, dir, opts)
 	write(t, w, 0, 5)
 	w.Close()
 	os.WriteFile(
-		filepath.Join(dir, fmt.Sprintf("seg-%020d.log", 1)), []byte("PBS"), 0o644,
+		filepath.Join(dir, fmt.Sprintf("seg-%020d.pbsl", 1)), []byte("PBS"), 0o644,
 	) // a header that was not finished
 
 	w = open(t, dir, opts)
@@ -260,7 +316,7 @@ func TestAClosedWriterRefusesAndOptionsAndPayloadsThatCannotWorkAreRefused(t *te
 	if _, err := w.Append([]byte("x")); !errors.Is(err, segmentlog.ErrClosed) {
 		t.Fatalf("Append after Close: %v", err)
 	}
-	if err := w.Commit(); !errors.Is(err, segmentlog.ErrClosed) {
+	if err := w.AsyncCommit(); !errors.Is(err, segmentlog.ErrClosed) {
 		t.Fatalf("Commit after Close: %v", err)
 	}
 	for _, bad := range []segmentlog.Options{{SyncEvery: time.Second}, {SegmentBytes: 1}, {}} {
@@ -289,7 +345,7 @@ func TestAWriterThatCannotWriteReportsItsFirstErrorAndWritesNothingMore(t *testi
 	w := open(t, dir, opts)
 	os.RemoveAll(dir) // the segment cannot be made
 	w.Append([]byte("x"))
-	w.Commit()
+	w.AsyncCommit()
 	deadline := time.Now().Add(5 * time.Second)
 	for w.Err() == nil && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
@@ -299,7 +355,7 @@ func TestAWriterThatCannotWriteReportsItsFirstErrorAndWritesNothingMore(t *testi
 	}
 	first := w.Err()
 	w.Append([]byte("y"))
-	if err := w.Commit(); err != first {
+	if err := w.AsyncCommit(); err != first {
 		t.Fatalf("Commit returned %v, want the first error %v", err, first)
 	}
 	if err := w.Close(); err != first {
@@ -333,7 +389,7 @@ func TestManyGoroutinesAppendAndCommitAndTheyAreAllThere(t *testing.T) {
 		wg.Go(func() {
 			for range 200 {
 				w.Append([]byte("x"))
-				w.Commit()
+				w.AsyncCommit()
 			}
 		})
 	}
@@ -352,7 +408,7 @@ func TestCloseWhileAnotherGoroutineCommitsNeverPanics(t *testing.T) {
 		wg.Go(func() {
 			for range 100 {
 				w.Append([]byte("x"))
-				w.Commit()
+				w.AsyncCommit()
 			}
 		})
 		w.Close()
@@ -380,7 +436,7 @@ func BenchmarkAppendOnly(b *testing.B) {
 			w.Append(rec)
 		}
 		b.StopTimer()
-		w.Commit()
+		w.AsyncCommit()
 		i += n
 	}
 	if err := w.Close(); err != nil {
@@ -409,7 +465,7 @@ func BenchmarkAppendAndCommit(b *testing.B) {
 				for range perTick {
 					w.Append(rec)
 				}
-				w.Commit()
+				w.AsyncCommit()
 			}
 			b.StopTimer()
 			if err := w.Close(); err != nil {
@@ -429,7 +485,7 @@ func BenchmarkRead(b *testing.B) {
 	for i := range 1 << 16 {
 		w.Append(rec)
 		if i%100 == 99 {
-			w.Commit()
+			w.AsyncCommit()
 		}
 	}
 	w.Close()
@@ -454,7 +510,7 @@ func writeBatches(t testing.TB, w *segmentlog.Writer, from, to uint64, per int) 
 				t.Fatal(err)
 			}
 		}
-		if err := w.Commit(); err != nil {
+		if err := w.AsyncCommit(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -554,7 +610,7 @@ func TestACommitThatDoesNotMatchItsRecordsEndsTheLogBeforeItsBatch(t *testing.T)
 func TestACommitWithNoRecordsIsNotWrittenAndABatchOfOneIsWhole(t *testing.T) {
 	dir := t.TempDir()
 	w := open(t, dir, opts)
-	if err := w.Commit(); err != nil {
+	if err := w.AsyncCommit(); err != nil {
 		t.Fatal(err)
 	}
 	writeBatches(t, w, 0, 3, 1)
@@ -590,7 +646,7 @@ func TestAHeaderThatWasNeverWrittenIsRemovedButOneThatIsNotRightIsKeptAndReporte
 		writeBatches(t, w, 0, 4, 2)
 		w.Close()
 		whole, _ := os.ReadFile(segmentOf(t, dir))
-		next := filepath.Join(dir, "seg-00000000000000000001.log")
+		next := filepath.Join(dir, "seg-00000000000000000001.pbsl")
 		switch name {
 		case "another version":
 			content = bytes.Clone(whole)
@@ -727,7 +783,7 @@ func TestSyncedCountsTheBatchesThatAreOnTheDisk(t *testing.T) {
 	o.SyncEvery = 5 * time.Millisecond
 	w := open(t, t.TempDir(), o)
 	write(t, w, 0, 5)
-	if err := w.Commit(); err != nil { // nothing was appended: not a batch
+	if err := w.AsyncCommit(); err != nil { // nothing was appended: not a batch
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
@@ -897,7 +953,7 @@ func TestTheLogNumbersItsRecordsFromOneAndGoesOnFromTheLastOne(t *testing.T) {
 		if id, err := w.Append(payload(want)); err != nil || id != want {
 			t.Fatalf("the record %d got the ID %d, error %v", want, id, err)
 		}
-		w.Commit()
+		w.AsyncCommit()
 	}
 	if w.LastID() != 10 {
 		t.Fatalf("the last ID is %d, want 10", w.LastID())
@@ -915,7 +971,7 @@ func TestTheLogNumbersItsRecordsFromOneAndGoesOnFromTheLastOne(t *testing.T) {
 	if id, _ := w.Append(payload(11)); id != 11 {
 		t.Fatalf("the record after the log was opened got the ID %d, want 11", id)
 	}
-	w.Commit()
+	w.AsyncCommit()
 	w.Close()
 	r, _ := segmentlog.OpenReader(dir, 0)
 	defer r.Close()
@@ -942,7 +998,7 @@ func TestLastFrameIDOfALogWhoseLastSegmentHasNoBatchIsInThePreviousOne(t *testin
 	write(t, w, 1, 30)
 	w.Close()
 	segs, _ := segmentlog.Segments(dir)
-	os.WriteFile(filepath.Join(dir, fmt.Sprintf("seg-%020d.log", segs[len(segs)-1].Index+1)),
+	os.WriteFile(filepath.Join(dir, fmt.Sprintf("seg-%020d.pbsl", segs[len(segs)-1].Index+1)),
 		[]byte("PBS"), 0o644) // a header that was not finished
 	if last, err := segmentlog.LastFrameID(dir); err != nil || last != 29 {
 		t.Fatalf("LastFrameID = %d, %v, want 29", last, err)

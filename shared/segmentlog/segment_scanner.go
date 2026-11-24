@@ -111,7 +111,8 @@ func (s *segmentScanner) next() error {
 	if _, err := io.ReadFull(s.r, s.buf); err != nil {
 		return errTorn
 	}
-	if crc32.Checksum(s.buf, castagnoli) != binary.LittleEndian.Uint32(head[4:]) {
+	id := s.begin + uint64(s.committedRecords) + uint64(s.sinceCommit)
+	if frameChecksum(id, length, s.buf) != binary.LittleEndian.Uint32(head[4:]) {
 		return errTorn
 	}
 	s.payload = s.buf

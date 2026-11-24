@@ -9,6 +9,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
@@ -265,3 +266,61 @@ func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
 
 // Count is how many items the slot holds; 0 is an empty slot.
 func (i InventorySlot) Count() uint32 { return i.count }
+
+// Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
+// it gives the states it makes, the private messages, and the inventory of every character. The
+// events are not data (R18) and are not written.
+func (s *State) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(len(s.zones)))
+	for _, id := range s.zones {
+		w.Uvarint(uint64(id))
+	}
+	w.Uvarint(uint64(len(s.zoneLayers)))
+	for _, id := range s.zoneLayers {
+		w.Uvarint(uint64(id))
+	}
+	s.stateIDCounters.Encode(w)
+	rows := s.privateChat.Rows()
+	w.Uvarint(uint64(len(rows)))
+	for _, m := range rows {
+		w.Uvarint(uint64(m.fromID))
+		w.Uvarint(uint64(m.toID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
+	}
+	w.Uvarint(uint64(s.inventories.Len()))
+	for characterID, inventory := range s.inventories.All() {
+		w.Uvarint(uint64(characterID))
+		w.Uvarint(uint64(len(inventory.slots)))
+		for _, slot := range inventory.slots {
+			w.Uvarint(uint64(slot.itemID))
+			w.Uvarint(uint64(slot.count))
+		}
+	}
+	return nil
+}
+
+// Hash returns a number that depends on the data of the state and on nothing else.
+func (s *State) Hash() uint64 {
+	h := sim.NewHasher()
+	h.U64(uint64(s.id))
+	h.U64(s.tick)
+	s.stateIDCounters.Hash(&h)
+	for _, id := range s.zones {
+		h.U64(uint64(id))
+	}
+	for _, id := range s.zoneLayers {
+		h.U64(uint64(id))
+	}
+	h.U64(uint64(s.privateChat.Len()))
+	for characterID, inventory := range s.inventories.All() {
+		h.U64(uint64(characterID))
+		for _, inventorySlot := range inventory.slots {
+			h.U64(uint64(inventorySlot.itemID))
+			h.U64(uint64(inventorySlot.count))
+		}
+	}
+	return h.Sum()
+}

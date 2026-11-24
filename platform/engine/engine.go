@@ -40,9 +40,8 @@ type Engine[S sim.State] struct {
 var ErrTickMismatch = errors.New("the tick of the state is not the tick of the engine")
 
 // New makes the engine of a state, at the tick the state is at. The tick is its own: the caller
-// gives the ticks with Run or calls Step. The state of a state ID that was given before is made at
-// the last tick of its log (replay.Log.Last), so that a tick of an ID is never the tick of two
-// lives: the log refuses a frame that does not follow its last.
+// gives the ticks with Run or calls Step. The log of the engine refuses a frame that does not
+// follow its last, so a state that is made again for an engine with a log is at the tick of it.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
 	e := &Engine[S]{
@@ -53,6 +52,7 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 		emitter: env.Emitter, plans: planPoolOf[S](),
 	}
 	e.reg.Me, e.reg.Stable = me, e.view
+	e.bounce.resend = e.sendToUnsettled
 	if n, ok := any(st).(Noticer); ok {
 		e.bounce.SetNotice(
 			func(actor any, key string, args []any) { n.Notice(actor, key, args...) },
@@ -151,10 +151,10 @@ func (e *Engine[S]) Step() error {
 		)
 	}
 	cfg := e.snapshot(e.tick)
-	ctx := &sim.Context{Tick: e.tick, Rand: e.rng, Cfg: cfg}
+	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand, Cfg: cfg}
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
-	e.settle(cfg, e.tick)
+	e.handleReturnedMessages(cfg, e.tick)
 
 	e.start = e.start[:0]
 	e.planScheduled()
@@ -187,7 +187,7 @@ func (e *Engine[S]) Step() error {
 		e.emitter.Emit(e.me, e.tick, events)
 	}
 	e.stable.Publish(e.st.Clone())
-	e.flush(cfg, e.tick, e.reg.Take())
+	e.flushUnsettledMessages(cfg, e.tick, e.reg.Take())
 	e.endTick(cfg, e.tick, e.Hash)
 	return nil
 }

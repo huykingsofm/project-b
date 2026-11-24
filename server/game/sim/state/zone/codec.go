@@ -13,38 +13,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
-// Encode writes the data of the state: its ID and tick, its entities, the zonelayers it knows, what
-// was said, and the ID the next entity gets. The map is not written: it never changes and the ID of
-// the zone finds it. The events are not data (R18) and are not written.
-func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
-	w.Uvarint(uint64(s.worldID))
-	w.Uvarint(s.tick)
-	w.Uvarint(uint64(s.entities.Len()))
-	for id, e := range s.entities.All() {
-		if id.Owner != s.id {
-			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
-		}
-		if err := entity.Encode(w, e); err != nil {
-			return err
-		}
-	}
-	w.Uvarint(uint64(s.zoneLayers.Len()))
-	for id, slot := range s.zoneLayers.All() {
-		w.Uvarint(uint64(id))
-		w.Varint(int64(slot.capacity))
-	}
-	rows := s.chat.Rows()
-	w.Uvarint(uint64(len(rows)))
-	for _, m := range rows {
-		w.Uvarint(uint64(m.fromID))
-		w.String(m.text)
-		w.Uvarint(m.tick)
-	}
-	s.entityIDCounter.Encode(w)
-	return nil
-}
-
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
 func count(r *binary.Reader) (uint64, error) {

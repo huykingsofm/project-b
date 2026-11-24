@@ -4,15 +4,15 @@
 
 ## Files
 
-One directory for each log. A segment is `seg-<index>.log`, the index in 20 digits counted from 0 in the order the segments were made, so the names sort in that order.
+One directory for each log. A segment is `seg-<index>.pbsl`, the index in 20 digits counted from 0 in the order the segments were made, so the names sort in that order.
 
 | Part | Layout |
 |---|---|
 | header | magic `PBSL`, format version `u16`, begin `u64`, meta length `u32`, meta, crc32 of all before it |
-| record | payload length `u32`, crc32 of the payload, payload |
+| record | payload length `u32`, crc32 of the ID of the record (not written), the length and the payload, payload |
 | commit | `0xFFFFFFFF` `u32`, crc32 of the count, count `u32` (the records since the last commit) |
 
-- Numbers are little-endian, the crc is CRC-32C.
+- Numbers are little-endian, the crc is CRC-32C. The crc of a record covers its ID, which is not in the file: the reader works it out from the `begin` of the segment and the records before, so a record that is at another place than where it was written (a batch that is gone, records that were swapped or put back) does not match and is an error, or a cut at the end of the last segment.
 - The meta is at most 64 KiB; the user of the log writes in it what is the same for every segment of the log (an engine, a seed).
 - A payload is at most 16 MiB.
 
@@ -65,6 +65,7 @@ One directory for each log. A segment is `seg-<index>.log`, the index in 20 digi
 | `Segments(dir)` | the segments in the order they were made |
 
 - The reader starts at the last segment whose begin is at or before `from`, or at the first when none is: a binary search over the headers of about log2(n) of the n segments, since the begins grow with the index. The records of that segment before `from` are read and not given.
+- A segment must begin where the one before it ended: its `begin` is the ID after the last frame of that segment, and when it is not the reader stops with an error that wraps `ErrCorrupt` (a segment that is gone, or one that was put in the wrong place). A read that starts after the hole does not see it, since it does not read the segments before its own.
 - The last segment is read up to the end of its last whole batch: a record cut off, a commit that is missing or wrong, and the records before it are the end of the log, not an error. Anywhere else it is an error that wraps `ErrCorrupt`.
 - A last segment whose header was not finished when a crash came is not in the log.
 

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ func toMessage(to sim.StateID, seq uint64) sim.Message {
 }
 
 func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *testing.T) {
-	var o UnsettledMessages
+	var o unsettledMessages
 	cfg := config.Defaults()
 	o.MarkSent(toMessage(2, 1), 5, cfg)
 	o.MarkSent(toMessage(3, 2), 5, cfg)
@@ -39,7 +40,7 @@ func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *t
 }
 
 func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *testing.T) {
-	var o UnsettledMessages
+	var o unsettledMessages
 	cfg := config.Defaults()
 	first := uint64(unsettledResendFirst.Get(cfg))
 	step := uint64(unsettledResendStep.Get(cfg))
@@ -64,7 +65,7 @@ func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *t
 }
 
 func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testing.T) {
-	var o UnsettledMessages
+	var o unsettledMessages
 	cfg := config.Defaults()
 	for seq := uint64(1); seq <= 5; seq++ {
 		o.MarkSent(toMessage(2, seq), 0, cfg)
@@ -81,7 +82,7 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	var o UnsettledMessages
+	var o unsettledMessages
 	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer
@@ -113,14 +114,13 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 
 func TestTheBoardOnlyGoesUp(t *testing.T) {
 	b := NewAckBoard()
-	slot := b.Slot(2, 1)
-	raise(slot, 5)
-	raise(slot, 3)
-	if got := b.Slot(2, 1).Load(); got != 5 {
-		t.Fatalf("the slot holds %d, want 5", got)
+	b.Raise(2, 1, 5)
+	b.Raise(2, 1, 3)
+	if got := b.Acked(2, 1); got != 5 {
+		t.Fatalf("the board holds %d, want 5", got)
 	}
-	if b.Slot(1, 2).Load() != 0 {
-		t.Fatal("the slot of another pair holds a number")
+	if b.Acked(1, 2) != 0 {
+		t.Fatal("the board holds a number for another pair")
 	}
 }
 
@@ -151,10 +151,11 @@ func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t 
 	first := uint64(unsettledResendFirst.Get(config.Defaults()))
 	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
 	c.Step()
-	if b.State().Total != 7 || a.unsettled.Len() != 1 {
-		t.Fatalf("b has %d and a holds %d, want 7 and 1", b.State().Total, a.unsettled.Len())
+	if b.State().Total != 7 || a.unsettledMessages.Len() != 1 {
+		t.Fatalf("b has %d and a holds %d, want 7 and 1",
+			b.State().Total, a.unsettledMessages.Len())
 	}
-	sent := a.unsettled.Sent()[0].Head()
+	sent := a.unsettledMessages.Sent()[0].Head()
 	if sent.From != 1 || sent.Tick != 1 {
 		t.Fatalf("the message went with the header %+v", sent)
 	}
@@ -164,15 +165,15 @@ func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t 
 	if b.State().Total != 7 {
 		t.Fatalf("b took a second copy: it has %d", b.State().Total)
 	}
-	if a.unsettled.Len() != 1 || a.unsettled.Sent()[0].Head() != sent {
+	if a.unsettledMessages.Len() != 1 || a.unsettledMessages.Sent()[0].Head() != sent {
 		t.Fatalf("a holds %d messages, and the first has the header %+v, want it unchanged",
-			a.unsettled.Len(), a.unsettled.Sent()[0].Head())
+			a.unsettledMessages.Len(), a.unsettledMessages.Sent()[0].Head())
 	}
 	log.safe[2] = b.Tick() // the tick at which b took it is safe
 	c.Step()               // b says it
 	c.Step()               // a reads it
-	if a.unsettled.Len() != 0 {
-		t.Fatalf("a holds %d messages after the ack, want none", a.unsettled.Len())
+	if a.unsettledMessages.Len() != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", a.unsettledMessages.Len())
 	}
 }
 
@@ -184,14 +185,16 @@ func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
 	for range 8 {
 		c.Step()
 	}
-	if a.unsettled.Len() != 3 || b.State().Total != 3 {
-		t.Fatalf("a holds %d and b has %d, want 3 and 3", a.unsettled.Len(), b.State().Total)
+	if a.unsettledMessages.Len() != 3 || b.State().Total != 3 {
+		t.Fatalf("a holds %d and b has %d, want 3 and 3",
+			a.unsettledMessages.Len(), b.State().Total)
 	}
 	log.safe[2] = 5 // b took the messages at the ticks 1 and 4, which are safe, not the one at 7
 	c.Step()
 	c.Step()
-	if a.unsettled.Len() != 1 || a.unsettled.Sent()[0].Head().Tick != 7 {
-		t.Fatalf("a holds %d messages: want only the one that b took at tick 7", a.unsettled.Len())
+	if a.unsettledMessages.Len() != 1 || a.unsettledMessages.Sent()[0].Head().Tick != 7 {
+		t.Fatalf("a holds %d messages: want only the one that b took at tick 7",
+			a.unsettledMessages.Len())
 	}
 }
 
@@ -204,8 +207,8 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	for a.Tick() < first+3 {
 		c.Step()
 	}
-	if a.unsettled.Len() != 0 {
-		t.Fatalf("a still holds %d messages for a receiver that is gone", a.unsettled.Len())
+	if a.unsettledMessages.Len() != 0 {
+		t.Fatalf("a still holds %d messages for a receiver that is gone", a.unsettledMessages.Len())
 	}
 	returned := 0
 	for _, r := range c.Env.ReplayLog.(*aLogThatSaysWhatIsSafe).Records {
@@ -233,7 +236,7 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	}
 	// the state of b was restored from the checkpoint: what it took is in a place that no crash
 	// takes back, so a sender is told of it without waiting
-	if got := env.Acks.Slot(2, 1).Load(); got != a.unsettled.Sent()[0].Head().Seq {
+	if got := env.Acks.Acked(2, 1); got != a.unsettledMessages.Sent()[0].Head().Seq {
 		t.Fatalf("a restored b acks %d to a, want the number of the message it took", got)
 	}
 	if restored.State().Total != 7 {
@@ -241,7 +244,7 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	}
 }
 
-func TestAnEngineThatIsRemovedEndsItsLogAndAnIDThatIsGivenAgainGoesOnCountingTicks(t *testing.T) {
+func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	dir := t.TempDir()
 	env := newToyEnv(t)
 	log := replay.NewFileLog(dir, replay.FileLogOptions{
@@ -261,17 +264,6 @@ func TestAnEngineThatIsRemovedEndsItsLogAndAnIDThatIsGivenAgainGoesOnCountingTic
 	reason, ok := env.Router.Deliver(toMessage(1, 1))
 	if ok || reason != sim.DeliveryFailureRetired {
 		t.Fatalf("a message to the engine that was removed bounced as %v, %v", reason, ok)
-	}
-	// the ID is given again: its state begins at the last tick of its log
-	second := New(&toyState{id: 1, tick: log.Last(1)}, env, 1)
-	c.Add(second)
-	if second.Tick() != 4 {
-		t.Fatalf("the engine of an ID that was given again is at the tick %d, want 4: the tick of "+
-			"the frame that says the first was removed", second.Tick())
-	}
-	for range 2 {
-		second.Send(toyCommand{N: 1})
-		c.Step()
 	}
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
@@ -299,7 +291,38 @@ func TestAnEngineThatIsRemovedEndsItsLogAndAnIDThatIsGivenAgainGoesOnCountingTic
 	if r.Err() != nil {
 		t.Fatal(r.Err())
 	}
-	if want := []uint64{1, 2, 3, 4, 5, 6}; !reflect.DeepEqual(ticks, want) || retiredAt != 4 {
+	if want := []uint64{1, 2, 3, 4}; !reflect.DeepEqual(ticks, want) || retiredAt != 4 {
 		t.Fatalf("the ticks are %v, the removal at %d; want %v and 4", ticks, retiredAt, want)
 	}
+}
+
+func TestManyGoroutinesRaiseTheBoardAndItEndsAtTheGreatestNumber(t *testing.T) {
+	b := NewAckBoard()
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			for n := range uint64(1000) {
+				b.Raise(2, 1, n*8+uint64(g))
+				b.Acked(2, 1)
+			}
+		})
+	}
+	wg.Wait()
+	if got := b.Acked(2, 1); got != 999*8+7 {
+		t.Fatalf("the board holds %d, want %d", got, 999*8+7)
+	}
+}
+
+// BenchmarkAckBoard is what every engine pays each tick to say what it holds and to read what its
+// receivers hold, on a board that all of them share.
+func BenchmarkAckBoard(b *testing.B) {
+	board := NewAckBoard()
+	b.RunParallel(func(pb *testing.PB) {
+		var seq uint64
+		for pb.Next() {
+			seq++
+			board.Raise(2, 1, seq)
+			board.Acked(2, 1)
+		}
+	})
 }

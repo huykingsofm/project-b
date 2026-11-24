@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -98,4 +100,48 @@ func declare[T any](r *registry, name string, def T, opts []Option[T]) Var[T] {
 // a programming error and panics. Call it while the program starts.
 func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
 	return declare(std, name, def, opts)
+}
+
+// build makes a snapshot from the defaults and the overrides, which are the text of a JSON value
+// by variable name. Every override is parsed into the type of its variable and checked against
+// its options: if any of them is wrong, no snapshot is made and the error names each one, so a
+// bad document never replaces a good configuration. A name that is not declared is returned in
+// unknown and otherwise ignored.
+func (r *registry) build(
+	version uint64, overrides map[string]string,
+) (snap *Snapshot, unknown []string, err error) {
+	r.mu.Lock()
+	r.frozen = true
+	decls, byName := r.decls, r.byName
+	r.mu.Unlock()
+
+	vals := make([]any, len(decls))
+	for i, d := range decls {
+		vals[i] = d.def
+	}
+
+	names := make([]string, 0, len(overrides))
+	for name := range overrides {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	var errs []error
+	for _, name := range names {
+		i, ok := byName[name]
+		if !ok {
+			unknown = append(unknown, name)
+			continue
+		}
+		v, perr := decls[i].parse(overrides[name])
+		if perr != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, perr))
+			continue
+		}
+		vals[i] = v
+	}
+	if len(errs) > 0 {
+		return nil, unknown, errors.Join(errs...)
+	}
+	return &Snapshot{version: version, vals: vals}, unknown, nil
 }

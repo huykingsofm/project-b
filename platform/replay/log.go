@@ -36,10 +36,6 @@ type Log interface {
 	// the ticks of the engines it depends on that it took, is kept. A log that records nothing says
 	// every tick is, since nothing it could do would make it more so.
 	Safe(engine sim.StateID) uint64
-	// Last is the tick of the last frame in the log of the engine, or 0 when it has none: an engine
-	// that is made for a state ID that had one goes on counting ticks after it, so that a tick of
-	// an ID is never the tick of two lives. A log that keeps nothing says 0.
-	Last(engine sim.StateID) uint64
 }
 
 // NopLog records nothing.
@@ -50,6 +46,3 @@ func (NopLog) EndTick(sim.StateID, uint64)      {}
 
 // Safe says every tick is: a log that records nothing cannot make a tick more safe.
 func (NopLog) Safe(sim.StateID) uint64 { return ^uint64(0) }
-
-// Last says there is no frame: a log that records nothing has none.
-func (NopLog) Last(sim.StateID) uint64 { return 0 }

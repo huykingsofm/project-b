@@ -8,13 +8,13 @@ import (
 
 // bouncer is what a message that could not be delivered asks of the engine that sent it: the
 // message says itself what a failed delivery means (its OnFail), and runs on the bouncer through
-// the interface sim.Bouncer. What it makes is put in the unsettled messages of the engine, to be
-// sent at the next flush.
+// the interface sim.Bouncer. A message that it is to send again is given to resend, which the
+// engine sets to keep it with its unsettled messages, to be sent at the next flush.
 type bouncer struct {
-	unsettled *UnsettledMessages
-	notice    func(actor any, key string, args []any)
-	stopping  bool
-	dropped   uint64
+	resend   func(m sim.Message)
+	notice   func(actor any, key string, args []any)
+	stopping bool
+	dropped  uint64
 }
 
 // bouncerAt is the bouncer as the kinds of OnFail see it in a tick: with the configuration of the
@@ -45,7 +45,7 @@ func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.DeliveryFail
 }
 
 // Resend keeps a message to be sent at the next flush.
-func (b *bouncer) Resend(m sim.Message) { b.unsettled.AddUnsent(m) }
+func (b *bouncer) Resend(m sim.Message) { b.resend(m) }
 
 // Tell tells an actor something. An actor that is nil, or an engine that has no one to tell, tells
 // nothing.

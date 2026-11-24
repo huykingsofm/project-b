@@ -84,10 +84,9 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | `sim.DeliveryFailure` | Number | Meaning |
 |---|---|---|
 | `DeliveryFailureRetired` | 1 | the state was removed |
-| `DeliveryFailureNotStarted` | 2 | the state exists, but its engine does not run yet; the message can be sent again |
-| `DeliveryFailureMoved` | 3 | what the message is about has gone to another engine |
-| `DeliveryFailureStopping` | 4 | the engine, or the cluster, is stopping |
-| `DeliveryFailureFull` | 5 | the inbox of the engine is full |
+| `DeliveryFailureNotStarted` | 2 | the engine does not exist yet, or the ID names none; the message can be sent again |
+| `DeliveryFailureStopping` | 3 | the engine, or the cluster, is stopping |
+| `DeliveryFailureFull` | 4 | the inbox of the engine is full |
 
 - The router says `DeliveryFailureRetired` for an engine that was retired, and `DeliveryFailureNotStarted` for any other ID with no engine: it does not know which of those IDs are given.
 - A message with no `OnFail` is dropped, and logged.

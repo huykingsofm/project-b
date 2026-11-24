@@ -1,6 +1,6 @@
 # Checkpoint of an engine
 
-`platform/engine/checkpoint.go`, with the codecs of the states (`server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
+`platform/engine/checkpoint.go`, with the codecs of the states (`Encode` in `server/game/sim/state/*/state.go`, the decoder in `server/game/sim/state/*/codec.go`), of the entities (`server/game/sim/state/zonelayer/entity/codec.go` and `server/game/sim/state/zone/entity/codec.go`) and of the scheduler (`platform/sim/scheduler.go`). What an engine needs to go on from the tick it was taken at, as bytes. The design: `plan/en/proposed-designs.md`.
 
 ## Entry points
 

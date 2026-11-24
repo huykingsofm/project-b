@@ -31,6 +31,7 @@ type Reader struct {
 	from   uint64 // the ID of the first record that Next gives
 	id     uint64 // the ID of the current record
 	nextID uint64 // the ID of the record that is read next
+	opened bool   // whether a segment was opened: the next one must begin where it ended
 }
 
 // OpenReader reads the log in dir from the record with the ID from: it starts at the last segment
@@ -158,7 +159,15 @@ func (r *Reader) openNext() bool {
 		r.err = fmt.Errorf("%s: %w", seg.Path, err)
 		return false
 	}
-	r.f, r.s, r.buffering = f, s, last
+	if r.opened && s.begin != r.nextID {
+		f.Close()
+		r.err = fmt.Errorf(
+			"%s: %w: it begins at the ID %d and the segment before it ends at %d",
+			seg.Path, ErrCorrupt, s.begin, r.nextID-1,
+		)
+		return false
+	}
+	r.f, r.s, r.buffering, r.opened = f, s, last, true
 	r.nextID = s.begin
 	r.collecting, r.ready, r.readyPos = r.collecting[:0], r.ready[:0], 0
 	r.next++

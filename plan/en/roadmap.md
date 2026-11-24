@@ -18,6 +18,7 @@ What is left of the recovery of a cluster: the logs can be cut to the recovery l
 | Piece | What it is |
 |---|---|
 | Checkpoint files | a set of checkpoints for the cluster, written by a copy taken at the end of a tick outside the goroutine of the engine, at a period with an offset for each engine; all are kept for now |
+| Recovery line cache | the `Safe` of every engine, written to a file of its own by the goroutine that works out what is safe (a temporary file that is synced and renamed); a recovery reads the log of an engine from the tick after its cached one and not from the tick 1, after it checked that no cached tick is above the end of its log (if one is, the cache is not used and the logs are read whole); it is written again after a cut, and it is made with the checkpoint files, since replay from a checkpoint is what makes the read of the logs from the tick 1 the slow part |
 | Checkpoints above the line | the checkpoints of an engine whose tick is above its limit are dropped, since they hold what was cut |
 | Replay from a checkpoint | each engine is made from its latest checkpoint at or below its limit and run on its own log to its limit, instead of from tick 0 |
 | Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the unsettled messages are those of the checkpoints, and the acks are made again |

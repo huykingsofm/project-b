@@ -10,41 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
-// Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
-// it gives the states it makes, the private messages, and the inventory of every character. The
-// events are not data (R18) and are not written.
-func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
-	w.Uvarint(s.tick)
-	w.Uvarint(uint64(len(s.zones)))
-	for _, id := range s.zones {
-		w.Uvarint(uint64(id))
-	}
-	w.Uvarint(uint64(len(s.zoneLayers)))
-	for _, id := range s.zoneLayers {
-		w.Uvarint(uint64(id))
-	}
-	s.stateIDCounters.Encode(w)
-	rows := s.privateChat.Rows()
-	w.Uvarint(uint64(len(rows)))
-	for _, m := range rows {
-		w.Uvarint(uint64(m.fromID))
-		w.Uvarint(uint64(m.toID))
-		w.String(m.text)
-		w.Uvarint(m.tick)
-	}
-	w.Uvarint(uint64(s.inventories.Len()))
-	for characterID, inventory := range s.inventories.All() {
-		w.Uvarint(uint64(characterID))
-		w.Uvarint(uint64(len(inventory.slots)))
-		for _, slot := range inventory.slots {
-			w.Uvarint(uint64(slot.itemID))
-			w.Uvarint(uint64(slot.count))
-		}
-	}
-	return nil
-}
-
 // count reads how many items follow, and refuses a number that claims more than the bytes left can
 // hold: an item takes at least one byte.
 func count(r *binary.Reader) (uint64, error) {

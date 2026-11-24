@@ -217,22 +217,22 @@ func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
 	_, engines := toyCluster(t, 1)
 	e := engines[0]
 	before := e.Hash()
-	e.cell.seq++
+	e.cell.sentSeq++
 	if e.Hash() == before {
 		t.Fatal("the number of its messages is not in the hash")
 	}
 	before = e.Hash()
-	e.cell.lastSeq[7] = 3
+	e.cell.lastRecvSeq[7] = 3
 	if e.Hash() == before {
 		t.Fatal("the last number taken from a sender is not in the hash")
 	}
 	before = e.Hash()
-	e.unsettled.AddUnsent(sim.NewActionMessage[*toyState](1, onfail.Drop{}))
+	e.unsettledMessages.AddUnsent(sim.NewActionMessage[*toyState](1, onfail.Drop{}))
 	if e.Hash() == before {
 		t.Fatal("a message held to be sent again is not in the hash")
 	}
 	before = e.Hash()
-	e.unsettled.SetSent([]sim.Message{sim.NewActionMessage[*toyState](2, onfail.Drop{})})
+	e.unsettledMessages.SetSent([]sim.Message{sim.NewActionMessage[*toyState](2, onfail.Drop{})})
 	if e.Hash() != before {
 		t.Fatal("a message that was sent and is not acked is in the hash: when it is acked " +
 			"depends on when the log of its receiver is synced, which a replay does not repeat")
@@ -244,13 +244,13 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 ) {
 	_, engines := toyCluster(t, 1)
 	e := engines[0]
-	e.cell.seq = 41
-	e.cell.lastSeq[99] = 1
-	e.unsettled.SetUnsent([]sim.Message{
+	e.cell.sentSeq = 41
+	e.cell.lastRecvSeq[99] = 1
+	e.unsettledMessages.SetUnsent([]sim.Message{
 		sim.NewActionMessage(2, onfail.Retry{}, &toyAction{N: 1}).
 			Stamp(sim.Header{From: 1, Seq: 40}),
 	})
-	e.unsettled.SetSent([]sim.Message{
+	e.unsettledMessages.SetSent([]sim.Message{
 		sim.NewActionMessage(3, onfail.Retry{}, &toyAction{N: 2}).
 			Stamp(sim.Header{From: 1, Seq: 39, Tick: 6}),
 	})
@@ -262,12 +262,13 @@ func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughAChe
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.cell.seq != 41 || len(r.unsettled.Unsent()) != 1 || len(r.unsettled.Sent()) != 1 ||
-		r.cell.lastSeq[99] != 1 || r.Hash() != e.Hash() {
+	unsent, sent := len(r.unsettledMessages.Unsent()), len(r.unsettledMessages.Sent())
+	if r.cell.sentSeq != 41 || unsent != 1 || sent != 1 ||
+		r.cell.lastRecvSeq[99] != 1 || r.Hash() != e.Hash() {
 		t.Fatalf("seq %d, %d to go, %d sent, last %v",
-			r.cell.seq, len(r.unsettled.Unsent()), len(r.unsettled.Sent()), r.cell.lastSeq)
+			r.cell.sentSeq, unsent, sent, r.cell.lastRecvSeq)
 	}
-	if got := r.unsettled.Sent()[0].Head(); got.Seq != 39 || got.Tick != 6 {
+	if got := r.unsettledMessages.Sent()[0].Head(); got.Seq != 39 || got.Tick != 6 {
 		t.Fatalf("the message that was sent came back as %+v, want its number and tick", got)
 	}
 }

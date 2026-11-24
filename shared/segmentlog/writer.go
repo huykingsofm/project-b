@@ -114,7 +114,7 @@ func (w *Writer) Append(payload []byte) (uint64, error) {
 	if w.pendingRecords == 0 {
 		w.pendingFirst = w.nextID
 	}
-	w.pending = appendFrame(w.pending, payload)
+	w.pending = appendFrame(w.pending, w.nextID, payload)
 	w.pendingRecords++
 	w.nextID++
 	return w.nextID - 1, nil
@@ -128,10 +128,10 @@ func (w *Writer) LastID() uint64 {
 	return w.nextID - 1
 }
 
-// Commit hands the records that were appended since the last Commit to the goroutine that writes
-// them. It returns the first error that writing the log has had, which is the same for every later
-// call: a log that failed does not write anything more.
-func (w *Writer) Commit() error {
+// AsyncCommit hands the records that were appended since the last AsyncCommit to the goroutine that
+// writes them. It returns the first error that writing the log has had, which is the same for every
+// later call: a log that failed does not write anything more.
+func (w *Writer) AsyncCommit() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {

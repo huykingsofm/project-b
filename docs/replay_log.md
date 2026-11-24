@@ -7,7 +7,7 @@
 | Part | Where |
 |---|---|
 | a log for each engine | `<dir>/<name>-<n>/`: the name of the type of its state (`StateType.String()`, see below) and the number of the state among the states of its type, for example `world-1`, `zone-2`, `zonelayer-1`; the meta of the segments holds the whole ID |
-| the segments of a log | `seg-<index>.log` ([segmentlog](segmentlog.md#files)) |
+| the segments of a log | `seg-<index>.pbsl` ([segmentlog](segmentlog.md#files)) |
 | opened | by the first tick of the engine: every tick has a frame, an empty one when the engine recorded nothing |
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
@@ -22,7 +22,7 @@
 | `EndTick(engine, tick)` | says that the engine has recorded all it will for the tick, the hash of its state included when it is due; a log in files hands the frame of the tick to the goroutine that writes it |
 
 - The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
-- The tick of a frame is the one after the last of the log, and the first of a log is the tick 1 (the state of a new engine is at the tick 0): a log has no gap, and a frame that does not follow is refused and the log marked as failed. `Log.Last(engine)` is the tick of the last frame, written or not, and 0 for a log with none.
+- The tick of a frame is the one after the last of the log, and the first of a log is the tick 1 (the state of a new engine is at the tick 0): a log has no gap, and a frame that does not follow is refused and the log marked as failed.
 - `Engine.Remove` (`Cluster.Remove`) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
 
 ## Which tick is on the disk

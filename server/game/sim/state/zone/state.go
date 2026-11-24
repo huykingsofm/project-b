@@ -12,6 +12,7 @@
 package zone
 
 import (
+	"fmt"
 	"iter"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -19,6 +20,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zone/entity"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zone/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 	"github.com/huykingsofm/project-b/shared/table"
@@ -176,3 +178,53 @@ func (s *State) ZoneLayerCount() int { return s.zoneLayers.Len() }
 
 // RemoveZoneLayer makes the zone forget a zonelayer.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) { s.zoneLayers.Delete(zoneLayerID) }
+
+// Encode writes the data of the state: its ID and tick, its entities, the zonelayers it knows, what
+// was said, and the ID the next entity gets. The map is not written: it never changes and the ID of
+// the zone finds it. The events are not data (R18) and are not written.
+func (s *State) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(s.id))
+	w.Uvarint(uint64(s.worldID))
+	w.Uvarint(s.tick)
+	w.Uvarint(uint64(s.entities.Len()))
+	for id, e := range s.entities.All() {
+		if id.Owner != s.id {
+			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
+		}
+		if err := entity.Encode(w, e); err != nil {
+			return err
+		}
+	}
+	w.Uvarint(uint64(s.zoneLayers.Len()))
+	for id, slot := range s.zoneLayers.All() {
+		w.Uvarint(uint64(id))
+		w.Varint(int64(slot.capacity))
+	}
+	rows := s.chat.Rows()
+	w.Uvarint(uint64(len(rows)))
+	for _, m := range rows {
+		w.Uvarint(uint64(m.fromID))
+		w.String(m.text)
+		w.Uvarint(m.tick)
+	}
+	s.entityIDCounter.Encode(w)
+	return nil
+}
+
+// Hash returns a number that depends on the data of the state and on nothing else.
+func (s *State) Hash() uint64 {
+	h := sim.NewHasher()
+	h.U64(uint64(s.id))
+	h.U64(uint64(s.worldID))
+	h.U64(s.tick)
+	s.entityIDCounter.Hash(&h)
+	for _, l := range s.zoneLayers.All() {
+		h.U64(uint64(l.id))
+		h.U64(uint64(uint32(l.capacity)))
+	}
+	for _, e := range s.entities.All() {
+		e.Hash(&h)
+	}
+	h.U64(uint64(s.chat.Len()))
+	return h.Sum()
+}

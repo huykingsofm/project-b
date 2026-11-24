@@ -8,7 +8,7 @@
 // too, so the IDs of a log have no gap. Whoever uses the log can make the ID mean something (a
 // tick), and then need not write it in the payload.
 //
-// A directory holds the segments of one log, each named `seg-<index>.log` with the index in 20
+// A directory holds the segments of one log, each named `seg-<index>.pbsl` with the index in 20
 // digits, counted from 0 in the order the segments were made, so the names sort in that order. A
 // segment is a header and then records:
 //
@@ -44,7 +44,7 @@ const (
 	commitMark    = 0xFFFFFFFF
 	commitSize    = 12
 	namePrefix    = "seg-"
-	nameSuffix    = ".log"
+	nameSuffix    = ".pbsl"
 )
 
 var (
@@ -75,10 +75,20 @@ func appendHeader(b []byte, begin uint64, meta []byte) []byte {
 	return binary.LittleEndian.AppendUint32(b, crc32.Checksum(b[start:], castagnoli))
 }
 
-// appendFrame appends a record.
-func appendFrame(b []byte, payload []byte) []byte {
+// frameChecksum is the crc of a record: of its ID, which is not written, its length and its
+// payload. A record that is read at another place than the one it was written at has another ID,
+// and so does not match.
+func frameChecksum(id uint64, length uint32, payload []byte) uint32 {
+	var head [12]byte
+	binary.LittleEndian.PutUint64(head[:8], id)
+	binary.LittleEndian.PutUint32(head[8:], length)
+	return crc32.Update(crc32.Checksum(head[:], castagnoli), castagnoli, payload)
+}
+
+// appendFrame appends a record that has the ID id.
+func appendFrame(b []byte, id uint64, payload []byte) []byte {
 	b = binary.LittleEndian.AppendUint32(b, uint32(len(payload)))
-	b = binary.LittleEndian.AppendUint32(b, crc32.Checksum(payload, castagnoli))
+	b = binary.LittleEndian.AppendUint32(b, frameChecksum(id, uint32(len(payload)), payload))
 	return append(b, payload...)
 }
 
