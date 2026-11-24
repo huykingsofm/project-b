@@ -72,11 +72,6 @@ func (r DeliveryFailure) String() string {
 	return "unknown"
 }
 
-// Gone reports whether a message that could not be delivered for this reason will not be delivered
-// by sending it again: the state it is for was removed. Sending it again fails the same way, so it
-// is for its OnFail to say what that means, once.
-func (r DeliveryFailure) Gone() bool { return r == DeliveryFailureRetired }
-
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bouncer handle messages and do not know which type of state one is
 // for.

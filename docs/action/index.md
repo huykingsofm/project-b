@@ -77,7 +77,7 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 
 - `sim.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, DeliveryFailure)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `sim.Bouncer`.
 - `onfail.Retry`, `onfail.Redirect` and `onfail.Escalate` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
-- `onfail.Retry` also drops the message, at once, when the state it is for is gone (`DeliveryFailureRetired`): sending it again fails the same way, so its `OnFail` is asked once and not after every attempt. `Redirect` and `Escalate` send to another engine, which a state that is gone is the very case for, and `Compensate` and `Notify` send something else or tell an actor, so they act as always.
+- `onfail.Retry` also drops the message, at once, when the engine it is for was retired (`DeliveryFailureRetired`): sending it again fails the same way, so its `OnFail` is asked once and not after every attempt.
 
 ### Why a message could not be delivered
 
@@ -89,7 +89,6 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | `DeliveryFailureStopping` | 4 | the engine, or the cluster, is stopping |
 | `DeliveryFailureFull` | 5 | the inbox of the engine is full |
 
-- `DeliveryFailure.Gone()` is true for `DeliveryFailureRetired`: the state is not coming back.
 - The router says `DeliveryFailureRetired` for an engine that was retired, and `DeliveryFailureNotStarted` for any other ID with no engine: it does not know which of those IDs are given.
 - A message with no `OnFail` is dropped, and logged.
 

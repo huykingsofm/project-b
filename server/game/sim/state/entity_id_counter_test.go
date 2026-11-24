@@ -18,8 +18,8 @@ func TestTheCounterGivesTheIDsOfItsOwnerFromOneAndNeverAgain(t *testing.T) {
 			t.Fatalf("the %dth ID is %v, %v", want, id, ok)
 		}
 	}
-	if c.Last() != 3 || c.Owner() != owner {
-		t.Fatalf("Last = %d, Owner = %v", c.Last(), c.Owner())
+	if c.Owner() != owner {
+		t.Fatalf("Owner = %v", c.Owner())
 	}
 }
 
@@ -49,8 +49,12 @@ func TestTheCounterWritesAndReadsBackAndACloneSharesNothing(t *testing.T) {
 	var w binary.Writer
 	clone.Encode(&w)
 	back, err := state.DecodeEntityIDCounter(owner, binary.NewReader(w.B))
-	if err != nil || back.Last() != 2 || clone.Last() != 2 {
-		t.Fatalf("read back %d, clone %d, error %v", back.Last(), clone.Last(), err)
+	next, _ := back.Give()
+	if err != nil || next.Local != 3 {
+		t.Fatalf("what was read back gives the number %d, error %v, want 3", next.Local, err)
+	}
+	if again, _ := clone.Give(); again.Local != 3 {
+		t.Fatalf("the clone gives the number %d, want 3", again.Local)
 	}
 	a, b := sim.NewHasher(), sim.NewHasher()
 	clone.Hash(&a)

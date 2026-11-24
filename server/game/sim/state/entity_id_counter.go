@@ -33,9 +33,6 @@ func (c *EntityIDCounter) Give() (EntityID, bool) {
 	return NewEntityID(c.owner, c.last), true
 }
 
-// Last is the local number that was last given, or 0 when none was.
-func (c *EntityIDCounter) Last() uint64 { return c.last }
-
 // CheckGiven returns an error for an ID that the counter did not give: one of another state, or one
 // whose number it has not counted to. A state that is read from a checkpoint checks its entities
 // with it.

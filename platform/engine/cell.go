@@ -220,7 +220,7 @@ func (c *cell) sendAgain(cfg *config.Snapshot, tick uint64) {
 	var gone []int
 	for _, i := range c.unsettled.Due(tick) {
 		m := c.unsettled.Message(i)
-		if reason, ok := c.router.Deliver(m); !ok && reason.Gone() {
+		if reason, ok := c.router.Deliver(m); !ok && reason == sim.DeliveryFailureRetired {
 			c.router.Return(m, reason)
 			gone = append(gone, i)
 			continue
