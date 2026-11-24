@@ -41,7 +41,7 @@ type cell struct {
 	rng            *rand.Rand
 	bounce         bouncer
 	// unsettled is what the engine has sent or is to send, until it is acked as safe
-	unsettled *unsettledMessages
+	unsettled *UnsettledMessages
 
 	// acks is where the receivers say what they hold safe, and where this engine says it of what
 	// it took; nil for an engine that holds nothing for an ack (a replay).
@@ -76,7 +76,7 @@ func newCell(
 	// The seed of the cluster and the ID of the engine decide the random numbers, so the same
 	// inputs give the same run.
 	pcg := rand.NewPCG(seed, uint64(me))
-	held := &unsettledMessages{}
+	held := &UnsettledMessages{}
 	return cell{
 		me: me, router: router, in: in, cfg: cfg, replayLog: rpl, view: stable.View(me, rpl),
 		lastSeq: map[sim.StateID]uint64{}, pcg: pcg, rng: rand.New(pcg),

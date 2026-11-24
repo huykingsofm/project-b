@@ -106,7 +106,7 @@ type restoredCell struct {
 	seq            uint64
 	cfgVersionSeen uint64
 	lastSeq        map[sim.StateID]uint64
-	unsettled      unsettledMessages
+	unsettled      UnsettledMessages
 }
 
 // PCG is where the random numbers of the engine were.
@@ -122,7 +122,7 @@ func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
 func (rc restoredCell) LastSeq() map[sim.StateID]uint64 { return rc.lastSeq }
 
 // Unsettled is what the engine had sent or was to send.
-func (rc restoredCell) Unsettled() unsettledMessages { return rc.unsettled }
+func (rc restoredCell) Unsettled() UnsettledMessages { return rc.unsettled }
 
 // Scheduler is what the engine waited for.
 func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }

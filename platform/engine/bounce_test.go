@@ -22,7 +22,7 @@ func bounced(
 ) (*bouncer, []notice, sim.Message) {
 	var told []notice
 	b := &bouncer{
-		unsettled: &unsettledMessages{},
+		unsettled: &UnsettledMessages{},
 		stopping:  stopping,
 		notice:    func(a any, k string, args []any) { told = append(told, notice{a, k, args}) },
 	}

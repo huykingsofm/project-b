@@ -18,7 +18,7 @@ func toMessage(to sim.StateID, seq uint64) sim.Message {
 }
 
 func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *testing.T) {
-	var o unsettledMessages
+	var o UnsettledMessages
 	cfg := config.Defaults()
 	o.MarkSent(toMessage(2, 1), 5, cfg)
 	o.MarkSent(toMessage(3, 2), 5, cfg)
@@ -39,7 +39,7 @@ func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *t
 }
 
 func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *testing.T) {
-	var o unsettledMessages
+	var o UnsettledMessages
 	cfg := config.Defaults()
 	first := uint64(unsettledResendFirst.Get(cfg))
 	step := uint64(unsettledResendStep.Get(cfg))
@@ -64,7 +64,7 @@ func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *t
 }
 
 func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testing.T) {
-	var o unsettledMessages
+	var o UnsettledMessages
 	cfg := config.Defaults()
 	for seq := uint64(1); seq <= 5; seq++ {
 		o.MarkSent(toMessage(2, seq), 0, cfg)
@@ -81,7 +81,7 @@ func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	var o unsettledMessages
+	var o UnsettledMessages
 	o.AddUnsent(sim.NewActionMessage[*toyState](2, onfail.Retry{}, &toyAction{N: 3}))
 	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
 	var w binary.Writer

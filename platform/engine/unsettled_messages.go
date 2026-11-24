@@ -34,34 +34,34 @@ type sentMessage struct {
 	wait    uint64 // how long it waited for the last time
 }
 
-// unsettledMessages holds what an engine has sent or is to send, for as long as it can be lost: the
+// UnsettledMessages holds what an engine has sent or is to send, for as long as it can be lost: the
 // messages that are to go (a message that its OnFail sends again, which gets a new number when it
 // goes) and the messages that went and have not been acked as safe (each is sent again, with the
 // number it has, until the receiver has it in a place that no crash takes back). Both are in a
 // checkpoint. Only the goroutine of the engine uses it.
-type unsettledMessages struct {
+type UnsettledMessages struct {
 	unsent []sim.Message
 	sent   []sentMessage // in the order they were sent, which is the order of their numbers
 }
 
 // AddUnsent puts a message that is to go at the next flush.
-func (u *unsettledMessages) AddUnsent(m sim.Message) { u.unsent = append(u.unsent, m) }
+func (u *UnsettledMessages) AddUnsent(m sim.Message) { u.unsent = append(u.unsent, m) }
 
 // Unsent is the messages that are to go, in the order they will. The list is a view.
-func (u *unsettledMessages) Unsent() []sim.Message { return u.unsent }
+func (u *UnsettledMessages) Unsent() []sim.Message { return u.unsent }
 
 // SetUnsent sets the messages that are to go, as a checkpoint says.
-func (u *unsettledMessages) SetUnsent(messages []sim.Message) { u.unsent = messages }
+func (u *UnsettledMessages) SetUnsent(messages []sim.Message) { u.unsent = messages }
 
 // TakeUnsent returns the messages that are to go and forgets them.
-func (u *unsettledMessages) TakeUnsent() []sim.Message {
+func (u *UnsettledMessages) TakeUnsent() []sim.Message {
 	out := u.unsent
 	u.unsent = nil
 	return out
 }
 
 // Sent is the messages that went and have not been acked, in the order they went.
-func (u *unsettledMessages) Sent() []sim.Message {
+func (u *UnsettledMessages) Sent() []sim.Message {
 	out := make([]sim.Message, len(u.sent))
 	for i, s := range u.sent {
 		out[i] = s.message
@@ -71,7 +71,7 @@ func (u *unsettledMessages) Sent() []sim.Message {
 
 // SetSent sets the messages that went and have not been acked, as a checkpoint says: each is sent
 // again at the next flush.
-func (u *unsettledMessages) SetSent(messages []sim.Message) {
+func (u *UnsettledMessages) SetSent(messages []sim.Message) {
 	u.sent = make([]sentMessage, len(messages))
 	for i, m := range messages {
 		u.sent[i] = sentMessage{message: m}
@@ -79,16 +79,16 @@ func (u *unsettledMessages) SetSent(messages []sim.Message) {
 }
 
 // Len is how many messages it holds.
-func (u *unsettledMessages) Len() int { return len(u.unsent) + len(u.sent) }
+func (u *UnsettledMessages) Len() int { return len(u.unsent) + len(u.sent) }
 
 // MarkSent says that a message went into the channel of its receiver at a tick.
-func (u *unsettledMessages) MarkSent(m sim.Message, tick uint64, cfg *config.Snapshot) {
+func (u *UnsettledMessages) MarkSent(m sim.Message, tick uint64, cfg *config.Snapshot) {
 	wait := uint64(unsettledResendFirst.Get(cfg))
 	u.sent = append(u.sent, sentMessage{message: m, due: tick + wait, wait: wait})
 }
 
 // Due returns the indexes of the messages that are to be sent again at the tick, in order.
-func (u *unsettledMessages) Due(tick uint64) []int {
+func (u *UnsettledMessages) Due(tick uint64) []int {
 	var due []int
 	for i, s := range u.sent {
 		if s.due <= tick {
@@ -99,18 +99,18 @@ func (u *unsettledMessages) Due(tick uint64) []int {
 }
 
 // Message is the message that went, by its index.
-func (u *unsettledMessages) Message(i int) sim.Message { return u.sent[i].message }
+func (u *UnsettledMessages) Message(i int) sim.Message { return u.sent[i].message }
 
 // Reschedule says that the message at the index was sent again at the tick: the next time it waits
 // the step longer, up to the most.
-func (u *unsettledMessages) Reschedule(i int, tick uint64, cfg *config.Snapshot) {
+func (u *UnsettledMessages) Reschedule(i int, tick uint64, cfg *config.Snapshot) {
 	s := &u.sent[i]
 	s.wait = min(s.wait+uint64(unsettledResendStep.Get(cfg)), uint64(unsettledResendMost.Get(cfg)))
 	s.due = tick + s.wait
 }
 
 // Remove forgets the messages at the indexes, which Due returned, in order.
-func (u *unsettledMessages) Remove(indexes []int) {
+func (u *UnsettledMessages) Remove(indexes []int) {
 	if len(indexes) == 0 {
 		return
 	}
@@ -129,7 +129,7 @@ func (u *unsettledMessages) Remove(indexes []int) {
 
 // Ack forgets the messages for a receiver that have a number up to the one given: the receiver has
 // them in a place that no crash takes back.
-func (u *unsettledMessages) Ack(receiver sim.StateID, upTo uint64) {
+func (u *UnsettledMessages) Ack(receiver sim.StateID, upTo uint64) {
 	kept := u.sent[:0]
 	for _, s := range u.sent {
 		if s.message.Dest() == receiver && s.message.Head().Seq <= upTo {
@@ -142,7 +142,7 @@ func (u *unsettledMessages) Ack(receiver sim.StateID, upTo uint64) {
 }
 
 // Receivers is the receivers that have a message that was not acked, each once, in order.
-func (u *unsettledMessages) Receivers() []sim.StateID {
+func (u *UnsettledMessages) Receivers() []sim.StateID {
 	var out []sim.StateID
 	seen := map[sim.StateID]bool{}
 	for _, s := range u.sent {
@@ -156,7 +156,7 @@ func (u *unsettledMessages) Receivers() []sim.StateID {
 
 // Encode writes the messages that are to go, and then the ones that went and were not acked, each
 // whole. What it waits for each is not written: after a restore every one is sent again.
-func (u *unsettledMessages) Encode(w *binary.Writer, withSent bool) error {
+func (u *UnsettledMessages) Encode(w *binary.Writer, withSent bool) error {
 	w.Uvarint(uint64(len(u.unsent)))
 	for _, m := range u.unsent {
 		if err := sim.EncodeMessage(w, m); err != nil {
@@ -178,21 +178,21 @@ func (u *unsettledMessages) Encode(w *binary.Writer, withSent bool) error {
 // decodeUnsettledMessages reads what Encode wrote with the sent messages.
 func decodeUnsettledMessages(
 	c *sim.Codecs, r *binary.Reader, version codec.Version,
-) (unsettledMessages, error) {
-	var u unsettledMessages
+) (UnsettledMessages, error) {
+	var u UnsettledMessages
 	for _, what := range []string{"that is to go", "that went and was not acked"} {
 		n := r.Uvarint()
 		if err := r.Err(); err != nil {
-			return unsettledMessages{}, err
+			return UnsettledMessages{}, err
 		}
 		if n > uint64(r.Left()) { // a message takes at least one byte
-			return unsettledMessages{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
+			return UnsettledMessages{}, fmt.Errorf("%w: %d messages", binary.ErrShort, n)
 		}
 		messages := make([]sim.Message, 0, n)
 		for range n {
 			m, err := c.DecodeMessage(r, version)
 			if err != nil {
-				return unsettledMessages{}, fmt.Errorf("a message %s: %w", what, err)
+				return UnsettledMessages{}, fmt.Errorf("a message %s: %w", what, err)
 			}
 			messages = append(messages, m)
 		}

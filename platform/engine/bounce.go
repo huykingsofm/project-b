@@ -11,7 +11,7 @@ import (
 // the interface sim.Bouncer. What it makes is put in the unsettled messages of the engine, to be
 // sent at the next flush.
 type bouncer struct {
-	unsettled *unsettledMessages
+	unsettled *UnsettledMessages
 	notice    func(actor any, key string, args []any)
 	stopping  bool
 	dropped   uint64
