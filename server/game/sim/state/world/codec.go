@@ -24,7 +24,7 @@ func (s *State) Encode(w *binary.Writer) error {
 	for _, id := range s.zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	s.stateIDs.Encode(w)
+	s.stateIDAllocators.Encode(w)
 	rows := s.privateChat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
@@ -77,13 +77,13 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	if s.stateIDs, err = sim.DecodeStateIDs(r); err != nil {
+	if s.stateIDAllocators, err = sim.DecodeStateIDAllocators(r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckZoneLayerIDs(&s.stateIDs, s.zoneLayers); err != nil {
+	if err = state.CheckZoneLayerIDs(&s.stateIDAllocators, s.zoneLayers); err != nil {
 		return nil, err
 	}
 	if n, err = count(r); err != nil {

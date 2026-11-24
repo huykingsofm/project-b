@@ -51,7 +51,7 @@ type State struct {
 	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
 	chat       ring.Ring[ChatMessage]
 
-	entityIDs state.EntityIDs
+	entityIDAllocator state.EntityIDAllocator
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
@@ -65,11 +65,11 @@ func NewState(
 ) *State {
 	s := &State{
 		id: zoneID, worldID: worldID, tiles: tiles,
-		chat:      ring.New[ChatMessage](chatKeep),
-		entityIDs: state.NewEntityIDs(entityGraveSteps),
+		chat:              ring.New[ChatMessage](chatKeep),
+		entityIDAllocator: state.NewEntityIDAllocator(entityGraveSteps),
 	}
 	for _, exit := range tiles.Exits() {
-		local, ok := s.entityIDs.Give()
+		local, ok := s.entityIDAllocator.Give()
 		if !ok {
 			break // a map has no more than a few exits: there is always an ID
 		}
@@ -83,14 +83,14 @@ func NewState(
 // changes.
 func (s *State) clone() *State {
 	return &State{
-		id:         s.id,
-		worldID:    s.worldID,
-		tick:       s.tick,
-		tiles:      s.tiles,
-		entities:   s.entities.Clone(),
-		zoneLayers: s.zoneLayers.Clone(),
-		chat:       s.chat.Clone(),
-		entityIDs:  s.entityIDs.Clone(),
+		id:                s.id,
+		worldID:           s.worldID,
+		tick:              s.tick,
+		tiles:             s.tiles,
+		entities:          s.entities.Clone(),
+		zoneLayers:        s.zoneLayers.Clone(),
+		chat:              s.chat.Clone(),
+		entityIDAllocator: s.entityIDAllocator.Clone(),
 	}
 }
 
@@ -126,7 +126,7 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 // NextTick takes the state to the next tick, and the IDs in the grave one step.
 func (s *State) NextTick() {
 	s.tick++
-	s.entityIDs.Step()
+	s.entityIDAllocator.Step()
 }
 
 // WorldID is the ID of the world that the zone is in.

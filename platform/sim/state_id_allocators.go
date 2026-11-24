@@ -8,13 +8,13 @@ import (
 	"github.com/huykingsofm/project-b/shared/ids"
 )
 
-// StateIDs gives out the IDs of states, of any type: the local number of each type comes from an
-// allocator of its own (package ids), from 1 up to what the 24 bits of a local number hold, with a
-// grave of the same steps for every type. An ID that is given back waits in the grave before it is
-// given again, so that what still names the state it was (a message that waits to be sent to it)
-// has the time to let go. It is plain data that a state holds, writes to its checkpoint and works
-// into its hash. Make one with NewStateIDs.
-type StateIDs struct {
+// StateIDAllocators gives out the IDs of states, of any type: the local number of each type comes
+// from an allocator of its own (package ids), from 1 up to what the 24 bits of a local number hold,
+// with a grave of the same steps for every type. An ID that is given back waits in the grave before
+// it is given again, so that what still names the state it was (a message that waits to be sent to
+// it) has the time to let go. It is plain data that a state holds, writes to its checkpoint and
+// works into its hash. Make one with NewStateIDAllocators.
+type StateIDAllocators struct {
 	steps   uint64
 	byType  map[StateType]*ids.Allocator[uint32]
 	ordered []StateType // the types that have an allocator, from the smallest, for a fixed order
@@ -23,16 +23,17 @@ type StateIDs struct {
 // stateLocalLimit is the largest local number of a state ID.
 const stateLocalLimit = 1<<24 - 1
 
-// NewStateIDs makes an allocator of state IDs whose grave keeps an ID for graveSteps steps.
-func NewStateIDs(graveSteps uint64) StateIDs {
-	return StateIDs{steps: graveSteps, byType: map[StateType]*ids.Allocator[uint32]{}}
+// NewStateIDAllocators makes an allocator of state IDs whose grave keeps an ID for graveSteps
+// steps.
+func NewStateIDAllocators(graveSteps uint64) StateIDAllocators {
+	return StateIDAllocators{steps: graveSteps, byType: map[StateType]*ids.Allocator[uint32]{}}
 }
 
 // GraveSteps is how many steps an ID waits in the grave.
-func (s *StateIDs) GraveSteps() uint64 { return s.steps }
+func (s *StateIDAllocators) GraveSteps() uint64 { return s.steps }
 
 // allocator returns the allocator of a type, making it the first time.
-func (s *StateIDs) allocator(t StateType) *ids.Allocator[uint32] {
+func (s *StateIDAllocators) allocator(t StateType) *ids.Allocator[uint32] {
 	if a, ok := s.byType[t]; ok {
 		return a
 	}
@@ -45,7 +46,7 @@ func (s *StateIDs) allocator(t StateType) *ids.Allocator[uint32] {
 
 // Give returns a state ID of the type that is live from now on. It reports false when the type has
 // no number left, every one being live or in the grave.
-func (s *StateIDs) Give(t StateType) (StateID, bool) {
+func (s *StateIDAllocators) Give(t StateType) (StateID, bool) {
 	local, ok := s.allocator(t).Give()
 	if !ok {
 		return 0, false
@@ -55,20 +56,20 @@ func (s *StateIDs) Give(t StateType) (StateID, bool) {
 
 // Release gives a live ID back: it waits in the grave for the steps. It reports false for an ID
 // that is not live, which changes nothing.
-func (s *StateIDs) Release(id StateID) bool {
+func (s *StateIDAllocators) Release(id StateID) bool {
 	a, ok := s.byType[id.Type()]
 	return ok && a.Release(id.Local())
 }
 
 // Step takes every ID in the grave one step, of every type.
-func (s *StateIDs) Step() {
+func (s *StateIDAllocators) Step() {
 	for _, t := range s.ordered {
 		s.byType[t].Step()
 	}
 }
 
 // Status says what an ID is: live, in the grave, or not given.
-func (s *StateIDs) Status(id StateID) ids.Status {
+func (s *StateIDAllocators) Status(id StateID) ids.Status {
 	a, ok := s.byType[id.Type()]
 	if !ok {
 		return ids.NotGiven
@@ -77,10 +78,10 @@ func (s *StateIDs) Status(id StateID) ids.Status {
 }
 
 // IsLive reports whether an ID was given and not given back.
-func (s *StateIDs) IsLive(id StateID) bool { return s.Status(id) == ids.Live }
+func (s *StateIDAllocators) IsLive(id StateID) bool { return s.Status(id) == ids.Live }
 
 // LiveCount is how many IDs of the type are live.
-func (s *StateIDs) LiveCount(t StateType) int {
+func (s *StateIDAllocators) LiveCount(t StateType) int {
 	a, ok := s.byType[t]
 	if !ok {
 		return 0
@@ -89,8 +90,8 @@ func (s *StateIDs) LiveCount(t StateType) int {
 }
 
 // Clone returns a copy that shares nothing.
-func (s *StateIDs) Clone() StateIDs {
-	c := StateIDs{
+func (s *StateIDAllocators) Clone() StateIDAllocators {
+	c := StateIDAllocators{
 		steps: s.steps, byType: make(map[StateType]*ids.Allocator[uint32], len(s.byType)),
 		ordered: slices.Clone(s.ordered),
 	}
@@ -104,7 +105,7 @@ func (s *StateIDs) Clone() StateIDs {
 // Hash works what it holds into a hash: for each type, its allocator and grave. The live IDs are
 // not in it: they are the IDs of what the state holds, which the hash of the state covers, and a
 // checkpoint is refused when the two differ.
-func (s *StateIDs) Hash(h *Hasher) {
+func (s *StateIDAllocators) Hash(h *Hasher) {
 	h.U64(s.steps)
 	for _, t := range s.ordered {
 		a := s.byType[t]
@@ -124,7 +125,7 @@ func (s *StateIDs) Hash(h *Hasher) {
 }
 
 // Encode writes it: the steps, and then each type with its allocator, from the smallest type.
-func (s *StateIDs) Encode(w *binary.Writer) {
+func (s *StateIDAllocators) Encode(w *binary.Writer) {
 	w.Uvarint(s.steps)
 	w.Uvarint(uint64(len(s.ordered)))
 	for _, t := range s.ordered {
@@ -133,28 +134,30 @@ func (s *StateIDs) Encode(w *binary.Writer) {
 	}
 }
 
-// DecodeStateIDs reads what Encode wrote. It refuses a type that is there twice or out of order, an
-// allocator with other steps or another limit, and what the package ids refuses.
-func DecodeStateIDs(r *binary.Reader) (StateIDs, error) {
-	s := NewStateIDs(r.Uvarint())
+// DecodeStateIDAllocators reads what Encode wrote. It refuses a type that is there twice or out of
+// order, an allocator with other steps or another limit, and what the package ids refuses.
+func DecodeStateIDAllocators(r *binary.Reader) (StateIDAllocators, error) {
+	s := NewStateIDAllocators(r.Uvarint())
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
-		return StateIDs{}, err
+		return StateIDAllocators{}, err
 	}
 	if n > uint64(r.Left()) { // a type takes at least one byte
-		return StateIDs{}, fmt.Errorf("%w: %d types", binary.ErrShort, n)
+		return StateIDAllocators{}, fmt.Errorf("%w: %d types", binary.ErrShort, n)
 	}
 	for range n {
 		t := StateType(r.Uint8())
 		if len(s.ordered) > 0 && t <= s.ordered[len(s.ordered)-1] {
-			return StateIDs{}, fmt.Errorf("the state IDs of the type %d are not in order", t)
+			return StateIDAllocators{}, fmt.Errorf(
+				"the state IDs of the type %d are not in order", t,
+			)
 		}
 		a, err := ids.Decode[uint32](r)
 		if err != nil {
-			return StateIDs{}, fmt.Errorf("the state IDs of the type %d: %w", t, err)
+			return StateIDAllocators{}, fmt.Errorf("the state IDs of the type %d: %w", t, err)
 		}
 		if a.Steps() != s.steps || a.Limit() != stateLocalLimit {
-			return StateIDs{}, fmt.Errorf(
+			return StateIDAllocators{}, fmt.Errorf(
 				"the state IDs of the type %d are not made as the rest", t,
 			)
 		}

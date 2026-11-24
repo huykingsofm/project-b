@@ -51,7 +51,7 @@
 | Who | What it gives out | Steps of the grave |
 |---|---|---|
 | `zonelayer` and `zone` states | the local number of the `EntityID` of each entity, from 1 up to 2^32 - 1; an entity that leaves (a body, an item) gives its number back | set when the state is made (`ClusterBuilder.WithEntityGraveSteps`, 12000 ticks unless set), written in the checkpoint with the allocator |
-| `world` state, with `sim.StateIDs` | the `StateID` of each state it makes, from an allocator for each type, local numbers from 1 up to 2^24 - 1; today the zonelayers (`State.AddZoneLayer` gives the ID and makes the world know the zonelayer; `RemoveZoneLayer` gives it back) | set when the state is made (`ClusterBuilder.WithStateGraveSteps`, 12000 ticks unless set), the same for every type, written in the checkpoint with the allocators |
+| `world` state, with `sim.StateIDAllocators` | the `StateID` of each state it makes, from an allocator for each type, local numbers from 1 up to 2^24 - 1; today the zonelayers (`State.AddZoneLayer` gives the ID and makes the world know the zonelayer; `RemoveZoneLayer` gives it back) | set when the state is made (`ClusterBuilder.WithStateGraveSteps`, 12000 ticks unless set), the same for every type, written in the checkpoint with the allocators |
 
 - The IDs of zones come from the content (the map of a zone says which zone an exit leads to), so no allocator gives them.
 - The state steps its allocator once in `NextTick`, at the start of each tick, so the grave is counted in the ticks of the state and a replay counts the same.

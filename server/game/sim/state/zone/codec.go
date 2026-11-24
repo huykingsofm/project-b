@@ -42,7 +42,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.String(m.text)
 		w.Uvarint(m.tick)
 	}
-	s.entityIDs.Encode(w)
+	s.entityIDAllocator.Encode(w)
 	return nil
 }
 
@@ -105,13 +105,13 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	if s.entityIDs, err = ids.Decode[uint32](r); err != nil {
+	if s.entityIDAllocator, err = ids.Decode[uint32](r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckEntityIDs(s.id, &s.entityIDs, s.entities.Keys()); err != nil {
+	if err = state.CheckEntityIDs(s.id, &s.entityIDAllocator, s.entities.Keys()); err != nil {
 		return nil, err
 	}
 	return s, nil

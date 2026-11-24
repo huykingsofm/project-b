@@ -46,7 +46,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.Uvarint(uint64(characterID))
 		w.Uvarint(uint64(entityID.Local()))
 	}
-	s.entityIDs.Encode(w)
+	s.entityIDAllocator.Encode(w)
 	return nil
 }
 
@@ -111,13 +111,13 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 		entityID := state.NewEntityID(id, r.Uint[uint32]())
 		s.bodies.Link(characterID, entityID)
 	}
-	if s.entityIDs, err = ids.Decode[uint32](r); err != nil {
+	if s.entityIDAllocator, err = ids.Decode[uint32](r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckEntityIDs(id, &s.entityIDs, s.entities.Keys()); err != nil {
+	if err = state.CheckEntityIDs(id, &s.entityIDAllocator, s.entities.Keys()); err != nil {
 		return nil, err
 	}
 	return s, nil
