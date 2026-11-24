@@ -21,7 +21,7 @@ const tile = 1024
 
 const cooldownKey zonelayer.CooldownKey = 1
 
-func newState() *zonelayer.State { return zonelayer.NewState(1, 1, 9, 1000) }
+func newState() *zonelayer.State { return zonelayer.NewState(1, 1, 9) }
 
 func map10x5(t testing.TB) *tilemap.TileMap {
 	return tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
@@ -60,7 +60,7 @@ func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 	if e, _ := st.ItemEntityByID(item); e.Position() != (state.Vec{X: 5500, Y: 3500}) {
 		t.Fatalf("the item is at %+v, want the middle of tile (5,3)", e.Position())
 	}
-	if st.MoveEntity(tiles, 999, state.East, 1000) {
+	if st.MoveEntity(tiles, state.NewEntityID(1, 999), state.East, 1000) {
 		t.Fatal("an entity that does not exist moved")
 	}
 }
@@ -127,7 +127,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	copied := st.Clone().(*zonelayer.State)
 
 	st.SetCooldown(1, cooldownKey, 99)
-	st.DamageEntity(1, 3)
+	st.DamageEntity(state.NewEntityID(1, 1), 3)
 	st.AddItemEntity(8, 1, state.Vec{X: 4500, Y: 4500}, 0)
 	st.SendMessage(zonelayer.NewChatMessage(1, "again", 0))
 	if copied.Hash() != before || copied.ChatMessageCount() != chatBefore {
@@ -296,12 +296,12 @@ func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 	}
 }
 
-func TestAnEntityThatLeavesIsNotGivenItsIDAgainSoon(t *testing.T) {
-	st := zonelayer.NewState(1, 1, 9, 3)
+func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
+	st := zonelayer.NewState(1, 1, 9)
 	at := state.Vec{X: 3500, Y: 3500}
 	first := must.Ok(st.AddItemEntity(7, 1, at, 0))
 	st.RemoveItemEntity(first)
-	for tick := uint64(1); tick <= 10; tick++ { // past the steps of the grave
+	for tick := uint64(1); tick <= 10; tick++ {
 		st.NextTick()
 		if got := must.Ok(st.AddItemEntity(7, 1, at, 0)); got == first {
 			t.Fatalf("the ID of an entity that left was given again at tick %d", tick)
@@ -310,7 +310,7 @@ func TestAnEntityThatLeavesIsNotGivenItsIDAgainSoon(t *testing.T) {
 }
 
 func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
-	st := zonelayer.NewState(1, 1, 9, 1)
+	st := zonelayer.NewState(1, 1, 9)
 	at := state.Vec{X: 1500, Y: 1500}
 	body := must.Ok(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
 	if _, ok := st.RemoveCharacterEntity(1); !ok {

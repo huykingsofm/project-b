@@ -10,9 +10,13 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
+// theZone is the zone that the exits of these tests are in.
+var theZone = sim.NewStateID(state.ZoneType, 1)
+
 func anExit() ExitEntity {
 	return NewExitEntity(
-		5, state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}}, 2,
+		state.NewEntityID(theZone, 5),
+		state.Rect{Min: state.Vec{X: 9000, Y: 0}, Max: state.Vec{X: 9999, Y: 4999}}, 2,
 		state.Vec{X: 1, Y: 2},
 	)
 }
@@ -69,12 +73,12 @@ func TestAnExitComesBackAsItWasWrittenAndCutBytesAndOtherKindsAreAnError(t *test
 		t.Fatal(err)
 	}
 	r := binary.NewReader(w.B)
-	got, err := Decode(r, 1, 0)
+	got, err := Decode(r, 1, theZone)
 	if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, anExit()) {
 		t.Fatalf("came back as %+v, error %v, %d bytes left", got, err, r.Left())
 	}
 	for n := range w.B {
-		if _, err := Decode(binary.NewReader(w.B[:n]), 1, 0); err == nil {
+		if _, err := Decode(binary.NewReader(w.B[:n]), 1, theZone); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
 	}
@@ -83,7 +87,7 @@ func TestAnExitComesBackAsItWasWrittenAndCutBytesAndOtherKindsAreAnError(t *test
 	}
 	var item binary.Writer
 	item.Uvarint(uint64(state.ItemKindID)) // a kind that a zone does not hold
-	if _, err := Decode(binary.NewReader(item.B), 1, 0); !errors.Is(err, ErrUnknownKind) {
+	if _, err := Decode(binary.NewReader(item.B), 1, theZone); !errors.Is(err, ErrUnknownKind) {
 		t.Fatalf("an item in a zone: %v", err)
 	}
 }

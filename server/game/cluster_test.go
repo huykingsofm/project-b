@@ -301,7 +301,7 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	// the zonelayer is removed: the world forgets it, and the router has no engine for it
 	c.World.State().RemoveZoneLayer(testkit.Layer3)
 	c.Env.Router.Retire(testkit.Layer3)
-	testkit.Steps(t, c, 1) // the world publishes that the ID is in the grave
+	testkit.Steps(t, c, 1) // the world publishes that the ID was removed
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},

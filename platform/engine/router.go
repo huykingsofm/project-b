@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -41,7 +40,7 @@ type Router struct {
 	stopping atomic.Bool
 	dropped  atomic.Uint64
 	// directory says what an ID with no engine is: DeliveryFailureNotStarted for a state that
-	// exists, DeliveryFailureRetired for one in the grave, and DeliveryFailureNotGiven for any
+	// exists, DeliveryFailureRetired for one that was removed, and DeliveryFailureNotGiven for any
 	// other ID. A router with none says DeliveryFailureRetired for an engine that was retired and
 	// DeliveryFailureNotStarted for any other ID.
 	directory atomic.Pointer[Directory]
@@ -120,9 +119,9 @@ func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.DeliveryFailure {
 	if d := rt.directory.Load(); d != nil {
 		switch (*d).StateStatus(id) {
-		case ids.Live:
+		case sim.StateLive:
 			return sim.DeliveryFailureNotStarted
-		case ids.InGrave:
+		case sim.StateRemoved:
 			return sim.DeliveryFailureRetired
 		}
 		return sim.DeliveryFailureNotGiven

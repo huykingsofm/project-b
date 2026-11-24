@@ -35,19 +35,18 @@ type State struct {
 	chat       ring.Ring[ChatMessage]
 
 	// bodies links each character to the entity that is its body, and back.
-	bodies            stablebimap.BiMap[state.CharacterID, state.EntityID]
-	entityIDAllocator state.EntityIDAllocator
+	bodies          stablebimap.BiMap[state.CharacterID, state.EntityID]
+	entityIDCounter state.EntityIDCounter
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of an empty zonelayer. An entity that leaves gives its ID back, and it
-// is given again only after entityGraveSteps ticks.
-func NewState(zoneLayerID, zoneID, worldID sim.StateID, entityGraveSteps uint64) *State {
+// NewState makes the state of an empty zonelayer.
+func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
-		entityIDAllocator: state.NewEntityIDAllocator(zoneLayerID, entityGraveSteps),
+		entityIDCounter: state.NewEntityIDCounter(zoneLayerID),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -70,19 +69,16 @@ var _ ReadOnlyZoneLayerState = (*State)(nil)
 func (s *State) clone() *State {
 	return &State{
 		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:          s.entities.Clone(),
-		characters:        s.characters.Clone(),
-		chat:              s.chat.Clone(),
-		bodies:            s.bodies.Clone(),
-		entityIDAllocator: s.entityIDAllocator.Clone(),
+		entities:        s.entities.Clone(),
+		characters:      s.characters.Clone(),
+		chat:            s.chat.Clone(),
+		bodies:          s.bodies.Clone(),
+		entityIDCounter: s.entityIDCounter.Clone(),
 	}
 }
 
-// NextTick takes the state to the next tick, and the IDs in the grave one step.
-func (s *State) NextTick() {
-	s.tick++
-	s.entityIDAllocator.Step()
-}
+// NextTick takes the state to the next tick.
+func (s *State) NextTick() { s.tick++ }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }
@@ -176,9 +172,9 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 // AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
 // false, and does nothing, when the state has no ID left to give.
 func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
-	id, ok := s.entityIDAllocator.Give()
+	id, ok := s.entityIDCounter.Give()
 	if !ok {
-		return 0, false
+		return state.EntityID{}, false
 	}
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
@@ -206,7 +202,6 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 	entityID, _ := s.bodies.GetByV1(characterID)
 	body, _ := s.entities.Get(entityID)
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID)
 	s.characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
 	s.events.Add(
@@ -221,9 +216,9 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
 ) (state.EntityID, bool) {
-	id, ok := s.entityIDAllocator.Give()
+	id, ok := s.entityIDCounter.Give()
 	if !ok {
-		return 0, false
+		return state.EntityID{}, false
 	}
 	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
@@ -238,7 +233,6 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bo
 		return entity.ItemEntity{}, false
 	}
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID)
 	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Position()})
 	return item, true
 }

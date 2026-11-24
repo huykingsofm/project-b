@@ -5,7 +5,6 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/shared/ids"
 )
 
 func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuses(t *testing.T) {
@@ -37,13 +36,13 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 }
 
 // aDirectory says what each ID is, for the tests of a router that asks one.
-type aDirectory map[sim.StateID]ids.Status
+type aDirectory map[sim.StateID]sim.StateStatus
 
-func (d aDirectory) StateStatus(id sim.StateID) ids.Status {
+func (d aDirectory) StateStatus(id sim.StateID) sim.StateStatus {
 	if status, ok := d[id]; ok {
 		return status
 	}
-	return ids.NotGiven
+	return sim.StateNotGiven
 }
 
 func TestARouterSaysWhyAnIDHasNoEngineByWhatItsDirectorySays(t *testing.T) {
@@ -55,7 +54,7 @@ func TestARouterSaysWhyAnIDHasNoEngineByWhatItsDirectorySays(t *testing.T) {
 		t.Fatalf("with no directory an ID with no engine bounced as %v, %v", reason, ok)
 	}
 	rt.SetDirectory(aDirectory{
-		5: ids.Live, 6: ids.InGrave, // 7 is not given
+		5: sim.StateLive, 6: sim.StateRemoved, // 7 is not given
 	})
 	for to, want := range map[sim.StateID]sim.DeliveryFailure{
 		5: sim.DeliveryFailureNotStarted,
@@ -71,7 +70,7 @@ func TestARouterSaysWhyAnIDHasNoEngineByWhatItsDirectorySays(t *testing.T) {
 func TestARouterWithADirectoryRemembersNoEngineThatWasRetired(t *testing.T) {
 	_, out := NewChannel(5, 4)
 	rt := NewRouter()
-	rt.SetDirectory(aDirectory{5: ids.InGrave})
+	rt.SetDirectory(aDirectory{5: sim.StateRemoved})
 	rt.Register(out)
 	rt.Retire(5)
 	if got := len(rt.data.Load().retired); got != 0 {

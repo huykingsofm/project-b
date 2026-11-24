@@ -22,8 +22,8 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
-		if id.Owner() != s.id {
-			return fmt.Errorf("the entity %d is not of the state %d", id, s.id)
+		if id.Owner != s.id {
+			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
 		}
 		if err := entity.Encode(w, e); err != nil {
 			return err
@@ -41,7 +41,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.String(m.text)
 		w.Uvarint(m.tick)
 	}
-	s.entityIDAllocator.Encode(w)
+	s.entityIDCounter.Encode(w)
 	return nil
 }
 
@@ -104,14 +104,14 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(s.id, r); err != nil {
+	if s.entityIDCounter, err = state.DecodeEntityIDCounter(s.id, r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
 	for _, entityID := range s.entities.Keys() {
-		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+		if err = s.entityIDCounter.CheckGiven(entityID); err != nil {
 			return nil, err
 		}
 	}

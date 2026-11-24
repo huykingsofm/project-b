@@ -54,9 +54,14 @@ var examples = []sim.BaseCommand{
 	ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
 	ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 	ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"},
-	ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 9},
-	ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: 1 << 40},
+	ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: anEntityID(9)},
+	ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: anEntityID(1 << 40)},
 	ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
+}
+
+// anEntityID is the ID of the entity that a zonelayer gave the number local.
+func anEntityID(local uint64) state.EntityID {
+	return state.NewEntityID(sim.NewStateID(state.ZoneLayerType, 1), local)
 }
 
 func codecs(t testing.TB) *sim.Codecs {

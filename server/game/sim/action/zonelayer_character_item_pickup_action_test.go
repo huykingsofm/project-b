@@ -170,7 +170,7 @@ func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
 	reg.Take()
 	pickup(1, item, 11, st, reg)
 	pickup(1, state.NewEntityID(1, 1), 11, st, reg) // the entity of the character itself
-	pickup(1, 999, 11, st, reg)
+	pickup(1, state.NewEntityID(1, 999), 11, st, reg)
 	if got := len(reg.Take()); got != 0 {
 		t.Fatalf("%d messages were sent for things that cannot be picked up", got)
 	}

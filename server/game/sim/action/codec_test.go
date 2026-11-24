@@ -41,23 +41,30 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 			CharacterID: 3, TargetID: 4,
 		},
 		ZoneLayerCharacterDamageActionID: &ZoneLayerCharacterDamageAction{
-			SourceID: 1, VictimID: 2, Amount: -5,
+			SourceID: anEntityID(1), VictimID: anEntityID(2), Amount: -5,
 		},
 		ZoneLayerCharacterShieldGrantActionID: &ZoneLayerCharacterShieldGrantAction{
 			CharacterID: 3, Duration: 20, started: true, until: 31,
 		},
 		ZoneLayerCharacterRegenActionID: &ZoneLayerCharacterRegenAction{},
 		ZoneLayerCharacterExitToActionID: &ZoneLayerCharacterExitToAction{
-			CharacterID: 3, ExitEntityID: 9,
+			CharacterID: 3, ExitEntityID: anEntityID(9),
 		},
 		ZoneLayerCharacterItemPickupActionID: &ZoneLayerCharacterItemPickupAction{
-			CharacterID: 3, ItemEntityID: 12,
+			CharacterID: 3, ItemEntityID: anEntityID(12),
 		},
 		ZoneLayerItemEntityAddActionID: &ZoneLayerItemEntityAddAction{
 			ItemID: 8, Count: 5, At: at, Expiry: 40,
 		},
-		ZoneLayerItemEntityRemoveActionID: &ZoneLayerItemEntityRemoveAction{EntityID: 12},
+		ZoneLayerItemEntityRemoveActionID: &ZoneLayerItemEntityRemoveAction{
+			EntityID: anEntityID(12),
+		},
 	}
+}
+
+// anEntityID is the ID of the entity that a zonelayer gave the number local.
+func anEntityID(local uint64) state.EntityID {
+	return state.NewEntityID(sim.NewStateID(state.ZoneLayerType, 1), local)
 }
 
 func codecs(t testing.TB) *sim.Codecs {

@@ -55,9 +55,8 @@ const (
 	DeliveryFailureStopping
 	// DeliveryFailureFull: the inbox of the engine is full.
 	DeliveryFailureFull
-	// DeliveryFailureNotGiven: the ID names no state: it was never given, or it was given to a
-	// state that was removed so long ago that it has left the grave of its IDs. To an action it is
-	// a state that is gone, as DeliveryFailureRetired is, but it says that the ID is not one of a
+	// DeliveryFailureNotGiven: the ID names no state: it was never given. To an action it is a
+	// state that is gone, as DeliveryFailureRetired is, but it says that the ID is not one of a
 	// state, and not that a state was removed. It is the last of the numbers, because a number is
 	// never changed or reused.
 	DeliveryFailureNotGiven

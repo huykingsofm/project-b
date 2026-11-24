@@ -5,7 +5,11 @@
 package state
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
 // The types of the states of the game, which the codecs register. A number is never changed or
@@ -35,22 +39,50 @@ type (
 )
 
 // EntityID names an entity that stands in a state: the body a character has in a zonelayer, an item
-// on its ground, an exit of a zone. It is made of the ID of the state that holds the entity and a
-// number that the state counts for itself, so it is unique among all the entities of the game, and
-// two states never give the same one.
-type EntityID uint64
-
-// NewEntityID makes the ID of the entity that a state gave the number local. The ID of a state is
-// less than 2^32.
-func NewEntityID(owner sim.StateID, local uint32) EntityID {
-	return EntityID(uint64(owner)<<32 | uint64(local))
+// on its ground, an exit of a zone. It is made of the ID of the state that holds the entity, its
+// owner, and a number that the state counts for itself and never gives again, so it is unique among
+// all the entities of the game for good, and an ID that names nothing any more names nothing else.
+// The zero value is no entity: an owner is never 0 and a number is counted from 1.
+type EntityID struct {
+	Owner sim.StateID // the state that holds the entity
+	Local uint64      // the number that the owner gave it
 }
 
-// Owner is the ID of the state that holds the entity.
-func (id EntityID) Owner() sim.StateID { return sim.StateID(uint64(id) >> 32) }
+// NewEntityID makes the ID of the entity that the state owner gave the number local.
+func NewEntityID(owner sim.StateID, local uint64) EntityID {
+	return EntityID{Owner: owner, Local: local}
+}
 
-// Local is the number that the state that holds the entity gave it.
-func (id EntityID) Local() uint32 { return uint32(id) }
+// String is the ID as the owner and the number, for a log.
+func (id EntityID) String() string { return fmt.Sprintf("%d/%d", id.Owner, id.Local) }
+
+// Hash works the ID into a hash: the owner and then the number.
+func (id EntityID) Hash(h *sim.Hasher) {
+	h.U64(uint64(id.Owner))
+	h.U64(id.Local)
+}
+
+// Encode writes the ID: the owner and then the number, each as a uvarint.
+func (id EntityID) Encode(w *binary.Writer) {
+	w.Uvarint(uint64(id.Owner))
+	w.Uvarint(id.Local)
+}
+
+// DecodeEntityID reads what Encode wrote. It reports an ID that has no owner or no number, which no
+// state gives, so a reader finds what is not an ID that was written.
+func DecodeEntityID(r *binary.Reader) (EntityID, error) {
+	id := EntityID{Owner: sim.StateID(r.Uvarint()), Local: r.Uvarint()}
+	if err := r.Err(); err != nil {
+		return EntityID{}, err
+	}
+	if id.Owner == 0 || id.Local == 0 {
+		return EntityID{}, fmt.Errorf("%w: %v", ErrNoEntity, id)
+	}
+	return id, nil
+}
+
+// ErrNoEntity is the error of an entity ID that has no owner or no number.
+var ErrNoEntity = errors.New("state: an entity ID has no owner or no number")
 
 // ItemID names a kind of item: what a dropped item is, and what an inventory holds.
 type ItemID uint32

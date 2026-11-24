@@ -51,25 +51,22 @@ type State struct {
 	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
 	chat       ring.Ring[ChatMessage]
 
-	entityIDAllocator state.EntityIDAllocator
+	entityIDCounter state.EntityIDCounter
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
 // NewState makes the state of a zone with no zonelayer, on a map. The exits of the map stand in the
-// zone as entities. An entity that leaves gives its ID back, and it is given again only after
-// entityGraveSteps ticks.
-func NewState(
-	zoneID, worldID sim.StateID, entityGraveSteps uint64, tiles *tilemap.TileMap,
-) *State {
+// zone as entities.
+func NewState(zoneID, worldID sim.StateID, tiles *tilemap.TileMap) *State {
 	s := &State{
 		id: zoneID, worldID: worldID, tiles: tiles,
-		chat:              ring.New[ChatMessage](chatKeep),
-		entityIDAllocator: state.NewEntityIDAllocator(zoneID, entityGraveSteps),
+		chat:            ring.New[ChatMessage](chatKeep),
+		entityIDCounter: state.NewEntityIDCounter(zoneID),
 	}
 	for _, exit := range tiles.Exits() {
-		id, ok := s.entityIDAllocator.Give()
+		id, ok := s.entityIDCounter.Give()
 		if !ok {
 			break // a map has no more than a few exits: there is always an ID
 		}
@@ -82,14 +79,14 @@ func NewState(
 // changes.
 func (s *State) clone() *State {
 	return &State{
-		id:                s.id,
-		worldID:           s.worldID,
-		tick:              s.tick,
-		tiles:             s.tiles,
-		entities:          s.entities.Clone(),
-		zoneLayers:        s.zoneLayers.Clone(),
-		chat:              s.chat.Clone(),
-		entityIDAllocator: s.entityIDAllocator.Clone(),
+		id:              s.id,
+		worldID:         s.worldID,
+		tick:            s.tick,
+		tiles:           s.tiles,
+		entities:        s.entities.Clone(),
+		zoneLayers:      s.zoneLayers.Clone(),
+		chat:            s.chat.Clone(),
+		entityIDCounter: s.entityIDCounter.Clone(),
 	}
 }
 
@@ -122,11 +119,8 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 	return s.zoneLayers.All()
 }
 
-// NextTick takes the state to the next tick, and the IDs in the grave one step.
-func (s *State) NextTick() {
-	s.tick++
-	s.entityIDAllocator.Step()
-}
+// NextTick takes the state to the next tick.
+func (s *State) NextTick() { s.tick++ }
 
 // WorldID is the ID of the world that the zone is in.
 func (s *State) WorldID() sim.StateID { return s.worldID }

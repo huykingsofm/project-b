@@ -9,7 +9,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
@@ -52,10 +51,10 @@ type State struct {
 	// added: the world is where an engine learns which other engines there are.
 	zones      []sim.StateID
 	zoneLayers []sim.StateID
-	// stateIDAllocators gives the IDs of the states that the world makes while it runs (its
-	// zonelayers), and takes them back.
-	stateIDAllocators sim.StateIDAllocators
-	privateChat       ring.Ring[PrivateChatMessage]
+	// stateIDCounters gives the IDs of the states that the world makes while it runs (its
+	// zonelayers), each once.
+	stateIDCounters sim.StateIDCounters
+	privateChat     ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
 	// (R28).
@@ -65,12 +64,11 @@ type State struct {
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of an empty world. The ID of a state that the world gives and that is
-// removed is given again only after stateGraveSteps ticks.
-func NewState(worldID sim.StateID, stateGraveSteps uint64) *State {
+// NewState makes the state of an empty world.
+func NewState(worldID sim.StateID) *State {
 	return &State{
 		id: worldID, privateChat: ring.New[PrivateChatMessage](chatKeep),
-		stateIDAllocators: sim.NewStateIDAllocators(stateGraveSteps),
+		stateIDCounters: sim.NewStateIDCounters(),
 	}
 }
 
@@ -92,21 +90,18 @@ var _ ReadOnlyWorldState = (*State)(nil)
 // clone returns a copy of the data, with an empty event.
 func (s *State) clone() *State {
 	return &State{
-		id:                s.id,
-		tick:              s.tick,
-		zones:             slices.Clone(s.zones),
-		zoneLayers:        slices.Clone(s.zoneLayers),
-		stateIDAllocators: s.stateIDAllocators.Clone(),
-		privateChat:       s.privateChat.Clone(),
-		inventories:       s.inventories.CloneFunc(Inventory.Clone),
+		id:              s.id,
+		tick:            s.tick,
+		zones:           slices.Clone(s.zones),
+		zoneLayers:      slices.Clone(s.zoneLayers),
+		stateIDCounters: s.stateIDCounters.Clone(),
+		privateChat:     s.privateChat.Clone(),
+		inventories:     s.inventories.CloneFunc(Inventory.Clone),
 	}
 }
 
-// NextTick takes the state to the next tick, and the IDs in the grave one step.
-func (s *State) NextTick() {
-	s.tick++
-	s.stateIDAllocators.Step()
-}
+// NextTick takes the state to the next tick.
+func (s *State) NextTick() { s.tick++ }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }
@@ -142,7 +137,7 @@ func (s *State) AddZone(zoneID sim.StateID) {
 // AddZoneLayer gives a zonelayer an ID and makes the world know it. It reports false, and does
 // nothing, when the world has no ID left to give.
 func (s *State) AddZoneLayer() (sim.StateID, bool) {
-	id, ok := s.stateIDAllocators.Give(state.ZoneLayerType)
+	id, ok := s.stateIDCounters.Give(state.ZoneLayerType)
 	if !ok {
 		return 0, false
 	}
@@ -151,29 +146,33 @@ func (s *State) AddZoneLayer() (sim.StateID, bool) {
 }
 
 // StateStatus says what a state ID is, of a state of the cluster of the world: the world and its
-// zones are live as long as it knows them, a zonelayer is live, in the grave or not given, and any
-// other ID is not given.
-func (s *State) StateStatus(id sim.StateID) ids.Status {
+// zones are live as long as it knows them, a zonelayer is live while it is one of the world's and
+// removed when its number was given and it is not, and any other ID is not given.
+func (s *State) StateStatus(id sim.StateID) sim.StateStatus {
 	switch id.Type() {
 	case state.WorldType:
 		if id == s.id {
-			return ids.Live
+			return sim.StateLive
 		}
 	case state.ZoneType:
 		if slices.Contains(s.zones, id) {
-			return ids.Live
+			return sim.StateLive
 		}
 	case state.ZoneLayerType:
-		return s.stateIDAllocators.Status(id)
+		switch {
+		case slices.Contains(s.zoneLayers, id):
+			return sim.StateLive
+		case id.Local() >= 1 && id.Local() <= s.stateIDCounters.Last(state.ZoneLayerType):
+			return sim.StateRemoved
+		}
 	}
-	return ids.NotGiven
+	return sim.StateNotGiven
 }
 
-// RemoveZoneLayer makes the world forget a zonelayer, and gives its number back: it is given again
-// only after the steps of the grave. It reports false for an ID that is not one of a zonelayer of
-// the world.
+// RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false
+// for an ID that is not one of a zonelayer of the world.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) bool {
-	if zoneLayerID.Type() != state.ZoneLayerType || !s.stateIDAllocators.Release(zoneLayerID) {
+	if zoneLayerID.Type() != state.ZoneLayerType || !slices.Contains(s.zoneLayers, zoneLayerID) {
 		return false
 	}
 	s.zoneLayers = slices.DeleteFunc(

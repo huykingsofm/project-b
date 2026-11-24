@@ -21,8 +21,8 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
-		if id.Owner() != s.id {
-			return fmt.Errorf("the entity %d is not of the state %d", id, s.id)
+		if id.Owner != s.id {
+			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
 		}
 		if err := entity.Encode(w, e); err != nil {
 			return err
@@ -43,9 +43,9 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.bodies.Len()))
 	for characterID, entityID := range s.bodies.AllV1() {
 		w.Uvarint(uint64(characterID))
-		w.Uvarint(uint64(entityID.Local()))
+		w.Uvarint(entityID.Local)
 	}
-	s.entityIDAllocator.Encode(w)
+	s.entityIDCounter.Encode(w)
 	return nil
 }
 
@@ -66,7 +66,7 @@ func count(r *binary.Reader) (uint64, error) {
 func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
 	worldID := r.Uint[sim.StateID]()
-	s := NewState(id, zoneID, worldID, 0) // its allocator is read below, with its own steps
+	s := NewState(id, zoneID, worldID)
 	s.tick = r.Uvarint()
 	n, err := count(r)
 	if err != nil {
@@ -107,17 +107,17 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	}
 	for range n {
 		characterID := r.Uint[state.CharacterID]()
-		entityID := state.NewEntityID(id, r.Uint[uint32]())
+		entityID := state.NewEntityID(id, r.Uvarint())
 		s.bodies.Link(characterID, entityID)
 	}
-	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(id, r); err != nil {
+	if s.entityIDCounter, err = state.DecodeEntityIDCounter(id, r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
 	for _, entityID := range s.entities.Keys() {
-		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+		if err = s.entityIDCounter.CheckGiven(entityID); err != nil {
 			return nil, err
 		}
 	}

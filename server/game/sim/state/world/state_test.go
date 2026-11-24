@@ -8,13 +8,12 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	add := func(char state.CharacterID, item state.ItemID, count uint32) uint32 {
 		return st.AddItemToCharacter(char, item, count, 3, 10)
 	}
@@ -60,7 +59,7 @@ func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *test
 }
 
 func TestOnlyWhatWasAddedIsTold(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 15, 1, 10) // 10 fit, 5 do not
 	events := st.TakeEvents()
 	added, ok := events[0].(event.CharacterItemAdded)
@@ -75,7 +74,7 @@ func TestOnlyWhatWasAddedIsTold(t *testing.T) {
 
 // R29: nothing in a state is shared with its clone.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	before := st.Hash()
 	copied := st.Clone().(*world.State)
@@ -91,7 +90,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 }
 
 func TestAClonedWorldStateSharesNoMemoryWithTheState(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "hi", 0))
 	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
@@ -108,7 +107,7 @@ func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
 }
 
 func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	first, second := must.Ok(st.AddZoneLayer()), must.Ok(st.AddZoneLayer())
 	if first != sim.NewStateID(state.ZoneLayerType, 1) ||
 		second != sim.NewStateID(state.ZoneLayerType, 2) {
@@ -119,8 +118,8 @@ func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 	}
 }
 
-func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testing.T) {
-	st := world.NewState(1, 2)
+func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing.T) {
+	st := world.NewState(1)
 	first := must.Ok(st.AddZoneLayer())
 	if !st.RemoveZoneLayer(first) {
 		t.Fatal("a zonelayer of the world was not removed")
@@ -137,7 +136,7 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testi
 }
 
 func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
-	st := world.NewState(1, 2)
+	st := world.NewState(1)
 	must.Ok(st.AddZoneLayer())
 	for name, id := range map[string]sim.StateID{
 		"a zonelayer it never gave": sim.NewStateID(state.ZoneLayerType, 9),
@@ -150,7 +149,7 @@ func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
 }
 
 func TestTheWorldSaysWhatAStateIDIsOfTheStatesOfItsCluster(t *testing.T) {
-	st := world.NewState(sim.NewStateID(state.WorldType, 1), 5)
+	st := world.NewState(sim.NewStateID(state.WorldType, 1))
 	zone := sim.NewStateID(state.ZoneType, 1)
 	st.AddZone(zone)
 	layer := must.Ok(st.AddZoneLayer())
@@ -158,25 +157,25 @@ func TestTheWorldSaysWhatAStateIDIsOfTheStatesOfItsCluster(t *testing.T) {
 	st.RemoveZoneLayer(gone)
 	for name, tc := range map[string]struct {
 		id   sim.StateID
-		want ids.Status
+		want sim.StateStatus
 	}{
-		"the world":                 {sim.NewStateID(state.WorldType, 1), ids.Live},
-		"another world":             {sim.NewStateID(state.WorldType, 2), ids.NotGiven},
-		"a zone that it knows":      {zone, ids.Live},
-		"a zone that it does not":   {sim.NewStateID(state.ZoneType, 2), ids.NotGiven},
-		"a zonelayer":               {layer, ids.Live},
-		"a zonelayer that was gone": {gone, ids.InGrave},
-		"a zonelayer never given":   {sim.NewStateID(state.ZoneLayerType, 9), ids.NotGiven},
-		"a type that is no state's": {sim.NewStateID(200, 1), ids.NotGiven},
+		"the world":                 {sim.NewStateID(state.WorldType, 1), sim.StateLive},
+		"another world":             {sim.NewStateID(state.WorldType, 2), sim.StateNotGiven},
+		"a zone that it knows":      {zone, sim.StateLive},
+		"a zone that it does not":   {sim.NewStateID(state.ZoneType, 2), sim.StateNotGiven},
+		"a zonelayer":               {layer, sim.StateLive},
+		"a zonelayer that was gone": {gone, sim.StateRemoved},
+		"a zonelayer never given":   {sim.NewStateID(state.ZoneLayerType, 9), sim.StateNotGiven},
+		"a type that is no state's": {sim.NewStateID(200, 1), sim.StateNotGiven},
 	} {
 		if got := st.StateStatus(tc.id); got != tc.want {
 			t.Errorf("%s: %v, want %v", name, got, tc.want)
 		}
 	}
 	for range 5 {
-		st.NextTick() // the grave takes a step at each tick
+		st.NextTick()
 	}
-	if got := st.StateStatus(gone); got != ids.NotGiven {
-		t.Errorf("a zonelayer that left the grave: %v, want not given", got)
+	if got := st.StateStatus(gone); got != sim.StateRemoved {
+		t.Errorf("a zonelayer that was removed, some ticks later: %v, want removed for good", got)
 	}
 }

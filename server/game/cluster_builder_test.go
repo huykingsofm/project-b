@@ -11,9 +11,9 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
 )
 
-func worldID(n uint32) sim.StateID { return sim.NewStateID(state.WorldType, n) }
-func zoneID(n uint32) sim.StateID  { return sim.NewStateID(state.ZoneType, n) }
-func layerID(n uint32) sim.StateID { return sim.NewStateID(state.ZoneLayerType, n) }
+func worldID(n uint64) sim.StateID { return sim.NewStateID(state.WorldType, n) }
+func zoneID(n uint64) sim.StateID  { return sim.NewStateID(state.ZoneType, n) }
+func layerID(n uint64) sim.StateID { return sim.NewStateID(state.ZoneLayerType, n) }
 
 func smallMap(t testing.TB) *tilemap.TileMap {
 	return tilemaptest.New(t, 5, 5, tilemap.Tile{X: 1, Y: 1}, nil, nil)

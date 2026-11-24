@@ -58,7 +58,7 @@ func BoundingBoxAround(pos Vec, radius int32) Rect {
 // HashEntity adds what every entity has to a hash: its ID, its kind and its bounding box. The
 // entity adds the fields of its own kind after it.
 func HashEntity(h *sim.Hasher, e Entity) {
-	h.U64(uint64(e.ID()))
+	e.ID().Hash(h)
 	h.U64(uint64(e.KindID()))
 	box := e.BoundingBox()
 	for _, n := range [...]int32{box.Min.X, box.Min.Y, box.Max.X, box.Max.Y} {

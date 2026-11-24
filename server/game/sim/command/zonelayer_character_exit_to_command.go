@@ -34,7 +34,7 @@ func (c ZoneLayerCharacterExitToCommand) Translate() []sim.Action[*zonelayerstat
 // Encode writes the fields of the command, not its ID: sim.EncodeCommand writes the ID first.
 func (c ZoneLayerCharacterExitToCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
-	w.Uvarint(uint64(c.ExitEntityID))
+	c.ExitEntityID.Encode(w)
 	return nil
 }
 
@@ -42,8 +42,12 @@ func (c ZoneLayerCharacterExitToCommand) Encode(w *binary.Writer) error {
 func decodeZoneLayerCharacterExitToCommand(
 	r *binary.Reader, version codec.Version,
 ) (ZoneLayerCharacterExitToCommand, error) {
-	c := ZoneLayerCharacterExitToCommand{
-		CharacterID: r.Uint[state.CharacterID](), ExitEntityID: r.Uint[state.EntityID](),
+	characterID := r.Uint[state.CharacterID]()
+	exitEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterExitToCommand{}, err
 	}
-	return c, r.Err()
+	return ZoneLayerCharacterExitToCommand{
+		CharacterID: characterID, ExitEntityID: exitEntityID,
+	}, r.Err()
 }

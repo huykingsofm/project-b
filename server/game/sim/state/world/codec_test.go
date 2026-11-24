@@ -13,7 +13,7 @@ import (
 )
 
 func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
-	st := world.NewState(1, 1000)
+	st := world.NewState(1)
 	st.AddItemToCharacter(3, 7, 120, 4, 99)
 	st.AddItemToCharacter(4, 8, 5, 4, 99)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "psst", 5))
@@ -50,6 +50,44 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	for n := range w.B { // every proper prefix
 		if _, err := world.DecodeState(binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
+		}
+	}
+}
+
+// worldBytes writes a world that knows the zonelayers (no zone) and whose counter has given the
+// number last for the type of the zonelayers.
+func worldBytes(zoneLayers []sim.StateID, last uint64) []byte {
+	var w binary.Writer
+	w.Uvarint(1) // the ID of the world
+	w.Uvarint(0) // its tick
+	w.Uvarint(0) // no zone
+	w.Uvarint(uint64(len(zoneLayers)))
+	for _, id := range zoneLayers {
+		w.Uvarint(uint64(id))
+	}
+	w.Uvarint(1) // one type has a counter
+	w.Uint8(uint8(state.ZoneLayerType))
+	w.Uvarint(last)
+	w.Uvarint(0) // no private message
+	w.Uvarint(0) // no inventory
+	return w.B
+}
+
+func TestAWorldWhoseZoneLayersWereNotGivenByItsCounterIsAnError(t *testing.T) {
+	layer := func(n uint64) sim.StateID { return sim.NewStateID(state.ZoneLayerType, n) }
+	aZone := sim.NewStateID(state.ZoneType, 1)
+	given := worldBytes([]sim.StateID{layer(1), layer(3)}, 3)
+	if _, err := world.DecodeState(binary.NewReader(given), 1); err != nil {
+		t.Fatalf("zonelayers that were given: %v", err)
+	}
+	for name, b := range map[string][]byte{
+		"a number that was never given": worldBytes([]sim.StateID{layer(4)}, 3),
+		"the number 0":                  worldBytes([]sim.StateID{layer(0)}, 3),
+		"a zonelayer twice":             worldBytes([]sim.StateID{layer(2), layer(2)}, 3),
+		"a state of another type":       worldBytes([]sim.StateID{aZone}, 3),
+	} {
+		if _, err := world.DecodeState(binary.NewReader(b), 1); err == nil {
+			t.Errorf("a world with %s was read", name)
 		}
 	}
 }

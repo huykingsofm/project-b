@@ -203,7 +203,7 @@ func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, err
 
 // Retired says that the engine was removed for good: it is the only record of the last frame of
 // its log, which comes after the last tick it ran. A log that ends with it is of an engine that
-// does not go on, and a state ID that is given again goes on counting ticks after it.
+// does not go on. Its state ID is never given again.
 type Retired struct{}
 
 func (Retired) Kind() Kind { return KindRetired }

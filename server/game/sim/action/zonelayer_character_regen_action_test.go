@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t *testing.T) {
-	st := zonelayerstate.NewState(1, 1, 9, 1000)
+	st := zonelayerstate.NewState(1, 1, 9)
 	c, err := zonelayerstate.NewCharacter(1, "An", 100, 250, 256)
 	if err != nil {
 		t.Fatal(err)

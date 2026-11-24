@@ -274,7 +274,7 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 		l.ScheduleAt(
 			uint64(500+i),
 			&action.ZoneLayerItemEntityRemoveAction{
-				EntityID: state.NewEntityID(theLayer, uint32(i)),
+				EntityID: state.NewEntityID(theLayer, uint64(i)),
 			},
 		)
 	}

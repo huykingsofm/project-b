@@ -31,13 +31,16 @@ func (a *ZoneLayerItemEntityRemoveAction) Apply(
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a *ZoneLayerItemEntityRemoveAction) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(a.EntityID))
+	a.EntityID.Encode(w)
 }
 
 // decodeZoneLayerItemEntityRemoveAction reads what Encode wrote.
 func decodeZoneLayerItemEntityRemoveAction(
 	r *binary.Reader, version codec.Version,
 ) (*ZoneLayerItemEntityRemoveAction, error) {
-	a := &ZoneLayerItemEntityRemoveAction{EntityID: r.Uint[state.EntityID]()}
-	return a, r.Err()
+	entityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return nil, err
+	}
+	return &ZoneLayerItemEntityRemoveAction{EntityID: entityID}, nil
 }

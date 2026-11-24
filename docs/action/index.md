@@ -83,15 +83,15 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 
 | `sim.DeliveryFailure` | Number | Meaning |
 |---|---|---|
-| `DeliveryFailureRetired` | 1 | the state was removed (its ID is in the grave of its IDs) |
+| `DeliveryFailureRetired` | 1 | the state was removed (its ID is given to no other state: an ID is never given again) |
 | `DeliveryFailureNotStarted` | 2 | the state exists, but its engine does not run yet; the message can be sent again |
 | `DeliveryFailureMoved` | 3 | what the message is about has gone to another engine |
 | `DeliveryFailureStopping` | 4 | the engine, or the cluster, is stopping |
 | `DeliveryFailureFull` | 5 | the inbox of the engine is full |
-| `DeliveryFailureNotGiven` | 6 | the ID names no state: never given, or given to a state that was removed so long ago that its ID left the grave |
+| `DeliveryFailureNotGiven` | 6 | the ID names no state: it was never given |
 
 - `DeliveryFailure.Gone()` is true for `DeliveryFailureRetired` and `DeliveryFailureNotGiven`: the state is not coming back, and an action treats both the same.
-- A router with a `StateDirectory` (the game gives it the world: `StateStatus(id)` says live, in the grave or not given, as the world was at the end of its last tick) decides the reason of an ID with no engine by what the directory says: live is `DeliveryFailureNotStarted`, in the grave is `DeliveryFailureRetired`, any other `DeliveryFailureNotGiven`. A router with none says `DeliveryFailureRetired` for an engine that was retired and `DeliveryFailureNotStarted` for any other ID.
+- A router with a `StateDirectory` (the game gives it the world: `StateStatus(id)` says live, removed or not given, as the world was at the end of its last tick) decides the reason of an ID with no engine by what the directory says: live is `DeliveryFailureNotStarted`, removed is `DeliveryFailureRetired`, any other `DeliveryFailureNotGiven`. A router with none says `DeliveryFailureRetired` for an engine that was retired and `DeliveryFailureNotStarted` for any other ID.
 - A message with no `OnFail` is dropped, and logged.
 
 ### What ends an action that repeats

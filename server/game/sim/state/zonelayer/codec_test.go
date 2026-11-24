@@ -12,7 +12,7 @@ import (
 
 // aStateWithEverything has characters with cooldowns, items, a body that moved and what was said.
 func aStateWithEverything(t testing.TB) *zonelayer.State {
-	st := zonelayer.NewState(3, 2, 1, 1000)
+	st := zonelayer.NewState(3, 2, 1)
 	for _, id := range []state.CharacterID{1, 2} {
 		c, err := zonelayer.NewCharacter(id, "Binh", 100, 250, 256)
 		if err != nil {
@@ -65,5 +65,22 @@ func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.
 		if _, err := zonelayer.DecodeState(binary.NewReader(w.B[:n]), 1); err == nil {
 			t.Fatalf("%d of %d bytes were read", n, len(w.B))
 		}
+	}
+}
+
+func TestAZoneLayerWhoseEntitiesAreAboveItsCounterIsAnError(t *testing.T) {
+	st := aStateWithEverything(t)
+	var w binary.Writer
+	if err := st.Encode(&w); err != nil {
+		t.Fatal(err)
+	}
+	// the counter is the last thing written, and fits in one byte here: with it at 0 no entity was
+	// given
+	if w.B[len(w.B)-1] == 0 || w.B[len(w.B)-1] >= 0x80 {
+		t.Fatalf("the last byte is %d, not a counter of one byte", w.B[len(w.B)-1])
+	}
+	w.B[len(w.B)-1] = 0
+	if _, err := zonelayer.DecodeState(binary.NewReader(w.B), 1); err == nil {
+		t.Fatal("entities that the counter did not give were read")
 	}
 }

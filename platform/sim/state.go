@@ -9,24 +9,28 @@ import (
 )
 
 // StateID names a state, whatever its type, and so names the engine that owns it and is the address
-// of a message. Its 8 high bits are the StateType and its 24 low bits a number that is local to the
+// of a message. Its 8 high bits are the StateType and its 56 low bits a number that is local to the
 // type, so the type of a state is known from its ID and two states of different types never have
-// the same ID. A thing that lives inside a state, such as an entity, takes an ID of its own that
-// has the ID of its state in it, so that it is unique as well and its type is known too (see
-// EntityID in the game).
-type StateID uint32
+// the same ID. A StateID is never given again: the number of a type is counted up and not taken
+// back. A thing that lives inside a state, such as an entity, takes an ID of its own that has the
+// ID of its state in it, so that it is unique as well (see EntityID in the game).
+type StateID uint64
+
+// maxLocalStateID is the greatest number that is local to a type: 2^56 - 1.
+const maxLocalStateID = 1<<56 - 1
 
 // NewStateID makes the ID of the state of a type with a number that is local to the type, which
-// must be less than 2^24.
-func NewStateID(t StateType, local uint32) StateID {
-	return StateID(uint32(t)<<24 | local&(1<<24-1))
+// must be at least 1 and at most 2^56 - 1: a number outside of that is cut, so a caller that counts
+// checks it first (see StateIDCounters).
+func NewStateID(t StateType, local uint64) StateID {
+	return StateID(uint64(t)<<56 | local&maxLocalStateID)
 }
 
 // Type is the type of the state that has the ID.
-func (id StateID) Type() StateType { return StateType(id >> 24) }
+func (id StateID) Type() StateType { return StateType(id >> 56) }
 
 // Local is the number of the state among the states of its type.
-func (id StateID) Local() uint32 { return uint32(id) & (1<<24 - 1) }
+func (id StateID) Local() uint64 { return uint64(id) & maxLocalStateID }
 
 // StateType names a kind of state, by a number that the game registers with the codecs: see
 // Codecs.RegisterState. A number is never changed or reused, because checkpoints and the replay log
@@ -93,8 +97,8 @@ type State interface {
 	// Tick is the tick that the state is at.
 	Tick() uint64
 	// NextTick takes the state to the next tick, one more than the one it is at, at the start of
-	// every tick: the only way its tick changes, so what counts in ticks in it (the grave of its
-	// IDs) counts once for each tick. The engine checks that Tick says one more after it.
+	// every tick: the only way its tick changes, so what counts in ticks in it counts once for each
+	// tick. The engine checks that Tick says one more after it.
 	NextTick()
 	// Clone returns a copy of the data that shares nothing with the state, and has no event. The
 	// engine publishes it for the other engines to read and never changes it again.

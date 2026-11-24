@@ -24,7 +24,7 @@ func (s *State) Encode(w *binary.Writer) error {
 	for _, id := range s.zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	s.stateIDAllocators.Encode(w)
+	s.stateIDCounters.Encode(w)
 	rows := s.privateChat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
@@ -77,19 +77,25 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	if s.stateIDAllocators, err = sim.DecodeStateIDAllocators(r); err != nil {
+	if s.stateIDCounters, err = sim.DecodeStateIDCounters(r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
+	seen := make(map[sim.StateID]bool, len(s.zoneLayers))
 	for _, zoneLayerID := range s.zoneLayers {
 		if zoneLayerID.Type() != state.ZoneLayerType {
 			return nil, fmt.Errorf("the zonelayer %d is a state of another type", zoneLayerID)
 		}
-		if err = s.stateIDAllocators.MarkLive(zoneLayerID); err != nil {
-			return nil, err
+		given := s.stateIDCounters.Last(state.ZoneLayerType)
+		if zoneLayerID.Local() == 0 || zoneLayerID.Local() > given {
+			return nil, fmt.Errorf("the zonelayer %d was never given", zoneLayerID)
 		}
+		if seen[zoneLayerID] {
+			return nil, fmt.Errorf("the zonelayer %d is there twice", zoneLayerID)
+		}
+		seen[zoneLayerID] = true
 	}
 	if n, err = count(r); err != nil {
 		return nil, err
