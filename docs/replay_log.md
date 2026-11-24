@@ -23,7 +23,7 @@
 
 - The engine writes the hash as the last record of the tick, in `EndTick`, every `every` ticks (the period and the offset of each engine). A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
 - The tick of a frame is the one after the last of the log: a log has no gap, and a frame that does not follow is refused and the log marked as failed. `Log.Last(engine)` is the tick of the last frame, written or not: the state of a state ID that is given again (see [ids](ids.md)) is made at it, and an engine begins at the tick of its state, so the ID goes on after the last tick of its last life, a tick of an ID is never the tick of two lives, and what depends on a tick of it means one engine.
-- `Engine.Remove` (`Cluster.Remove`) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `Retired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
+- `Engine.Remove` (`Cluster.Remove`) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
 
 ## Which tick is on the disk
 
@@ -83,7 +83,7 @@ The tick is once in the frame, and a record does not carry it. A tick with no re
 | `KindConfig` | 3 | the version of the config |
 | `KindHash` | 4 | the hash, 8 bytes |
 | `KindStableRead` | 5 | state ID of the engine read, the tick of the copy |
-| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.Reason`) |
+| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
 | `KindRetired` | 7 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.

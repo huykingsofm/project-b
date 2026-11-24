@@ -71,27 +71,27 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 
 | Package | Holds |
 |---|---|
-| `platform/sim` | `Header`, `Reason`, the interfaces `Message`, `OnFail` and `Bouncer`, the message that carries actions (`ActionMessage[S]`, made with `NewActionMessage` or `Registry.Send`) and the codecs |
+| `platform/sim` | `Header`, `DeliveryFailure`, the interfaces `Message`, `OnFail` and `Bouncer`, the message that carries actions (`ActionMessage[S]`, made with `NewActionMessage` or `Registry.Send`) and the codecs |
 | `platform/sim/onfail` | the kinds above, each in a file of its own (`retry.go`, `redirect.go`, `compensate.go`, `notify.go`, `escalate.go`, `drop.go`), the register of their IDs, and `onfail.Register(codecs)` |
 | `server/game/sim/action` | the actions, and `action.Register(codecs)` |
 
-- `sim.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, Reason)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `sim.Bouncer`.
+- `sim.OnFail` is an interface: `ID()`, `Handle(Bouncer, Message, DeliveryFailure)`, `Encode(w)`. A kind runs itself on the engine that sent the message through `sim.Bouncer`.
 - `onfail.Retry`, `onfail.Redirect` and `onfail.Escalate` drop the message when it was tried `bounce.max_attempts` times, and every kind that sends again drops it while the engine stops.
-- `onfail.Retry` also drops the message, at once, when the state it is for is gone (`Retired` or `NotGiven`): sending it again fails the same way, so its `OnFail` is asked once and not after every attempt. `Redirect` and `Escalate` send to another engine, which a state that is gone is the very case for, and `Compensate` and `Notify` send something else or tell an actor, so they act as always.
+- `onfail.Retry` also drops the message, at once, when the state it is for is gone (`DeliveryFailureRetired` or `DeliveryFailureNotGiven`): sending it again fails the same way, so its `OnFail` is asked once and not after every attempt. `Redirect` and `Escalate` send to another engine, which a state that is gone is the very case for, and `Compensate` and `Notify` send something else or tell an actor, so they act as always.
 
 ### Why a message could not be delivered
 
-| `sim.Reason` | Number | Meaning |
+| `sim.DeliveryFailure` | Number | Meaning |
 |---|---|---|
-| `Retired` | 1 | the state was removed (its ID is in the grave of its IDs) |
-| `NotStarted` | 2 | the state exists, but its engine does not run yet; the message can be sent again |
-| `Moved` | 3 | what the message is about has gone to another engine |
-| `Stopping` | 4 | the engine, or the cluster, is stopping |
-| `Full` | 5 | the inbox of the engine is full |
-| `NotGiven` | 6 | the ID names no state: never given, or given to a state that was removed so long ago that its ID left the grave |
+| `DeliveryFailureRetired` | 1 | the state was removed (its ID is in the grave of its IDs) |
+| `DeliveryFailureNotStarted` | 2 | the state exists, but its engine does not run yet; the message can be sent again |
+| `DeliveryFailureMoved` | 3 | what the message is about has gone to another engine |
+| `DeliveryFailureStopping` | 4 | the engine, or the cluster, is stopping |
+| `DeliveryFailureFull` | 5 | the inbox of the engine is full |
+| `DeliveryFailureNotGiven` | 6 | the ID names no state: never given, or given to a state that was removed so long ago that its ID left the grave |
 
-- `Reason.Gone()` is true for `Retired` and `NotGiven`: the state is not coming back, and an action treats both the same.
-- A router with a `StateDirectory` (the game gives it the world: `StateStatus(id)` says live, in the grave or not given, as the world was at the end of its last tick) decides the reason of an ID with no engine by what the directory says: live is `NotStarted`, in the grave is `Retired`, any other `NotGiven`. A router with none says `Retired` for an engine that was retired and `NotStarted` for any other ID.
+- `DeliveryFailure.Gone()` is true for `DeliveryFailureRetired` and `DeliveryFailureNotGiven`: the state is not coming back, and an action treats both the same.
+- A router with a `StateDirectory` (the game gives it the world: `StateStatus(id)` says live, in the grave or not given, as the world was at the end of its last tick) decides the reason of an ID with no engine by what the directory says: live is `DeliveryFailureNotStarted`, in the grave is `DeliveryFailureRetired`, any other `DeliveryFailureNotGiven`. A router with none says `DeliveryFailureRetired` for an engine that was retired and `DeliveryFailureNotStarted` for any other ID.
 - A message with no `OnFail` is dropped, and logged.
 
 ### What ends an action that repeats

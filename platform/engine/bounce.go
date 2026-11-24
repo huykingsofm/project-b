@@ -31,7 +31,7 @@ func (b bouncerAt) MaxAttempts() int { return sim.MaxAttempts.Get(b.cfg) }
 
 // handle runs what the message says to do about the failure. A message with no OnFail is dropped
 // and logged.
-func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.Reason) {
+func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.DeliveryFailure) {
 	onFail := m.OnFail()
 	if onFail == nil {
 		logging.Error(

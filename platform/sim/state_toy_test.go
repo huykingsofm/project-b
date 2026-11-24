@@ -190,9 +190,9 @@ const (
 	testCompensateID OnFailID = 60002
 )
 
-func (testDrop) ID() OnFailID                          { return testDropID }
-func (testDrop) Handle(b Bouncer, _ Message, _ Reason) { b.Drop() }
-func (testDrop) Encode(*binary.Writer) error           { return nil }
+func (testDrop) ID() OnFailID                                   { return testDropID }
+func (testDrop) Handle(b Bouncer, _ Message, _ DeliveryFailure) { b.Drop() }
+func (testDrop) Encode(*binary.Writer) error                    { return nil }
 
 func decodeTestDrop(
 	*binary.Reader, codec.Version, MessageDecoder,
@@ -202,9 +202,9 @@ func decodeTestDrop(
 
 type testCompensate struct{ With Message }
 
-func (testCompensate) ID() OnFailID                            { return testCompensateID }
-func (f testCompensate) Handle(b Bouncer, _ Message, _ Reason) { b.Resend(f.With) }
-func (f testCompensate) Nested() Message                       { return f.With }
+func (testCompensate) ID() OnFailID                                     { return testCompensateID }
+func (f testCompensate) Handle(b Bouncer, _ Message, _ DeliveryFailure) { b.Resend(f.With) }
+func (f testCompensate) Nested() Message                                { return f.With }
 func (f testCompensate) Encode(w *binary.Writer) error {
 	if f.With == nil {
 		return ErrNoCodec

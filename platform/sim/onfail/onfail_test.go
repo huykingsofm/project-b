@@ -109,10 +109,12 @@ func (aMessage) Encode(*binary.Writer) error          { return nil }
 func TestRetrySendsAgainForALostChanceButNeverToAStateThatIsGone(t *testing.T) {
 	m := aMessage{}
 	for _, tc := range []struct {
-		reason  sim.Reason
+		reason  sim.DeliveryFailure
 		resends int
 	}{
-		{sim.Full, 1}, {sim.NotStarted, 1}, {sim.Moved, 1}, {sim.Retired, 0}, {sim.NotGiven, 0},
+		{sim.DeliveryFailureFull, 1}, {sim.DeliveryFailureNotStarted, 1},
+		{sim.DeliveryFailureMoved, 1}, {sim.DeliveryFailureRetired, 0},
+		{sim.DeliveryFailureNotGiven, 0},
 	} {
 		var b aBouncer
 		Retry{}.Handle(&b, m, tc.reason)
@@ -127,7 +129,7 @@ func TestRedirectAndEscalateStillGoToAnotherEngineWhenTheStateIsGone(t *testing.
 	m := aMessage{}
 	for _, f := range []sim.OnFail{Redirect{To: 6}, Escalate{To: 2}} {
 		var b aBouncer
-		f.Handle(&b, m, sim.Retired)
+		f.Handle(&b, m, sim.DeliveryFailureRetired)
 		if b.resent != 1 {
 			t.Errorf("%T did not give the message to the other engine", f)
 		}

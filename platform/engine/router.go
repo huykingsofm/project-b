@@ -18,8 +18,8 @@ type MessageRouter interface {
 	Register(o OutgoingChannel)
 	Retire(a sim.StateID)
 	Stop()
-	Deliver(l sim.Message) (sim.Reason, bool)
-	Return(l sim.Message, r sim.Reason)
+	Deliver(l sim.Message) (sim.DeliveryFailure, bool)
+	Return(l sim.Message, r sim.DeliveryFailure)
 }
 
 var _ MessageRouter = (*Router)(nil)
@@ -40,9 +40,10 @@ type Router struct {
 	data     atomic.Pointer[routerData]
 	stopping atomic.Bool
 	dropped  atomic.Uint64
-	// directory says what an ID with no engine is: NotStarted for a state that exists, Retired for
-	// one in the grave, and NotGiven for any other ID. A router with none says Retired for an
-	// engine that was retired and NotStarted for any other ID.
+	// directory says what an ID with no engine is: DeliveryFailureNotStarted for a state that
+	// exists, DeliveryFailureRetired for one in the grave, and DeliveryFailureNotGiven for any
+	// other ID. A router with none says DeliveryFailureRetired for an engine that was retired and
+	// DeliveryFailureNotStarted for any other ID.
 	directory atomic.Pointer[Directory]
 }
 
@@ -84,7 +85,8 @@ func (rt *Router) Register(o OutgoingChannel) {
 	})
 }
 
-// Retire makes an engine unreachable for good: a message to it bounces as Retired.
+// Retire makes an engine unreachable for good: a message to it bounces as
+// DeliveryFailureRetired.
 func (rt *Router) Retire(a sim.StateID) {
 	remember := rt.directory.Load() == nil
 	rt.update(func(n *routerData) {
@@ -99,9 +101,9 @@ func (rt *Router) Retire(a sim.StateID) {
 func (rt *Router) Stop() { rt.stopping.Store(true) }
 
 // Deliver puts a message in the channel of its ID. When it cannot, it says why.
-func (rt *Router) Deliver(l sim.Message) (sim.Reason, bool) {
+func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 	if rt.stopping.Load() {
-		return sim.Stopping, false
+		return sim.DeliveryFailureStopping, false
 	}
 	data := rt.data.Load()
 	ch, ok := data.chans[l.Dest()]
@@ -109,31 +111,31 @@ func (rt *Router) Deliver(l sim.Message) (sim.Reason, bool) {
 		return rt.whyNoEngine(data, l.Dest()), false
 	}
 	if !ch.Send(l) {
-		return sim.Full, false
+		return sim.DeliveryFailureFull, false
 	}
 	return 0, true
 }
 
 // whyNoEngine says why a message to an ID with no engine cannot be delivered.
-func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.Reason {
+func (rt *Router) whyNoEngine(data *routerData, id sim.StateID) sim.DeliveryFailure {
 	if d := rt.directory.Load(); d != nil {
 		switch (*d).StateStatus(id) {
 		case ids.Live:
-			return sim.NotStarted
+			return sim.DeliveryFailureNotStarted
 		case ids.InGrave:
-			return sim.Retired
+			return sim.DeliveryFailureRetired
 		}
-		return sim.NotGiven
+		return sim.DeliveryFailureNotGiven
 	}
 	if data.retired[id] {
-		return sim.Retired
+		return sim.DeliveryFailureRetired
 	}
-	return sim.NotStarted
+	return sim.DeliveryFailureNotStarted
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that
 // is gone or full loses it, and it is counted.
-func (rt *Router) Return(l sim.Message, r sim.Reason) {
+func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 	from := l.Head().From
 	ch, ok := rt.data.Load().chans[from]
 	if !ok {

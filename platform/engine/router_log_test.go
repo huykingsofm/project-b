@@ -30,7 +30,7 @@ func TestReturnLogsAWarningWhenTheSenderIsGone(t *testing.T) {
 	}
 	rt := NewRouter()
 	m := sim.NewActionMessage[*toyState](1, onfail.Drop{}).Stamp(sim.Header{From: 9})
-	rt.Return(m, sim.Retired)
+	rt.Return(m, sim.DeliveryFailureRetired)
 	closeLogs()
 
 	if rt.Dropped() != 1 {

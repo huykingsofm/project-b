@@ -45,7 +45,7 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 		t.Fatal("the engine that failed recorded something of the tick")
 	}
 	m := sim.NewActionMessage[*toyState](2, onfail.Drop{})
-	if reason, ok := c.Env.Router.Deliver(m); ok || reason != sim.Stopping {
+	if reason, ok := c.Env.Router.Deliver(m); ok || reason != sim.DeliveryFailureStopping {
 		t.Fatalf("Deliver after the failure = %v, %v: want the cluster stopping", reason, ok)
 	}
 }

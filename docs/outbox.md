@@ -19,7 +19,7 @@
 |---|---|
 | a message went and is not acked after `outbox.resend_first_ticks` (20) ticks of its sender | sends it again, the same message with the same number and tick; then after the wait grows by `outbox.resend_step_ticks` (20), up to `outbox.resend_most_ticks` (200) |
 | the router says the receiver is full or not started | the message waits again |
-| the router says the receiver is gone (`Retired`, `NotGiven`) | the message is let go of and comes back to the engine as a message that could not be delivered (`Router.Return`), so its `OnFail` runs once, at the tick that the replay log records |
+| the router says the receiver is gone (`DeliveryFailureRetired`, `DeliveryFailureNotGiven`) | the message is let go of and comes back to the engine as a message that could not be delivered (`Router.Return`), so its `OnFail` runs once, at the tick that the replay log records |
 
 - A receiver drops a message whose number is not more than the last it took from the sender, and records nothing of it. So a second copy of a message costs a slot in the channel, nothing else, and a message that is sent again after a restore is taken once.
 - A message that its `OnFail` sends again gets a new number: it was never taken, and the same number would be dropped as a copy once a later message of the sender was taken.

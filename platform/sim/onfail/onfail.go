@@ -24,7 +24,7 @@ const (
 
 // resendable reports whether a message that is to be sent again may be: not while the engine stops,
 // and not once it has been tried the most that it may. When it may not, it is dropped.
-func resendable(b sim.Bouncer, m sim.Message, r sim.Reason) bool {
+func resendable(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) bool {
 	if b.Stopping() {
 		b.Drop()
 		return false

@@ -54,7 +54,7 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 	log.Append(engine, tick, ConfigRead{Version: 5})
 	log.Append(engine, tick, Inbound{Message: inbound})
 	log.Append(engine, tick, Returned{
-		Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.Full,
+		Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.DeliveryFailureFull,
 	})
 	log.Append(engine, tick, Command{Command: chat})
 	log.Append(engine, tick, Command{Command: enter})
@@ -69,7 +69,7 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 			Engine: engine,
 			Tick:   tick,
 			Body: Returned{
-				Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.Full,
+				Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.DeliveryFailureFull,
 			},
 		},
 		{Engine: engine, Tick: tick, Body: Command{Command: chat}},

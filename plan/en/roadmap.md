@@ -21,7 +21,7 @@ What is left of the recovery of a cluster: the logs can be cut to the recovery l
 | Checkpoints above the line | the checkpoints of an engine whose tick is above its limit are dropped, since they hold what was cut |
 | Replay from a checkpoint | each engine is made from its latest checkpoint at or below its limit and run on its own log to its limit, instead of from tick 0 |
 | Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the outboxes are those of the checkpoints, and the acks are made again |
-| An outbox that is full | a limit for each destination, above which a new message bounces as `Full` and runs its `OnFail` |
+| An outbox that is full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
 | Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
 | To measure | the size of the outbox in a checkpoint; the time of a recovery, from tick 0 and from a checkpoint |
 

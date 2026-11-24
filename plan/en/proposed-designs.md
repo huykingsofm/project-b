@@ -63,7 +63,7 @@ What crosses from one engine to another (the only thing a replay needs besides t
 |---|---|---|
 | A message (sender, `Seq`) taken by an engine at its tick | header and action IDs, at the receiver | the actions too (codecs by ID) |
 | A copy of another engine read in a tick (`StableRead`) | the tick of the copy | nothing more |
-| A message that came back (`Full`, `Retired`) and was settled at a tick | nothing | a record: the tick, the header of the message and the reason |
+| A message that came back (`DeliveryFailureFull`, `DeliveryFailureRetired`) and was settled at a tick | nothing | a record: the tick, the header of the message and the reason |
 | An engine added or removed while running | not built yet | a record of the cluster: which engine, when it starts, and the engine and tick that caused it |
 | The version of the configuration | at the first read of each version | the content of each version, in the control stream |
 
@@ -102,7 +102,7 @@ Messages in flight when the server stops (the reason a transfer of an item betwe
 - **Not duplicated:** the logs of two engines reach the disk at different times, so a receiver may have recorded a message whose cause the sender did not. The recovery line cuts the log of the receiver at the first record that the sender, replayed to the end of its durable log, does not produce; the receiver loses what follows and nothing is duplicated. The runner finds it as it plays the engines in order.
 - **What the log cannot give:** the last interval before a stop (`SyncEvery`) may be lost. What a player must not lose (an item) is saved in the store of phase 6, where an item has exactly one owner and a transfer is one transaction.
 
-A message that came back (`Full`, `Retired`) depends on how busy the receiver was, so it cannot be worked out again: the log records the tick, the header of the message and the reason, and the replay of the sender settles it at that tick.
+A message that came back (`DeliveryFailureFull`, `DeliveryFailureRetired`) depends on how busy the receiver was, so it cannot be worked out again: the log records the tick, the header of the message and the reason, and the replay of the sender settles it at that tick.
 
 Replay is the engines running again, not a second implementation:
 

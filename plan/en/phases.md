@@ -62,7 +62,7 @@ Clean up what is unfinished and lay the foundation for entities before building 
 - Change layer within the same zone (a person moves to another layer). (pending approval)
 - **A read of another engine returns a read-only interface (built):** `Registry.Get[T](id)` finds the state that the engine with the ID published and returns it as a `T`; the game asks for `ReadOnlyWorldState`, `ReadOnlyZoneState` or `ReadOnlyZoneLayerState` (the read methods of each state, none that changes it), not the state itself. An action then cannot change a state it does not own by mistake (R26, R28), and the compiler checks it instead of a review. The read-only interface of a state is declared with it. An ID that was published by no engine, or by one whose state is not a `T`, is an error, not a nil.
 - Graceful stop: `Run` ends, drains the queue and returns the messages that remain.
-- Back-pressure: count the messages that are refused (`Full`) and lost (`Dropped`), with configured thresholds.
+- Back-pressure: count the messages that are refused (`DeliveryFailureFull`) and lost (`Dropped`), with configured thresholds.
 - Plain engine metrics: players, capacity, tick time histogram (the engine does not know Prometheus). (pending approval)
 - A test that `Step` and `Run` give the same result for the same input.
 - A baseline benchmark for one full zonelayer and for many zonelayers in parallel.

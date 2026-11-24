@@ -15,8 +15,8 @@ type notice struct {
 	args  []any
 }
 
-// bounced runs what a message that came back as Full says to do, on a bouncer that records what it
-// is told.
+// bounced runs what a message that came back as DeliveryFailureFull says to do, on a bouncer that
+// records what it is told.
 func bounced(
 	onFail sim.OnFail, attempts int, stopping bool,
 ) (*bouncer, []notice, sim.Message) {
@@ -30,7 +30,7 @@ func bounced(
 	for range attempts {
 		m = m.Again()
 	}
-	b.handle(config.Defaults(), m, sim.Full)
+	b.handle(config.Defaults(), m, sim.DeliveryFailureFull)
 	return b, told, m
 }
 

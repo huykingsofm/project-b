@@ -183,7 +183,7 @@ func decodeStableRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, e
 // message, and the reason.
 type Returned struct {
 	Header sim.Header
-	Reason sim.Reason
+	Reason sim.DeliveryFailure
 }
 
 func (Returned) Kind() Kind { return KindReturned }
@@ -198,7 +198,7 @@ func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok &
 
 func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	header := sim.DecodeHeader(r)
-	return Returned{Header: header, Reason: sim.Reason(r.Uint8())}, r.Err()
+	return Returned{Header: header, Reason: sim.DeliveryFailure(r.Uint8())}, r.Err()
 }
 
 // Retired says that the engine was removed for good: it is the only record of the last frame of

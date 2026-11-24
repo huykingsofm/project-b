@@ -258,7 +258,8 @@ func TestAnEngineThatIsRemovedEndsItsLogAndAnIDThatIsGivenAgainGoesOnCountingTic
 	if !c.Remove(1) || len(c.Engines()) != 0 {
 		t.Fatal("the engine was not removed")
 	}
-	if reason, ok := env.Router.Deliver(toMessage(1, 1)); ok || reason != sim.Retired {
+	reason, ok := env.Router.Deliver(toMessage(1, 1))
+	if ok || reason != sim.DeliveryFailureRetired {
 		t.Fatalf("a message to the engine that was removed bounced as %v, %v", reason, ok)
 	}
 	// the ID is given again: its state begins at the last tick of its log

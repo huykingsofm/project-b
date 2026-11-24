@@ -7,7 +7,7 @@ import (
 // ReturnedMessage is a message that came back to its sender because it could not be delivered.
 type ReturnedMessage struct {
 	Message sim.Message
-	Reason  sim.Reason
+	Reason  sim.DeliveryFailure
 }
 
 // IncomingChannel is the receiving end of the two channels of an engine: In for the messages that

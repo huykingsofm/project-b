@@ -39,41 +39,43 @@ func DecodeHeader(r *binary.Reader) Header {
 	return Header{From: r.Uint[StateID](), Seq: r.Uvarint(), Tick: r.Uvarint()}
 }
 
-// Reason says why a message could not be delivered.
-type Reason uint8
+// DeliveryFailure says why a message could not be delivered.
+type DeliveryFailure uint8
 
 // The reasons.
 const (
-	// Retired: the engine was removed.
-	Retired Reason = iota + 1
-	// NotStarted: the engine exists, or its ID is given to a state, but it does not run yet.
-	NotStarted
-	// Moved: what the message is about has gone to another engine.
-	Moved
-	// Stopping: the engine, or the cluster, is stopping.
-	Stopping
-	// Full: the inbox of the engine is full.
-	Full
-	// NotGiven: the ID names no state: it was never given, or it was given to a state that was
-	// removed so long ago that it has left the grave of its IDs. To an action it is a state that is
-	// gone, as Retired is, but it says that the ID is not one of a state, and not that a state was
-	// removed. It is the last of the numbers, because a number is never changed or reused.
-	NotGiven
+	// DeliveryFailureRetired: the engine was removed.
+	DeliveryFailureRetired DeliveryFailure = iota + 1
+	// DeliveryFailureNotStarted: the engine exists, or its ID is given to a state, but it does not
+	// run yet.
+	DeliveryFailureNotStarted
+	// DeliveryFailureMoved: what the message is about has gone to another engine.
+	DeliveryFailureMoved
+	// DeliveryFailureStopping: the engine, or the cluster, is stopping.
+	DeliveryFailureStopping
+	// DeliveryFailureFull: the inbox of the engine is full.
+	DeliveryFailureFull
+	// DeliveryFailureNotGiven: the ID names no state: it was never given, or it was given to a
+	// state that was removed so long ago that it has left the grave of its IDs. To an action it is
+	// a state that is gone, as DeliveryFailureRetired is, but it says that the ID is not one of a
+	// state, and not that a state was removed. It is the last of the numbers, because a number is
+	// never changed or reused.
+	DeliveryFailureNotGiven
 )
 
-func (r Reason) String() string {
+func (r DeliveryFailure) String() string {
 	switch r {
-	case Retired:
+	case DeliveryFailureRetired:
 		return "retired"
-	case NotStarted:
+	case DeliveryFailureNotStarted:
 		return "not started"
-	case Moved:
+	case DeliveryFailureMoved:
 		return "moved"
-	case Stopping:
+	case DeliveryFailureStopping:
 		return "stopping"
-	case Full:
+	case DeliveryFailureFull:
 		return "full"
-	case NotGiven:
+	case DeliveryFailureNotGiven:
 		return "not given"
 	}
 	return "unknown"
@@ -82,7 +84,9 @@ func (r Reason) String() string {
 // Gone reports whether a message that could not be delivered for this reason will not be delivered
 // by sending it again: the state it is for was removed, or never was. Sending it again fails the
 // same way, so it is for its OnFail to say what that means, once.
-func (r Reason) Gone() bool { return r == Retired || r == NotGiven }
+func (r DeliveryFailure) Gone() bool {
+	return r == DeliveryFailureRetired || r == DeliveryFailureNotGiven
+}
 
 // Message is a message with its type taken away, which is what travels between the engines: the
 // outbox, the router and the bouncer handle messages and do not know which type of state one is
@@ -125,7 +129,7 @@ type OnFail interface {
 	ID() OnFailID
 	// Handle does what a failed delivery means, given the engine that sent the message, the
 	// message and why it could not be delivered.
-	Handle(b Bouncer, m Message, r Reason)
+	Handle(b Bouncer, m Message, r DeliveryFailure)
 	// Encode writes what the kind holds, not its ID: Codecs.EncodeOnFail writes the ID first.
 	Encode(w *binary.Writer) error
 }

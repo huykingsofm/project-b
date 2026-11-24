@@ -321,8 +321,8 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	body := got.Body.(replay.Returned)
 	layer := testkit.Layer1
 	if got.Engine != layer || body.Header.From != layer ||
-		body.Header.Seq == 0 || body.Reason != sim.Retired {
-		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as Retired", got)
+		body.Header.Seq == 0 || body.Reason != sim.DeliveryFailureRetired {
+		t.Fatalf("the record is %+v, want zonelayer 1's own message, returned as retired", got)
 	}
 	var settledAt uint64
 	for _, r := range j.Records {
@@ -583,10 +583,12 @@ func TestAMessageToAStateThatHasNoEngineBouncesAsTheWorldSaysItsIDIs(t *testing.
 	}
 	for name, tc := range map[string]struct {
 		to   sim.StateID
-		want sim.Reason
+		want sim.DeliveryFailure
 	}{
-		"a zonelayer that was never given": {sim.NewStateID(state.ZoneLayerType, 99), sim.NotGiven},
-		"a type that has no states":        {sim.NewStateID(200, 1), sim.NotGiven},
+		"a zonelayer that was never given": {
+			sim.NewStateID(state.ZoneLayerType, 99), sim.DeliveryFailureNotGiven,
+		},
+		"a type that has no states": {sim.NewStateID(200, 1), sim.DeliveryFailureNotGiven},
 	} {
 		if reason, ok := c.Env.Router.Deliver(say(tc.to)); ok || reason != tc.want {
 			t.Errorf("%s: bounced as %v, %v; want %v", name, reason, ok, tc.want)
@@ -596,7 +598,8 @@ func TestAMessageToAStateThatHasNoEngineBouncesAsTheWorldSaysItsIDIs(t *testing.
 	c.World.State().RemoveZoneLayer(testkit.Layer1)
 	testkit.Steps(t, c, 1)
 	c.Env.Router.Retire(testkit.Layer1)
-	if reason, ok := c.Env.Router.Deliver(say(testkit.Layer1)); ok || reason != sim.Retired {
+	reason, ok := c.Env.Router.Deliver(say(testkit.Layer1))
+	if ok || reason != sim.DeliveryFailureRetired {
 		t.Errorf("a zonelayer that was removed: bounced as %v, %v; want retired", reason, ok)
 	}
 }

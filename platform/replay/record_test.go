@@ -33,7 +33,7 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		{ConfigRead{Version: 1}, ConfigRead{Version: 1}},
 		{Hash{Value: 9}, Hash{Value: 9}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 4}},
-		{Returned{Reason: sim.Full}, Returned{Reason: sim.Full}},
+		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureFull}},
 	}
 	for _, p := range same {
 		if !p[0].Same(p[1]) {
@@ -46,7 +46,7 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		{ConfigRead{Version: 1}, ConfigRead{Version: 2}},
 		{Hash{Value: 9}, Hash{Value: 10}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 5}},
-		{Returned{Reason: sim.Full}, Returned{Reason: sim.Retired}},
+		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureRetired}},
 		{ConfigRead{Version: 9}, Hash{Value: 9}}, // the same number in another kind
 	}
 	for _, p := range different {

@@ -263,6 +263,6 @@ func (c *cell) retire() {
 	c.router.Retire(c.me)
 	c.bounce.Stop()
 	for _, m := range channels.Drain(c.in.In) {
-		c.router.Return(m, sim.Retired)
+		c.router.Return(m, sim.DeliveryFailureRetired)
 	}
 }
