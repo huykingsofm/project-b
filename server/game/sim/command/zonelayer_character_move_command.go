@@ -23,7 +23,7 @@ func (c ZoneLayerCharacterMoveCommand) Clone() sim.Command[*zonelayerstate.State
 
 func (c ZoneLayerCharacterMoveCommand) Translate() []sim.Action[*zonelayerstate.State] {
 	return []sim.Action[*zonelayerstate.State]{
-		&action.ZoneLayerCharacterMoveAction{
+		action.ZoneLayerCharacterMoveAction{
 			CharacterID: c.CharacterID, Dir: c.Dir, Ticks: c.Ticks,
 		},
 	}

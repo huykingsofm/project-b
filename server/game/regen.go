@@ -18,11 +18,11 @@ func EnsureRegen(e *engine.Engine[*zonelayerstate.State], every uint64) error {
 	waiting, found := e.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID)
 	if !found {
 		if every > 0 {
-			e.ScheduleAt(e.Tick()+every, &action.ZoneLayerCharacterRegenAction{Every: every})
+			e.ScheduleAt(e.Tick()+every, action.ZoneLayerCharacterRegenAction{Every: every})
 		}
 		return nil
 	}
-	regen, ok := waiting.(*action.ZoneLayerCharacterRegenAction)
+	regen, ok := waiting.(action.ZoneLayerCharacterRegenAction)
 	if !ok || regen.Every != every {
 		return fmt.Errorf(
 			"zonelayer %d: the zonelayer heals every %d ticks and the cluster says every %d",
@@ -34,7 +34,7 @@ func EnsureRegen(e *engine.Engine[*zonelayerstate.State], every uint64) error {
 
 // regenEveryOf is the period of an action that heals, or 0.
 func regenEveryOf(a sim.Action[*zonelayerstate.State]) uint64 {
-	if regen, ok := a.(*action.ZoneLayerCharacterRegenAction); ok {
+	if regen, ok := a.(action.ZoneLayerCharacterRegenAction); ok {
 		return regen.Every
 	}
 	return 0

@@ -340,7 +340,7 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 	layer := testkit.Layer1
 	say := func(seq uint64) sim.Message {
 		m := sim.NewActionMessage[*zonelayerstate.State](
-			testkit.Layer1, onfail.Drop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
+			testkit.Layer1, onfail.Drop{}, action.ZoneLayerChatSendAction{FromID: 1, Text: "hi"},
 		)
 		return m.Stamp(sim.Header{From: testkit.Zone1, Seq: seq})
 	}

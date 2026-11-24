@@ -274,7 +274,7 @@ func TestAReplayFindsASenderThatDoesNotMakeTheMessageTheReceiverRecorded(t *test
 	logs[layer] = slices.Clone(logs[layer])
 	forged := sim.NewActionMessage[*zonelayerstate.State](
 		testkit.Layer1, onfail.Drop{},
-		&action.ZoneLayerChatSendAction{FromID: 1, Text: "not what was said"},
+		action.ZoneLayerChatSendAction{FromID: 1, Text: "not what was said"},
 	).Stamp(logs[layer][at].Body.(replay.Inbound).Message.Head())
 	logs[layer][at].Body = replay.Inbound{Message: forged}
 

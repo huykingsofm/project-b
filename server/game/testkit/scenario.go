@@ -59,7 +59,7 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	// made on the state from outside the engine would be in no log, and no replay could make it.
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		Layer1, onfail.Drop{},
-		&action.ZoneLayerItemEntityAddAction{ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}},
+		action.ZoneLayerItemEntityAddAction{ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}},
 	).Stamp(sim.Header{From: 99, Seq: 1}))
 	Steps(t, c, 1)
 	var itemID state.EntityID

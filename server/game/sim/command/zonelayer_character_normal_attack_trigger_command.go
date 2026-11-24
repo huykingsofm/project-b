@@ -29,7 +29,7 @@ func (
 	c ZoneLayerCharacterNormalAttackTriggerCommand,
 ) Translate() []sim.Action[*zonelayerstate.State] {
 	return []sim.Action[*zonelayerstate.State]{
-		&action.ZoneLayerCharacterNormalAttackTriggerAction{
+		action.ZoneLayerCharacterNormalAttackTriggerAction{
 			CharacterID: c.CharacterID, TargetID: c.TargetID,
 		},
 	}

@@ -29,20 +29,19 @@ type ZoneLayerCharacterNormalAttackTriggerAction struct {
 	TargetID    state.CharacterID // the character it hits
 }
 
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) ID() sim.ActionID {
+func (a ZoneLayerCharacterNormalAttackTriggerAction) ID() sim.ActionID {
 	return ZoneLayerCharacterNormalAttackTriggerActionID
 }
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) Actor() any      { return a.CharacterID }
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Priority() int16 { return PriorityIntent }
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Actor() any      { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply sets the cooldown and adds the hit to the plan, or does nothing.
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) Apply(
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
 	p *sim.Plan[*zonelayerstate.State],
 ) {
@@ -72,14 +71,14 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 		c.Tick+uint64(zoneLayerCharacterNormalAttackTriggerActionCooldown.Get(c.Cfg)),
 	)
 	p.Append(
-		&ZoneLayerCharacterDamageAction{
+		ZoneLayerCharacterDamageAction{
 			SourceID: source.ID(), VictimID: victim.ID(), Amount: normalAttackDamage,
 		},
 	)
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(uint64(a.TargetID))
 }
@@ -87,8 +86,8 @@ func (a *ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterNormalAttackTriggerAction reads what Encode wrote.
 func decodeZoneLayerCharacterNormalAttackTriggerAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterNormalAttackTriggerAction, error) {
-	a := &ZoneLayerCharacterNormalAttackTriggerAction{
+) (ZoneLayerCharacterNormalAttackTriggerAction, error) {
+	a := ZoneLayerCharacterNormalAttackTriggerAction{
 		CharacterID: r.Uint[state.CharacterID](),
 		TargetID:    r.Uint[state.CharacterID](),
 	}

@@ -37,7 +37,7 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 
 func TestARouterSaysAnIDWithNoEngineIsNotStartedUntilItsEngineIsRetired(t *testing.T) {
 	message := func(to sim.StateID) sim.Message {
-		return sim.NewActionMessage(to, onfail.Drop{}, &toyAction{N: 1})
+		return sim.NewActionMessage(to, onfail.Drop{}, toyAction{N: 1})
 	}
 	_, out := NewChannel(5, 4)
 	rt := NewRouter()

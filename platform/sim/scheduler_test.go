@@ -23,7 +23,7 @@ func names(p *Plan[*toyState], name func(Action[*toyState]) string) []string {
 func anonymousName(a Action[*toyState]) string { return nameOf(a) }
 
 // at is an action that the scheduler of these tests holds.
-func at(name string) Action[*toyState] { return &anonymousAction{name: name} }
+func at(name string) Action[*toyState] { return anonymousAction{name: name} }
 
 func dueNames(s *ActionScheduler[*toyState], tick uint64) []string {
 	var out []string
@@ -81,11 +81,11 @@ func TestSchedulerFindsTheActionOfAnIDThatWaitsForTheEarliestTick(t *testing.T) 
 
 func aSchedulerThatWaits() *ActionScheduler[*toyState] {
 	var s ActionScheduler[*toyState]
-	s.At(30, &addAction{N: 10})
+	s.At(30, addAction{N: 10})
 	s.Due(4) // the last tick it gave out
-	s.At(9, &addAction{N: 12})
-	s.At(7, &anonymousAction{name: "shield", priority: -50})
-	s.At(9, &addAction{N: -6})
+	s.At(9, addAction{N: 12})
+	s.At(7, anonymousAction{name: "shield", priority: -50})
+	s.At(9, addAction{N: -6})
 	return &s
 }
 
@@ -134,7 +134,7 @@ func TestTheHashOfASchedulerSaysWhatItWaitsFor(t *testing.T) {
 	if hashOf(a) != hashOf(b) {
 		t.Fatal("two schedulers that wait for the same have different hashes")
 	}
-	b.At(11, &addAction{N: 13})
+	b.At(11, addAction{N: 13})
 	if hashOf(a) == hashOf(b) {
 		t.Fatal("an action more did not change the hash")
 	}
@@ -144,9 +144,9 @@ func TestTheHashOfASchedulerSaysWhatItWaitsFor(t *testing.T) {
 		t.Fatal("actions that ran did not change the hash")
 	}
 	d := aSchedulerThatWaits()
-	d.At(30, &anonymousAction{name: "a"})
+	d.At(30, anonymousAction{name: "a"})
 	e := aSchedulerThatWaits()
-	e.At(30, &anonymousAction{name: "b"})
+	e.At(30, anonymousAction{name: "b"})
 	if hashOf(d) == hashOf(e) {
 		t.Fatal("a field of the action did not change the hash")
 	}

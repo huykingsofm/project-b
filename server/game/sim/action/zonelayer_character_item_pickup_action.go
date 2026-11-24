@@ -29,20 +29,19 @@ type ZoneLayerCharacterItemPickupAction struct {
 	ItemEntityID state.EntityID
 }
 
-func (a *ZoneLayerCharacterItemPickupAction) ID() sim.ActionID {
+func (a ZoneLayerCharacterItemPickupAction) ID() sim.ActionID {
 	return ZoneLayerCharacterItemPickupActionID
 }
-func (a *ZoneLayerCharacterItemPickupAction) Priority() int16 { return PriorityIntent }
-func (a *ZoneLayerCharacterItemPickupAction) Actor() any      { return a.CharacterID }
+func (a ZoneLayerCharacterItemPickupAction) Priority() int16 { return PriorityIntent }
+func (a ZoneLayerCharacterItemPickupAction) Actor() any      { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterItemPickupAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterItemPickupAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply takes the item off the ground and sends it to the world.
-func (a *ZoneLayerCharacterItemPickupAction) Apply(
+func (a ZoneLayerCharacterItemPickupAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -69,13 +68,13 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 	undo := sim.NewActionMessage(
 		selfID,
 		onfail.Drop{},
-		&ZoneLayerItemEntityAddAction{
+		ZoneLayerItemEntityAddAction{
 			ItemID: item.ItemID(), Count: item.Count(), At: item.Position(), Expiry: item.Expiry(),
 		},
 	)
 	r.Send(
 		s.WorldID(), onfail.Compensate{With: undo},
-		&WorldCharacterItemAddAction{
+		WorldCharacterItemAddAction{
 			CharacterID: a.CharacterID, ItemID: item.ItemID(), Count: item.Count(),
 			FromZoneLayerID: selfID, At: item.Position(), Expiry: item.Expiry(),
 		},
@@ -83,7 +82,7 @@ func (a *ZoneLayerCharacterItemPickupAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	a.ItemEntityID.Encode(w)
 }
@@ -91,13 +90,13 @@ func (a *ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
 func decodeZoneLayerCharacterItemPickupAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterItemPickupAction, error) {
+) (ZoneLayerCharacterItemPickupAction, error) {
 	characterID := r.Uint[state.CharacterID]()
 	itemEntityID, err := state.DecodeEntityID(r)
 	if err != nil {
-		return nil, err
+		return ZoneLayerCharacterItemPickupAction{}, err
 	}
-	return &ZoneLayerCharacterItemPickupAction{
+	return ZoneLayerCharacterItemPickupAction{
 		CharacterID: characterID, ItemEntityID: itemEntityID,
 	}, r.Err()
 }

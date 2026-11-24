@@ -36,18 +36,17 @@ type WorldCharacterItemAddAction struct {
 	Expiry          uint64
 }
 
-func (a *WorldCharacterItemAddAction) ID() sim.ActionID { return WorldCharacterItemAddActionID }
-func (a *WorldCharacterItemAddAction) Priority() int16  { return PriorityResolve }
-func (a *WorldCharacterItemAddAction) Actor() any       { return a.CharacterID }
+func (a WorldCharacterItemAddAction) ID() sim.ActionID { return WorldCharacterItemAddActionID }
+func (a WorldCharacterItemAddAction) Priority() int16  { return PriorityResolve }
+func (a WorldCharacterItemAddAction) Actor() any       { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *WorldCharacterItemAddAction) Clone() sim.Action[*worldstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a WorldCharacterItemAddAction) Clone() sim.Action[*worldstate.State] {
+	return a
 }
 
 // Apply adds the items and sends back the ones that did not fit.
-func (a *WorldCharacterItemAddAction) Apply(
+func (a WorldCharacterItemAddAction) Apply(
 	c *sim.Context, s *worldstate.State, r *sim.Registry[*worldstate.State],
 	_ *sim.Plan[*worldstate.State],
 ) {
@@ -61,12 +60,12 @@ func (a *WorldCharacterItemAddAction) Apply(
 	r.Send(
 		a.FromZoneLayerID,
 		onfail.Drop{},
-		&ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
+		ZoneLayerItemEntityAddAction{ItemID: a.ItemID, Count: left, At: a.At, Expiry: a.Expiry},
 	)
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *WorldCharacterItemAddAction) Encode(w *binary.Writer) {
+func (a WorldCharacterItemAddAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(uint64(a.ItemID))
 	w.Uvarint(uint64(a.Count))
@@ -78,8 +77,8 @@ func (a *WorldCharacterItemAddAction) Encode(w *binary.Writer) {
 // decodeWorldCharacterItemAddAction reads what Encode wrote.
 func decodeWorldCharacterItemAddAction(
 	r *binary.Reader, version codec.Version,
-) (*WorldCharacterItemAddAction, error) {
-	a := &WorldCharacterItemAddAction{
+) (WorldCharacterItemAddAction, error) {
+	a := WorldCharacterItemAddAction{
 		CharacterID:     r.Uint[state.CharacterID](),
 		ItemID:          r.Uint[state.ItemID](),
 		Count:           r.Uint[uint32](),

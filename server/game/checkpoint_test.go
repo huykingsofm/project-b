@@ -69,7 +69,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 	testkit.Steps(t, c, 4)
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		theLayer, onfail.Drop{},
-		&action.ZoneLayerItemEntityAddAction{
+		action.ZoneLayerItemEntityAddAction{
 			ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}, Expiry: 40,
 		},
 	).Stamp(sim.Header{From: 99, Seq: 1}))
@@ -190,7 +190,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 	say := sim.NewActionMessage[*zonelayerstate.State](
-		theLayer, onfail.Drop{}, &action.ZoneLayerChatSendAction{FromID: 1, Text: "x"},
+		theLayer, onfail.Drop{}, action.ZoneLayerChatSendAction{FromID: 1, Text: "x"},
 	)
 	for n := range data { // every proper prefix, which is bad after the state or before it
 		env := aFreshEnv(c)
@@ -233,7 +233,7 @@ func aBigZoneLayerOf(t testing.TB, c *game.Cluster) *engine.Engine[*zonelayersta
 		l.State().AddItemEntity(state.ItemID(i%9+1), 3, at, 500)
 		l.ScheduleAt(
 			uint64(500+i),
-			&action.ZoneLayerItemEntityRemoveAction{
+			action.ZoneLayerItemEntityRemoveAction{
 				EntityID: state.NewEntityID(theLayer, uint64(i+1)),
 			},
 		)

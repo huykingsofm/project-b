@@ -21,20 +21,19 @@ type ZoneLayerCharacterShieldGrantAction struct {
 	until   uint64
 }
 
-func (a *ZoneLayerCharacterShieldGrantAction) ID() sim.ActionID {
+func (a ZoneLayerCharacterShieldGrantAction) ID() sim.ActionID {
 	return ZoneLayerCharacterShieldGrantActionID
 }
-func (a *ZoneLayerCharacterShieldGrantAction) Priority() int16 { return PriorityModifier }
-func (a *ZoneLayerCharacterShieldGrantAction) Actor() any      { return a.CharacterID }
+func (a ZoneLayerCharacterShieldGrantAction) Priority() int16 { return PriorityModifier }
+func (a ZoneLayerCharacterShieldGrantAction) Actor() any      { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterShieldGrantAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterShieldGrantAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply blocks the first damage that is aimed at the character, or stands again next tick.
-func (a *ZoneLayerCharacterShieldGrantAction) Apply(
+func (a ZoneLayerCharacterShieldGrantAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	p *sim.Plan[*zonelayerstate.State],
 ) {
@@ -48,7 +47,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Apply(
 	if !ok {
 		return
 	}
-	damages := p.FindByID[*ZoneLayerCharacterDamageAction](ZoneLayerCharacterDamageActionID)
+	damages := p.FindByID[ZoneLayerCharacterDamageAction](ZoneLayerCharacterDamageActionID)
 	for e, damage := range damages {
 		if e.Status() == sim.EntryPending && damage.VictimID == entity.ID() {
 			p.Cancel(e)
@@ -59,7 +58,7 @@ func (a *ZoneLayerCharacterShieldGrantAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(a.Duration)
 	w.Bool(a.started)
@@ -69,8 +68,8 @@ func (a *ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
 func decodeZoneLayerCharacterShieldGrantAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterShieldGrantAction, error) {
-	a := &ZoneLayerCharacterShieldGrantAction{
+) (ZoneLayerCharacterShieldGrantAction, error) {
+	a := ZoneLayerCharacterShieldGrantAction{
 		CharacterID: r.Uint[state.CharacterID](),
 		Duration:    r.Uvarint(),
 		started:     r.Bool(),

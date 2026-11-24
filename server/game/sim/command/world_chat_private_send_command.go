@@ -23,7 +23,7 @@ func (c WorldChatPrivateSendCommand) Clone() sim.Command[*worldstate.State] { re
 
 func (c WorldChatPrivateSendCommand) Translate() []sim.Action[*worldstate.State] {
 	return []sim.Action[*worldstate.State]{
-		&action.WorldChatPrivateSendAction{FromID: c.FromID, ToID: c.ToID, Text: c.Text},
+		action.WorldChatPrivateSendAction{FromID: c.FromID, ToID: c.ToID, Text: c.Text},
 	}
 }
 

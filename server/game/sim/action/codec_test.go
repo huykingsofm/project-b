@@ -26,37 +26,37 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 	ch.SetCooldown(ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 44)
 	at := state.Vec{X: -300, Y: 9000}
 	return map[sim.ActionID]sim.BaseAction{
-		WorldChatPrivateSendActionID: &WorldChatPrivateSendAction{FromID: 1, ToID: 2, Text: "psst"},
-		WorldCharacterItemAddActionID: &WorldCharacterItemAddAction{
+		WorldChatPrivateSendActionID: WorldChatPrivateSendAction{FromID: 1, ToID: 2, Text: "psst"},
+		WorldCharacterItemAddActionID: WorldCharacterItemAddAction{
 			CharacterID: 3, ItemID: 8, Count: 5, FromZoneLayerID: 4, At: at, Expiry: 90,
 		},
-		ZoneChatSendActionID:            &ZoneChatSendAction{FromID: 3, Text: "xin chào"},
-		ZoneCharacterEnterActionID:      &ZoneCharacterEnterAction{Character: ch},
-		ZoneLayerChatSendActionID:       &ZoneLayerChatSendAction{FromID: 3, Text: "hello"},
-		ZoneLayerCharacterEnterActionID: &ZoneLayerCharacterEnterAction{Character: ch, At: at},
-		ZoneLayerCharacterMoveActionID: &ZoneLayerCharacterMoveAction{
+		ZoneChatSendActionID:            ZoneChatSendAction{FromID: 3, Text: "xin chào"},
+		ZoneCharacterEnterActionID:      ZoneCharacterEnterAction{Character: ch},
+		ZoneLayerChatSendActionID:       ZoneLayerChatSendAction{FromID: 3, Text: "hello"},
+		ZoneLayerCharacterEnterActionID: ZoneLayerCharacterEnterAction{Character: ch, At: at},
+		ZoneLayerCharacterMoveActionID: ZoneLayerCharacterMoveAction{
 			CharacterID: 3, Dir: state.East, Ticks: 6, reserved: true,
 		},
-		ZoneLayerCharacterNormalAttackTriggerActionID: &ZoneLayerCharacterNormalAttackTriggerAction{
+		ZoneLayerCharacterNormalAttackTriggerActionID: ZoneLayerCharacterNormalAttackTriggerAction{
 			CharacterID: 3, TargetID: 4,
 		},
-		ZoneLayerCharacterDamageActionID: &ZoneLayerCharacterDamageAction{
+		ZoneLayerCharacterDamageActionID: ZoneLayerCharacterDamageAction{
 			SourceID: anEntityID(1), VictimID: anEntityID(2), Amount: -5,
 		},
-		ZoneLayerCharacterShieldGrantActionID: &ZoneLayerCharacterShieldGrantAction{
+		ZoneLayerCharacterShieldGrantActionID: ZoneLayerCharacterShieldGrantAction{
 			CharacterID: 3, Duration: 20, started: true, until: 31,
 		},
-		ZoneLayerCharacterRegenActionID: &ZoneLayerCharacterRegenAction{},
-		ZoneLayerCharacterExitToActionID: &ZoneLayerCharacterExitToAction{
+		ZoneLayerCharacterRegenActionID: ZoneLayerCharacterRegenAction{},
+		ZoneLayerCharacterExitToActionID: ZoneLayerCharacterExitToAction{
 			CharacterID: 3, ExitEntityID: anEntityID(9),
 		},
-		ZoneLayerCharacterItemPickupActionID: &ZoneLayerCharacterItemPickupAction{
+		ZoneLayerCharacterItemPickupActionID: ZoneLayerCharacterItemPickupAction{
 			CharacterID: 3, ItemEntityID: anEntityID(12),
 		},
-		ZoneLayerItemEntityAddActionID: &ZoneLayerItemEntityAddAction{
+		ZoneLayerItemEntityAddActionID: ZoneLayerItemEntityAddAction{
 			ItemID: 8, Count: 5, At: at, Expiry: 40,
 		},
-		ZoneLayerItemEntityRemoveActionID: &ZoneLayerItemEntityRemoveAction{
+		ZoneLayerItemEntityRemoveActionID: ZoneLayerItemEntityRemoveAction{
 			EntityID: anEntityID(12),
 		},
 	}

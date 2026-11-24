@@ -25,7 +25,7 @@ func (c ZoneLayerCharacterExitToCommand) Clone() sim.Command[*zonelayerstate.Sta
 
 func (c ZoneLayerCharacterExitToCommand) Translate() []sim.Action[*zonelayerstate.State] {
 	return []sim.Action[*zonelayerstate.State]{
-		&action.ZoneLayerCharacterExitToAction{
+		action.ZoneLayerCharacterExitToAction{
 			CharacterID: c.CharacterID, ExitEntityID: c.ExitEntityID,
 		},
 	}

@@ -16,20 +16,19 @@ type ZoneLayerCharacterDamageAction struct {
 	Amount             int32
 }
 
-func (a *ZoneLayerCharacterDamageAction) ID() sim.ActionID {
+func (a ZoneLayerCharacterDamageAction) ID() sim.ActionID {
 	return ZoneLayerCharacterDamageActionID
 }
-func (a *ZoneLayerCharacterDamageAction) Priority() int16 { return PriorityResolve }
-func (a *ZoneLayerCharacterDamageAction) Actor() any      { return nil }
+func (a ZoneLayerCharacterDamageAction) Priority() int16 { return PriorityResolve }
+func (a ZoneLayerCharacterDamageAction) Actor() any      { return nil }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterDamageAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterDamageAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply hurts the victim.
-func (a *ZoneLayerCharacterDamageAction) Apply(
+func (a ZoneLayerCharacterDamageAction) Apply(
 	_ *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -40,7 +39,7 @@ func (a *ZoneLayerCharacterDamageAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
 	a.SourceID.Encode(w)
 	a.VictimID.Encode(w)
 	w.Varint(int64(a.Amount))
@@ -49,16 +48,16 @@ func (a *ZoneLayerCharacterDamageAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterDamageAction reads what Encode wrote.
 func decodeZoneLayerCharacterDamageAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterDamageAction, error) {
+) (ZoneLayerCharacterDamageAction, error) {
 	sourceID, err := state.DecodeEntityID(r)
 	if err != nil {
-		return nil, err
+		return ZoneLayerCharacterDamageAction{}, err
 	}
 	victimID, err := state.DecodeEntityID(r)
 	if err != nil {
-		return nil, err
+		return ZoneLayerCharacterDamageAction{}, err
 	}
-	a := &ZoneLayerCharacterDamageAction{
+	a := ZoneLayerCharacterDamageAction{
 		SourceID: sourceID, VictimID: victimID, Amount: r.Int[int32](),
 	}
 	return a, r.Err()

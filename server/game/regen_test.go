@@ -15,7 +15,7 @@ func TestEnsureRegenSetsTheFirstActionWhenNoneWaitsAndChecksTheOneThatDoes(t *te
 	c := aWorldToCheckpoint(t) // the builder asked for healing every 10 ticks
 	l := c.ZoneLayer(theLayer)
 	regen, ok := l.Scheduler().FindByID(action.ZoneLayerCharacterRegenActionID)
-	if !ok || regen.(*action.ZoneLayerCharacterRegenAction).Every != 10 {
+	if !ok || regen.(action.ZoneLayerCharacterRegenAction).Every != 10 {
 		t.Fatalf("the zonelayer does not wait for the heal that was asked for: %v, %v", regen, ok)
 	}
 	if err := game.EnsureRegen(l, 10); err != nil {

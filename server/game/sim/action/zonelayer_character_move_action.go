@@ -31,18 +31,17 @@ type ZoneLayerCharacterMoveAction struct {
 	reserved bool
 }
 
-func (a *ZoneLayerCharacterMoveAction) ID() sim.ActionID { return ZoneLayerCharacterMoveActionID }
-func (a *ZoneLayerCharacterMoveAction) Priority() int16  { return PriorityIntent }
-func (a *ZoneLayerCharacterMoveAction) Actor() any       { return a.CharacterID }
+func (a ZoneLayerCharacterMoveAction) ID() sim.ActionID { return ZoneLayerCharacterMoveActionID }
+func (a ZoneLayerCharacterMoveAction) Priority() int16  { return PriorityIntent }
+func (a ZoneLayerCharacterMoveAction) Actor() any       { return a.CharacterID }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterMoveAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterMoveAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply moves the character one step, or takes its place in the cooldown.
-func (a *ZoneLayerCharacterMoveAction) Apply(
+func (a ZoneLayerCharacterMoveAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -78,7 +77,7 @@ func (a *ZoneLayerCharacterMoveAction) Apply(
 }
 
 // ApplyCancel frees the character of the movement that this run had reserved.
-func (a *ZoneLayerCharacterMoveAction) ApplyCancel(
+func (a ZoneLayerCharacterMoveAction) ApplyCancel(
 	c *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
 ) {
 	if a.reserved &&
@@ -88,7 +87,7 @@ func (a *ZoneLayerCharacterMoveAction) ApplyCancel(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterMoveAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterMoveAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uint8(uint8(a.Dir))
 	w.Uvarint(uint64(a.Ticks))
@@ -98,8 +97,8 @@ func (a *ZoneLayerCharacterMoveAction) Encode(w *binary.Writer) {
 // decodeZoneLayerCharacterMoveAction reads what Encode wrote.
 func decodeZoneLayerCharacterMoveAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterMoveAction, error) {
-	a := &ZoneLayerCharacterMoveAction{
+) (ZoneLayerCharacterMoveAction, error) {
+	a := ZoneLayerCharacterMoveAction{
 		CharacterID: r.Uint[state.CharacterID](),
 		Dir:         state.Dir(r.Uint8()),
 		Ticks:       r.Uint[uint32](),

@@ -13,9 +13,10 @@ Conventions and how to run: [index](index.md). Behavior: [replay_log](../replay_
 
 | Message | Encode ns/op | B/op | allocs/op | Decode ns/op | B/op | allocs/op |
 |---|---|---|---|---|---|---|
-| 2 actions (a move and a chat line) | 84.7 | 0 | 0 | 321 | 293 | 7 |
-| enter, a character with a cooldown | 83.1 | 0 | 0 | 468 | 536 | 9 |
-| a world message with an `onfail.Compensate` that holds a message | 131.9 | 0 | 0 | 466 | 440 | 7 |
+| 2 actions (a move and a chat line) | 53 | 0 | 0 | 300 | 253 | 7 |
+| enter, a character with a cooldown | 68 | 0 | 0 | 478 | 512 | 10 |
+| a world message with an `onfail.Compensate` that holds a message | 97 | 0 | 0 | 488 | 408 | 10 |
 
 - Encoding allocates nothing; decoding allocates the message, its actions and their strings.
+- An action is a value type: its decoder returns the value, which is put in the interface of the action, and its methods, `Encode` among them, are called on the value.
 - The cost grows with the actions and with the messages inside `OnFail`, not with a table: the decoder of an action is found by its ID in a map.

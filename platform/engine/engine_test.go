@@ -65,12 +65,12 @@ func TestAStepRunsTheCommandsPublishesTheStateAndRecordsTheCommand(t *testing.T)
 func TestAMessageToAnotherEngineIsTakenAtItsNextTickAndACopyIsNeverTakenTwice(t *testing.T) {
 	c, engines := toyCluster(t, 1, 2)
 	a, b := engines[0], engines[1]
-	a.ScheduleAt(1, &forwardAction{To: 2, N: 7})
+	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
 	c.Step() // a sends: b runs after a in this step, so it takes the message at once
 	if b.State().Total != 7 {
 		t.Fatalf("b has %d, want 7", b.State().Total)
 	}
-	dup := sim.NewActionMessage(2, onfail.Drop{}, &toyAction{N: 100}).
+	dup := sim.NewActionMessage(2, onfail.Drop{}, toyAction{N: 100}).
 		Stamp(sim.Header{From: 1, Seq: 1}) // the first message of a had the number 1
 	c.Env.Router.Deliver(dup)
 	c.Step()
@@ -82,7 +82,7 @@ func TestAMessageToAnotherEngineIsTakenAtItsNextTickAndACopyIsNeverTakenTwice(t 
 func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T) {
 	c, engines := toyCluster(t, 1, 2)
 	a := engines[0]
-	a.ScheduleAt(3, &forwardAction{To: 2, N: 7})
+	a.ScheduleAt(3, forwardAction{To: 2, N: 7})
 	c.Step()
 	c.Step()
 	c.Step() // a sends at its tick 3: b takes the message in the same step
@@ -102,7 +102,7 @@ func TestAnEngineReadsWhatAnotherPublishedByItsID(t *testing.T) {
 	c, engines := toyCluster(t, 1, 2)
 	engines[0].Send(toyCommand{N: 9})
 	c.Step()
-	engines[1].ScheduleAt(2, &readAction{From: 1})
+	engines[1].ScheduleAt(2, readAction{From: 1})
 	c.Step()
 	if engines[1].State().Total != 9 {
 		t.Fatalf("b read %d of a, want 9", engines[1].State().Total)

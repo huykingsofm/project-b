@@ -27,7 +27,7 @@ func (c ZoneLayerCharacterShieldGrantCommand) Clone() sim.Command[*zonelayerstat
 
 func (c ZoneLayerCharacterShieldGrantCommand) Translate() []sim.Action[*zonelayerstate.State] {
 	return []sim.Action[*zonelayerstate.State]{
-		&action.ZoneLayerCharacterShieldGrantAction{
+		action.ZoneLayerCharacterShieldGrantAction{
 			CharacterID: c.CharacterID, Duration: c.Duration,
 		},
 	}

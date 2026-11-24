@@ -23,6 +23,7 @@ An interface held in a state (such as `Entity`) is implemented only by value typ
 What crosses from one goroutine to another, commands, actions, messages and events, is a value, or holds only values and types with `Clone`.
 
 - Every command has `Clone`, and an engine calls it when it takes the command in, because the caller keeps the command it sent and may change it. A command that holds only values returns itself.
+- Every action is a value type: its methods are on the value, not on a pointer, so no one changes an action through the interface that holds it, and an interface may be shared. An action that changes what it holds as it runs (a run of movement that reserved its time, a shield that started) changes its own copy and sets that copy for a later tick; it never changes itself in place. Its `Clone` returns itself, or copies what it holds that is not a value (a character).
 - A state method that makes an event from what it was given copies what the event holds, because the event goes to the emitter on another goroutine.
 
 ## Tests

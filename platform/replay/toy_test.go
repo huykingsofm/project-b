@@ -36,23 +36,23 @@ type toyMoveAction struct {
 	Ticks       uint32
 }
 
-func (*toyMoveAction) ID() sim.ActionID { return 60001 }
-func (*toyMoveAction) Priority() int16  { return 0 }
-func (*toyMoveAction) Actor() any       { return nil }
-func (*toyMoveAction) Apply(
+func (toyMoveAction) ID() sim.ActionID { return 60001 }
+func (toyMoveAction) Priority() int16  { return 0 }
+func (toyMoveAction) Actor() any       { return nil }
+func (toyMoveAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
-func (a *toyMoveAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (a *toyMoveAction) Encode(w *binary.Writer) {
+func (a toyMoveAction) Clone() sim.Action[*toyState] { return a }
+func (a toyMoveAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.CharacterID)
 	w.Uint8(a.Dir)
 	w.Uvarint(uint64(a.Ticks))
 }
 func decodeToyMoveAction(
 	r *binary.Reader, _ codec.Version,
-) (*toyMoveAction, error) {
-	a := &toyMoveAction{CharacterID: r.Uvarint(), Dir: r.Uint8(), Ticks: uint32(r.Uvarint())}
+) (toyMoveAction, error) {
+	a := toyMoveAction{CharacterID: r.Uvarint(), Dir: r.Uint8(), Ticks: uint32(r.Uvarint())}
 	return a, r.Err()
 }
 
@@ -61,37 +61,37 @@ type toyChatAction struct {
 	Text   string
 }
 
-func (*toyChatAction) ID() sim.ActionID { return 60002 }
-func (*toyChatAction) Priority() int16  { return 0 }
-func (*toyChatAction) Actor() any       { return nil }
-func (*toyChatAction) Apply(
+func (toyChatAction) ID() sim.ActionID { return 60002 }
+func (toyChatAction) Priority() int16  { return 0 }
+func (toyChatAction) Actor() any       { return nil }
+func (toyChatAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
-func (a *toyChatAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (a *toyChatAction) Encode(w *binary.Writer)      { w.Uvarint(a.FromID); w.String(a.Text) }
+func (a toyChatAction) Clone() sim.Action[*toyState] { return a }
+func (a toyChatAction) Encode(w *binary.Writer)      { w.Uvarint(a.FromID); w.String(a.Text) }
 func decodeToyChatAction(
 	r *binary.Reader, _ codec.Version,
-) (*toyChatAction, error) {
-	a := &toyChatAction{FromID: r.Uvarint(), Text: r.String()}
+) (toyChatAction, error) {
+	a := toyChatAction{FromID: r.Uvarint(), Text: r.String()}
 	return a, r.Err()
 }
 
 type toyRegenAction struct{}
 
-func (*toyRegenAction) ID() sim.ActionID { return 60003 }
-func (*toyRegenAction) Priority() int16  { return 0 }
-func (*toyRegenAction) Actor() any       { return nil }
-func (*toyRegenAction) Apply(
+func (toyRegenAction) ID() sim.ActionID { return 60003 }
+func (toyRegenAction) Priority() int16  { return 0 }
+func (toyRegenAction) Actor() any       { return nil }
+func (toyRegenAction) Apply(
 	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
 ) {
 }
-func (a *toyRegenAction) Clone() sim.Action[*toyState] { c := *a; return &c }
-func (*toyRegenAction) Encode(*binary.Writer)          {}
+func (a toyRegenAction) Clone() sim.Action[*toyState] { return a }
+func (toyRegenAction) Encode(*binary.Writer)          {}
 func decodeToyRegenAction(
 	_ *binary.Reader, _ codec.Version,
-) (*toyRegenAction, error) {
-	return &toyRegenAction{}, nil
+) (toyRegenAction, error) {
+	return toyRegenAction{}, nil
 }
 
 // toyMove, toyChat and toyEnter are the commands of the tests.
@@ -109,7 +109,7 @@ func (c toyMove) Encode(w *binary.Writer) error {
 	return nil
 }
 func (c toyMove) Translate() []sim.Action[*toyState] {
-	return []sim.Action[*toyState]{&toyMoveAction{c.CharacterID, c.Dir, c.Ticks}}
+	return []sim.Action[*toyState]{toyMoveAction{c.CharacterID, c.Dir, c.Ticks}}
 }
 func (c toyMove) Clone() sim.Command[*toyState] { return c }
 func decodeToyMove(r *binary.Reader, _ codec.Version) (toyMove, error) {
@@ -129,7 +129,7 @@ func (c toyChat) Encode(w *binary.Writer) error {
 	return nil
 }
 func (c toyChat) Translate() []sim.Action[*toyState] {
-	return []sim.Action[*toyState]{&toyChatAction{c.FromID, c.Text}}
+	return []sim.Action[*toyState]{toyChatAction{c.FromID, c.Text}}
 }
 func (c toyChat) Clone() sim.Command[*toyState] { return c }
 func decodeToyChat(r *binary.Reader, _ codec.Version) (toyChat, error) {

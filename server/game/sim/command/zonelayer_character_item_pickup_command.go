@@ -24,7 +24,7 @@ func (c ZoneLayerCharacterItemPickupCommand) Clone() sim.Command[*zonelayerstate
 
 func (c ZoneLayerCharacterItemPickupCommand) Translate() []sim.Action[*zonelayerstate.State] {
 	return []sim.Action[*zonelayerstate.State]{
-		&action.ZoneLayerCharacterItemPickupAction{
+		action.ZoneLayerCharacterItemPickupAction{
 			CharacterID: c.CharacterID, ItemEntityID: c.ItemEntityID,
 		},
 	}

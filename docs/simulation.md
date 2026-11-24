@@ -69,7 +69,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 - An action that must wait sets itself at the tick it knows it can run.
 - The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldGrantAction`](action/zonelayer.md#zonelayercharactershieldaction) is the pattern.
 - A cancellable action implements `sim.Cancellable[S]` (a `sim.Action[S]` with one more method, `ApplyCancel`).
-- Every action has `Clone`, a copy that shares nothing with it (most are `c := *a; return &c`; one that holds a character clones it): a checkpoint and an engine that takes a message copy actions with it.
+- Every action is a value type, with its methods on the value ([R29](../plan/rule/r29-clone-or-value.md)): an action that changes as it runs sets a changed copy of itself for a later tick. Its `Clone` returns itself, and one that holds a character clones the character: a checkpoint and an engine that takes a message copy actions with it.
 - Cooldowns: [action/index.md](action/index.md#cooldowns).
 
 ## Reading other states

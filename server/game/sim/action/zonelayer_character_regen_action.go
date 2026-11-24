@@ -17,18 +17,17 @@ type ZoneLayerCharacterRegenAction struct {
 	Every uint64
 }
 
-func (a *ZoneLayerCharacterRegenAction) ID() sim.ActionID { return ZoneLayerCharacterRegenActionID }
-func (a *ZoneLayerCharacterRegenAction) Priority() int16  { return PrioritySystem }
-func (a *ZoneLayerCharacterRegenAction) Actor() any       { return nil }
+func (a ZoneLayerCharacterRegenAction) ID() sim.ActionID { return ZoneLayerCharacterRegenActionID }
+func (a ZoneLayerCharacterRegenAction) Priority() int16  { return PrioritySystem }
+func (a ZoneLayerCharacterRegenAction) Actor() any       { return nil }
 
-// Clone returns a copy that shares nothing with the action.
-func (a *ZoneLayerCharacterRegenAction) Clone() sim.Action[*zonelayerstate.State] {
-	c := *a
-	return &c
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerCharacterRegenAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
 }
 
 // Apply heals everyone and sets the action again.
-func (a *ZoneLayerCharacterRegenAction) Apply(
+func (a ZoneLayerCharacterRegenAction) Apply(
 	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
@@ -39,14 +38,14 @@ func (a *ZoneLayerCharacterRegenAction) Apply(
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a *ZoneLayerCharacterRegenAction) Encode(w *binary.Writer) {
+func (a ZoneLayerCharacterRegenAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.Every)
 }
 
 // decodeZoneLayerCharacterRegenAction reads what Encode wrote.
 func decodeZoneLayerCharacterRegenAction(
 	r *binary.Reader, version codec.Version,
-) (*ZoneLayerCharacterRegenAction, error) {
-	a := &ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
+) (ZoneLayerCharacterRegenAction, error) {
+	a := ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
 	return a, r.Err()
 }
