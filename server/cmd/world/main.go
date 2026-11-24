@@ -122,11 +122,11 @@ func main() {
 		WithReplayLog(replayLog).
 		WithEmitter(printer{}).
 		WithWorld(game.WorldParams{ID: worldID}).
-		WithZone(game.ZoneParams{ID: zone1ID, Tiles: zone1Tiles, Adjacent: []sim.StateID{zone2ID}}).
+		WithZone(game.ZoneParams{ID: zone1ID, Tiles: zone1Tiles}).
 		WithZoneLayers(
 			game.ZoneLayerParams{ZoneID: zone1ID, Count: 2, Capacity: 2, RegenEvery: 10},
 		).
-		WithZone(game.ZoneParams{ID: zone2ID, Tiles: zone2Tiles, Adjacent: []sim.StateID{zone1ID}}).
+		WithZone(game.ZoneParams{ID: zone2ID, Tiles: zone2Tiles}).
 		WithZoneLayers(
 			game.ZoneLayerParams{ZoneID: zone2ID, Count: 1, Capacity: 4, RegenEvery: 10},
 		).
@@ -138,7 +138,9 @@ func main() {
 	step := func(title string, n int) {
 		fmt.Printf("\n== %s (%d ticks)\n", title, n)
 		for range n {
-			cluster.Step()
+			if err := cluster.Step(); err != nil {
+				fail("the cluster could not run a tick", err)
+			}
 		}
 	}
 

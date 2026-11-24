@@ -45,7 +45,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.Uvarint(uint64(characterID))
 		w.Uvarint(uint64(entityID.Local()))
 	}
-	w.Uvarint(uint64(s.nextEntityID))
+	s.entityIDAllocator.Encode(w)
 	return nil
 }
 
@@ -66,7 +66,7 @@ func count(r *binary.Reader) (uint64, error) {
 func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
 	worldID := r.Uint[sim.StateID]()
-	s := NewState(id, zoneID, worldID)
+	s := NewState(id, zoneID, worldID, 0) // its allocator is read below, with its own steps
 	s.tick = r.Uvarint()
 	n, err := count(r)
 	if err != nil {
@@ -110,6 +110,16 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 		entityID := state.NewEntityID(id, r.Uint[uint32]())
 		s.bodies.Link(characterID, entityID)
 	}
-	s.nextEntityID = r.Uint[uint32]()
-	return s, r.Err()
+	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(id, r); err != nil {
+		return nil, err
+	}
+	if err = r.Err(); err != nil {
+		return nil, err
+	}
+	for _, entityID := range s.entities.Keys() {
+		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }

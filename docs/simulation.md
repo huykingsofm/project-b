@@ -19,7 +19,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | State | Holds | State package |
 |---|---|---|
 | world | private messages between players, inventories, every zone and zonelayer of the world | `server/game/sim/state/world` |
-| zone | the world it is in, the zones its exits lead to, the map, the exit entities, the zonelayers and capacity, zone chat | `server/game/sim/state/zone` |
+| zone | the world it is in, the map, the exit entities (each says the zone it leads to), the zonelayers and capacity, zone chat | `server/game/sim/state/zone` |
 | zonelayer | the zone and the world it is in, one copy of a zone's map with its entities, cooldowns, chat | `server/game/sim/state/zonelayer` |
 
 - Each state has events, a plan, actions and an engine of its own.
@@ -28,7 +28,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 ## State and events
 
 - A state is data. Every field of a state, and of every value it holds (a character, an entity, a message, an inventory slot), is private: it is read with a method and changed only by a method that the state offers, and the methods that change it write the events. A value is made by a constructor (`NewCharacter`, `NewChatMessage`, `NewPrivateChatMessage`) and its setters are for what is not yet in a state.
-- A state implements `sim.State`: `ID()`, `Type()`, `String()`, `Tick()`, `SetTick`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
+- A state implements `sim.State`: `ID()`, `Type()`, `String()`, `Tick()`, `NextTick()`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
 - The events are the list of what a client should hear (`sim.Events[E]` holds a `[]E`). They are not cloned or published.
 - Every event has `Audience()`:
 
@@ -47,6 +47,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 `platform/engine/engine.go`, `Engine[S].Step`:
 
+0. Take the state to the next tick (`NextTick`); when the state does not then say the tick of the engine, return an error that wraps `ErrTickMismatch`, having done nothing else.
 1. Take the configuration once; decide on what came back undelivered.
 2. Build the plan: what was scheduled for this tick (what the engine set for itself in the last tick included), the messages of other engines, the commands.
 3. Run the plan, one action after another, on the state, in place.
@@ -54,6 +55,12 @@ The simulation core touches nothing outside: no gateway, no database, no network
 5. Hand the events to the emitter.
 6. Publish a `Clone` of the state (other engines read the latest copy).
 7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`.
+
+| When a tick fails | What happens |
+|---|---|
+| `Cluster.Step` | the router stops (every message bounces as `Stopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
+| `Cluster.Run` | the engine that failed retires and returns its error; every other engine stops as if the context had ended; the error is logged once, by `Run` |
+| an engine is made | it starts at the tick of its state; `Restore` refuses a checkpoint whose state is not at the tick in its header |
 
 ## Actions
 

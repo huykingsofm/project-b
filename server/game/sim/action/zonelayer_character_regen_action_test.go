@@ -6,15 +6,16 @@ import (
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
 func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t *testing.T) {
-	st := zonelayerstate.NewState(1, 1, 9)
+	st := zonelayerstate.NewState(1, 1, 9, 1000)
 	c, err := zonelayerstate.NewCharacter(1, "An", 100, 250, 256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048})
+	body := must.Ok(st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048}))
 	st.DamageEntity(body, 30)
 	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health() }
 

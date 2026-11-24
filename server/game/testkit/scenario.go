@@ -50,18 +50,18 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	if s.Reuses {
 		an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
 	}
-	Steps(c, 4)
+	Steps(t, c, 4)
 	c.Zone(Zone1).Send(
 		s.Via(command.ZoneCharacterEnterCommand{Character: NewCharacter(2, "Binh", 100, 1000, 0)}),
 	)
-	Steps(c, 4)
+	Steps(t, c, 4)
 	// The item reaches the ground the way a message puts it there, which the log records; a change
 	// made on the state from outside the engine would be in no log, and no replay could make it.
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		Layer1, onfail.Drop{},
 		&action.ZoneLayerItemEntityAddAction{ItemID: 7, Count: 1, At: state.Vec{X: 2500, Y: 2500}},
 	).Stamp(sim.Header{From: 99, Seq: 1}))
-	Steps(c, 1)
+	Steps(t, c, 1)
 	var itemID state.EntityID
 	for _, id := range c.ZoneLayer(Layer1).State().EntityIDsOfKind(state.ItemKindID) {
 		itemID = id
@@ -78,14 +78,14 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	l.Send(
 		s.Via(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
 	)
-	Steps(c, 6)
+	Steps(t, c, 6)
 	if _, err := cfg.Apply(
 		map[string]string{"zonelayer.normal_attack.cooldown_ticks": "5"},
 	); err != nil { // a new version of the config: the engines record that they read it
 		t.Fatal(err)
 	}
 	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
-	Steps(c, 14)
+	Steps(t, c, 14)
 	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))
-	Steps(c, 60) // the zone it went to records a hash too
+	Steps(t, c, 60) // the zone it went to records a hash too
 }

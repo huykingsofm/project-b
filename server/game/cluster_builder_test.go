@@ -60,9 +60,7 @@ func TestAnIDThatIsNotOfTheTypeOfItsStateIsRefused(t *testing.T) {
 func TestTheZoneLayersAreNumberedFromOneAndEveryEngineKnowsTheWorld(t *testing.T) {
 	c, err := game.NewBuilder().
 		WithWorld(game.WorldParams{ID: worldID(1)}).
-		WithZone(game.ZoneParams{
-			ID: zoneID(5), Tiles: smallMap(t), Adjacent: []sim.StateID{zoneID(3)},
-		}).
+		WithZone(game.ZoneParams{ID: zoneID(5), Tiles: smallMap(t)}).
 		WithZone(game.ZoneParams{ID: zoneID(3), Tiles: smallMap(t)}).
 		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(5), Count: 2, Capacity: 1}).
 		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(3), Count: 1, Capacity: 1}).
@@ -88,12 +86,8 @@ func TestTheZoneLayersAreNumberedFromOneAndEveryEngineKnowsTheWorld(t *testing.T
 		)
 	}
 	z := c.Zone(zoneID(5)).State()
-	if z.WorldID() != worldID(1) || !slices.Equal(z.AdjacentZones(), []sim.StateID{zoneID(3)}) ||
-		z.ZoneLayerCount() != 2 {
-		t.Fatalf(
-			"zone 5 knows world %d, adjacent %v, %d zonelayers",
-			z.WorldID(), z.AdjacentZones(), z.ZoneLayerCount(),
-		)
+	if z.WorldID() != worldID(1) || z.ZoneLayerCount() != 2 {
+		t.Fatalf("zone 5 knows world %d and %d zonelayers", z.WorldID(), z.ZoneLayerCount())
 	}
 	if c.ZoneLayer(layerID(1)).State().ZoneID() != zoneID(5) ||
 		c.ZoneLayer(layerID(3)).State().ZoneID() != zoneID(3) {

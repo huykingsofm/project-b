@@ -2,12 +2,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/logging"
 )
 
 // Env is what every engine of a cluster shares: the router that carries their messages, the
@@ -26,8 +28,8 @@ type Env struct {
 // Stepper is what a cluster needs of an engine, whatever its state is: to run a tick, to run on
 // its own, and to say which engine it is.
 type Stepper interface {
-	Step()
-	Run(ctx context.Context, ticks <-chan time.Time)
+	Step() error
+	Run(ctx context.Context, ticks <-chan time.Time) error
 	StateID() sim.StateID
 	Type() sim.StateType
 	// TypeName is the name of the type of the state of the engine, for a message to a person.
@@ -90,25 +92,47 @@ func (c *Cluster) All[S sim.State]() []*Engine[S] {
 // that an engine sends is in the In channel of the receiver at once, so an engine that comes later
 // reads in this step what an earlier one sent in it, and an earlier one reads in the next step what
 // a later one sent. It is the way to run the engines with a fixed order, as a test or an example
-// needs; Run lets each engine go at its own pace.
-func (c *Cluster) Step() {
+// needs; Run lets each engine go at its own pace. When the tick of an engine fails the cluster
+// stops: the router refuses every message from then on, the engines after it do not run, and the
+// error is returned.
+func (c *Cluster) Step() error {
 	for _, e := range c.engines {
-		e.Step()
+		if err := e.Step(); err != nil {
+			c.Env.Router.Stop()
+			return fmt.Errorf("the cluster stopped: %w", err)
+		}
 	}
+	return nil
 }
 
 // Run starts every engine on a goroutine of its own, ticking every period, and returns when the
-// context ends and all of them have stopped. An engine is not waited for by the others.
+// context ends and all of them have stopped. An engine is not waited for by the others. When the
+// tick of an engine fails, the whole cluster stops as if the context had ended, and the error is
+// logged here, once: Run is where it ends.
 func (c *Cluster) Run(ctx context.Context, period time.Duration) {
-	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg       sync.WaitGroup
+		failOnce sync.Once
+		failure  error
+	)
 	for _, e := range c.engines {
 		wg.Go(func() {
 			t := time.NewTicker(period)
 			defer t.Stop()
-			e.Run(ctx, t.C)
+			if err := e.Run(ctx, t.C); err != nil {
+				failOnce.Do(func() {
+					failure = err
+					cancel()
+				})
+			}
 		})
 	}
 	<-ctx.Done()
 	c.Env.Router.Stop()
 	wg.Wait()
+	if failure != nil {
+		logging.Error("the cluster stopped", "err", failure)
+	}
 }

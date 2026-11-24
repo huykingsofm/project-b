@@ -22,11 +22,11 @@ type WorldParams struct {
 	ID sim.StateID
 }
 
-// ZoneParams are the parameters of a zone to build: its map, and which zones its exits lead to.
+// ZoneParams are the parameters of a zone to build: its ID and its map, whose exits say which zones
+// they lead to.
 type ZoneParams struct {
-	ID       sim.StateID
-	Tiles    *tilemap.TileMap
-	Adjacent []sim.StateID
+	ID    sim.StateID
+	Tiles *tilemap.TileMap
 }
 
 // ZoneLayerParams are the parameters of the zonelayers of one zone: how many it starts with, how
@@ -48,20 +48,29 @@ type ClusterBuilder struct {
 	replayLog replay.Log
 	emitter   engine.Emitter
 
+	// entityGraveSteps is how many ticks an entity ID waits after its entity left, before it is
+	// given again: longer than anything that can still name the entity.
+	entityGraveSteps uint64
+	// stateGraveSteps is the same for the ID of a state that the world gave and that was removed.
+	stateGraveSteps uint64
+
 	world      *WorldParams
 	zones      []ZoneParams
 	zoneLayers []ZoneLayerParams
 }
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
-// seed 0, a queue of 256 for each engine, a replay log that records nothing, and an emitter that
-// discards.
+// seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
+// discards, and entity IDs and state IDs that wait 12000 ticks before they are given again.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
 		queueSize: 256,
 		replayLog: replay.NopLog{},
 		emitter:   engine.NopEmitter{},
+
+		entityGraveSteps: 12000,
+		stateGraveSteps:  12000,
 	}
 }
 
@@ -101,6 +110,25 @@ func (b *ClusterBuilder) WithEmitter(e engine.Emitter) *ClusterBuilder {
 	if e != nil {
 		b.emitter = e
 	}
+	return b
+}
+
+// WithEntityGraveSteps sets how many ticks an entity ID waits after its entity left, before it is
+// given again. It must be longer than anything that can still name the entity, such as the removal
+// that was set for an item on the ground.
+func (b *ClusterBuilder) WithEntityGraveSteps(steps uint64) *ClusterBuilder {
+	b.entityGraveSteps = steps
+	return b
+}
+
+// EntityGraveSteps is how many ticks an entity ID waits before it is given again.
+func (b *ClusterBuilder) EntityGraveSteps() uint64 { return b.entityGraveSteps }
+
+// WithStateGraveSteps sets how many ticks the ID of a state that the world gave (a zonelayer) and
+// that was removed waits before it is given again. It must be longer than anything that can still
+// name the state, such as a message that waits to be sent to it.
+func (b *ClusterBuilder) WithStateGraveSteps(steps uint64) *ClusterBuilder {
+	b.stateGraveSteps = steps
 	return b
 }
 
@@ -231,21 +259,21 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
 	}
-	var nextLocal uint32 // the zonelayers count from 1 among the states of their type
-
-	worldState := worldstate.NewState(b.world.ID)
+	worldState := worldstate.NewState(b.world.ID, b.stateGraveSteps)
 	var zoneEngines []*engine.Engine[*zonestate.State]
 	var layerEngines []*engine.Engine[*zonelayerstate.State]
 	for _, zp := range b.zones {
 		worldState.AddZone(zp.ID)
-		zoneState := zonestate.NewState(zp.ID, b.world.ID, zp.Tiles, zp.Adjacent...)
+		zoneState := zonestate.NewState(zp.ID, b.world.ID, b.entityGraveSteps, zp.Tiles)
 		lp := layers[zp.ID]
 		for range lp.Count {
-			nextLocal++
-			layerID := sim.NewStateID(state.ZoneLayerType, nextLocal)
+			layerID, ok := worldState.AddZoneLayer()
+			if !ok {
+				return nil, errors.New("the world has no ID left to give a zonelayer")
+			}
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
-			worldState.AddZoneLayer(layerID)
-			le := engine.New(zonelayerstate.NewState(layerID, zp.ID, b.world.ID), env, b.seed)
+			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID, b.entityGraveSteps)
+			le := engine.New(layerState, env, b.seed)
 			if err := EnsureRegen(le, lp.RegenEvery); err != nil {
 				return nil, err
 			}

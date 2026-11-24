@@ -20,10 +20,6 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.worldID))
 	w.Uvarint(s.tick)
-	w.Uvarint(uint64(len(s.adjacent)))
-	for _, zoneID := range s.adjacent {
-		w.Uvarint(uint64(zoneID))
-	}
 	w.Uvarint(uint64(s.entities.Len()))
 	for id, e := range s.entities.All() {
 		if id.Owner() != s.id {
@@ -45,7 +41,7 @@ func (s *State) Encode(w *binary.Writer) error {
 		w.String(m.text)
 		w.Uvarint(m.tick)
 	}
-	w.Uvarint(uint64(s.nextEntityID))
+	s.entityIDAllocator.Encode(w)
 	return nil
 }
 
@@ -83,12 +79,6 @@ func DecodeState(
 		return nil, err
 	}
 	for range n {
-		s.adjacent = append(s.adjacent, r.Uint[sim.StateID]())
-	}
-	if n, err = count(r); err != nil {
-		return nil, err
-	}
-	for range n {
 		e, err := entity.Decode(r, version, s.id)
 		if err != nil {
 			return nil, err
@@ -114,6 +104,16 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	s.nextEntityID = r.Uint[uint32]()
-	return s, r.Err()
+	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(s.id, r); err != nil {
+		return nil, err
+	}
+	if err = r.Err(); err != nil {
+		return nil, err
+	}
+	for _, entityID := range s.entities.Keys() {
+		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }

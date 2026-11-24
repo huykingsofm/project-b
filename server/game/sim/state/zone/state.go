@@ -13,7 +13,6 @@ package zone
 
 import (
 	"iter"
-	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -46,31 +45,34 @@ type State struct {
 	// Data.
 	id         sim.StateID
 	worldID    sim.StateID
-	adjacent   []sim.StateID // the zones that the exits of this one lead to
 	tick       uint64
 	tiles      *tilemap.TileMap
 	entities   table.Table[state.EntityID, state.Entity]
 	zoneLayers stablemap.Map[sim.StateID, ZoneLayerSlot]
 	chat       ring.Ring[ChatMessage]
 
-	nextEntityID uint32
+	entityIDAllocator state.EntityIDAllocator
 
 	// Events: not data, never cloned.
 	events sim.Events[sim.Event]
 }
 
 // NewState makes the state of a zone with no zonelayer, on a map. The exits of the map stand in the
-// zone as entities.
+// zone as entities. An entity that leaves gives its ID back, and it is given again only after
+// entityGraveSteps ticks.
 func NewState(
-	zoneID, worldID sim.StateID, tiles *tilemap.TileMap, adjacent ...sim.StateID,
+	zoneID, worldID sim.StateID, entityGraveSteps uint64, tiles *tilemap.TileMap,
 ) *State {
 	s := &State{
-		id: zoneID, worldID: worldID, adjacent: slices.Clone(adjacent), tiles: tiles,
-		chat: ring.New[ChatMessage](chatKeep),
+		id: zoneID, worldID: worldID, tiles: tiles,
+		chat:              ring.New[ChatMessage](chatKeep),
+		entityIDAllocator: state.NewEntityIDAllocator(zoneID, entityGraveSteps),
 	}
 	for _, exit := range tiles.Exits() {
-		s.nextEntityID++
-		id := state.NewEntityID(zoneID, s.nextEntityID)
+		id, ok := s.entityIDAllocator.Give()
+		if !ok {
+			break // a map has no more than a few exits: there is always an ID
+		}
 		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
 	}
 	return s
@@ -80,15 +82,14 @@ func NewState(
 // changes.
 func (s *State) clone() *State {
 	return &State{
-		id:           s.id,
-		worldID:      s.worldID,
-		adjacent:     slices.Clone(s.adjacent),
-		tick:         s.tick,
-		tiles:        s.tiles,
-		entities:     s.entities.Clone(),
-		zoneLayers:   s.zoneLayers.Clone(),
-		chat:         s.chat.Clone(),
-		nextEntityID: s.nextEntityID,
+		id:                s.id,
+		worldID:           s.worldID,
+		tick:              s.tick,
+		tiles:             s.tiles,
+		entities:          s.entities.Clone(),
+		zoneLayers:        s.zoneLayers.Clone(),
+		chat:              s.chat.Clone(),
+		entityIDAllocator: s.entityIDAllocator.Clone(),
 	}
 }
 
@@ -107,7 +108,6 @@ func (s *State) ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool
 type ReadOnlyZoneState interface {
 	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
 	WorldID() sim.StateID
-	AdjacentZones() []sim.StateID
 	TileMap() tilemap.ReadOnlyTileMap
 	ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot]
 }
@@ -122,15 +122,14 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 	return s.zoneLayers.All()
 }
 
-// SetTick sets the tick that the state is at.
-func (s *State) SetTick(tick uint64) { s.tick = tick }
+// NextTick takes the state to the next tick, and the IDs in the grave one step.
+func (s *State) NextTick() {
+	s.tick++
+	s.entityIDAllocator.Step()
+}
 
 // WorldID is the ID of the world that the zone is in.
 func (s *State) WorldID() sim.StateID { return s.worldID }
-
-// AdjacentZones returns the zones that the exits of the zone lead to. The slice is a view: do not
-// change it.
-func (s *State) AdjacentZones() []sim.StateID { return s.adjacent }
 
 // ID is the ID of the state.
 func (s *State) ID() sim.StateID { return s.id }

@@ -217,7 +217,9 @@ func (r *replayRun) stepEngine(e sim.StateID, tick uint64) error {
 		}
 	}
 	r.cfg.snap = r.snapshotOf(e, r.version[e])
-	eng.Step()
+	if err := eng.Step(); err != nil {
+		return err
+	}
 	r.cur[e] = tick
 	return nil
 }

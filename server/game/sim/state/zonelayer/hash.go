@@ -13,6 +13,7 @@ func (s *State) Hash() uint64 {
 	h.U64(uint64(s.zoneID))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)
+	s.entityIDAllocator.Hash(&h)
 	for _, e := range s.entities.All() {
 		e.Hash(&h)
 	}

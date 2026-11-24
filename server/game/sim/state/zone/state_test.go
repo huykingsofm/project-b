@@ -17,7 +17,8 @@ func newState(t *testing.T) *zone.State {
 		Min: tilemap.Tile{X: 9, Y: 0}, Max: tilemap.Tile{X: 9, Y: 4}, ToZoneID: 2,
 	}
 	return zone.NewState(
-		1, 9, tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}), 2, 3,
+		1, 9, 1000,
+		tilemaptest.New(t, 10, 5, tilemap.Tile{}, nil, []tilemap.ExitDefinition{exit}),
 	)
 }
 

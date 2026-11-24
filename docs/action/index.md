@@ -90,7 +90,7 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 
 - No state keeps a copy of another's data; an action reads the latest state that the engine with an ID published, with `Registry.Get[T](id)`, which may be a few ticks old or missing.
 - `T` is the Go type of the state or an interface of its read methods (`ReadOnlyZoneState`, `ReadOnlyZoneLayerState`), so an action cannot change a state that is not its own. It returns `sim.ErrStateNotFound` when nothing was published and `sim.ErrStateWrongType` when the state is not a `T`.
-- A state keeps the IDs of the states it needs to read: a zonelayer its zone and its world, a zone its world and the zones its exits lead to, the world every zone and zonelayer. What an action does when a read fails is stated in its own entry.
+- A state keeps the IDs of the states it needs to read: a zonelayer its zone and its world, a zone its world (and its exits the zones they lead to), the world every zone and zonelayer. What an action does when a read fails is stated in its own entry.
 
 | Read | From |
 |---|---|

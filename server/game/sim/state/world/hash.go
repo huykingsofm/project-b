@@ -9,6 +9,7 @@ func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
 	h.U64(uint64(s.id))
 	h.U64(s.tick)
+	s.stateIDAllocators.Hash(&h)
 	for _, id := range s.zones {
 		h.U64(uint64(id))
 	}

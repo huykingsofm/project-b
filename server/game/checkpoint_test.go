@@ -55,7 +55,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 		t.Fatal(err)
 	}
 	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: an})
-	testkit.Steps(c, 4)
+	testkit.Steps(t, c, 4)
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		theLayer, onfail.Drop{},
 		&action.ZoneLayerItemEntityAddAction{
@@ -65,10 +65,10 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 	l := c.ZoneLayer(theLayer)
 	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 1, Duration: 100})
 	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
-	testkit.Steps(c, 3)
+	testkit.Steps(t, c, 3)
 	c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
 	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
-	testkit.Steps(c, 2)
+	testkit.Steps(t, c, 2)
 	return c
 }
 

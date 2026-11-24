@@ -43,9 +43,9 @@ In this order:
 
 | State | Data written |
 |---|---|
-| world | ID, tick, every zone and zonelayer, the private messages, the inventory of each character |
-| zone | ID, world ID, tick, the zones its exits lead to, its entities (the exits), the zonelayers it knows with their capacity, what was said, the number the next entity gets |
-| zonelayer | IDs (zonelayer, zone, world), tick, its entities, its characters with their cooldowns, what was said, which character has which body, the number the next entity gets |
+| world | ID, tick, every zone and zonelayer, the IDs it gives its zonelayers (see [ids](ids.md)), the private messages, the inventory of each character |
+| zone | ID, world ID, tick, its entities (the exits, each with the zone it leads to), the zonelayers it knows with their capacity, what was said, the IDs it gives its entities (see [ids](ids.md)) |
+| zonelayer | IDs (zonelayer, zone, world), tick, its entities, its characters with their cooldowns, what was said, which character has which body, the IDs it gives its entities (see [ids](ids.md)) |
 
 - An entity of a zonelayer is written as its kind (`KindID`) and then what it is made of; each kind has its decoder in the `codec.go` of the `entity` package of its state, and a test fails when a kind of the register has none. An entity writes only the number its state gave it, not the whole `EntityID`: the state is the owner of all its entities and gives its own ID back when it reads them (the bodies of the characters are written the same way), and a state that holds an entity of another owner cannot be written. An entity is written once, not under a key.
 - A count that claims more items than the bytes left can hold is refused before anything is made.
