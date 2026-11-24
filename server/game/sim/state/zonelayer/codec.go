@@ -8,7 +8,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/ids"
 )
 
 // Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
@@ -111,14 +110,16 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 		entityID := state.NewEntityID(id, r.Uint[uint32]())
 		s.bodies.Link(characterID, entityID)
 	}
-	if s.entityIDAllocator, err = ids.Decode[uint32](r); err != nil {
+	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(id, r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckEntityIDs(id, &s.entityIDAllocator, s.entities.Keys()); err != nil {
-		return nil, err
+	for _, entityID := range s.entities.Keys() {
+		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }

@@ -5,38 +5,60 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/testing/must"
 )
 
-func TestTheEntitiesOfAStateMustBeTheLiveIDsOfItsAllocator(t *testing.T) {
-	allocator := state.NewEntityIDAllocator(2)
-	one, two := must.Ok(allocator.Give()), must.Ok(allocator.Give())
-	both := []state.EntityID{state.NewEntityID(5, one), state.NewEntityID(5, two)}
-	if err := state.CheckEntityIDs(5, &allocator, both); err != nil {
-		t.Fatalf("an allocator and the entities it gave: %v", err)
+func TestAnEntityIDAllocatorGivesIDsOfItsOwnerAndRefusesOnesOfAnother(t *testing.T) {
+	allocator := state.NewEntityIDAllocator(5, 2)
+	one := must.Ok(allocator.Give())
+	if one != state.NewEntityID(5, 1) || !allocator.IsLive(one) {
+		t.Fatalf("Give = %d", one)
 	}
-	for name, entities := range map[string][]state.EntityID{
-		"fewer":             both[:1],
-		"an ID never given": {both[0], state.NewEntityID(5, 9)},
-		"another owner":     {both[0], state.NewEntityID(6, two)},
-	} {
-		if err := state.CheckEntityIDs(5, &allocator, entities); err == nil {
-			t.Errorf("%s was accepted", name)
-		}
+	other := state.NewEntityID(6, one.Local())
+	if allocator.IsLive(other) || allocator.Release(other) {
+		t.Fatal("an ID of another state was taken for one of the owner")
 	}
-	allocator.Release(two)
-	if err := state.CheckEntityIDs(5, &allocator, both); err == nil {
-		t.Error("an entity whose ID is in the grave was accepted")
+	if !allocator.Release(one) || allocator.IsLive(one) {
+		t.Fatal("an ID of the owner was not given back")
 	}
 }
 
-func TestTheHashOfTheIDsSeesTheGrave(t *testing.T) {
+func TestEntityIDsComeBackLiveOnlyWhenTheStateMarksThem(t *testing.T) {
+	allocator := state.NewEntityIDAllocator(5, 2)
+	one, two := must.Ok(allocator.Give()), must.Ok(allocator.Give())
+	allocator.Release(one)
+	var w binary.Writer
+	allocator.Encode(&w)
+	got, err := state.DecodeEntityIDAllocator(5, binary.NewReader(w.B))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IsLive(two) {
+		t.Fatal("an ID is live before the state marks it")
+	}
+	if err := got.MarkLive(two); err != nil {
+		t.Fatal(err)
+	}
+	for name, id := range map[string]state.EntityID{
+		"of another state": state.NewEntityID(6, 2),
+		"in the grave":     one,
+		"marked already":   two,
+		"never given":      state.NewEntityID(5, 9),
+	} {
+		if err := got.MarkLive(id); err == nil {
+			t.Errorf("an ID %s was marked live", name)
+		}
+	}
+}
+
+func TestTheHashOfAnEntityIDAllocatorSeesTheGrave(t *testing.T) {
 	hash := func(a *state.EntityIDAllocator) uint64 {
 		h := sim.NewHasher()
-		state.HashIDAllocator(&h, a)
+		a.Hash(&h)
 		return h.Sum()
 	}
-	a, b := state.NewEntityIDAllocator(2), state.NewEntityIDAllocator(2)
+	a, b := state.NewEntityIDAllocator(5, 2), state.NewEntityIDAllocator(5, 2)
 	for range 3 {
 		a.Give()
 		b.Give()
@@ -44,11 +66,11 @@ func TestTheHashOfTheIDsSeesTheGrave(t *testing.T) {
 	if hash(&a) != hash(&b) {
 		t.Fatal("the same IDs hash differently")
 	}
-	a.Release(2)
+	a.Release(state.NewEntityID(5, 2))
 	if hash(&a) == hash(&b) {
 		t.Fatal("an ID in the grave does not change the hash")
 	}
-	b.Release(2)
+	b.Release(state.NewEntityID(5, 2))
 	if hash(&a) != hash(&b) {
 		t.Fatal("the same grave hashes differently")
 	}

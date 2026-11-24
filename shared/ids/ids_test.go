@@ -206,15 +206,25 @@ func encoded(a *ids.Allocator[testID]) []byte {
 	return w.B
 }
 
-func TestAnAllocatorSurvivesEncodeAndDecode(t *testing.T) {
+func TestAnAllocatorSurvivesEncodeAndDecodeWhenItsOwnerMarksWhatIsLive(t *testing.T) {
 	a := ids.New[testID](4, 50)
 	run(11, &a)
 	got, err := ids.Decode[testID](binary.NewReader(encoded(&a)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(encoded(&got)) != string(encoded(&a)) {
-		t.Fatal("what was read does not encode to what was written")
+	if got.LiveCount() != 0 {
+		t.Fatalf("%d IDs are live before the owner marks them", got.LiveCount())
+	}
+	for id := testID(1); id <= a.Limit(); id++ {
+		if a.IsLive(id) {
+			if err := got.MarkLive(id); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if string(encoded(&got)) != string(encoded(&a)) || got.LiveCount() != a.LiveCount() {
+		t.Fatal("what was read is not what was written")
 	}
 	for range 50 {
 		x, okx := a.Give()
@@ -224,6 +234,27 @@ func TestAnAllocatorSurvivesEncodeAndDecode(t *testing.T) {
 		}
 		a.Step()
 		got.Step()
+	}
+}
+
+func TestMarkLiveRefusesAnIDThatCannotBeLive(t *testing.T) {
+	a := ids.New[testID](2, 50)
+	one, two := give(t, &a), give(t, &a)
+	a.Release(one)
+	got, err := ids.Decode[testID](binary.NewReader(encoded(&a)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got.MarkLive(two); err != nil {
+		t.Fatalf("a live ID was refused: %v", err)
+	}
+	for name, id := range map[string]testID{
+		"zero": 0, "never given": 9, "in the grave": one, "marked already": two,
+		"above the limit": 51,
+	} {
+		if err := got.MarkLive(id); err == nil {
+			t.Errorf("an ID %s was marked live", name)
+		}
 	}
 }
 
@@ -247,22 +278,21 @@ func TestDecodeRefusesWhatIsNotAnAllocator(t *testing.T) {
 		w.Uvarint(0)  // clock
 	}
 	cases := map[string]func(w *binary.Writer){
-		"an ID live and in the grave": func(w *binary.Writer) {
-			w.Uvarint(1) // live
+		"an ID twice in the grave": func(w *binary.Writer) {
+			w.Uvarint(2)
 			w.Uvarint(1)
-			w.Uvarint(1) // in the grave
+			w.Uvarint(2)
 			w.Uvarint(1)
 			w.Uvarint(2)
 		},
-		"an ID live twice": func(w *binary.Writer) {
-			w.Uvarint(2)
-			w.Uvarint(1)
-			w.Uvarint(1)
-			w.Uvarint(0)
-		},
-		"an ID never given": func(w *binary.Writer) {
+		"an ID never given in the grave": func(w *binary.Writer) {
 			w.Uvarint(1)
 			w.Uvarint(9)
+			w.Uvarint(2)
+		},
+		"a step that is not after the clock": func(w *binary.Writer) {
+			w.Uvarint(1)
+			w.Uvarint(1)
 			w.Uvarint(0)
 		},
 		"a count too large": func(w *binary.Writer) { w.Uvarint(1<<40 | 1) },

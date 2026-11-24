@@ -66,14 +66,13 @@ func NewState(
 	s := &State{
 		id: zoneID, worldID: worldID, tiles: tiles,
 		chat:              ring.New[ChatMessage](chatKeep),
-		entityIDAllocator: state.NewEntityIDAllocator(entityGraveSteps),
+		entityIDAllocator: state.NewEntityIDAllocator(zoneID, entityGraveSteps),
 	}
 	for _, exit := range tiles.Exits() {
-		local, ok := s.entityIDAllocator.Give()
+		id, ok := s.entityIDAllocator.Give()
 		if !ok {
 			break // a map has no more than a few exits: there is always an ID
 		}
-		id := state.NewEntityID(zoneID, local)
 		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
 	}
 	return s

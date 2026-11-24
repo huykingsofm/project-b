@@ -6,9 +6,10 @@
 // round to 1 again and skips an ID that is live or in the grave. It holds where it is in that
 // order, the IDs that are live, and the grave: an ID that left the grave is the same to it as one
 // it never gave, so it holds no list of them, and it is as big as what is live and what waits,
-// whatever was given before. It is plain data, which a checkpoint writes in a fixed order; a
-// replay of the same calls ends with the same allocator. It is not safe for concurrent use: the
-// state that owns it is changed by one goroutine.
+// whatever was given before. A checkpoint writes it without the live IDs, which are the IDs of
+// what the owner holds: the owner marks them live again as it reads them (MarkLive), so the two
+// cannot differ. A replay of the same calls ends with the same allocator. It is not safe for
+// concurrent use: the state that owns it is changed by one goroutine.
 package ids
 
 import (
@@ -169,16 +170,6 @@ func (a *Allocator[T]) Status(id T) Status {
 	return NotGiven
 }
 
-// LiveIDs returns the IDs that are live, from the smallest.
-func (a *Allocator[T]) LiveIDs() []T {
-	out := make([]T, 0, len(a.live))
-	for id := range a.live {
-		out = append(out, id)
-	}
-	slices.Sort(out)
-	return out
-}
-
 // Grave walks the IDs in the grave, in the order they were given back, with the step at which each
 // leaves.
 func (a *Allocator[T]) Grave() iter.Seq2[T, uint64] {
@@ -214,11 +205,6 @@ func (a *Allocator[T]) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.last))
 	w.Bool(a.wrapped)
 	w.Uvarint(a.clock)
-	live := a.LiveIDs()
-	w.Uvarint(uint64(len(live)))
-	for _, id := range live {
-		w.Uvarint(uint64(id))
-	}
 	w.Uvarint(uint64(a.grave.len()))
 	for r := range a.grave.all() {
 		w.Uvarint(uint64(r.id))
@@ -226,10 +212,10 @@ func (a *Allocator[T]) Encode(w *binary.Writer) {
 	}
 }
 
-// Decode reads what Encode wrote. It refuses an allocator that cannot be one: a count that claims
-// more than the bytes left can hold, the last ID above the limit, an ID that is 0, that was never
-// given or that is held twice (live twice, in the grave twice, or both), an ID in the grave whose
-// step is not after the clock and the ones before it, and more IDs held than the limit.
+// Decode reads what Encode wrote, with no live ID: the owner marks each of its IDs live with
+// MarkLive. It refuses an allocator that cannot be one: a count that claims more than the bytes
+// left can hold, the last ID above the limit, an ID in the grave that is 0, never given or there
+// twice, and one whose step is not after the clock and the ones before it.
 func Decode[T ID](r *binary.Reader) (Allocator[T], error) {
 	steps, limit := r.Uvarint(), T(r.Uvarint())
 	a := New(steps, limit)
@@ -244,21 +230,6 @@ func Decode[T ID](r *binary.Reader) (Allocator[T], error) {
 	}
 	n, err := count(r)
 	if err != nil {
-		return Allocator[T]{}, err
-	}
-	for range n {
-		id := T(r.Uvarint())
-		if err := r.Err(); err != nil {
-			return Allocator[T]{}, err
-		}
-		if !a.mayHold(id) {
-			return Allocator[T]{}, fmt.Errorf(
-				"ids: %d is live, but was never given or is held twice", id,
-			)
-		}
-		a.live[id] = struct{}{}
-	}
-	if n, err = count(r); err != nil {
 		return Allocator[T]{}, err
 	}
 	var last uint64
@@ -279,10 +250,20 @@ func Decode[T ID](r *binary.Reader) (Allocator[T], error) {
 		a.grave.push(resting[T]{id: id, until: until})
 		a.inGrave[id] = struct{}{}
 	}
-	if uint64(len(a.live))+uint64(a.grave.len()) > uint64(a.limit) {
-		return Allocator[T]{}, fmt.Errorf("ids: more IDs are held than the limit, %d", a.limit)
-	}
 	return a, nil
+}
+
+// MarkLive makes an ID live again after Decode: the owner calls it for each ID it holds, as it
+// reads what it holds. It refuses an ID that the allocator cannot have given and still be
+// holding: 0, above the limit, never given, in the grave, or marked already.
+func (a *Allocator[T]) MarkLive(id T) error {
+	if !a.mayHold(id) {
+		return fmt.Errorf(
+			"ids: %d cannot be live: it is 0, never given, in the grave or live already", id,
+		)
+	}
+	a.live[id] = struct{}{}
+	return nil
 }
 
 // mayHold reports whether an ID can be one that the allocator gave and does not hold yet.

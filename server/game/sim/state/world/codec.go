@@ -83,8 +83,13 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckZoneLayerIDs(&s.stateIDAllocators, s.zoneLayers); err != nil {
-		return nil, err
+	for _, zoneLayerID := range s.zoneLayers {
+		if zoneLayerID.Type() != state.ZoneLayerType {
+			return nil, fmt.Errorf("the zonelayer %d is a state of another type", zoneLayerID)
+		}
+		if err = s.stateIDAllocators.MarkLive(zoneLayerID); err != nil {
+			return nil, err
+		}
 	}
 	if n, err = count(r); err != nil {
 		return nil, err

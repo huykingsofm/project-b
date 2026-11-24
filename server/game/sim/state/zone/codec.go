@@ -10,7 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/ids"
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
@@ -105,14 +104,16 @@ func DecodeState(
 	for _, row := range rows {
 		s.chat.Add(row)
 	}
-	if s.entityIDAllocator, err = ids.Decode[uint32](r); err != nil {
+	if s.entityIDAllocator, err = state.DecodeEntityIDAllocator(s.id, r); err != nil {
 		return nil, err
 	}
 	if err = r.Err(); err != nil {
 		return nil, err
 	}
-	if err = state.CheckEntityIDs(s.id, &s.entityIDAllocator, s.entities.Keys()); err != nil {
-		return nil, err
+	for _, entityID := range s.entities.Keys() {
+		if err = s.entityIDAllocator.MarkLive(entityID); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }

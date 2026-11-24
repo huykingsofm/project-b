@@ -61,6 +61,20 @@ func (s *StateIDAllocators) Release(id StateID) bool {
 	return ok && a.Release(id.Local())
 }
 
+// MarkLive makes an ID live again after DecodeStateIDAllocators: the owner calls it for each state
+// it knows, as it reads them. It refuses an ID of a type that was never given one, and what the
+// allocator of its type refuses.
+func (s *StateIDAllocators) MarkLive(id StateID) error {
+	a, ok := s.byType[id.Type()]
+	if !ok {
+		return fmt.Errorf("the state %d is of a type that was never given an ID", id)
+	}
+	if err := a.MarkLive(id.Local()); err != nil {
+		return fmt.Errorf("the state %d: %w", id, err)
+	}
+	return nil
+}
+
 // Step takes every ID in the grave one step, of every type.
 func (s *StateIDAllocators) Step() {
 	for _, t := range s.ordered {
@@ -134,7 +148,8 @@ func (s *StateIDAllocators) Encode(w *binary.Writer) {
 	}
 }
 
-// DecodeStateIDAllocators reads what Encode wrote. It refuses a type that is there twice or out of
+// DecodeStateIDAllocators reads what Encode wrote, with no live ID: the owner marks each of its
+// IDs live with MarkLive. It refuses a type that is there twice or out of
 // order, an allocator with other steps or another limit, and what the package ids refuses.
 func DecodeStateIDAllocators(r *binary.Reader) (StateIDAllocators, error) {
 	s := NewStateIDAllocators(r.Uvarint())

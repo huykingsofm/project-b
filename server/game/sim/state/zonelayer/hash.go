@@ -2,7 +2,6 @@ package zonelayer
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/server/game/sim/state"
 )
 
 // Hash returns a number that depends on the data of the state and on nothing else: a replay runs
@@ -14,7 +13,7 @@ func (s *State) Hash() uint64 {
 	h.U64(uint64(s.zoneID))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)
-	state.HashIDAllocator(&h, &s.entityIDAllocator)
+	s.entityIDAllocator.Hash(&h)
 	for _, e := range s.entities.All() {
 		e.Hash(&h)
 	}

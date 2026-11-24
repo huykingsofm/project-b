@@ -47,7 +47,7 @@ type State struct {
 func NewState(zoneLayerID, zoneID, worldID sim.StateID, entityGraveSteps uint64) *State {
 	s := &State{
 		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
-		entityIDAllocator: state.NewEntityIDAllocator(entityGraveSteps),
+		entityIDAllocator: state.NewEntityIDAllocator(zoneLayerID, entityGraveSteps),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -179,13 +179,11 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 // AddCharacterEntity gives a character a body at a position, and returns the entity. It reports
 // false, and does nothing, when the state has no ID left to give.
 func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, bool) {
-	local, ok := s.entityIDAllocator.Give()
+	id, ok := s.entityIDAllocator.Give()
 	if !ok {
 		return 0, false
 	}
-	e := entity.NewCharacterEntity(
-		state.NewEntityID(s.id, local), at, c.radius, c.health, c.maxHealth,
-	)
+	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
 	// (R29)
@@ -211,7 +209,7 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 	entityID, _ := s.bodies.GetByV1(characterID)
 	body, _ := s.entities.Get(entityID)
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID.Local())
+	s.entityIDAllocator.Release(entityID)
 	s.characters.Delete(characterID)
 	s.bodies.UnlinkByV1(characterID)
 	s.events.Add(
@@ -226,11 +224,11 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
 ) (state.EntityID, bool) {
-	local, ok := s.entityIDAllocator.Give()
+	id, ok := s.entityIDAllocator.Give()
 	if !ok {
 		return 0, false
 	}
-	e := entity.NewItemEntity(state.NewEntityID(s.id, local), at, itemID, count, expiry)
+	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
 	return e.ID(), true
@@ -243,7 +241,7 @@ func (s *State) RemoveItemEntity(entityID state.EntityID) (entity.ItemEntity, bo
 		return entity.ItemEntity{}, false
 	}
 	s.entities.Delete(entityID)
-	s.entityIDAllocator.Release(entityID.Local())
+	s.entityIDAllocator.Release(entityID)
 	s.events.Add(event.ItemDisappeared{EntityID: entityID, At: item.Position()})
 	return item, true
 }

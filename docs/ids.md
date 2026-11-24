@@ -11,9 +11,10 @@
 | `Release(id)` | gives a live ID back: it waits in the grave; false for an ID that is not live, which changes nothing |
 | `Step()` | takes every ID in the grave one step; the ones that have waited the steps leave it |
 | `Status(id)`, `IsLive(id)`, `InGrave(id)` | say what an ID is (below) |
-| `LiveIDs()`, `LiveCount()` | the live IDs, from the smallest, and how many there are |
+| `MarkLive(id)` | makes an ID live again after `Decode`: the owner calls it for each ID it holds as it reads them; an error for an ID that is 0, above the limit, never given, in the grave, or marked already |
+| `LiveCount()` | how many IDs are live |
 | `Clone()` | a copy that shares nothing |
-| `Encode(w)` and `ids.Decode[T](r)` | write and read it, for a checkpoint |
+| `Encode(w)` and `ids.Decode[T](r)` | write and read it, for a checkpoint, without the live IDs |
 | `Steps`, `Limit`, `Last`, `Wrapped`, `Clock`, `Grave`, `GraveLen` | what it holds, for the hash of a state |
 
 ## What an ID is
@@ -43,18 +44,18 @@
 - `Give` reports false at once when the live IDs and the grave fill the limit; otherwise it finds one.
 - It is not safe for concurrent use: the state that owns it is changed by one goroutine.
 - A call with the same arguments in the same order ends with the same allocator, so a replay of the same inputs gives the same IDs.
-- `Encode` writes the live IDs from the smallest, so the same allocator is always the same bytes.
-- `Decode` refuses a count that claims more than the bytes left can hold, a last ID above the limit, an ID that is 0, never given or held twice (live twice, in the grave twice, or both), an ID in the grave whose step is not after the clock and the ones before it, and more IDs held than the limit.
+- A checkpoint holds the live IDs once: in what the owner holds (its entities, its zonelayers), not again in the allocator. The owner marks them live as it reads them, so the two cannot differ, and an ID that cannot be live is an error while reading.
+- `Decode` refuses a count that claims more than the bytes left can hold, a last ID above the limit, and an ID in the grave that is 0, never given or there twice, or whose step is not after the clock and the ones before it.
 
 ## Who uses it
 
 | Who | What it gives out | Steps of the grave |
 |---|---|---|
-| `zonelayer` and `zone` states | the local number of the `EntityID` of each entity, from 1 up to 2^32 - 1; an entity that leaves (a body, an item) gives its number back | set when the state is made (`ClusterBuilder.WithEntityGraveSteps`, 12000 ticks unless set), written in the checkpoint with the allocator |
+| `zonelayer` and `zone` states, with `state.EntityIDAllocator` | the `EntityID` of each entity: the ID of the state and a local number from 1 up to 2^32 - 1; it takes and gives `EntityID`, so an ID of another state is refused; an entity that leaves (a body, an item) gives its ID back | set when the state is made (`ClusterBuilder.WithEntityGraveSteps`, 12000 ticks unless set), written in the checkpoint with the allocator |
 | `world` state, with `sim.StateIDAllocators` | the `StateID` of each state it makes, from an allocator for each type, local numbers from 1 up to 2^24 - 1; today the zonelayers (`State.AddZoneLayer` gives the ID and makes the world know the zonelayer; `RemoveZoneLayer` gives it back) | set when the state is made (`ClusterBuilder.WithStateGraveSteps`, 12000 ticks unless set), the same for every type, written in the checkpoint with the allocators |
 
 - The IDs of zones come from the content (the map of a zone says which zone an exit leads to), so no allocator gives them.
 - The state steps its allocator once in `NextTick`, at the start of each tick, so the grave is counted in the ticks of the state and a replay counts the same.
 - The steps must be longer than anything that can still name the entity: the removal that is set for an item on the ground (`ZoneLayerItemEntityRemoveAction`, at the tick the item expires) holds its `EntityID`, and an ID that came back sooner would have that action remove another item. The same is true of the ID of a zonelayer and a message that waits to be sent to it.
 - A state whose allocator has no ID left refuses the new entity (`AddCharacterEntity` and `AddItemEntity` return false), and the action logs an error. With 2^32 IDs and the ones that left coming back, only a state that holds that many entities at once, or that gave them away faster than they wait, can reach it.
-- A checkpoint is refused when the entities a state holds (or the zonelayers the world knows) are not exactly the live IDs of its allocator. The hash of a state covers the allocator and its grave; the live IDs are not in it again, as the hash of the state covers what it holds.
+- When a state is read from a checkpoint, it marks each entity (the world each zonelayer) live; an ID of another state or type, never given, in the grave or there twice makes the checkpoint an error. The hash of a state covers the allocator and its grave; the live IDs are not in it again, as the hash of the state covers what it holds.

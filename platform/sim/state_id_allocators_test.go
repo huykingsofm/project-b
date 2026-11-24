@@ -56,6 +56,22 @@ func TestStateIDsSurviveEncodeAndDecodeAndAreRefusedOutOfOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got.IsLive(sim.NewStateID(5, 1)) {
+		t.Fatal("an ID is live before its owner marks it")
+	}
+	for _, id := range []sim.StateID{sim.NewStateID(5, 1), sim.NewStateID(3, 2)} {
+		if err := got.MarkLive(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, id := range map[string]sim.StateID{
+		"in the grave": gone, "marked already": sim.NewStateID(5, 1),
+		"of a type never given": sim.NewStateID(9, 1),
+	} {
+		if err := got.MarkLive(id); err == nil {
+			t.Errorf("an ID %s was marked live", name)
+		}
+	}
 	var again binary.Writer
 	got.Encode(&again)
 	if string(again.B) != string(w.B) || got.Status(gone) != ids.InGrave {
