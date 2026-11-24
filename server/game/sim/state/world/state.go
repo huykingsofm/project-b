@@ -4,7 +4,6 @@
 package world
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -136,16 +135,12 @@ func (s *State) AddZone(zoneID sim.StateID) {
 	}
 }
 
-// AddZoneLayer gives a zonelayer an ID and makes the world know it. It returns an error, and does
-// nothing, when the world has no number left for the ID of a zonelayer.
-func (s *State) AddZoneLayer() (sim.StateID, error) {
-	if s.lastStateID >= sim.MaxLocalStateID {
-		return 0, fmt.Errorf("the world %d has no number left for the ID of a zonelayer", s.id)
-	}
+// AddZoneLayer gives a zonelayer an ID and makes the world know it.
+func (s *State) AddZoneLayer() sim.StateID {
 	s.lastStateID++
 	id := sim.NewStateID(state.ZoneLayerType, s.lastStateID)
 	s.zoneLayers = append(s.zoneLayers, id)
-	return id, nil
+	return id
 }
 
 // RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false

@@ -3,7 +3,6 @@ package game_test
 import (
 	"context"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"slices"
 	"testing"
 	"time"
@@ -455,8 +454,8 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testing.T) {
 	c, rec, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
-	itemID := must.NoError(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -481,8 +480,8 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
-	itemID := must.NoError(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -503,8 +502,8 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	at := state.Vec{X: 2500, Y: 2500}
-	itemID := must.NoError(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 3, at, 0))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 3, at, 0)
 
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
@@ -529,8 +528,8 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 	c, _, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
-	itemID := must.NoError(c.ZoneLayer(testkit.Layer1).State().
-		AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20))
+	itemID := c.ZoneLayer(testkit.Layer1).State().
+		AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20)
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)

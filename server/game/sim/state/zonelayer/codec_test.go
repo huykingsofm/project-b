@@ -2,7 +2,6 @@ package zonelayer_test
 
 import (
 	"bytes"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -57,8 +56,8 @@ func TestAZoneLayerStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.
 		t.Fatalf("%d characters came back, want 2", got.CharacterCount())
 	}
 	// the state goes on as the original does: a new entity takes the ID that it would have taken
-	if a, b := must.NoError(st.AddItemEntity(8, 1, state.Vec{X: tile, Y: tile}, 0)),
-		must.NoError(got.AddItemEntity(8, 1, state.Vec{X: tile, Y: tile}, 0)); a != b {
+	if a, b := st.AddItemEntity(8, 1, state.Vec{X: tile, Y: tile}, 0),
+		got.AddItemEntity(8, 1, state.Vec{X: tile, Y: tile}, 0); a != b {
 		t.Fatalf("the next entity gets the ID %d, and %d in the original", b, a)
 	}
 	for n := range w.B { // every proper prefix

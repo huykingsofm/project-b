@@ -10,7 +10,6 @@ package zonelayer
 
 import (
 	"fmt"
-	"math"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -165,23 +164,10 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 	}
 }
 
-// giveEntityID returns the ID of the next entity of the zonelayer. It returns an error, and gives
-// nothing, when the numbers of the zonelayer are all given.
-func (s *State) giveEntityID() (state.EntityID, error) {
-	if s.lastEntityID == math.MaxUint64 {
-		return state.EntityID{}, fmt.Errorf("the zonelayer %d has no entity ID left", s.id)
-	}
+// AddCharacterEntity gives a character a body at a position, and returns the entity.
+func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.lastEntityID++
-	return state.NewEntityID(s.id, s.lastEntityID), nil
-}
-
-// AddCharacterEntity gives a character a body at a position, and returns the entity. It returns an
-// error, and does nothing, when the zonelayer has no entity ID left.
-func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, error) {
-	id, err := s.giveEntityID()
-	if err != nil {
-		return state.EntityID{}, err
-	}
+	id := state.NewEntityID(s.id, s.lastEntityID)
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
@@ -195,7 +181,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) (state.EntityID, e
 			EntityID: e.ID(), CharacterID: c.characterID, Name: c.name, Pos: at, Radius: e.Radius(),
 		},
 	)
-	return e.ID(), nil
+	return e.ID()
 }
 
 // RemoveCharacterEntity takes a character and its body out of the zonelayer and returns the
@@ -217,19 +203,16 @@ func (s *State) RemoveCharacterEntity(characterID state.CharacterID) (Character,
 }
 
 // AddItemEntity puts count items of a kind on the ground at a position, for expiry ticks (0: for
-// ever), and returns its entity. It returns an error, and does nothing, when the zonelayer has no
-// entity ID left.
+// ever), and returns its entity.
 func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
-) (state.EntityID, error) {
-	id, err := s.giveEntityID()
-	if err != nil {
-		return state.EntityID{}, err
-	}
+) state.EntityID {
+	s.lastEntityID++
+	id := state.NewEntityID(s.id, s.lastEntityID)
 	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
-	return e.ID(), nil
+	return e.ID()
 }
 
 // RemoveItemEntity takes an item off the ground and returns it.

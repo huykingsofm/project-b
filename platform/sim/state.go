@@ -19,15 +19,9 @@ type StateID uint64
 // MaxLocalStateID is the greatest number that is local to a type: 2^56 - 1.
 const MaxLocalStateID = 1<<56 - 1
 
-// NewStateID makes the ID of the state of a type with a number that is local to the type. It
-// panics for a number above MaxLocalStateID, which would be cut and name another state: whoever
-// counts the numbers of states while the program runs checks it first and returns an error.
-func NewStateID(t StateType, local uint64) StateID {
-	if local > MaxLocalStateID {
-		panic(fmt.Sprintf("the number %d is too large for the ID of a state", local))
-	}
-	return StateID(uint64(t)<<56 | local)
-}
+// NewStateID makes the ID of the state of a type with a number that is local to the type, which is
+// at most MaxLocalStateID.
+func NewStateID(t StateType, local uint64) StateID { return StateID(uint64(t)<<56 | local) }
 
 // Type is the type of the state that has the ID.
 func (id StateID) Type() StateType { return StateType(id >> 56) }

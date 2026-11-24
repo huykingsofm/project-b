@@ -1,7 +1,6 @@
 package action
 
 import (
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -15,7 +14,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := must.NoError(st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048}))
+	body := st.AddCharacterEntity(c, state.Vec{X: 2048, Y: 2048})
 	st.DamageEntity(body, 30)
 	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health() }
 

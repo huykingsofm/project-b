@@ -2,7 +2,6 @@ package world_test
 
 import (
 	"bytes"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"slices"
 	"testing"
 
@@ -23,7 +22,7 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddZone(2)
 	st.AddZone(3)
 	st.AddZone(2) // a zone it knows is not added again
-	first := must.NoError(st.AddZoneLayer())
+	first := st.AddZoneLayer()
 	st.AddZoneLayer()
 	st.RemoveZoneLayer(first)
 

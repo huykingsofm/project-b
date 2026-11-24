@@ -10,7 +10,7 @@ What has been built and what is to be built, in the order it is done. What is bu
 | Checkpoint of an engine, and an engine made from one | `done` |
 | Fixes from a review of the replay and the checkpoint | `done` |
 | The platform that runs states in ticks split from the game; the plan, the scheduler, the containers and the codecs rebuilt | `done` |
-| IDs that a state gives out, counted up from 1 and never given again, from a number that the state holds (`lastStateID` of the world for its zonelayers, `lastEntityID` of a zone and a zonelayer for their entities), with an error when the numbers are all given (see [ids](../../docs/ids.md)) | `done` |
+| IDs that a state gives out, counted up from 1 and never given again, from a number that the state holds (`lastStateID` of the world for its zonelayers, `lastEntityID` of a zone and a zonelayer for their entities) (see [ids](../../docs/ids.md)) | `done` |
 |## To build
 
 What is left of the recovery of a cluster: the logs can be cut to the recovery line and then replayed from tick 0 with no divergence, and what is not there yet is to make it quick and to go on.

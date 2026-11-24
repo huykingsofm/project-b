@@ -11,7 +11,7 @@
 
 | Call | What it does |
 |---|---|
-| `sim.NewStateID(type, local)` | makes the ID; panics for a number above `sim.MaxLocalStateID` (2^56 - 1), which would be cut and name another state; `Type()` and `Local()` read it back |
+| `sim.NewStateID(type, local)` | makes the ID from a number of at most `sim.MaxLocalStateID` (2^56 - 1); `Type()` and `Local()` read it back |
 | `state.NewEntityID(owner, local)` | makes the ID; `Owner` and `Local` are its fields, `String()` says them for a log |
 | `EntityID.Encode(w)` | writes the owner and then the number, each as a uvarint |
 | `state.DecodeEntityID(r)` | reads what `Encode` wrote; an error (`ErrNoEntity`) for an ID with no owner or no number |
@@ -21,15 +21,15 @@
 
 There is no counter type: a state that gives IDs holds the last number it gave, as a plain field, which is written in its checkpoint and worked into its hash.
 
-| State | Field | What it gives | When the numbers are all given |
-|---|---|---|---|
-| `world` | `lastStateID` | the `StateID` of each zonelayer it makes (`State.AddZoneLayer`; `RemoveZoneLayer` makes it forget the zonelayer) | `AddZoneLayer` returns an error and adds nothing |
-| `zonelayer` | `lastEntityID` | the `EntityID` of each entity: a body, an item (`AddCharacterEntity`, `AddItemEntity`) | both return an error and add nothing |
-| `zone` | `lastEntityID` | the `EntityID` of each exit of its map, when the state is made | not reached: a map has a few exits |
+| State | Field | What it gives |
+|---|---|---|
+| `world` | `lastStateID` | the `StateID` of each zonelayer it makes (`State.AddZoneLayer`; `RemoveZoneLayer` makes it forget the zonelayer) |
+| `zonelayer` | `lastEntityID` | the `EntityID` of each entity: a body, an item (`AddCharacterEntity`, `AddItemEntity`) |
+| `zone` | `lastEntityID` | the `EntityID` of each exit of its map, when the state is made |
 
 ## Rules
 
-- 0 is never given. A number is counted up from 1 and never given again, and none is given when the numbers are all given: the caller gets an error and the action logs it. With 56 bits for a type and 64 for an owner this is not reached in practice (at a thousand a second, 2 million years for a type), but it is an error and never a number that is cut or goes round.
+- 0 is never given: a number is counted up from 1 and never given again. Nothing checks that a number is left, since 56 bits for a type and 64 for an owner are not reached in practice (at a thousand a second, 2 million years for a type), and nothing is done for a number that goes round.
 - A call with the same arguments in the same order ends with the same field, so a replay of the same inputs gives the same IDs.
 - When a state is read from a checkpoint, each ID it holds is checked against the field: a zonelayer of the world, or an entity of a state, whose owner is not the state, or whose number is 0 or above the number last given, makes the checkpoint an error, and so does a number that is too large for the ID of a state.
 - A state writes its own entities with the number only: it is the owner of all of them, and says so when it reads them. An `EntityID` that goes from a state to another (in a command, an action or an event) is written whole, with `Encode`.

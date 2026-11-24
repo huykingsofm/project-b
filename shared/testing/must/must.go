@@ -9,12 +9,3 @@ func Ok[T any](v T, ok bool) T {
 	}
 	return v
 }
-
-// NoError returns v when err is nil, and panics when not: a test that reaches it did not set up
-// what it needs.
-func NoError[T any](v T, err error) T {
-	if err != nil {
-		panic("must.NoError: " + err.Error())
-	}
-	return v
-}

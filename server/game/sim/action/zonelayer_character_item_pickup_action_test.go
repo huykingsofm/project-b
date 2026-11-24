@@ -1,7 +1,6 @@
 package action
 
 import (
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -19,7 +18,7 @@ func newPickupTestLayer(
 ) (*zonelayerstate.State, *sim.Registry[*zonelayerstate.State], state.EntityID) {
 	st, reg := newMoveTestWorld(t, true)
 	st.AddCharacterEntity(newCharacter(2, "b", 100, 1000, 0), state.Vec{X: 9500, Y: 2500})
-	return st, reg, must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0))
+	return st, reg, st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 }
 
 func pickup(
@@ -60,12 +59,12 @@ func TestAnItemOutsideTheRadiusStaysOnTheGround(t *testing.T) {
 func TestTheReachIsASquareOfUnitsAroundTheItem(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	// The character is at (1500, 2500). The reach is 2000 units on every side of the item's point.
-	inside := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 4500}, 0))
+	inside := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 4500}, 0)
 	pickup(1, inside, 10, st, reg)
 	if _, ok := st.ItemEntityByID(inside); ok {
 		t.Fatal("an item exactly at the edge of the reach, on the diagonal, was out of reach")
 	}
-	outside := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 3501, Y: 2500}, 0))
+	outside := st.AddItemEntity(7, 1, state.Vec{X: 3501, Y: 2500}, 0)
 	pickup(1, outside, 10, st, reg)
 	if _, ok := st.ItemEntityByID(outside); !ok {
 		t.Fatal("an item one unit past the reach was taken")
@@ -78,12 +77,12 @@ func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
 	st.AddCharacterEntity(big, state.Vec{X: 5500, Y: 4500})
 	// The edge of the body is at 4000 on x, and the reach, 2000 units, is from there; the centre is
 	// 3500 from the item.
-	near := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 2000, Y: 4500}, 0))
+	near := st.AddItemEntity(7, 1, state.Vec{X: 2000, Y: 4500}, 0)
 	pickup(5, near, 10, st, reg)
 	if _, ok := st.ItemEntityByID(near); ok {
 		t.Fatal("an item within the reach of the edge of the body was out of reach")
 	}
-	far := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 1999, Y: 4500}, 0))
+	far := st.AddItemEntity(7, 1, state.Vec{X: 1999, Y: 4500}, 0)
 	pickup(5, far, 10, st, reg)
 	if _, ok := st.ItemEntityByID(far); !ok {
 		t.Fatal("an item one unit past the reach of the edge of the body was taken")
@@ -93,7 +92,7 @@ func TestABigBodyReachesAnItemWithItsEdgeNotItsCentre(t *testing.T) {
 func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	at := state.Vec{X: 2500, Y: 2500}
-	stack := must.NoError(st.AddItemEntity(8, 5, at, 40))
+	stack := st.AddItemEntity(8, 5, at, 40)
 	pickup(1, stack, 10, st, reg)
 	messages := reg.Take()
 	if len(messages) != 1 {
@@ -118,7 +117,7 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testing.T) {
 	st, reg, _ := newPickupTestLayer(t)
 	at := state.Vec{X: 2500, Y: 2500}
-	stack := must.NoError(st.AddItemEntity(8, 5, at, 40))
+	stack := st.AddItemEntity(8, 5, at, 40)
 	pickup(1, stack, 10, st, reg)
 	sent := reg.Take()[0]
 

@@ -3,7 +3,6 @@ package zonelayer_test
 import (
 	"fmt"
 	"github.com/huykingsofm/project-b/shared/table"
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"reflect"
 	"testing"
 
@@ -29,7 +28,7 @@ func map10x5(t testing.TB) *tilemap.TileMap {
 
 func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 	st := newState()
-	id := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0))
+	id := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	item, ok := st.ItemEntityByID(id)
 	if !ok || item.ItemID() != 7 || item.Position() != (state.Vec{X: 3500, Y: 3500}) {
 		t.Fatalf("ItemEntityByID = %+v, %v", item, ok)
@@ -53,7 +52,7 @@ func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
 func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 	st := newState()
 	tiles := map10x5(t)
-	item := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0))
+	item := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	if !st.MoveEntity(tiles, item, state.East, 2000) {
 		t.Fatal("an item did not move")
 	}
@@ -67,9 +66,7 @@ func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 
 func TestACharacterIsNotRemovedAsAnItem(t *testing.T) {
 	st := newState()
-	id := must.NoError(
-		st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500}),
-	)
+	id := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500})
 	if _, ok := st.RemoveItemEntity(id); ok {
 		t.Fatal("a character was removed as an item")
 	}
@@ -77,9 +74,7 @@ func TestACharacterIsNotRemovedAsAnItem(t *testing.T) {
 
 func TestTheHealthOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 	st := newState()
-	id := must.NoError(
-		st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500}),
-	)
+	id := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500})
 	if died := st.DamageEntity(id, 4); died {
 		t.Fatal("4 damage killed a character with 10 health")
 	}
@@ -97,7 +92,7 @@ func TestTheHealthOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 			"the character left with %d of %d health, want 7 of 10", out.Health(), out.MaxHealth(),
 		)
 	}
-	back := must.NoError(st.AddCharacterEntity(out, state.Vec{X: 2500, Y: 2500}))
+	back := st.AddCharacterEntity(out, state.Vec{X: 2500, Y: 2500})
 	if body, _ := st.CharacterEntityByCharacterID(1); body.ID() != back || body.Health() != 7 {
 		t.Fatalf("the body that came back has %d health, want 7", body.Health())
 	}
@@ -105,7 +100,7 @@ func TestTheHealthOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 
 func TestOnlyADamageableEntityLosesHealth(t *testing.T) {
 	st := newState()
-	item := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0))
+	item := st.AddItemEntity(7, 1, state.Vec{X: 3500, Y: 3500}, 0)
 	if st.DamageEntity(item, 5) {
 		t.Fatal("an item that cannot be damaged died")
 	}
@@ -151,7 +146,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T) {
 	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	st := newState()
-	id := must.NoError(st.AddItemEntity(7, 1, state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}, 0))
+	id := st.AddItemEntity(7, 1, state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}, 0)
 	// The item is in the middle of tile (2,3); the wall is tile (4,3), which starts a tile and a
 	// half away.
 	if !st.MoveEntity(walls, id, state.East, 5*tile) {
@@ -173,9 +168,9 @@ func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T
 
 func TestTheRadiusOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 	st := newState()
-	id := must.NoError(st.AddCharacterEntity(
+	id := st.AddCharacterEntity(
 		newCharacter(1, "a", 10, 1000, 300), state.Vec{X: tile + tile/2, Y: tile + tile/2},
-	))
+	)
 	body, _ := st.CharacterEntityByCharacterID(1)
 	if body.Radius() != 300 || body.ID() != id {
 		t.Fatalf("body = %+v, want a radius of 300", body)
@@ -193,8 +188,8 @@ func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
 	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
 	st := newState()
 	at := state.Vec{X: 2 * tile, Y: 2*tile + tile/2}
-	point := must.NoError(st.AddCharacterEntity(newCharacter(1, "point", 10, 1000, 0), at))
-	body := must.NoError(st.AddCharacterEntity(newCharacter(2, "body", 10, 1000, 600), at))
+	point := st.AddCharacterEntity(newCharacter(1, "point", 10, 1000, 0), at)
+	body := st.AddCharacterEntity(newCharacter(2, "body", 10, 1000, 600), at)
 
 	st.MoveEntity(walls, point, state.East, 9*tile)
 	st.MoveEntity(walls, body, state.East, 9*tile)
@@ -213,9 +208,9 @@ func BenchmarkMoveEntity(b *testing.B) {
 	for _, radius := range []int32{0, 256} {
 		b.Run(fmt.Sprintf("radius %d/a character's step of a tick", radius), func(b *testing.B) {
 			st := newState()
-			id := must.NoError(st.AddCharacterEntity(
+			id := st.AddCharacterEntity(
 				newCharacter(1, "a", 10, 1000, radius), state.Vec{X: 100 * tile, Y: 100 * tile},
-			))
+			)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				dir := state.East
@@ -299,11 +294,11 @@ func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
 	st := zonelayer.NewState(1, 1, 9)
 	at := state.Vec{X: 3500, Y: 3500}
-	first := must.NoError(st.AddItemEntity(7, 1, at, 0))
+	first := st.AddItemEntity(7, 1, at, 0)
 	st.RemoveItemEntity(first)
 	for tick := uint64(1); tick <= 10; tick++ {
 		st.NextTick()
-		if got := must.NoError(st.AddItemEntity(7, 1, at, 0)); got == first {
+		if got := st.AddItemEntity(7, 1, at, 0); got == first {
 			t.Fatalf("the ID of an entity that left was given again at tick %d", tick)
 		}
 	}
@@ -312,12 +307,12 @@ func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
 func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
 	st := zonelayer.NewState(1, 1, 9)
 	at := state.Vec{X: 1500, Y: 1500}
-	body := must.NoError(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
+	body := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at)
 	if _, ok := st.RemoveCharacterEntity(1); !ok {
 		t.Fatal("the character was not taken out")
 	}
 	st.NextTick()
-	back := must.NoError(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
+	back := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at)
 	if back == body {
 		t.Fatalf("the body that came back got the ID of the one that left, %d", body)
 	}

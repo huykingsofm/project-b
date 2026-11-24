@@ -239,10 +239,7 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 		zoneState := zonestate.NewState(zp.ID, b.world.ID, zp.Tiles)
 		lp := layers[zp.ID]
 		for range lp.Count {
-			layerID, err := worldState.AddZoneLayer()
-			if err != nil {
-				return nil, err
-			}
+			layerID := worldState.AddZoneLayer()
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
 			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID)
 			le := engine.New(layerState, env, b.seed)

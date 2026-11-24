@@ -1,7 +1,6 @@
 package world_test
 
 import (
-	"github.com/huykingsofm/project-b/shared/testing/must"
 	"reflect"
 	"testing"
 
@@ -108,7 +107,7 @@ func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
 
 func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 	st := world.NewState(1)
-	first, second := must.NoError(st.AddZoneLayer()), must.NoError(st.AddZoneLayer())
+	first, second := st.AddZoneLayer(), st.AddZoneLayer()
 	if first != sim.NewStateID(state.ZoneLayerType, 1) ||
 		second != sim.NewStateID(state.ZoneLayerType, 2) {
 		t.Fatalf("the IDs are %d and %d", first, second)
@@ -120,7 +119,7 @@ func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
 
 func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing.T) {
 	st := world.NewState(1)
-	first := must.NoError(st.AddZoneLayer())
+	first := st.AddZoneLayer()
 	if !st.RemoveZoneLayer(first) {
 		t.Fatal("a zonelayer of the world was not removed")
 	}
@@ -129,7 +128,7 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing
 	}
 	for tick := uint64(1); tick <= 5; tick++ {
 		st.NextTick()
-		if got := must.NoError(st.AddZoneLayer()); got == first {
+		if got := st.AddZoneLayer(); got == first {
 			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
 		}
 	}
