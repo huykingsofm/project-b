@@ -138,7 +138,9 @@ func main() {
 	step := func(title string, n int) {
 		fmt.Printf("\n== %s (%d ticks)\n", title, n)
 		for range n {
-			cluster.Step()
+			if err := cluster.Step(); err != nil {
+				fail("the cluster could not run a tick", err)
+			}
 		}
 	}
 

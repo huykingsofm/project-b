@@ -20,7 +20,7 @@ func (s *toyState) ID() sim.StateID               { return s.id }
 func (*toyState) Type() sim.StateType             { return toyType }
 func (*toyState) String() string                  { return "toy" }
 func (*toyState) Tick() uint64                    { return 0 }
-func (*toyState) SetTick(uint64)                  {}
+func (*toyState) NextTick()                       {}
 func (s *toyState) Clone() sim.State              { return s }
 func (*toyState) Hash() uint64                    { return 0 }
 func (*toyState) TakeEvents() []sim.Event         { return nil }

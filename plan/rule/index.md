@@ -150,6 +150,10 @@ Written data has two versions: the format of the container (owned by the library
 
 No line of code or comment is longer than 100 columns (a tab is 4); `lll` checks it in `make ci`. Comments are wrapped, code is broken after the commas inside brackets or after `&&` and `||`, and no tool does it for us.
 
+### [R34. An error is returned or logged, never both (hard)](r34-return-or-log.md)
+
+A function that meets an error returns it, wrapped with where it went through (`%w`), or logs it, never both: the error is logged once, by the one that handles it last (a cluster that stops, a loop that drops a message, `main`).
+
 ## 5. Ways of working
 
 ### [Ways of working](ways-of-working.md)

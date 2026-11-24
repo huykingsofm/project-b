@@ -128,7 +128,7 @@ func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNotGivenAgainSoon(t *testi
 		t.Fatalf("the world still knows %v", got)
 	}
 	for tick := uint64(1); tick <= 5; tick++ {
-		st.SetTick(tick)
+		st.NextTick()
 		if got := must.Ok(st.AddZoneLayer()); got == first {
 			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
 		}

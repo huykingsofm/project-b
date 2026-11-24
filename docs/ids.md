@@ -54,7 +54,7 @@
 | `world` state | the local number of the `StateID` of each zonelayer, from 1 up to 2^24 - 1 (`State.AddZoneLayer` gives the ID and makes the world know the zonelayer; `RemoveZoneLayer` gives the number back) | set when the state is made (`ClusterBuilder.WithZoneLayerGraveSteps`, 12000 ticks unless set), written in the checkpoint with the allocator |
 
 - The IDs of zones come from the content (the map of a zone says which zone an exit leads to), so no allocator gives them.
-- The state steps its allocator once in `SetTick`, at the start of each tick, so the grave is counted in the ticks of the state and a replay counts the same.
+- The state steps its allocator once in `NextTick`, at the start of each tick, so the grave is counted in the ticks of the state and a replay counts the same.
 - The steps must be longer than anything that can still name the entity: the removal that is set for an item on the ground (`ZoneLayerItemEntityRemoveAction`, at the tick the item expires) holds its `EntityID`, and an ID that came back sooner would have that action remove another item. The same is true of the ID of a zonelayer and a message that waits to be sent to it.
 - A state whose allocator has no ID left refuses the new entity (`AddCharacterEntity` and `AddItemEntity` return false), and the action logs an error. With 2^32 IDs and the ones that left coming back, only a state that holds that many entities at once, or that gave them away faster than they wait, can reach it.
 - A checkpoint is refused when the entities a state holds (or the zonelayers the world knows) are not exactly the live IDs of its allocator. The hash of a state covers the allocator and its grave; the live IDs are not in it again, as the hash of the state covers what it holds.

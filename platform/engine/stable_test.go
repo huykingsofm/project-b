@@ -9,8 +9,7 @@ import (
 )
 
 func publishedAt(stable *StableStateStore, tick uint64) *toyState {
-	st := &toyState{id: 7}
-	st.SetTick(tick)
+	st := &toyState{id: 7, tick: tick} // a toy state is made at any tick
 	stable.Publish(st)
 	return st
 }

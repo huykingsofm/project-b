@@ -182,7 +182,7 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 		testkit.WalkToTheEastExit(t, c, 1)
 		c.Env.Router.Retire(testkit.Layer3)
 		c.ZoneLayer(testkit.Layer1).Send(exitEast)
-		testkit.Steps(c, 10)
+		testkit.Steps(t, c, 10)
 		replayAndCompare(t, c, mem)
 	})
 

@@ -18,7 +18,7 @@ func (s *stampState) ID() sim.StateID           { return s.id }
 func (*stampState) Type() sim.StateType         { return 1 }
 func (*stampState) String() string              { return "stamp" }
 func (s *stampState) Tick() uint64              { return s.tick }
-func (s *stampState) SetTick(t uint64)          { s.tick = t }
+func (s *stampState) NextTick()                 { s.tick++ }
 func (s *stampState) Clone() sim.State          { return s }
 func (*stampState) Hash() uint64                { return 0 }
 func (*stampState) TakeEvents() []sim.Event     { return nil }

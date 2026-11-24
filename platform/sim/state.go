@@ -52,8 +52,10 @@ type State interface {
 	String() string
 	// Tick is the tick that the state is at.
 	Tick() uint64
-	// SetTick sets the tick that the state is at, at the start of every tick.
-	SetTick(tick uint64)
+	// NextTick takes the state to the next tick, one more than the one it is at, at the start of
+	// every tick: the only way its tick changes, so what counts in ticks in it (the grave of its
+	// IDs) counts once for each tick. The engine checks that Tick says one more after it.
+	NextTick()
 	// Clone returns a copy of the data that shares nothing with the state, and has no event. The
 	// engine publishes it for the other engines to read and never changes it again.
 	Clone() State

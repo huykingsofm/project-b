@@ -128,9 +128,9 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 	return s.zoneLayers.All()
 }
 
-// SetTick sets the tick that the state is at.
-func (s *State) SetTick(tick uint64) {
-	s.tick = tick
+// NextTick takes the state to the next tick, and the IDs in the grave one step.
+func (s *State) NextTick() {
+	s.tick++
 	s.entityIDs.Step()
 }
 

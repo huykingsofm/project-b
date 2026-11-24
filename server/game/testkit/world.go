@@ -90,10 +90,13 @@ func NewWorld(
 	return c, rec, replayLog, cfg
 }
 
-// Steps runs n ticks of every engine of the cluster.
-func Steps(c *game.Cluster, n int) {
+// Steps runs n ticks of every engine of the cluster, and fails the test when one fails.
+func Steps(t testing.TB, c *game.Cluster, n int) {
+	t.Helper()
 	for range n {
-		c.Step()
+		if err := c.Step(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -116,7 +119,7 @@ func EnterCharacter(
 	if !c.Zone(zoneID).Send(command.ZoneCharacterEnterCommand{Character: character}) {
 		t.Fatal("zone queue full")
 	}
-	Steps(c, 4)
+	Steps(t, c, 4)
 }
 
 // WalkToTheEastExit enters a character in Zone1 and walks it to the exit.
@@ -126,7 +129,7 @@ func WalkToTheEastExit(t *testing.T, c *game.Cluster, characterID state.Characte
 	c.ZoneLayer(Layer1).Send(
 		command.ZoneLayerCharacterMoveCommand{CharacterID: characterID, Dir: state.East, Ticks: 8},
 	)
-	Steps(c, 12)
+	Steps(t, c, 12)
 }
 
 // NewCharacter is a character of the values of a test, which are never invalid.

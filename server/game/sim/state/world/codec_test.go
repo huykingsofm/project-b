@@ -17,7 +17,9 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddItemToCharacter(3, 7, 120, 4, 99)
 	st.AddItemToCharacter(4, 8, 5, 4, 99)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "psst", 5))
-	st.SetTick(9)
+	for range 9 {
+		st.NextTick()
+	}
 	st.AddZone(2)
 	st.AddZone(3)
 	st.AddZone(2) // a zone it knows is not added again

@@ -16,7 +16,9 @@ func TestAZoneStateComesBackAsItWasWrittenWithTheMapThatItsIDFinds(t *testing.T)
 	st.AddZoneLayer(4, 50)
 	st.AddZoneLayer(5, 20)
 	st.SendMessage(zone.NewChatMessage(1, "hello zone", 3))
-	st.SetTick(7)
+	for range 7 {
+		st.NextTick()
+	}
 	tiles := st.TileMap().(*tilemap.TileMap)
 
 	var w binary.Writer

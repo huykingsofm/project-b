@@ -35,15 +35,19 @@ type Engine[S sim.State] struct {
 	tick     uint64
 }
 
-// New makes the engine of a state. The tick is its own: the caller gives the ticks with Run or
-// calls Step.
+// ErrTickMismatch is wrapped by the error of an engine whose state is not at the tick the engine is
+// at.
+var ErrTickMismatch = errors.New("the tick of the state is not the tick of the engine")
+
+// New makes the engine of a state, at the tick the state is at. The tick is its own: the caller
+// gives the ticks with Run or calls Step.
 func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
 	env.ReplayLog.Describe(me, st.String())
 	e := &Engine[S]{
 		cell: newCell(
 			me, env.Router, env.Cfg, env.ReplayLog, env.Stable, env.QueueSize, seed,
-		), st: st,
+		), st: st, tick: st.Tick(),
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, plans: planPoolOf[S](),
 	}
@@ -117,11 +121,21 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.sched.At(tick, 
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
 //  7. send the messages that the actions put in the outbox.
-func (e *Engine[S]) Step() {
+//
+// It first takes the state to the next tick, and returns an error, having done nothing else, when
+// the state does not then say the tick that the engine is at: a state whose NextTick is wrong can
+// no longer be run, nor replayed, and the cluster stops.
+func (e *Engine[S]) Step() error {
 	e.tick++
+	e.st.NextTick()
+	if got := e.st.Tick(); got != e.tick {
+		return fmt.Errorf(
+			"the engine %d: %w: the state is at tick %d, and the engine at %d",
+			e.me, ErrTickMismatch, got, e.tick,
+		)
+	}
 	cfg := e.snapshot(e.tick)
 	ctx := &sim.Context{Tick: e.tick, Rand: e.rng, Cfg: cfg}
-	e.st.SetTick(e.tick)
 	e.reg.Begin(e.tick)
 	e.view.begin(e.tick)
 	e.settle(cfg, e.tick)
@@ -160,6 +174,7 @@ func (e *Engine[S]) Step() {
 	e.recordHash(cfg, e.tick, e.Hash)
 	e.flush(cfg, e.tick, e.reg.Take())
 	e.endTick(e.tick)
+	return nil
 }
 
 // planScheduled adds the actions that were scheduled for this tick, among them what the engine set
@@ -182,15 +197,19 @@ func (e *Engine[S]) planCommands() {
 	}
 }
 
-// Run steps the engine at every tick that arrives, until the context ends.
-func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) {
+// Run steps the engine at every tick that arrives, until the context ends or a tick fails. It
+// returns the error of the tick that failed, and nil when the context ended.
+func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	for {
 		select {
 		case <-ctx.Done():
 			e.retire()
-			return
+			return nil
 		case <-ticks:
-			e.Step()
+			if err := e.Step(); err != nil {
+				e.retire()
+				return err
+			}
 		}
 	}
 }
@@ -226,6 +245,12 @@ func Restore[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error
 	}
 	if st.ID() != id {
 		return nil, fmt.Errorf("%d: the state is of the engine %d", id, st.ID())
+	}
+	if st.Tick() != tick {
+		return nil, fmt.Errorf(
+			"%d: %w: the state is at tick %d, and the checkpoint at %d",
+			id, ErrTickMismatch, st.Tick(), tick,
+		)
 	}
 	rest, err := env.readCheckpointRest[S](r, version)
 	if err != nil {

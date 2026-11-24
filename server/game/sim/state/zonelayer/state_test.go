@@ -302,7 +302,7 @@ func TestAnEntityThatLeavesIsNotGivenItsIDAgainSoon(t *testing.T) {
 	first := must.Ok(st.AddItemEntity(7, 1, at, 0))
 	st.RemoveItemEntity(first)
 	for tick := uint64(1); tick <= 10; tick++ { // past the steps of the grave
-		st.SetTick(tick)
+		st.NextTick()
 		if got := must.Ok(st.AddItemEntity(7, 1, at, 0)); got == first {
 			t.Fatalf("the ID of an entity that left was given again at tick %d", tick)
 		}
@@ -316,7 +316,7 @@ func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
 	if _, ok := st.RemoveCharacterEntity(1); !ok {
 		t.Fatal("the character was not taken out")
 	}
-	st.SetTick(1)
+	st.NextTick()
 	back := must.Ok(st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at))
 	if back == body {
 		t.Fatalf("the body that came back got the ID of the one that left, %d", body)

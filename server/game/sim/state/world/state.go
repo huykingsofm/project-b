@@ -95,10 +95,9 @@ func (s *State) clone() *State {
 	}
 }
 
-// SetTick sets the tick that the state is at, and takes the IDs in the grave one step. It is called
-// once at the start of each tick.
-func (s *State) SetTick(tick uint64) {
-	s.tick = tick
+// NextTick takes the state to the next tick, and the IDs in the grave one step.
+func (s *State) NextTick() {
+	s.tick++
 	s.zoneLayerIDs.Step()
 }
 
