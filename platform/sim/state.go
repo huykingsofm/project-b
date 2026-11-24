@@ -44,27 +44,27 @@ var (
 )
 
 // MapStateTypeToName gives a type of state its name, in letters, for a file or a log: a log names
-// the directory of an engine after it. It is called where the type is defined, once for each type.
-// A type has one name and a name belongs to one type, and neither is ever changed, because what is
-// written to the disk carries the name; it reports an error for a second name of a type, or a name
-// that another type has.
-func MapStateTypeToName(t StateType, name string) error {
+// the directory of an engine after it. It is called where the type is defined, once for each type,
+// when the program starts. A type has one name and a name belongs to one type, and neither is ever
+// changed, because what is written to the disk carries the name; it panics for no name, for a
+// second name of a type, and for a name that another type has: a program that has it cannot run
+// before the owner fixes it (R31).
+func MapStateTypeToName(t StateType, name string) {
 	if name == "" {
-		return fmt.Errorf("the state type %d is given no name", t)
+		panic(fmt.Sprintf("the state type %d is given no name", t))
 	}
 	typeNamesMu.Lock()
 	defer typeNamesMu.Unlock()
 	if old, ok := typeNames[t]; ok {
-		return fmt.Errorf(
+		panic(fmt.Sprintf(
 			"the state type %d is called %q already, and cannot be called %q", t, old, name,
-		)
+		))
 	}
 	if other, ok := namedTypes[name]; ok {
-		return fmt.Errorf("the name %q is the name of the state type %d already", name, other)
+		panic(fmt.Sprintf("the name %q is the name of the state type %d already", name, other))
 	}
 	typeNames[t] = name
 	namedTypes[name] = t
-	return nil
 }
 
 // String is the name that MapStateTypeToName gave the type, or "state type" and its number when

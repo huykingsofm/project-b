@@ -14,11 +14,7 @@ import (
 // the toy state is of the type 0, so a plain number is the ID of a toy state
 const toyType sim.StateType = 0
 
-func init() {
-	if err := sim.MapStateTypeToName(toyType, "toy"); err != nil {
-		panic(err)
-	}
-}
+func init() { sim.MapStateTypeToName(toyType, "toy") }
 
 type toyState struct{ id sim.StateID }
 

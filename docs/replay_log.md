@@ -12,7 +12,7 @@
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
 - A log writes what it is given: `NopLog` is a place holder that takes everything and keeps nothing, and the engine works out a hash at its period whatever the log is.
-- The name of a type of state is set where the type is defined, with `sim.MapStateTypeToName(type, name)`: a type has one name, a name belongs to one type, and neither is ever changed, because the name is in the path of a log on the disk. A second name for a type, or a name that another type has, is an error that is found when the program starts. A type that was given none is called `state type <number>`.
+- The name of a type of state is set where the type is defined, with `sim.MapStateTypeToName(type, name)`: a type has one name, a name belongs to one type, and neither is ever changed, because the name is in the path of a log on the disk. A second name for a type, no name, or a name that another type has makes it panic when the program starts: the owner fixes it before the server runs (R31). A type that was given none is called `state type <number>`.
 
 ## Writing
 

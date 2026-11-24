@@ -55,27 +55,27 @@ type restored[S sim.State] struct {
 
 // restoredCell is what a checkpoint says of what every engine knows besides its state.
 type restoredCell struct {
-	rng            *rand.Rand
-	seq            uint64
-	cfgVersionSeen uint64
-	lastSeq        map[sim.StateID]uint64
-	unsettled      unsettledMessages
+	rng               *rand.Rand
+	sentSeq           uint64
+	cfgVersionSeen    uint64
+	lastRecvSeq       map[sim.StateID]uint64
+	unsettledMessages unsettledMessages
 }
 
 // PCG is where the random numbers of the engine were.
 func (rc restoredCell) Rand() *rand.Rand { return rc.rng }
 
-// Seq is the number of the last message the engine sent.
-func (rc restoredCell) Seq() uint64 { return rc.seq }
+// SentSeq is the number of the last message the engine sent.
+func (rc restoredCell) SentSeq() uint64 { return rc.sentSeq }
 
 // CfgVersionSeen is the version of the configuration the engine read last.
 func (rc restoredCell) CfgVersionSeen() uint64 { return rc.cfgVersionSeen }
 
-// LastSeq is the last number that the engine took from each sender.
-func (rc restoredCell) LastSeq() map[sim.StateID]uint64 { return rc.lastSeq }
+// LastRecvSeq is the last number that the engine took from each sender.
+func (rc restoredCell) LastRecvSeq() map[sim.StateID]uint64 { return rc.lastRecvSeq }
 
-// Unsettled is what the engine had sent or was to send.
-func (rc restoredCell) Unsettled() unsettledMessages { return rc.unsettled }
+// UnsettledMessages is what the engine had sent or was to send.
+func (rc restoredCell) UnsettledMessages() unsettledMessages { return rc.unsettledMessages }
 
 // Scheduler is what the engine waited for.
 func (r *restored[S]) Scheduler() sim.Scheduler[S] { return r.sched }
@@ -92,7 +92,7 @@ func decodeCell(
 		return restoredCell{}, fmt.Errorf("its random numbers: %w", err)
 	}
 	rc := restoredCell{rng: rng}
-	rc.seq = r.Uvarint()
+	rc.sentSeq = r.Uvarint()
 	rc.cfgVersionSeen = r.Uvarint()
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
@@ -101,12 +101,12 @@ func decodeCell(
 	if n > uint64(r.Left()) { // a sender takes at least one byte
 		return restoredCell{}, fmt.Errorf("%w: %d senders", binary.ErrShort, n)
 	}
-	rc.lastSeq = make(map[sim.StateID]uint64, n)
+	rc.lastRecvSeq = make(map[sim.StateID]uint64, n)
 	for range n {
 		sender := r.Uint[sim.StateID]()
-		rc.lastSeq[sender] = r.Uvarint()
+		rc.lastRecvSeq[sender] = r.Uvarint()
 	}
-	if rc.unsettled, err = decodeUnsettledMessages(c, r, version); err != nil {
+	if rc.unsettledMessages, err = decodeUnsettledMessages(c, r, version); err != nil {
 		return restoredCell{}, err
 	}
 	return rc, r.Err()

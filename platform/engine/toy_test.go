@@ -15,9 +15,7 @@ const toyType sim.StateType = 0
 
 func init() {
 	for t, name := range map[sim.StateType]string{toyType: "toy", toyType + 1: "other"} {
-		if err := sim.MapStateTypeToName(t, name); err != nil {
-			panic(err)
-		}
+		sim.MapStateTypeToName(t, name)
 	}
 }
 

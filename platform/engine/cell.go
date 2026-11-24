@@ -334,9 +334,9 @@ func (c *cell) encode(w *binary.Writer, withSent bool) error {
 // before the engine was made.
 func (c *cell) restore(rc restoredCell) {
 	c.rng = rc.Rand()
-	c.sentSeq, c.cfgVersionSeen = rc.Seq(), rc.CfgVersionSeen()
-	c.lastRecvSeq = rc.LastSeq()
-	held := rc.Unsettled()
+	c.sentSeq, c.cfgVersionSeen = rc.SentSeq(), rc.CfgVersionSeen()
+	c.lastRecvSeq = rc.LastRecvSeq()
+	held := rc.UnsettledMessages()
 	c.unsettledMessages.SetUnsent(held.Unsent())
 	c.unsettledMessages.SetSent(held.Sent())
 	// what the checkpoint says it took is in a place that no crash takes back: the state was

@@ -1,6 +1,6 @@
 # Unsettled messages and acks
 
-`platform/engine/unsettled_messages.go`, `platform/engine/cell.go` (`flushUnsettledMessages`, `publishAcks`), `platform/replay/safe.go`. The unsettled messages of an engine (`engine.UnsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
+`platform/engine/unsettled_messages.go`, `platform/engine/cell.go` (`flushUnsettledMessages`, `releaseAckedMessages`, `publishAcks`), `platform/replay/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
 
 ## What they hold
 
@@ -28,10 +28,10 @@
 
 | Part | What it is |
 |---|---|
-| `AckBoard` | `Slot(receiver, sender)`: a number that only goes up, in the memory of the process; it is not a message, and is never written to a log or a checkpoint |
-| receiver | at the end of each tick asks its replay log up to which tick it is safe (`Log.Safe`), and for the messages it took in those ticks sets the slot of each sender to the largest number it took |
-| sender | at each flush reads the slot of each receiver it holds a message for, and lets go of the messages for it that have a number up to it |
-| a restore | what the checkpoint says an engine took (`lastSeq`) is in a place that no crash takes back, so it is set in the slots at once |
+| `AckBoard` | a number for each pair (receiver, sender) that only goes up, in the memory of the process: `Raise(receiver, sender, seq)` says it and `Acked(receiver, sender)` reads it (0 when nothing was said); it is not a message, and is never written to a log or a checkpoint |
+| receiver | at the end of each tick asks its replay log up to which tick it is safe (`Log.Safe`), and for the messages it took in those ticks raises the number of each sender to the largest it took (`publishAcks`) |
+| sender | at each flush (`releaseAckedMessages`) reads the number of each receiver it holds a message for, and lets go of the messages for it that have a number up to it |
+| a restore | what the checkpoint says an engine took (`lastRecvSeq`) is in a place that no crash takes back, so it is raised on the board at once |
 
 - A copy that a receiver drops is not acked by being dropped: it has to be safe like any other message.
 - Safe: see [replay_log](replay_log.md#which-tick-is-safe).
