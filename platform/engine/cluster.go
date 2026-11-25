@@ -65,6 +65,12 @@ type Stepper interface {
 	// SentMessages are the messages the engine sent and holds until their receivers say they hold
 	// them safe.
 	SentMessages() []sim.Message
+	// SetSentMessages sets the messages the engine sent and has not had acked, before it runs: see
+	// Engine.SetSentMessages.
+	SetSentMessages(messages []sim.Message)
+	// EncodeCheckpoint takes the checkpoint of the engine as it is and encodes it: see
+	// Engine.EncodeCheckpoint.
+	EncodeCheckpoint() ([]byte, error)
 	// PublishState publishes a copy of the state as it is, for the other engines to read: an
 	// engine that was made from a checkpoint has not run the tick that publishes it.
 	PublishState()

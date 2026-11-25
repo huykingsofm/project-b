@@ -275,6 +275,19 @@ func (e *Engine[S]) checkpointWith(st S) EngineCheckpoint[S] {
 // until their receivers say they hold them safe. The messages are the engine's own.
 func (e *Engine[S]) SentMessages() []sim.Message { return e.peer.data.unsettledMessages.Sent() }
 
+// SetSentMessages sets the messages the engine sent and has not had acked, as SentMessages gives
+// them: each is sent again at the next flush with the number it has, and let go of when its
+// receiver says it holds it safe. It is for an engine that has not run since it was made, whose
+// messages were found out by a replay; the engine takes the messages and the caller does not use
+// them after.
+func (e *Engine[S]) SetSentMessages(messages []sim.Message) {
+	e.peer.data.unsettledMessages.SetSent(messages)
+}
+
+// EncodeCheckpoint takes the checkpoint of the engine as it is and encodes it: what Checkpoint
+// gives, written, for a cluster that holds its engines without their state type.
+func (e *Engine[S]) EncodeCheckpoint() ([]byte, error) { return e.Checkpoint().Encode() }
+
 // PublishState publishes a copy of the state as it is. A tick does it at its end; an engine made
 // from a checkpoint calls it before its first tick, so that what the others read of it is there.
 func (e *Engine[S]) PublishState() { e.stable.Publish(e.st.Clone().(S)) }

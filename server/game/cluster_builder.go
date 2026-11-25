@@ -214,12 +214,27 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := &engine.Env{
+	return b.assemble(b.newEnv(codecs), engine.NoCheckpoints{})
+}
+
+// NewEnv makes the environment of a cluster that runs, from what the builder holds: a router, the
+// event log, the published states, the emitter, the acks and the writer of checkpoints. A cluster
+// that goes live after a recovery is made in it (see replay.Result.Handover). It returns an error
+// when the codecs cannot be made.
+func (b *ClusterBuilder) NewEnv() (*engine.Env, error) {
+	codecs, err := NewCodecs(b.tilesOf)
+	if err != nil {
+		return nil, err
+	}
+	return b.newEnv(codecs), nil
+}
+
+func (b *ClusterBuilder) newEnv(codecs *sim.Codecs) *engine.Env {
+	return &engine.Env{
 		Router: engine.NewRouter(), EventLog: b.eventLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
-	return b.assemble(env, engine.NoCheckpoints{})
 }
 
 // BuildIn makes the engines of the world and connects them in the environment given instead of one

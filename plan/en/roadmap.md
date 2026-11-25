@@ -22,14 +22,14 @@ What has been built and what is to be built, in the order it is done. What is bu
 | Checkpoints above the line: moved, with what is cut of the logs, to the archive of the cut (`.archive/cut-<n>/`), and never deleted (see [replay](../../docs/replay.md#cut)) | `done` |
 | Replay from a checkpoint: each engine is made from its latest checkpoint at or below its limit (an earlier one where another engine reads a copy of it before) and run on its own log to its limit, with the hash of the log at the checkpoint compared with the engine that was made (see [replay](../../docs/replay.md#start-of-an-engine)) | `done` |
 | `platform/eventlog` keeps the log of an engine, and `platform/replay` brings a cluster back: the recovery line and the start of each engine make a `Plan` (read-only), `Plan.Cut` brings the files to it, and `Run` runs the engines on it, so a replay only runs on logs that are whole at the recovery line; `Recover` is the three, and an engine that differs from its log is a `*DivergenceError` (see [replay](../../docs/replay.md)) | `done` |
+| Handover: `Result.Handover(builder, env)` after `Recover` makes the engines again in the environment of a cluster that runs, each from a checkpoint of its replayed engine at its limit; the replay router keeps every message the engines sent, and each live engine is given its own as its sent messages that are not acked (`SetSentMessages`), so the first flush sends them again and a receiver that took one drops the copy; the event log writes on after the cut (see [replay](../../docs/replay.md#handover)) | `done` |
 
 ## To build
 
-What is left of the recovery of a cluster: the logs and the checkpoints can be cut to the recovery line and every engine replayed from its checkpoint to its limit with no divergence; what is not there yet is to go on live from there.
+What is left of the recovery of a cluster: a cluster is recovered and goes on live from the recovery line; what is not there yet are the limits and the checks below.
 
 | Piece | What it is |
 |---|---|
-| Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the unsettled messages are those of the checkpoints, and the acks are made again |
 | Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
 | Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
 | To measure | the size of the unsettled messages in a checkpoint |

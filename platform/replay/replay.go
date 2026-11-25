@@ -43,6 +43,10 @@ type Result struct {
 	Cluster *engine.Cluster
 	// Ticks is the last tick of each engine that was replayed.
 	Ticks map[sim.StateID]uint64
+	// SentMessages is, for each engine, the messages it sent from its start to its limit that did
+	// not come back, in the order of their numbers: what the engines of a replay do not hold, and
+	// what the engines that go live send again (see Handover).
+	SentMessages map[sim.StateID][]sim.Message
 	// Divergences says, for each engine that did not do what its log says, the first thing that
 	// differed. A replay that matches has none.
 	Divergences []string
@@ -76,7 +80,8 @@ func Run(b Builder, p *Plan) (*Result, error) {
 		return nil, err
 	}
 	return &Result{
-		Plan: p, Cluster: run.cluster, Ticks: run.ticks(), Divergences: run.div.list(),
+		Plan: p, Cluster: run.cluster, Ticks: run.ticks(), SentMessages: run.sentMessages(),
+		Divergences: run.div.list(),
 	}, nil
 }
 

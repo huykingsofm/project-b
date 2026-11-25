@@ -11,7 +11,7 @@
 
 - Both are in the checkpoint, each message whole. What a sent message waits for (the tick at which it is sent again) is not: after a restore each is sent again at the next flush, with the number it has.
 - The hash of the engine covers the unsent messages and not the sent ones: when a message is acked depends on when the log of its receiver is synced, which a replay does not repeat.
-- An engine in an environment with no `AckBoard` (a replay) holds no sent message: nothing would ever let it go.
+- An engine in an environment with no `AckBoard` (a replay) holds no sent message: nothing would ever let it go. The replay router keeps what the engines sent, and a handover gives each engine its own as its sent messages ([replay](replay.md#handover)).
 
 ## Sending again
 
