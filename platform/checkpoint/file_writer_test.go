@@ -182,8 +182,11 @@ func TestAnArchivedCheckpointIsNotOneAnyMoreAndIsKeptInTheArchive(t *testing.T) 
 	if ticks, _ := Ticks(dir, engineA); !slices.Equal(ticks, []uint64{7}) {
 		t.Fatalf("the ticks are %v, want only 7", ticks)
 	}
-	if got, err := os.ReadFile(filepath.Join(archive, fileName(14))); err != nil ||
-		string(got) != "fourteen" {
+	kept, _ := filepath.Glob(filepath.Join(archive, "ckpt-*.snap"))
+	if len(kept) != 1 || filepath.Base(kept[0]) == fileName(14) {
+		t.Fatalf("the archive holds %v, want one file with a time in its name", kept)
+	}
+	if got, err := os.ReadFile(kept[0]); err != nil || string(got) != "fourteen" {
 		t.Fatalf("the archived file holds %q (%v)", got, err)
 	}
 	if err := Archive(dir, engineA, 14, archive); err == nil {

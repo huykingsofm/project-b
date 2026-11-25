@@ -43,10 +43,11 @@
 
 | What | Where it goes |
 |---|---|
-| the records of a log above its line | `<dir>/.archive/cut-<n>/<engine>/seg-*.pbsl.discarded-<offset>` ([segmentlog](segmentlog.md#cut)) |
-| the checkpoints of an engine above its line | `<dir>/.archive/cut-<n>/<engine>/ckpt-<tick>.snap` |
+| the records of a log above its line | `<dir>/.archive/cut-<n>/<engine>/seg-*.<now>.pbsl.discarded-<offset>` ([segmentlog](segmentlog.md#cut)) |
+| the checkpoints of an engine above its line | `<dir>/.archive/cut-<n>/<engine>/ckpt-<tick>.<now>.snap` |
 
 - `<n>` counts from 1, one above the largest that is there, so what two cuts keep never meets. The directory is made only when something is cut. Nothing is deleted.
+- A file put in the archive has the time of the move (UTC, to the nanosecond) before its extension, `<origin>.<now>.<ext>` (`atomicfile.Stamped`), so that what is put aside twice under one name is not written over.
 - `<dir>/.archive` is not read as the log of an engine or as a checkpoint (`replay.Engines`, `checkpoint.Ticks`).
 - A checkpoint above the line holds what was cut. A cut is made from the end, so that a crash in the middle leaves a cluster that is whole and longer than it should be, and the cut is made again.
 - A log already at its line and an engine with no checkpoint above it are not touched; a second cut of the same files changes nothing.

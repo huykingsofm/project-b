@@ -7,6 +7,7 @@
 | Call | What it does |
 |---|---|
 | `atomicfile.Write(path, data)` | makes the directory of `path` when it is not there, writes `path + ".tmp"`, syncs it, renames it to `path`, and syncs the directory; a file already at `path` is replaced whole |
+| `atomicfile.Stamped(name, now)` | the name of a file put aside: `<origin>.<now>.<ext>`, with `now` in UTC to the nanosecond (`20060102T150405` + 9 digits + `Z`), so that a file put aside before under the same name is not written over |
 | `atomicfile.SyncDir(dir)` | forces the entries of a directory to disk, so that a file made, renamed or deleted in it is there after a crash |
 
 - A temporary file that a crash left is not the file; the next `Write` of the same path writes over it.

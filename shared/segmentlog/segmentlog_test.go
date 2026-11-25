@@ -728,7 +728,7 @@ func TestWhatOpenCutsFromTheLastSegmentIsKeptNextToItWhetherItWasATornBatchOrDam
 
 		segmentlog.Open(dir, opts) // repairs; its writer is not used
 		after, _ := os.ReadFile(path)
-		kept, err := filepath.Glob(path + ".discarded-*")
+		kept, err := filepath.Glob(filepath.Join(dir, "seg-*.discarded-*"))
 		if err != nil || len(kept) != 1 {
 			t.Fatalf("%s: %d files of discarded bytes, want 1", name, len(kept))
 		}

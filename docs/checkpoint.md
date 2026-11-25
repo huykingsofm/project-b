@@ -11,7 +11,7 @@
 | `engine.DecodeEngineCheckpoint[S](data, codecs)` | reads a checkpoint of an engine whose state is of type `S`; the state is read with the codecs, which for a zone know the map of the zone (`game.NewCodecs(tilesOf)`); a checkpoint of an engine whose state is of another type is an error |
 | `c.Restore(env, seed)` | makes the engine of a checkpoint, at its tick; the engine takes what the checkpoint holds |
 | `checkpoint.LatestAtOrBelow(dir, id, tick)` | the tick of the latest checkpoint file of an engine at or below `tick`, and false when there is none |
-| `checkpoint.Archive(dir, id, tick, archiveDir)` | moves the checkpoint file of an engine at a tick to `archiveDir`: it is no longer a checkpoint, and is not deleted |
+| `checkpoint.Archive(dir, id, tick, archiveDir)` | moves the checkpoint file of an engine at a tick to `archiveDir`: it is no longer a checkpoint, and is not deleted; the file is named `ckpt-<tick>.<now>.snap` there (`atomicfile.Stamped`), so that two moves never meet |
 | `engine.CheckpointSource` | what a builder asks for the checkpoint of each engine it makes (`Checkpoint(id)`); `engine.NoCheckpoints` has none; `recovery.CheckpointFiles` gives the files |
 | `checkpoint.NewFileWriter(dir, queue)` | the `engine.CheckpointWriter` of a cluster: one goroutine that writes the checkpoints of every engine to files under `dir`, with a queue of `queue`; `Close` writes what waits and stops it |
 | `checkpoint.Ticks(dir, id)` | the ticks at which an engine has a checkpoint file, in rising order |

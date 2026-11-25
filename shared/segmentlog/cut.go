@@ -15,10 +15,10 @@ import (
 // that holds the record after limit, and reads only that one. The segment is cut at the start of
 // the batch of the first record that goes, which can take with it records of that batch that were
 // to be kept, and the segments after it are taken out of the log. Nothing is thrown away: what is
-// cut is kept in archiveDir, in a file named <segment>.discarded-<offset> (a segment that is taken
-// out whole is moved there with the offset 0), where Segments does not see it, and a warning says
-// so. archiveDir is made when it is needed, and must be on the same volume as dir. A log with no
-// record after limit is not changed. The log must not be open for writing: a Writer is opened on
+// cut is kept in archiveDir, in a file named <segment>.<now>.discarded-<offset> (a segment that is
+// taken out whole is moved there with the offset 0), where Segments does not see it, and a warning
+// says so. archiveDir is made when it is needed, and must be on the same volume as dir. A log with
+// no record after limit is not changed. The log must not be open for writing: a Writer is opened on
 // the log that is left, and the ID of its next record is limit + 1.
 //
 // It is what a recovery does to the log of an engine whose last ticks were lost to a crash that
@@ -123,7 +123,7 @@ func cutSegment(archiveDir, path string, at int64) error {
 // discardSegment takes a segment out of the log without throwing it away: it is moved to
 // archiveDir.
 func discardSegment(archiveDir, path string) error {
-	name := filepath.Join(archiveDir, fmt.Sprintf("%s.discarded-%d", filepath.Base(path), 0))
+	name := filepath.Join(archiveDir, discardedName(path, 0))
 	if err := os.Rename(path, name); err != nil {
 		return err
 	}

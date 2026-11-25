@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -87,15 +88,17 @@ func LatestAtOrBelow(dir string, engine sim.StateID, tick uint64) (uint64, bool,
 	return ticks[i-1], true, nil
 }
 
-// Archive moves the checkpoint of an engine at the tick to archiveDir, which is made when it is
-// needed and must be on the same volume as dir: the checkpoint is no longer one, and is not
-// deleted. The directories are synced, so that a crash does not bring it back.
+// Archive moves the checkpoint of an engine at the tick to archiveDir, under its name with the time
+// of the move before the extension (atomicfile.Stamped), so that two moves never meet. archiveDir
+// is made when it is needed and must be on the same volume as dir: the checkpoint is no longer one,
+// and is not deleted. The directories are synced, so that a crash does not bring it back.
 func Archive(dir string, engine sim.StateID, tick uint64, archiveDir string) error {
 	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
 		return err
 	}
 	from := Path(dir, engine, tick)
-	if err := os.Rename(from, filepath.Join(archiveDir, fileName(tick))); err != nil {
+	to := filepath.Join(archiveDir, atomicfile.Stamped(fileName(tick), time.Now()))
+	if err := os.Rename(from, to); err != nil {
 		return err
 	}
 	if err := atomicfile.SyncDir(archiveDir); err != nil {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/huykingsofm/project-b/shared/atomicfile"
 	"github.com/huykingsofm/project-b/shared/logging"
@@ -18,11 +19,11 @@ import (
 // not repaired and is reported when the segment is read.
 //
 // What repair removes is not thrown away: the bytes that were cut are kept next to the segment, in
-// a file named <segment>.discarded-<offset>, and a warning says so, because the bytes after the
-// last whole batch are a batch that a crash cut or whole batches after damage in the middle of the
-// segment, and repair cannot tell the two apart. A segment whose header is of another format, or
-// whose header does not match its crc, is not repaired: Open returns the error and the file is left
-// as it is.
+// a file named <segment>.<now>.discarded-<offset>, and a warning says so, because the bytes after
+// the last whole batch are a batch that a crash cut or whole batches after damage in the middle of
+// the segment, and repair cannot tell the two apart. A segment whose header is of another format,
+// or whose header does not match its crc, is not repaired: Open returns the error and the file is
+// left as it is.
 func repair(dir string) error {
 	segments, err := Segments(dir)
 	if err != nil || len(segments) == 0 {
@@ -72,7 +73,7 @@ func repair(dir string) error {
 
 // keepDiscarded copies the bytes of a segment from `from` to `to` to a file in dir, and warns.
 func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
-	name := filepath.Join(dir, fmt.Sprintf("%s.discarded-%d", filepath.Base(path), from))
+	name := filepath.Join(dir, discardedName(path, from))
 	out, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
@@ -108,4 +109,11 @@ func removeSegment(dir, path string) error {
 		return err
 	}
 	return atomicfile.SyncDir(dir)
+}
+
+// discardedName is the name of the file that keeps what is cut from the segment at path, from the
+// offset: the name of the segment with the time of the cut before its extension, so that what is
+// kept by two cuts of one segment never meets, then `.discarded-<offset>`.
+func discardedName(path string, from int64) string {
+	return fmt.Sprintf("%s.discarded-%d", atomicfile.Stamped(filepath.Base(path), time.Now()), from)
 }

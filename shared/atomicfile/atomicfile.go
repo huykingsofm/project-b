@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // tmpSuffix is added to the name of the file while it is written. A file left by a crash is not the
@@ -55,4 +56,15 @@ func SyncDir(dir string) error {
 		return fmt.Errorf("sync of the directory %s: %w", dir, err)
 	}
 	return d.Close()
+}
+
+// Stamped is the name of a file that is put aside, so that a file put aside before with the same
+// name is not written over: `<origin>.<now>.<ext>`, where ext is the extension of name, with now
+// in UTC to the nanosecond (`20060102T150405` and nine digits of nanoseconds, then `Z`). A name
+// with no extension is `<origin>.<now>`. It is the name of a file only, with no directory.
+func Stamped(name string, now time.Time) string {
+	now = now.UTC()
+	stamp := fmt.Sprintf("%s%09dZ", now.Format("20060102T150405"), now.Nanosecond())
+	ext := filepath.Ext(name)
+	return name[:len(name)-len(ext)] + "." + stamp + ext
 }

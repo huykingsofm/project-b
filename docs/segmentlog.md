@@ -75,7 +75,7 @@ One directory for each log. A segment is `seg-<index>.pbsl`, the index in 20 dig
 |---|---|
 | `CutAfter(dir, limit, archiveDir)` | cuts the log after the record with the ID `limit`: the records with a greater ID go to `archiveDir`; the log must not be open for writing, and the ID of the next record of a Writer opened on what is left is `limit + 1` |
 
-- The segment that holds the record after `limit` is found like the one of `OpenReader` (the headers of about log2(n) segments) and is the only one that is read. It is cut at the start of the batch of that record, which takes with it the records of the batch that were to be kept; the segments after it are taken out of the log, from the last, so that a crash in the middle leaves a log that is whole and longer than it should be. Nothing is thrown away: the bytes that were cut are in `<archiveDir>/<segment>.discarded-<offset>`, a segment taken out whole is moved there as `<segment>.discarded-0`, where `Segments` does not see it, and a warning says so. `archiveDir` is made when something is cut, and is on the same volume as `dir`.
+- The segment that holds the record after `limit` is found like the one of `OpenReader` (the headers of about log2(n) segments) and is the only one that is read. It is cut at the start of the batch of that record, which takes with it the records of the batch that were to be kept; the segments after it are taken out of the log, from the last, so that a crash in the middle leaves a log that is whole and longer than it should be. Nothing is thrown away: the bytes that were cut are in `<archiveDir>/<segment>.<now>.discarded-<offset>`, a segment taken out whole is moved there as `<segment>.<now>.discarded-0`, where `Segments` does not see it, and a warning says so. `archiveDir` is made when something is cut, and is on the same volume as `dir`.
 - A log with no record after `limit` is not changed, a `limit` before the first record cuts all of the log, and a log that does not exist is empty.
 
 ## Repair
@@ -89,7 +89,7 @@ One directory for each log. A segment is `seg-<index>.pbsl`, the index in 20 dig
 | header cut off (never finished) | deletes it |
 | header whole but wrong (magic, version or crc) | leaves it and `Open` returns an error that names the file |
 
-- What `Open` cuts off is not thrown away: the bytes are copied to `<segment>.discarded-<offset>` and synced before the segment is cut, and a warning is logged. A torn batch and damage in the middle of the segment look the same, so a person decides.
+- What `Open` cuts off is not thrown away: the bytes are copied to `<segment>.<now>.discarded-<offset>` and synced before the segment is cut, and a warning is logged. A torn batch and damage in the middle of the segment look the same, so a person decides.
 - A new segment, a deleted one and a copy of discarded bytes are followed by a sync of the directory, so the name survives a crash as the bytes do.
 - The Writer then starts a new segment; it never appends to an old one.
 - One process at a time may open a directory. Nothing stops two (see the plan: a directory lock when several processes run).

@@ -120,8 +120,9 @@ func TestACutToTheRecoveryLineLeavesLogsThatEndAtThePointAndKeepsWhatItCutInTheA
 	if got, _ := checkpoint.Ticks(dir, a); !reflect.DeepEqual(got, []uint64{3}) {
 		t.Fatalf("a has the checkpoints %v, want 3", got)
 	}
-	if _, err := os.Stat(filepath.Join(archive, "ckpt-00000000000000000006.snap")); err != nil {
-		t.Fatalf("the checkpoint above the line is not in the archive: %v", err)
+	kept, _ := filepath.Glob(filepath.Join(archive, "ckpt-00000000000000000006.*.snap"))
+	if len(kept) != 1 {
+		t.Fatalf("the checkpoint above the line is not in the archive: %v", kept)
 	}
 	if engines, _ := replay.Engines(dir); len(engines) != 2 {
 		t.Fatalf("the archive is read as a log: engines %v", engines)
@@ -178,9 +179,9 @@ func TestTwoCutsKeepWhatTheyCutInDirectoriesOfTheirOwn(t *testing.T) {
 	}
 	for _, n := range []string{"cut-1", "cut-2"} {
 		engineArchive := filepath.Join(dir, ".archive", n, filepath.Base(replay.EngineDir(dir, b)))
-		kept := filepath.Join(engineArchive, "ckpt-00000000000000000008.snap")
-		if _, err := os.Stat(kept); err != nil {
-			t.Fatalf("the checkpoint of %s is not kept: %v", n, err)
+		kept, _ := filepath.Glob(filepath.Join(engineArchive, "ckpt-00000000000000000008.*.snap"))
+		if len(kept) != 1 {
+			t.Fatalf("the checkpoint of %s is not kept: %v", n, kept)
 		}
 	}
 }
