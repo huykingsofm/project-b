@@ -29,4 +29,4 @@
 | an action | `Registry.Config()`: the same copy, so every action of a tick sees one configuration |
 | the event log | the first read in a tick is a `StableRead` of `sim.ConfigStateID` with the tick of the copy, so a replay gives each tick the copy it read, and the engine depends on that tick of the configuration engine |
 | no copy published | the defaults (`config.Defaults()`), and the `StableRead` has tick 0 |
-| from outside the engines | `Cluster.Reader()`: the latest copy of the configuration engine, with no lock and no record in the log; `Cluster.ConfigStore().Snapshot()` is the configuration of the world outside the game, which the `LineCacheWriter` reads for its period |
+| from outside the engines | `Cluster.ConfigStore().Snapshot()` is the configuration of the world outside the game, which the `LineCacheWriter` reads for its period |

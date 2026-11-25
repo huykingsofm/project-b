@@ -132,21 +132,6 @@ func (c *Cluster) syncConfig() {
 // UpdateConfigCommand to.
 func (c *Cluster) ConfigEngine() *Engine[*sim.ConfigState] { return c.config }
 
-// Reader reads the latest copy that each engine published, with no lock and without the log: for
-// whoever is outside the engines and asks (a gateway, a config service). An engine reads through
-// its own view, which the event log records. It finds nothing in the environment of a replay.
-func (c *Cluster) Reader() sim.StableReader {
-	if r, ok := c.Env.Stable.(sim.StableReader); ok {
-		return r
-	}
-	return noCopies{}
-}
-
-// noCopies is the reader of an environment that keeps no copy to read.
-type noCopies struct{}
-
-func (noCopies) Read(sim.StateID) (sim.State, error) { return nil, sim.ErrStateNotFound }
-
 // Add puts an engine in the cluster, after the engines that are already in it.
 func (c *Cluster) Add(e Stepper) { c.engines = append(c.engines, e) }
 

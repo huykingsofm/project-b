@@ -25,10 +25,7 @@ type CopySource interface {
 	Copy(reader sim.StateID, tick uint64, id sim.StateID) sim.State
 }
 
-var (
-	_ StableStore      = (*StableStateStore)(nil)
-	_ sim.StableReader = (*StableStateStore)(nil)
-)
+var _ StableStore = (*StableStateStore)(nil)
 
 // StableStateStore is the store of the states that the engines published: the latest copy of the
 // state of each engine, whatever its type.
@@ -56,15 +53,6 @@ func (s *StableStateStore) Remove(id sim.StateID) { s.states.Remove(id) }
 // each ID in a tick (see StableView) and writes the read to the event log.
 func (s *StableStateStore) View(reader sim.StateID, eventLog eventlog.Log) *StableView {
 	return NewStableView(s, reader, eventLog)
-}
-
-// Read returns the latest published copy of the state with the ID, or sim.ErrStateNotFound: for
-// whoever is not an engine, which has a view of its own.
-func (s *StableStateStore) Read(id sim.StateID) (sim.State, error) {
-	if st, ok := s.states.Get(id); ok {
-		return st, nil
-	}
-	return nil, sim.ErrStateNotFound
 }
 
 // Copy returns the latest published copy, or nil.
