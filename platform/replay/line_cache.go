@@ -99,25 +99,22 @@ func WriteLineCache(dir string, c LineCache) error {
 	return atomicfile.Write(filepath.Join(dir, lineCacheFile), c.encode())
 }
 
-// ConfigSource is where the variables of the configuration are read from.
-type ConfigSource interface {
-	Snapshot() *config.Snapshot
-}
-
 // LineCacheWriter writes the cache of the recovery line of a cluster each time a FileLog says that
 // some engine has gone `replay.line_cache_every_ticks` ticks past what the cache says of it, and
 // once more when the log is closed. It is the replay.SafeObserver of the FileLog of the cluster,
 // and is called by one goroutine at a time, so it needs no lock.
 type LineCacheWriter struct {
 	dir     string
-	cfg     ConfigSource
+	store   *config.Store
 	written map[sim.StateID]uint64
 }
 
-// NewLineCacheWriter makes the writer of the cache of the cluster in dir. A nil cfg reads the
-// default of the period.
-func NewLineCacheWriter(dir string, cfg ConfigSource) *LineCacheWriter {
-	return &LineCacheWriter{dir: dir, cfg: cfg}
+// NewLineCacheWriter makes the writer of the cache of the cluster in dir, which reads the period
+// from the store: the configuration of the world outside the game, which the cluster is built with.
+// The writer is outside the engines, so it does not go through a stable view; nil means the
+// default.
+func NewLineCacheWriter(dir string, store *config.Store) *LineCacheWriter {
+	return &LineCacheWriter{dir: dir, store: store}
 }
 
 // SafeChanged writes the cache when it is due, or when final. A cache that cannot be written is
@@ -138,11 +135,7 @@ func (w *LineCacheWriter) SafeChanged(safe map[sim.StateID]uint64, final bool) {
 
 // due says whether an engine is a period past what was written.
 func (w *LineCacheWriter) due(safe map[sim.StateID]uint64) bool {
-	var snapshot *config.Snapshot
-	if w.cfg != nil {
-		snapshot = w.cfg.Snapshot()
-	}
-	every := uint64(lineCacheEvery.Get(snapshot))
+	every := uint64(lineCacheEvery.Get(w.store.Snapshot()))
 	for id, tick := range safe {
 		if tick >= w.written[id]+every {
 			return true

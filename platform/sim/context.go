@@ -7,12 +7,11 @@ import (
 )
 
 // Context is what an action sees of the world outside its state while it runs: the tick of its
-// engine, the random numbers of its engine, and the configuration as it was when the tick began.
-// There is no system clock: time is the tick count, so a run can be repeated.
+// engine and the random numbers of its engine. The configuration is read from the registry
+// (Registry.Config). There is no system clock: time is the tick count, so a run can be repeated.
 type Context struct {
 	Tick uint64
 	Rand *rand.Rand
-	Cfg  *config.Snapshot
 }
 
 // MaxDepth is how many actions deep a chain may go: an action that adds another action to the plan

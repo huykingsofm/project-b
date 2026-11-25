@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 // Var is a declared variable of type T. Get reads its value from a Snapshot.
@@ -20,11 +22,13 @@ func (v Var[T]) Name() string { return v.name }
 
 // Get returns the value of the variable in s, or its default when s is nil. A value that is a
 // slice or a map is shared by every reader of the snapshot: do not change it.
-func (v Var[T]) Get(s *Snapshot) T {
-	if s == nil {
-		return v.def
+func (v Var[T]) Get(s ReadOnlySnapshot) T {
+	if s != nil {
+		if val, ok := s.lookup(v.idx); ok {
+			return val.(T)
+		}
 	}
-	return s.vals[v.idx].(T)
+	return v.def
 }
 
 // declaration is what the registry keeps of a variable. It carries everything that depends on
@@ -50,6 +54,15 @@ func newRegistry() *registry { return &registry{byName: map[string]int{}} }
 
 // std is the registry that NewVar uses.
 var std = newRegistry()
+
+// declarations returns the declared variables, in the order they were declared. It ends the
+// declaration of variables, as a snapshot does.
+func (r *registry) declarations() []declaration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.frozen = true
+	return r.decls
+}
 
 func (r *registry) add(d declaration) int {
 	r.mu.Lock()
@@ -105,11 +118,10 @@ func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
 // build makes a snapshot from the defaults and the overrides, which are the text of a JSON value
 // by variable name. Every override is parsed into the type of its variable and checked against
 // its options: if any of them is wrong, no snapshot is made and the error names each one, so a
-// bad document never replaces a good configuration. A name that is not declared is returned in
-// unknown and otherwise ignored.
+// bad document never replaces a good configuration. A name that is not declared is ignored.
 func (r *registry) build(
-	version uint64, overrides map[string]string,
-) (snap *Snapshot, unknown []string, err error) {
+	overrides map[string]string,
+) (*Snapshot, error) {
 	r.mu.Lock()
 	r.frozen = true
 	decls, byName := r.decls, r.byName
@@ -126,11 +138,11 @@ func (r *registry) build(
 	}
 	slices.Sort(names)
 
+	var texts stablemap.Map[string, string]
 	var errs []error
 	for _, name := range names {
 		i, ok := byName[name]
 		if !ok {
-			unknown = append(unknown, name)
 			continue
 		}
 		v, perr := decls[i].parse(overrides[name])
@@ -139,9 +151,10 @@ func (r *registry) build(
 			continue
 		}
 		vals[i] = v
+		texts.Set(name, overrides[name])
 	}
 	if len(errs) > 0 {
-		return nil, unknown, errors.Join(errs...)
+		return nil, errors.Join(errs...)
 	}
-	return &Snapshot{version: version, vals: vals}, unknown, nil
+	return &Snapshot{vals: vals, texts: texts}, nil
 }

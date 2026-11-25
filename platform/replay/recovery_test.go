@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"github.com/huykingsofm/project-b/platform/config"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
@@ -312,11 +312,11 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	cfg := config.NewStore()
-	if _, err := cfg.Apply(map[string]string{"replay.line_cache_every_ticks": "10"}); err != nil {
+	store := config.NewStore()
+	if err := store.Apply(map[string]string{"replay.line_cache_every_ticks": "10"}); err != nil {
 		t.Fatal(err)
 	}
-	w := NewLineCacheWriter(dir, cfg)
+	w := NewLineCacheWriter(dir, store)
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {

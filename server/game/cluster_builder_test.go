@@ -32,7 +32,7 @@ func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {
 
 func TestANilEmitterOrEventLogKeepsTheDefault(t *testing.T) {
 	c, err := game.NewBuilder().
-		WithEventLog(nil).WithEmitter(nil).WithConfig(nil).
+		WithEventLog(nil).WithEmitter(nil).
 		WithWorld(game.WorldParams{ID: worldID(1)}).
 		WithZone(game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)}).
 		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 2}).

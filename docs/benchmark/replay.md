@@ -6,7 +6,7 @@ Conventions and how to run: [index](index.md). Behavior: [replay](../replay.md).
 
 | Name | Package | Measures |
 |---|---|---|
-| `BenchmarkRunScenarioLive` | `server/game` | building the world of the tests and running the scenario of `runScenario` (chat in each scope, a shield, an attack, a pickup, a run of movement, a new version of the config, a character that crosses to another zone, 90 ticks of each of 6 engines), with a memory event log |
+| `BenchmarkRunScenarioLive` | `server/game` | building the world of the tests and running the scenario of `runScenario` (chat in each scope, a shield, an attack, a pickup, a run of movement, a new document of the config, a character that crosses to another zone, 90 ticks of each of 6 engines), with a memory event log |
 | `BenchmarkReplayCluster` | `server/game` | building the same world and replaying the records of that scenario with `replay.Run` |
 
 | Benchmark | ns/op | B/op | allocs/op |

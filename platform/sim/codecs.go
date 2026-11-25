@@ -2,9 +2,11 @@ package sim
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // ActionDecoder, CommandDecoder, StateDecoder and OnFailDecoder read one kind of what the codecs
@@ -38,15 +40,26 @@ type Codecs struct {
 	messages map[StateType]stateMessageDecoder
 }
 
-// NewCodecs makes empty codecs.
+// NewCodecs makes codecs that know what every cluster has, the configuration engine, and nothing
+// else: the game registers its own states, actions and commands in them.
 func NewCodecs() *Codecs {
-	return &Codecs{
+	c := &Codecs{
 		Actions:  codec.New[ActionID, BaseAction, ActionDecoder](BaseAction.ID),
 		Commands: codec.New[CommandID, BaseCommand, CommandDecoder](BaseCommand.ID),
 		States:   codec.New[StateType, State, StateDecoder](State.Type),
 		OnFails:  codec.New[OnFailID, OnFail, OnFailDecoder](OnFail.ID),
 		messages: map[StateType]stateMessageDecoder{},
 	}
+	// the registers are empty, so this fails only when the numbers of the configuration meet others
+	err := errs.Join(
+		c.RegisterState(DecodeConfigState),
+		c.RegisterCommand(decodeUpdateConfigCommand),
+		c.RegisterAction(decodeUpdateConfigAction),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("the codecs of the configuration cannot be registered: %v", err))
+	}
+	return c
 }
 
 // RegisterState registers a type of state: decode reads it, and the type of state and its Go type
@@ -139,8 +152,11 @@ func (c *Codecs) DecodeAction(
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	if code > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: action %d", ErrUnknownCode, code)
+	}
 	decode, ok := c.Actions.Lookup(ActionID(code))
-	if !ok || code > 0xffff {
+	if !ok {
 		return nil, fmt.Errorf("%w: action %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)
@@ -170,8 +186,11 @@ func (c *Codecs) DecodeCommand(
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	if code > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: command %d", ErrUnknownCode, code)
+	}
 	decode, ok := c.Commands.Lookup(CommandID(code))
-	if !ok || code > 0xffff {
+	if !ok {
 		return nil, fmt.Errorf("%w: command %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)

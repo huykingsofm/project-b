@@ -98,7 +98,7 @@ func (u *unsettledMessages) SetSent(messages []sim.Message) {
 func (u *unsettledMessages) Len() int { return len(u.unsent) + len(u.sent) }
 
 // MarkSent says that a message went into the channel of its receiver at a tick.
-func (u *unsettledMessages) MarkSent(m sim.Message, tick uint64, cfg *config.Snapshot) {
+func (u *unsettledMessages) MarkSent(m sim.Message, tick uint64, cfg config.ReadOnlySnapshot) {
 	wait := uint64(unsettledResendFirst.Get(cfg))
 	u.sent = append(u.sent, sentMessage{message: m, due: tick + wait, wait: wait})
 }
@@ -119,7 +119,7 @@ func (u *unsettledMessages) Message(i int) sim.Message { return u.sent[i].messag
 
 // Reschedule says that the message at the index was sent again at the tick: the next time it waits
 // the step longer, up to the most.
-func (u *unsettledMessages) Reschedule(i int, tick uint64, cfg *config.Snapshot) {
+func (u *unsettledMessages) Reschedule(i int, tick uint64, cfg config.ReadOnlySnapshot) {
 	s := &u.sent[i]
 	s.wait = min(s.wait+uint64(unsettledResendStep.Get(cfg)), uint64(unsettledResendMost.Get(cfg)))
 	s.due = tick + s.wait

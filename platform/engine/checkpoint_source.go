@@ -1,6 +1,10 @@
 package engine
 
-import "github.com/huykingsofm/project-b/platform/sim"
+import (
+	"fmt"
+
+	"github.com/huykingsofm/project-b/platform/sim"
+)
 
 // CheckpointSource says which checkpoint each engine of a cluster is made from when the cluster
 // does not start at tick 0: a replay or a recovery starts an engine from a checkpoint of its own
@@ -17,3 +21,24 @@ type NoCheckpoints struct{}
 
 // Checkpoint says that no engine has one.
 func (NoCheckpoints) Checkpoint(sim.StateID) ([]byte, bool, error) { return nil, false, nil }
+
+// NewOrRestore makes the engine of a state that was just made: from the checkpoint that the source
+// has for its ID, if it has one, whatever the state says (it gives the engine its ID and nothing
+// else), and new otherwise. It returns an error when the checkpoint cannot be read or cannot make
+// its engine.
+func NewOrRestore[S sim.State](
+	fresh S, env *Env, seed uint64, checkpoints CheckpointSource,
+) (*Engine[S], error) {
+	data, ok, err := checkpoints.Checkpoint(fresh.ID())
+	if err != nil {
+		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
+	}
+	if !ok {
+		return New(fresh, env, seed), nil
+	}
+	c, err := DecodeEngineCheckpoint[S](data, env.Codecs)
+	if err != nil {
+		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
+	}
+	return c.Restore(env, seed)
+}

@@ -19,6 +19,7 @@ The rules the code follows are in [plan/rule/index.md](plan/rule/index.md). How 
 ```
 docs/
   action/                           reference of the actions: index.md (conventions, priorities, index), and world.md, zone.md, zonelayer.md
+  configengine.md                   the engine that owns the configuration: what it holds, how it is changed and read
   tilemap.md                        reference of TileMap: construction, Free, FreeForBody, Reach, exits
   simulation.md                     how the simulation works: platform and game, states, a tick, delivery, replay
   entity/                           reference of the entities: entity.md (the interfaces), character.md, item.md, exit.md
@@ -32,7 +33,7 @@ shared/                             libraries of our own, each a package; import
   codec/                            Registry: kinds told apart by a number, each with the function that reads it
 platform/                           what any game that runs in ticks is made of; imports nothing of the game
   config/                           Var[T] with defaults and limits, values parsed from JSON text, an immutable Snapshot
-  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs
+  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs, and the state of the configuration engine
     onfail/                         the kinds of OnFail (retry, redirect, compensate, notify, escalate, drop)
   engine/                           Engine[S] that runs any state, the router, the store of published states, the cluster
   eventlog/                         the event log of an engine, in memory and in files; where each engine's directory is

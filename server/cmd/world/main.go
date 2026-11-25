@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -110,10 +109,6 @@ func main() {
 
 	seed := uint64(1)
 	// the script runs some 40 ticks: a checkpoint every 10 shows a few of each engine
-	cfg := config.NewStore()
-	if _, err := cfg.Apply(map[string]string{"checkpoint.every_ticks": "10"}); err != nil {
-		fail("the configuration is refused", err)
-	}
 	var eventLog eventlog.Log = eventlog.NopLog{}
 	var replayFile *eventlog.FileLog
 	var checkpointFiles *checkpoint.FileWriter
@@ -133,7 +128,6 @@ func main() {
 	cluster, err := game.NewBuilder().
 		WithSeed(seed).
 		WithEventLog(eventLog).
-		WithConfig(cfg).
 		WithCheckpointWriter(checkpoints).
 		WithEmitter(printer{}).
 		WithWorld(game.WorldParams{ID: worldID}).
@@ -148,6 +142,12 @@ func main() {
 		Build()
 	if err != nil {
 		fail("the cluster could not be built", err)
+	}
+
+	if err := cluster.ConfigStore().Apply(
+		map[string]string{"checkpoint.every_ticks": "10"},
+	); err != nil {
+		fail("the configuration is refused", err)
 	}
 
 	step := func(title string, n int) {
@@ -261,11 +261,10 @@ func main() {
 			if err != nil {
 				fail("the checkpoints could not be listed", err)
 			}
-			fmt.Printf("  %s: %d inbound, %d commands, %d config, %d hashes, %d stable "+
-				"reads, up to tick %d; checkpoints at %v\n",
+			fmt.Printf("  %s: %d inbound, %d commands, %d hashes, %d stable reads, "+
+				"up to tick %d; checkpoints at %v\n",
 				label(e), counts[eventlog.KindInbound], counts[eventlog.KindCommand],
-				counts[eventlog.KindConfig], counts[eventlog.KindHash],
-				counts[eventlog.KindStableRead], last, ticks)
+				counts[eventlog.KindHash], counts[eventlog.KindStableRead], last, ticks)
 		}
 	}
 }

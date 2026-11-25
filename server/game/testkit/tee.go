@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
@@ -31,19 +30,17 @@ var ClusterEngines = []sim.StateID{World, Zone1, Zone2, Layer1, Layer2, Layer3}
 // NewTeeWorld is NewWorld with a event log that writes the records both in memory and to files.
 func NewTeeWorld(
 	t *testing.T, dir string,
-) (*game.Cluster, *eventlog.MemLog, *eventlog.FileLog, *config.Store) {
+) (*game.Cluster, *eventlog.MemLog, *eventlog.FileLog) {
 	t.Helper()
 	mem := &eventlog.MemLog{}
 	file := eventlog.NewFileLog(
 		dir, eventlog.FileLogOptions{Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8},
 	)
-	cfg := config.NewStore()
 	c, err := WorldBuilder(t, 7, 10).
-		WithConfig(cfg).
 		WithEventLog(teeLog{mem, file}).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c, mem, file, cfg
+	return c, mem, file
 }

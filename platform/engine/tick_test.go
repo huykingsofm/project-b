@@ -29,7 +29,7 @@ func TestAnEngineStartsAtTheTickOfItsState(t *testing.T) {
 }
 
 func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testing.T) {
-	c := NewCluster(newToyEnv(t))
+	c := newCluster(t, newToyEnv(t))
 	stuck := New(&stuckToy{toyState{id: 1}}, c.Env, 1)
 	after := New(&toyState{id: 2}, c.Env, 1)
 	c.Add(stuck)
@@ -41,8 +41,10 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 	if after.Tick() != 0 {
 		t.Fatal("an engine after the one that failed ran its tick")
 	}
-	if len(c.Env.EventLog.(*eventlog.MemLog).Records) != 0 {
-		t.Fatal("the engine that failed recorded something of the tick")
+	for _, r := range c.Env.EventLog.(*eventlog.MemLog).Records {
+		if r.Engine == 1 || r.Engine == 2 {
+			t.Fatalf("an engine that did not run recorded something of the tick: %+v", r)
+		}
 	}
 	m := sim.NewActionMessage[*toyState](2, onfail.Drop{})
 	if reason, ok := c.Env.Router.Deliver(m); ok || reason != sim.DeliveryFailureStopping {
@@ -51,7 +53,7 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 }
 
 func TestRunStopsEveryEngineWhenOneFails(t *testing.T) {
-	c := NewCluster(newToyEnv(t))
+	c := newCluster(t, newToyEnv(t))
 	c.Add(New(&stuckToy{toyState{id: 1}}, c.Env, 1))
 	c.Add(New(&toyState{id: 2}, c.Env, 1))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

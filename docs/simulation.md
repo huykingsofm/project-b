@@ -48,7 +48,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 `platform/engine/engine.go`, `Engine[S].Step`:
 
 0. Take the state to the next tick (`NextTick`); when the state does not then say the tick of the engine, return an error that wraps `ErrTickMismatch`, having done nothing else.
-1. Take the configuration once; decide on what came back undelivered.
+1. Read the configuration once, from the copy of the configuration engine that the stable view keeps for the tick ([configengine](configengine.md)); decide on what came back undelivered.
 2. Build the plan: what was scheduled for this tick (what the engine set for itself in the last tick included), the messages of other engines, the commands.
 3. Run the plan, one action after another, on the state, in place.
 4. Tell the actions that were cancelled; put what the actions set for the engine in the scheduler.
@@ -142,7 +142,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/errs` | `Join`: joins what many registrations returned into one error |
 | `shared/clone` | the contract for copying: a value, or a type with `Clone`; the containers use it ([R29](../plan/rule/r29-clone-or-value.md)) |
 | `shared/testing/aliasing` | for tests: finds memory that two values share, and checks that a type is a value or has `Clone` |
-| `platform/config` | `Var[T]` with defaults and limits; a snapshot taken once per tick; a whole set is rejected when one value is wrong |
+| `platform/config` | `Var[T]` with defaults and limits; an immutable snapshot, read as a `ReadOnlySnapshot`; a whole set is rejected when one value is wrong |
 
 ## Temporary values
 
@@ -152,6 +152,6 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - Needs the inputs from outside and what only the time decides (`platform/eventlog/`); what engines send themselves is made again from the state.
 - The hash an engine records is the hash of its state, of what it waits for and of what only it knows ([checkpoint](checkpoint.md#hash)).
-- An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
+- An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the hash of its state every few ticks, and which copy of another engine it read first.
 - In files: [eventlog](eventlog.md).
 - Run again from the records, on the real engines with other adapters: [replay](replay.md). Cut to the recovery line and run again from the checkpoints: [replay](replay.md).

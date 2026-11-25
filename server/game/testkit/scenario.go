@@ -4,7 +4,6 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game"
@@ -40,30 +39,41 @@ func (s Sender) Via[C sim.BaseCommand](c C) C {
 	return got.(C)
 }
 
-// ScenarioConfigVersion is the configuration that the scenario makes: the overrides that stay in
-// force, and its own.
-func ScenarioConfigVersion(kept map[string]string) map[string]string {
-	version := maps.Clone(kept)
-	if version == nil {
-		version = map[string]string{}
+// ScenarioConfigDocument is the document of the configuration that the scenario sets: the overrides
+// that stay in force, and its own.
+func ScenarioConfigDocument(kept map[string]string) map[string]string {
+	document := maps.Clone(kept)
+	if document == nil {
+		document = map[string]string{}
 	}
-	version["zonelayer.normal_attack.cooldown_ticks"] = "5"
-	return version
+	document["zonelayer.normal_attack.cooldown_ticks"] = "5"
+	return document
+}
+
+// SetConfig gives the store of the cluster the document: the text of the JSON value of each
+// variable that is not at its default, by name. The cluster sends it to its configuration engine at
+// its next step, when a variable changes, and the configuration is the new one from the tick after
+// the command is taken.
+func SetConfig(t testing.TB, c *game.Cluster, document map[string]string) {
+	t.Helper()
+	if err := c.ConfigStore().Apply(document); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // RunScenario runs a cluster through chat in each scope, a shield, an attack, a pickup, a run of
-// movement, a new version of the config, a character that enters with cooldowns and one that
+// movement, a new document of the config, a character that enters with cooldowns and one that
 // crosses to another zone, long enough for every engine to record a hash.
-func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
+func RunScenario(t testing.TB, c *game.Cluster, s Sender) {
 	t.Helper()
-	RunScenarioKeeping(t, c, cfg, s, nil)
+	RunScenarioKeeping(t, c, s, nil)
 }
 
-// RunScenarioKeeping is RunScenario for a store whose configuration has overrides that stay in
-// force when the scenario makes its new version of it: a version holds the whole document, so
-// without them the variables they name go back to their defaults.
+// RunScenarioKeeping is RunScenario for a cluster whose configuration has overrides that stay in
+// force when the scenario changes it: the change is to the whole document, so without them the
+// variables they name go back to their defaults.
 func RunScenarioKeeping(
-	t testing.TB, c *game.Cluster, cfg *config.Store, s Sender, kept map[string]string,
+	t testing.TB, c *game.Cluster, s Sender, kept map[string]string,
 ) {
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)
@@ -101,11 +111,8 @@ func RunScenarioKeeping(
 		s.Via(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
 	)
 	Steps(t, c, 6)
-	if _, err := cfg.Apply(
-		ScenarioConfigVersion(kept),
-	); err != nil { // a new version of the config: the engines record that they read it
-		t.Fatal(err)
-	}
+	// a new document of the config: the engines record that they read it
+	SetConfig(t, c, ScenarioConfigDocument(kept))
 	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
 	Steps(t, c, 14)
 	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))

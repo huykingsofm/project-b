@@ -10,7 +10,7 @@ import (
 func TestAMemoryLogOpenedFromATickGivesThatTickAndTheOnesAfterIt(t *testing.T) {
 	engine := sim.StateID(1)
 	logs := eventlog.MemoryLogs{engine: {
-		{Tick: 1, Body: eventlog.ConfigRead{Version: 1}},
+		{Tick: 1, Body: eventlog.Hash{Value: 0}},
 		{Tick: 3, Body: eventlog.Hash{Value: 1}},
 		{Tick: 3, Body: eventlog.Hash{Value: 2}},
 		{Tick: 5, Body: eventlog.Hash{Value: 3}},

@@ -140,7 +140,7 @@ func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engi
 	env := newToyEnv(t)
 	log := &aLogThatSaysWhatIsSafe{safe: map[sim.StateID]uint64{}}
 	env.EventLog = log
-	c := NewCluster(env)
+	c := newCluster(t, env)
 	a, b := New(&toyState{id: 1}, env, 1), New(&toyState{id: 2}, env, 1)
 	c.Add(a)
 	c.Add(b)
@@ -255,14 +255,15 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 		SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
 	})
 	env.EventLog = log
-	c := NewCluster(env)
+	c := newCluster(t, env)
 	first := New(&toyState{id: 1}, env, 1)
 	c.Add(first)
 	for range 3 {
 		first.Send(toyCommand{N: 1})
 		c.Step()
 	}
-	if !c.Remove(1) || len(c.Engines()) != 0 {
+	// the configuration engine stays
+	if !c.Remove(1) || len(c.Engines()) != 1 {
 		t.Fatal("the engine was not removed")
 	}
 	reason, ok := env.Router.Deliver(toMessage(1, 1))

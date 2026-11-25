@@ -57,7 +57,9 @@ func (a ZoneLayerCharacterItemPickupAction) Apply(
 	if !ok {
 		return
 	}
-	reach := item.BoundingBox().Grown(int32(zoneLayerCharacterItemPickupActionRadius.Get(c.Cfg)))
+	reach := item.BoundingBox().Grown(
+		int32(zoneLayerCharacterItemPickupActionRadius.Get(r.Config())),
+	)
 	if !reach.Intersects(body.BoundingBox()) {
 		return
 	}

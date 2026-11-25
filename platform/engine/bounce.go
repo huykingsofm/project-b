@@ -19,7 +19,7 @@ type bouncer struct {
 
 // handle runs what the message says to do about the failure. A message with no OnFail is dropped
 // and logged.
-func (b *bouncer) handle(cfg *config.Snapshot, m sim.Message, r sim.DeliveryFailure) {
+func (b *bouncer) handle(cfg config.ReadOnlySnapshot, m sim.Message, r sim.DeliveryFailure) {
 	onFail := m.OnFail()
 	if onFail == nil {
 		logging.Error(
@@ -65,7 +65,7 @@ func (b *bouncer) SetNotice(notice func(actor any, key string, args []any)) { b.
 // tick, which says how many times a message is tried.
 type bouncerAt struct {
 	*bouncer
-	cfg *config.Snapshot
+	cfg config.ReadOnlySnapshot
 }
 
 // MaxAttempts is how many times a message is tried.

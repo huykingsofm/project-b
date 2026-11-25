@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/platform/config"
+	"testing"
+
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -153,6 +156,25 @@ func decodeReadAction(
 ) (readAction, error) {
 	a := readAction{From: sim.StateID(r.Uvarint())}
 	return a, r.Err()
+}
+
+// newCluster makes a cluster with its configuration engine, and fails the test when it cannot.
+func newCluster(t testing.TB, env *Env) *Cluster {
+	t.Helper()
+	c, err := NewCluster(env, 1, NoCheckpoints{}, config.NewStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// setConfig gives the store of the cluster the document, which the cluster sends to the
+// configuration engine at its next step.
+func setConfig(t testing.TB, c *Cluster, document map[string]string) {
+	t.Helper()
+	if err := c.ConfigStore().Apply(document); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func toyCodecs() (*sim.Codecs, error) {

@@ -71,18 +71,17 @@ What an engine writes in a tick is one frame, which is one record of the segment
 |---|---|
 | `eventlog.Record` | `Engine`, `Tick` and a `Body` |
 | `eventlog.Body` | an interface: `Kind()`, `Encode(w)` and `Same(other)` |
-| a type for each kind | `Inbound`, `Command`, `ConfigRead`, `Hash`, `StableRead`, `Returned`: each holds only what its kind has |
+| a type for each kind | `Inbound`, `Command`, `Hash`, `StableRead`, `Returned`, `Retired`: each holds only what its kind has |
 | `decoders` | the table that reads a body, by its kind; a test fails when a kind of the register has none |
 
 | Kind | Number | Body |
 |---|---|---|
 | `KindInbound` | 1 | a message, whole (below) |
 | `KindCommand` | 2 | the number of the command and its fields (below) |
-| `KindConfig` | 3 | the version of the config |
-| `KindHash` | 4 | the hash, 8 bytes |
-| `KindStableRead` | 5 | state ID of the engine read, the tick of the copy |
-| `KindReturned` | 6 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
-| `KindRetired` | 7 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
+| `KindHash` | 3 | the hash, 8 bytes |
+| `KindStableRead` | 4 | state ID of the engine read, the tick of the copy |
+| `KindReturned` | 5 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
+| `KindRetired` | 6 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.

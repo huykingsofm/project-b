@@ -1,5 +1,7 @@
 package sim
 
+import "github.com/huykingsofm/project-b/platform/config"
+
 // StableReader is what a registry reads the states of the other engines with: the latest state
 // that each engine published. A state read from it is a copy that its engine will never change
 // again, so it may be read without a lock and kept; it may be a few ticks old. It returns
@@ -41,6 +43,18 @@ type Registry[S State] struct {
 	Stable StableReader
 
 	self []Timed[S]
+}
+
+// Config returns the configuration that the engine of the tick reads: the snapshot in the copy of
+// the configuration engine that the engine first read in the tick, so every action of the tick sees
+// one configuration, or the defaults when there is none.
+func (r *Registry[S]) Config() config.ReadOnlySnapshot {
+	if r.Stable != nil {
+		if cs, err := r.Get[*ConfigState](ConfigStateID); err == nil {
+			return cs.Snapshot()
+		}
+	}
+	return config.Defaults()
 }
 
 // Begin sets the tick that the registry is used at.

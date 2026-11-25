@@ -17,7 +17,6 @@ type Kind uint8
 const (
 	KindInbound Kind = iota + 1
 	KindCommand
-	KindConfig
 	KindHash
 	KindStableRead
 	KindReturned
@@ -118,22 +117,6 @@ func decodeCommand(
 ) (Body, error) {
 	cmd, err := c.DecodeCommand(r, version)
 	return Command{Command: cmd}, err
-}
-
-// ConfigRead is the version of the configuration that the engine first read at the tick.
-type ConfigRead struct{ Version uint64 }
-
-func (b ConfigRead) Encode(w *binary.Writer) error {
-	w.Uvarint(b.Version)
-	return nil
-}
-
-func (b ConfigRead) Same(other Body) bool { o, ok := other.(ConfigRead); return ok && b == o }
-
-func (ConfigRead) Kind() Kind { return KindConfig }
-
-func decodeConfigRead(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
-	return ConfigRead{Version: r.Uvarint()}, r.Err()
 }
 
 // Hash is the hash of the state of the engine at the end of the tick.
@@ -246,7 +229,6 @@ var decoders = map[Kind]func(
 ) (Body, error){
 	KindInbound:    decodeInbound,
 	KindCommand:    decodeCommand,
-	KindConfig:     decodeConfigRead,
 	KindHash:       decodeHash,
 	KindStableRead: decodeStableRead,
 	KindReturned:   decodeReturned,
