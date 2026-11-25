@@ -1,6 +1,6 @@
 # Event log in files
 
-`platform/eventlog/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `eventlog.Log` that writes to files, and the reader of those files. What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
+`platform/eventlog/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `eventlog.Log` that writes to files, and the reader of those files; `MemLog` keeps records in memory and `MemoryLogs` holds them by engine, and both, like `FileLogs` (the files under a directory, one log for each engine), are read the way a replay reads logs (`Engines`, `Last`, `Open`). What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
 
 ## Files
 

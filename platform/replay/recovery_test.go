@@ -16,7 +16,7 @@ import (
 
 // theLine is the recovery line of the files under dir, with the cache of the line when it holds.
 func theLine(dir string) (map[sim.StateID]uint64, error) {
-	logs, err := FileLogs(dir, toyCodecs())
+	logs, err := eventlog.NewFileLogs(dir, toyCodecs())
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func cutToTheLine(dir string) (map[sim.StateID]uint64, error) {
 
 // startsOf is where each engine of limits starts, from the checkpoints under dir.
 func startsOf(dir string, limits map[sim.StateID]uint64) (map[sim.StateID]uint64, error) {
-	logs, err := FileLogs(dir, toyCodecs())
+	logs, err := eventlog.NewFileLogs(dir, toyCodecs())
 	if err != nil {
 		return nil, err
 	}

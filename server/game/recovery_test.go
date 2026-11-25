@@ -213,7 +213,7 @@ func BenchmarkReplayFromTheCheckpoints(b *testing.B) {
 
 func BenchmarkReplayFromTickZero(b *testing.B) {
 	benchmarkReplay(b, func(dir string, c *sim.Codecs) (*replay.Plan, error) {
-		logs, err := replay.FileLogs(dir, c)
+		logs, err := eventlog.NewFileLogs(dir, c)
 		if err != nil {
 			return nil, err
 		}

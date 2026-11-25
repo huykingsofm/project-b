@@ -186,3 +186,37 @@ type Source interface {
 type Seeded interface {
 	Seed() uint64
 }
+
+// FileLogs is the logs of the engines of a cluster that a FileLog wrote under a directory: the
+// logs are opened one at a time and read as a replay goes on.
+type FileLogs struct {
+	dir     string
+	codecs  *sim.Codecs
+	engines []sim.StateID
+}
+
+// NewFileLogs reads the files that a FileLog wrote under dir.
+func NewFileLogs(dir string, codecs *sim.Codecs) (*FileLogs, error) {
+	engines, err := Engines(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &FileLogs{dir: dir, codecs: codecs, engines: engines}, nil
+}
+
+// Engines returns the engines that have a log, in the order of their IDs.
+func (f *FileLogs) Engines() []sim.StateID { return f.engines }
+
+// Last returns the ID of the last frame of the log of the engine, which is its last tick.
+func (f *FileLogs) Last(engine sim.StateID) (uint64, error) {
+	return segmentlog.LastFrameID(EngineDir(f.dir, engine))
+}
+
+// Open returns a reader of the log of the engine from the tick from.
+func (f *FileLogs) Open(engine sim.StateID, from uint64) (Source, error) {
+	r, err := ReadFileLog(f.dir, engine, from, f.codecs)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil // a *FileLogReader is a Source and a Seeded
+}

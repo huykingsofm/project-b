@@ -14,13 +14,13 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `(*Plan).Cut()` | brings the files to the plan: each log is cut to its limit, each checkpoint above its limit goes to the archive, the cache of the line is written again |
 | `replay.Run(builder, plan, options)` | runs the engines again on the plan and returns the `Result`; changes nothing on the disk |
 | `replay.Recover(dir, builder, options)` | `MakePlan`, `Cut` and `Run`; an engine that did not do what its log says is a `*DivergenceError`, returned with the result |
-| `replay.FileLogs(dir, codecs)`, `replay.MemoryLogs` | where the records come from (below) |
+| `eventlog.NewFileLogs(dir, codecs)`, `eventlog.MemoryLogs`, `eventlog.MemLog` | where the records come from: the files of a `FileLog`, and records in memory (below) |
 | `replay.ReadLineCache(dir)`, `replay.WriteLineCache(dir, cache)`, `replay.NewLineCacheWriter(dir, cfg)` | the cache of the line (below) |
 
 | Part | Value |
 |---|---|
 | the builder | a `replay.Builder` (`Seed`, `QueueSize`, `Codecs`, `BuildIn(env, checkpoints)`), which the game gives (`game.ClusterBuilder`): it describes the cluster that was recorded; what it sets for the event log, the emitter and the configuration is not used |
-| the logs | `replay.Logs`: for each engine, its last tick (`Last`) and an `eventlog.Source` that gives its records in order, one at a time, from a tick (`Open(engine, from)`: the tick `from` and the ones after it); `FileLogs` reads the files of an `eventlog.FileLog`, and `MemoryLogs` holds records in memory |
+| the logs | `replay.Logs`: for each engine, its last tick (`Last`) and an `eventlog.Source` that gives its records in order, one at a time, from a tick (`Open(engine, from)`: the tick `from` and the ones after it); `eventlog.FileLogs` reads the files of an `eventlog.FileLog`, and `eventlog.MemoryLogs` and `eventlog.MemLog` hold records in memory |
 | `Options` | `ConfigVersions`: what each version of the configuration was made of (version 0 is the defaults) |
 | `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, and the divergences |
 | an error | the replay cannot run: a wrong builder, a record that cannot be given to its engine, a log of an engine that is not in the cluster, engines that wait for each other for ever, a file that cannot be read or cut, a checkpoint that cannot make its engine (or is of another tick than its file says) |
@@ -41,7 +41,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `replay.go` | `Run`, `Recover`, `Builder`, `Options`, `Result`, `DivergenceError` |
 | `run.go` | the run: `engineRun` (what a replay holds of one engine: the engine, its limit, the tick it has run to, its log and the records of the tick loaded, the version of the configuration) in a `stablemap.Map` that keeps the order of `Step`; how an engine that starts from a checkpoint begins; the inputs of a tick |
 | `index.go` | the pass over each log before the run: how many reads each copy has, which messages came back, a hash of each message as it was taken, the size of the queues, the seed |
-| `logs.go` | `Logs`, `MemoryLogs`, `FileLogs`, and the `tickReader` that reads the records of one engine a tick at a time |
+| `logs.go` | `Logs`, and the `tickReader` that reads the records of one engine a tick at a time |
 | `adapters.go` | `replayRouter`, `replayStable`, `replayConfig` and `verifyLog` |
 | `divergence.go` | the first difference of each engine |
 

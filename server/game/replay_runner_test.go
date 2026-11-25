@@ -33,13 +33,13 @@ func runOn(b replay.Builder, logs replay.Logs, opts replay.Options) (*replay.Res
 }
 
 // readAll reads the files of a log into memory, to count what they hold.
-func readAll(t *testing.T, dir string, codecs *sim.Codecs) replay.MemoryLogs {
+func readAll(t *testing.T, dir string, codecs *sim.Codecs) eventlog.MemoryLogs {
 	t.Helper()
 	engines, err := eventlog.Engines(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logs := replay.MemoryLogs{}
+	logs := eventlog.MemoryLogs{}
 	for _, e := range engines {
 		if logs[e], err = eventlog.ReadAll(dir, e, codecs); err != nil {
 			t.Fatal(err)
@@ -48,16 +48,7 @@ func readAll(t *testing.T, dir string, codecs *sim.Codecs) replay.MemoryLogs {
 	return logs
 }
 
-// logsOf groups the records of a memory log by engine.
-func logsOf(mem *eventlog.MemLog) replay.MemoryLogs {
-	logs := replay.MemoryLogs{}
-	for _, r := range mem.Records {
-		logs[r.Engine] = append(logs[r.Engine], r)
-	}
-	return logs
-}
-
-func countKind(logs replay.MemoryLogs, k eventlog.Kind) int {
+func countKind(logs eventlog.MemoryLogs, k eventlog.Kind) int {
 	n := 0
 	for _, records := range logs {
 		for _, r := range records {
@@ -83,14 +74,14 @@ func TestAReplayOfAWholeClusterRunMatchesItsLogFromMemoryAndFromFiles(t *testing
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	fromFiles, err := replay.FileLogs(dir, c.Env.Codecs)
+	fromFiles, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	counted := map[string]replay.MemoryLogs{
-		"memory": logsOf(mem), "files": readAll(t, dir, c.Env.Codecs),
+	counted := map[string]eventlog.MemoryLogs{
+		"memory": mem.ByEngine(), "files": readAll(t, dir, c.Env.Codecs),
 	}
-	sources := map[string]replay.Logs{"memory": logsOf(mem), "files": fromFiles}
+	sources := map[string]replay.Logs{"memory": mem.ByEngine(), "files": fromFiles}
 	for name, logs := range sources {
 		for _, kind := range []eventlog.Kind{
 			eventlog.KindInbound, eventlog.KindCommand, eventlog.KindConfig, eventlog.KindHash,
@@ -125,7 +116,7 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 	layer := testkit.Layer1
 
 	without := func(kind eventlog.Kind) replay.Logs {
-		logs := logsOf(mem)
+		logs := mem.ByEngine()
 		cut := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
 			c, isCommand := r.Body.(eventlog.Command)
 			_, move := c.Command.(command.ZoneLayerCharacterMoveCommand)
@@ -154,7 +145,7 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 		}
 	}
 
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	i := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
 		return r.Kind() == eventlog.KindHash
 	})
@@ -170,7 +161,7 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 func TestAReplayWithoutTheConfigThatWasReadSaysSo(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logsOf(mem), replay.Options{})
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine(), replay.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +228,7 @@ func everyTickHashed(t *testing.T) (*game.Cluster, *eventlog.MemLog) {
 // where it was.
 func replayAndCompare(t *testing.T, c *game.Cluster, mem *eventlog.MemLog) {
 	t.Helper()
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	if countKind(logs, eventlog.KindReturned) != 1 {
 		t.Fatalf("%d records of a message that came back, want 1",
 			countKind(logs, eventlog.KindReturned))
@@ -266,7 +257,7 @@ func replayAndCompare(t *testing.T, c *game.Cluster, mem *eventlog.MemLog) {
 func TestAReplayFindsASenderThatDoesNotMakeTheMessageTheReceiverRecorded(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	layer := testkit.Layer1
 	at := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
 		inbound, isInbound := r.Body.(eventlog.Inbound)
@@ -309,7 +300,7 @@ func BenchmarkRunScenarioLive(b *testing.B) {
 func BenchmarkReplayCluster(b *testing.B) {
 	c, _, mem, cfg := testkit.NewWorld(b, 7, 10)
 	testkit.RunScenario(b, c, cfg, testkit.Sender{T: b})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	b.ReportAllocs()
 	var ticks uint64
 	for b.Loop() {
@@ -380,7 +371,7 @@ func (s *countingSource) Close() error { s.logs.closed++; return s.Source.Close(
 func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 
 	counting := &countingLogs{Logs: logs}
 	plan, err := replay.PlanFrom(counting, nil, nil) // reads each log once, for the line
@@ -415,7 +406,7 @@ func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *test
 func TestALogWhoseRecordsAreNotInTheOrderOfTheirTicksIsAnError(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	layer := testkit.Layer1
 	records := slices.Clone(logs[layer])
 	last := len(records) - 1
@@ -435,7 +426,7 @@ func TestFilesMadeWithAnotherSeedThanTheBuilderHasAreRefused(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	logs, err := replay.FileLogs(dir, c.Env.Codecs)
+	logs, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +491,7 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if cut == 0 {
 		t.Fatal("no engine took what the zonelayer sent after tick 7: the test checks nothing")
 	}
-	logs, err := replay.FileLogs(dir, c.Env.Codecs)
+	logs, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}

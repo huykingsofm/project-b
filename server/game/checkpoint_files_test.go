@@ -158,7 +158,7 @@ func TestEveryEngineWritesACheckpointFileEveryPeriodThatMakesItAgainWithTheHashO
 	}
 
 	// a replay, whose engines take no checkpoint, hashes at the same ticks
-	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logsOf(mem), replay.Options{
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine(), replay.Options{
 		ConfigVersions: map[uint64]map[string]string{1: everySeventhTick},
 	})
 	if err != nil {

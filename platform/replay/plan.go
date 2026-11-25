@@ -40,7 +40,7 @@ func (p *Plan) Starts() map[sim.StateID]uint64 { return maps.Clone(p.starts) }
 // from; nothing is written. The cache of the line, when it holds, saves reading the logs whole. No
 // log may be open for writing.
 func MakePlan(dir string, codecs *sim.Codecs) (*Plan, error) {
-	logs, err := FileLogs(dir, codecs)
+	logs, err := eventlog.NewFileLogs(dir, codecs)
 	if err != nil {
 		return nil, err
 	}
