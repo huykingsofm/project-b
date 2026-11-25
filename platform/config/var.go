@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 // Var is a declared variable of type T. Get reads its value from a Snapshot.
@@ -136,6 +138,7 @@ func (r *registry) build(
 	}
 	slices.Sort(names)
 
+	var texts stablemap.Map[string, string]
 	var errs []error
 	for _, name := range names {
 		i, ok := byName[name]
@@ -148,9 +151,10 @@ func (r *registry) build(
 			continue
 		}
 		vals[i] = v
+		texts.Set(name, overrides[name])
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
-	return &Snapshot{vals: vals}, nil
+	return &Snapshot{vals: vals, texts: texts}, nil
 }
