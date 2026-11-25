@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/huykingsofm/project-b/platform/config"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -160,23 +161,19 @@ func decodeReadAction(
 // newCluster makes a cluster with its configuration engine, and fails the test when it cannot.
 func newCluster(t testing.TB, env *Env) *Cluster {
 	t.Helper()
-	c, err := NewCluster(env, 1, NoCheckpoints{})
+	c, err := NewCluster(env, 1, NoCheckpoints{}, config.NewStore())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return c
 }
 
-// setConfig sends the configuration engine the command that takes the configuration to the
-// document, which is taken at the next tick of the cluster.
+// setConfig gives the store of the cluster the document, which the cluster sends to the
+// configuration engine at its next step.
 func setConfig(t testing.TB, c *Cluster, document map[string]string) {
 	t.Helper()
-	cmd, changed, err := sim.NewUpdateConfigCommand(c.Config(), document)
-	if err != nil {
+	if err := c.ConfigStore().Apply(document); err != nil {
 		t.Fatal(err)
-	}
-	if changed && !c.ConfigEngine().Send(cmd) {
-		t.Fatal("the configuration engine refused the command")
 	}
 }
 

@@ -312,16 +312,11 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	state := sim.NewConfigState()
-	err := state.ApplyConfigChange(
-		[]sim.ConfigOverride{{Name: "replay.line_cache_every_ticks", Text: "10"}}, nil,
-	)
-	if err != nil {
+	store := config.NewStore()
+	if err := store.Apply(map[string]string{"replay.line_cache_every_ticks": "10"}); err != nil {
 		t.Fatal(err)
 	}
-	live := config.NewLive()
-	live.Set(state.Snapshot())
-	w := NewLineCacheWriter(dir, live)
+	w := NewLineCacheWriter(dir, store)
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {

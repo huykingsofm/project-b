@@ -374,7 +374,7 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testing.T) {
 	c, _, j := testkit.NewWorld(t, 1, 0)
 	every5 := map[string]string{"eventlog.hash_every_ticks": "5"}
-	testkit.SetConfig(t, c, testkit.Sender{T: t}, every5)
+	testkit.SetConfig(t, c, every5)
 	testkit.Steps(t, c, 22)
 	ticks := map[sim.StateID][]uint64{}
 	for _, r := range j.Records {

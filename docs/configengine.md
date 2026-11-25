@@ -15,10 +15,11 @@
 
 | Step | What happens |
 |---|---|
-| 1 | a config service makes the command from the document it has: `sim.NewUpdateConfigCommand(current, document)`; `current` is `cluster.Config()`; no command (`false`) when no variable would change, an error when a value is wrong |
-| 2 | `cluster.ConfigEngine().Send(cmd)`: `UpdateConfigCommand` translates to `UpdateConfigAction`, which calls `ApplyConfigChange` |
-| 3 | the engine publishes its state at the end of the tick; the other engines read the new copy from their next tick |
-| after a recovery | the engine is made from its checkpoint and its log like any other, so its configuration goes on; the service sends the difference between its document and `cluster.Config()` |
+| 1 | whoever has the configuration of the world outside the game (a file, a service) gives it to the `config.Store` of the cluster: `store.Apply(document)`, the text of the JSON value of each variable that is not at its default, by name. A wrong value is refused there and changes nothing |
+| 2 | the cluster sends it: at the start of every `Step`, and in `Run` when the store signals (`Changed()`) or at every period, it makes the command from the document of the store and what it sent last, `sim.NewUpdateConfigCommand`, and `ConfigEngine().Send(cmd)`. No command when no variable would change; when the engine cannot take it, the next call sends it again. A store that took no document leaves the engine as it is |
+| 3 | `UpdateConfigCommand` translates to `UpdateConfigAction`, which calls `ApplyConfigChange`; the command is in the log of the configuration engine |
+| 4 | the engine publishes its state at the end of the tick; the other engines read the new copy from their next tick |
+| after a recovery | the engine is made from its checkpoint and its log like any other, so its configuration goes on; the cluster starts from what the engine holds, and the first call sends the difference with the store |
 
 ## Reading it
 
@@ -28,14 +29,4 @@
 | an action | `Registry.Config()`: the same copy, so every action of a tick sees one configuration |
 | the event log | the first read in a tick is a `StableRead` of `sim.ConfigStateID` with the tick of the copy, so a replay gives each tick the copy it read, and the engine depends on that tick of the configuration engine |
 | no copy published | the defaults (`config.Defaults()`), and the `StableRead` has tick 0 |
-| from outside the engines | `Cluster.Config()`, which is the `config.Live` of the cluster (the builder takes one with `WithLiveConfig`, for what is made before the cluster, such as the `LineCacheWriter`), and `Cluster.Reader()`: the latest copy, with no lock and no record in the log; the store changes the live configuration each time the configuration engine publishes |
-
-## IDs
-
-| What | Number |
-|---|---|
-| state type | 255 |
-| `UpdateConfigCommandID` | 4294967295: the last of the register of commands (32 bits) |
-| `UpdateConfigActionID` | 4294967295: the last of the register of actions (32 bits) |
-
-The numbers of the game count up from 1, so they never meet these.
+| from outside the engines | `Cluster.Reader()`: the latest copy of the configuration engine, with no lock and no record in the log; `Cluster.ConfigStore().Snapshot()` is the configuration of the world outside the game, which the `LineCacheWriter` reads for its period |

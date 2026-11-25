@@ -19,7 +19,7 @@ func newToyEnv(t testing.TB) *Env {
 	}
 	return &Env{
 		Router: NewRouter(), EventLog: &eventlog.MemLog{},
-		Stable: NewStableStateStore(config.NewLive()), Codecs: codecs, QueueSize: 16,
+		Stable: NewStableStateStore(), Codecs: codecs, QueueSize: 16,
 		Emitter: NopEmitter{},
 		Acks:    NewAckBoard(),
 	}

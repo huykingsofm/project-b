@@ -226,7 +226,7 @@ func everyTickHashed(t *testing.T) (*game.Cluster, *eventlog.MemLog) {
 	// every engine records the hash of its state at every tick, so that a replay is compared with
 	// the run at every tick and ends where the run ended
 	every := map[string]string{"eventlog.hash_every_ticks": "1"}
-	testkit.SetConfig(t, c, testkit.Sender{T: t}, every)
+	testkit.SetConfig(t, c, every)
 	return c, mem
 }
 

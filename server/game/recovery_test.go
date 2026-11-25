@@ -23,22 +23,22 @@ func aWorldThatWroteItsFilesAndStopped(
 	t testing.TB, dir string, every map[string]string, idleTicks int,
 ) *game.Cluster {
 	t.Helper()
-	live := config.NewLive()
-	cache := replay.NewLineCacheWriter(dir, live)
+	store := config.NewStore()
+	cache := replay.NewLineCacheWriter(dir, store)
 	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8,
 		OnSafe: cache,
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
-		WithLiveConfig(live).
+		WithConfigStore(store).
 		WithEventLog(file).
 		WithCheckpointWriter(files).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.SetConfig(t, c, testkit.Sender{T: t}, every)
+	testkit.SetConfig(t, c, every)
 	testkit.RunScenarioKeeping(t, c, testkit.Sender{T: t}, every)
 	testkit.Steps(t, c, idleTicks)
 	files.Close()

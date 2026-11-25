@@ -38,7 +38,7 @@ func aWorldThatCheckpointsToFiles(
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.SetConfig(t, c, testkit.Sender{T: t}, everySeventhTick)
+	testkit.SetConfig(t, c, everySeventhTick)
 	return c, mem, files
 }
 

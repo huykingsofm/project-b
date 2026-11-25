@@ -24,7 +24,7 @@ func readToy(t *testing.T, view *StableView, id sim.StateID) *toyState {
 }
 
 func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
-	stable := NewStableStateStore(nil)
+	stable := NewStableStateStore()
 	eventLog := &eventlog.MemLog{}
 	view := stable.View(1, eventLog)
 
@@ -45,7 +45,7 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 }
 
 func TestAStateThatWasNotPublishedIsNotFoundAndTheReadIsKeptForTheTick(t *testing.T) {
-	stable := NewStableStateStore(nil)
+	stable := NewStableStateStore()
 	view := stable.View(1, &eventlog.MemLog{})
 	view.begin(10)
 	if _, err := view.Read(8); !errors.Is(err, sim.ErrStateNotFound) {
@@ -67,7 +67,7 @@ func TestAStateThatWasNotPublishedIsNotFoundAndTheReadIsKeptForTheTick(t *testin
 }
 
 func TestTheFirstReadOfEachStateInATickIsWrittenToTheEventLog(t *testing.T) {
-	stable := NewStableStateStore(nil)
+	stable := NewStableStateStore()
 	eventLog := &eventlog.MemLog{}
 	view := stable.View(1, eventLog)
 	publishedAt(stable, 3)

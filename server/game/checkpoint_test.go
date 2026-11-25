@@ -84,7 +84,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 func aFreshEnv(c *game.Cluster) *engine.Env {
 	return &engine.Env{
 		Router: engine.NewRouter(), EventLog: eventlog.NopLog{},
-		Stable: engine.NewStableStateStore(nil), Codecs: c.Env.Codecs, QueueSize: 16,
+		Stable: engine.NewStableStateStore(), Codecs: c.Env.Codecs, QueueSize: 16,
 		Emitter: engine.NopEmitter{},
 	}
 }
@@ -404,7 +404,7 @@ func stepping(b *testing.B, checkpointAtEveryTick bool) *game.Cluster {
 		return aWorldToCheckpointWith(b, nil)
 	}
 	c := aWorldToCheckpointWith(b, discardingWriter{})
-	testkit.SetConfig(b, c, testkit.Sender{T: b}, map[string]string{"checkpoint.every_ticks": "1"})
+	testkit.SetConfig(b, c, map[string]string{"checkpoint.every_ticks": "1"})
 	testkit.Steps(b, c, 1) // the configuration is the new one from here
 	return c
 }

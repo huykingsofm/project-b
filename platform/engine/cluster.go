@@ -79,18 +79,58 @@ type Cluster struct {
 	Env     *Env
 	config  *Engine[*sim.ConfigState]
 	engines []Stepper
+
+	// store is the configuration of the world outside the game, which the cluster brings into the
+	// configuration engine; nil means none. synced is the configuration that the engine has, or is
+	// sent, from it, and syncedGen the generation of the document that made it.
+	store     *config.Store
+	synced    config.ReadOnlySnapshot
+	syncedGen uint64
 }
 
 // NewCluster makes a cluster that has its configuration engine and no other, in the environment:
 // from the checkpoint that the source has for it, or new with every variable at its default. It
 // returns an error when that checkpoint cannot make the engine. The environment's codecs must know
-// the configuration engine (see NewCodecs).
-func NewCluster(env *Env, seed uint64, checkpoints CheckpointSource) (*Cluster, error) {
+// the configuration engine (see NewCodecs). The store is the configuration of the world outside the
+// game, which the cluster sends to the configuration engine when it changes; nil means none.
+func NewCluster(
+	env *Env, seed uint64, checkpoints CheckpointSource, store *config.Store,
+) (*Cluster, error) {
 	ce, err := NewOrRestore(sim.NewConfigState(), env, seed, checkpoints)
 	if err != nil {
 		return nil, fmt.Errorf("the configuration engine: %w", err)
 	}
-	return &Cluster{Env: env, config: ce, engines: []Stepper{ce}}, nil
+	return &Cluster{
+		Env: env, config: ce, engines: []Stepper{ce},
+		store: store, synced: ce.State().Snapshot(),
+	}, nil
+}
+
+// ConfigStore is the configuration of the world outside the game, or nil.
+func (c *Cluster) ConfigStore() *config.Store { return c.store }
+
+// syncConfig sends the configuration engine what the store holds, when it is a document that was
+// not sent: the command makes the difference from what the engine has, which the cluster knows,
+// being the only one that sends it. A store that took no document leaves the engine as it is. When
+// the engine cannot take the command now, the next call sends it again.
+func (c *Cluster) syncConfig() {
+	if c.store == nil {
+		return
+	}
+	cur := c.store.Current()
+	if cur.Generation == 0 || cur.Generation == c.syncedGen {
+		return
+	}
+	cmd, changed, err := sim.NewUpdateConfigCommand(c.synced, cur.Document)
+	if err != nil {
+		logging.Error("the configuration of the store is refused", "err", err)
+		c.syncedGen = cur.Generation
+		return
+	}
+	if changed && !c.config.Send(cmd) {
+		return
+	}
+	c.synced, c.syncedGen = cur.Snapshot, cur.Generation
 }
 
 // ConfigEngine returns the configuration engine of the cluster: the one to send an
@@ -105,15 +145,6 @@ func (c *Cluster) Reader() sim.StableReader {
 		return r
 	}
 	return noCopies{}
-}
-
-// Config is the configuration as the configuration engine last published it, or the defaults when
-// it published none.
-func (c *Cluster) Config() config.ReadOnlySnapshot {
-	if s, ok := c.Env.Stable.(*StableStateStore); ok {
-		return s.Live().Get()
-	}
-	return config.Defaults()
 }
 
 // noCopies is the reader of an environment that keeps no copy to read.
@@ -167,6 +198,7 @@ func (c *Cluster) All[S sim.State]() []*Engine[S] {
 // stops: the router refuses every message from then on, the engines after it do not run, and the
 // error is returned.
 func (c *Cluster) Step() error {
+	c.syncConfig()
 	for _, e := range c.engines {
 		if err := e.Step(); err != nil {
 			c.Env.Router.Stop()
@@ -200,6 +232,19 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 			}
 		})
 	}
+	wg.Go(func() {
+		t := time.NewTicker(period)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.store.Changed():
+			case <-t.C: // a command that the engine could not take is sent again
+			}
+			c.syncConfig()
+		}
+	})
 	<-ctx.Done()
 	c.Env.Router.Stop()
 	wg.Wait()

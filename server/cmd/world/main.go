@@ -144,14 +144,10 @@ func main() {
 		fail("the cluster could not be built", err)
 	}
 
-	updateConfig, changed, err := sim.NewUpdateConfigCommand(
-		cluster.Config(), map[string]string{"checkpoint.every_ticks": "10"},
-	)
-	if err != nil {
+	if err := cluster.ConfigStore().Apply(
+		map[string]string{"checkpoint.every_ticks": "10"},
+	); err != nil {
 		fail("the configuration is refused", err)
-	}
-	if changed {
-		cluster.ConfigEngine().Send(updateConfig)
 	}
 
 	step := func(title string, n int) {

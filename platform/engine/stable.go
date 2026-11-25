@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/registry"
@@ -41,25 +40,13 @@ var (
 // owns a piece of data knows exactly what it is.
 type StableStateStore struct {
 	states registry.Registry[sim.StateID, sim.State]
-	live   *config.Live
 }
 
-// NewStableStateStore makes an empty store. The live configuration is changed each time the
-// configuration engine publishes; nil means that no one outside the engines follows it.
-func NewStableStateStore(live *config.Live) *StableStateStore {
-	return &StableStateStore{live: live}
-}
-
-// Live is the configuration as the configuration engine published it last, or nil.
-func (s *StableStateStore) Live() *config.Live { return s.live }
+// NewStableStateStore makes an empty store.
+func NewStableStateStore() *StableStateStore { return &StableStateStore{} }
 
 // Publish makes a copy the latest of its engine.
-func (s *StableStateStore) Publish(st sim.State) {
-	s.states.Publish(st.ID(), st)
-	if cs, ok := st.(*sim.ConfigState); ok && s.live != nil {
-		s.live.Set(cs.Snapshot())
-	}
-}
+func (s *StableStateStore) Publish(st sim.State) { s.states.Publish(st.ID(), st) }
 
 // Remove forgets what an engine published.
 func (s *StableStateStore) Remove(id sim.StateID) { s.states.Remove(id) }

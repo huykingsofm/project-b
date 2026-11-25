@@ -46,8 +46,9 @@ type ClusterBuilder struct {
 	queueSize int
 	eventLog  eventlog.Log
 	emitter   engine.Emitter
-	// live follows the configuration engine for whoever is outside the engines
-	live *config.Live
+	// store is the configuration of the world outside the game, which the cluster sends to the
+	// configuration engine
+	store *config.Store
 	// checkpoints writes the checkpoints the engines take; nil: they take none
 	checkpoints engine.CheckpointWriter
 
@@ -64,7 +65,7 @@ func NewBuilder() *ClusterBuilder {
 		queueSize: 256,
 		eventLog:  eventlog.NopLog{},
 		emitter:   engine.NopEmitter{},
-		live:      config.NewLive(),
+		store:     config.NewStore(),
 	}
 }
 
@@ -83,12 +84,13 @@ func (b *ClusterBuilder) WithQueueSize(size int) *ClusterBuilder {
 	return b
 }
 
-// WithLiveConfig sets the live configuration that the cluster keeps up to date as the configuration
-// engine publishes, for what is made before the cluster and needs the configuration (see
-// replay.NewLineCacheWriter). A nil one keeps the default, which no one else holds.
-func (b *ClusterBuilder) WithLiveConfig(live *config.Live) *ClusterBuilder {
-	if live != nil {
-		b.live = live
+// WithConfigStore sets the configuration of the world outside the game, which the cluster sends to
+// its configuration engine each time it changes. It is for what is made before the cluster and
+// needs it too (see replay.NewLineCacheWriter). A nil one keeps the default, which no one else
+// holds.
+func (b *ClusterBuilder) WithConfigStore(store *config.Store) *ClusterBuilder {
+	if store != nil {
+		b.store = store
 	}
 	return b
 }
@@ -214,7 +216,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 	}
 	env := &engine.Env{
 		Router: engine.NewRouter(), EventLog: b.eventLog,
-		Stable: engine.NewStableStateStore(b.live), Codecs: codecs, QueueSize: b.queueSize,
+		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
 	return b.assemble(env, engine.NoCheckpoints{})
@@ -281,7 +283,7 @@ func (b *ClusterBuilder) assemble(
 		return nil, err
 	}
 
-	base, err := engine.NewCluster(env, b.seed, checkpoints)
+	base, err := engine.NewCluster(env, b.seed, checkpoints, b.store)
 	if err != nil {
 		return nil, err
 	}

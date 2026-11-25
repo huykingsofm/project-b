@@ -50,18 +50,14 @@ func ScenarioConfigDocument(kept map[string]string) map[string]string {
 	return document
 }
 
-// SetConfig sends the configuration engine of the cluster the command that takes the configuration
-// to the document: the text of the JSON value of each variable that is not at its default, by name.
-// Nothing is sent when no variable changes. The configuration is the new one from the tick after
+// SetConfig gives the store of the cluster the document: the text of the JSON value of each
+// variable that is not at its default, by name. The cluster sends it to its configuration engine at
+// its next step, when a variable changes, and the configuration is the new one from the tick after
 // the command is taken.
-func SetConfig(t testing.TB, c *game.Cluster, s Sender, document map[string]string) {
+func SetConfig(t testing.TB, c *game.Cluster, document map[string]string) {
 	t.Helper()
-	cmd, changed, err := sim.NewUpdateConfigCommand(c.Config(), document)
-	if err != nil {
+	if err := c.ConfigStore().Apply(document); err != nil {
 		t.Fatal(err)
-	}
-	if changed {
-		c.ConfigEngine().Send(s.Via(cmd))
 	}
 }
 
@@ -116,7 +112,7 @@ func RunScenarioKeeping(
 	)
 	Steps(t, c, 6)
 	// a new document of the config: the engines record that they read it
-	SetConfig(t, c, s, ScenarioConfigDocument(kept))
+	SetConfig(t, c, ScenarioConfigDocument(kept))
 	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
 	Steps(t, c, 14)
 	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))
