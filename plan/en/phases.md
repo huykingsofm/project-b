@@ -6,6 +6,8 @@ The performance targets are the minimum for every phase: 2,000 players at once o
 
 **Stage: pre-alpha.** There is no official production yet, so any breaking change in the code (not only a data format) is made as it is and everything that depends on it is refactored, with no version and no back-compatibility ([R32](../rule/r32-versioned-data-formats.md)). It lasts until the owner says it is over and changes this line; from then on R32 applies in full.
 
+**To decide what to do next, read this file and [roadmap.md](roadmap.md) together, both every time:** the phases say what the whole plan holds and how far each phase is, and the roadmap says what is built and what is next, in order.
+
 ## Progress
 
 Every phase records its progress directly under its heading, in a `**Progress:**` line with one of three values: `not started`, `in progress` or `done`. A short note after the value says what is already built and what is missing. The line is updated in the same PR that lands a task of the phase, and a phase becomes `done` only when its acceptance has passed.
