@@ -85,18 +85,10 @@ func (s *ConfigState) ApplyConfigChange(set []ConfigOverride, unset []string) er
 	return nil
 }
 
-// Encode writes the state: its tick and the text of every variable that was set.
+// Encode writes the state: its tick and its snapshot.
 func (s *ConfigState) Encode(w *binary.Writer) error {
 	w.Uvarint(s.tick)
-	n := 0
-	for range s.snap.Texts() {
-		n++
-	}
-	w.Uvarint(uint64(n))
-	for name, text := range s.snap.Texts() {
-		w.String(name)
-		w.String(text)
-	}
+	s.snap.Encode(w)
 	return nil
 }
 
@@ -111,28 +103,16 @@ func (s *ConfigState) Hash() uint64 {
 	return h.Sum()
 }
 
-// DecodeConfigState reads what Encode wrote, and makes the snapshot of the texts again. It returns
-// an error for bytes that are cut, or texts that no snapshot can be made of.
+// DecodeConfigState reads what Encode wrote. It returns an error for bytes that are cut, or texts
+// that no snapshot can be made of.
 func DecodeConfigState(r *binary.Reader, _ codec.Version) (*ConfigState, error) {
 	tick := r.Uvarint()
-	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	if n > uint64(r.Left()) { // a variable takes at least two bytes
-		return nil, fmt.Errorf("%w: %d variables", binary.ErrShort, n)
-	}
-	texts := make(map[string]string, n)
-	for range n {
-		name, text := r.String(), r.String()
-		if err := r.Err(); err != nil {
-			return nil, err
-		}
-		texts[name] = text
-	}
-	snap, err := config.Build(texts)
+	snap, err := config.DecodeSnapshot(r)
 	if err != nil {
-		return nil, fmt.Errorf("the texts of the configuration: %w", err)
+		return nil, fmt.Errorf("the snapshot of the configuration: %w", err)
 	}
 	return &ConfigState{tick: tick, snap: snap}, nil
 }

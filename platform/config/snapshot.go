@@ -1,11 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"iter"
 	"maps"
 	"reflect"
 	"sync"
 
+	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
@@ -38,6 +40,36 @@ func (s *Snapshot) lookup(idx int) (any, bool) {
 // Texts returns the name of each variable that was set, in the order of the names, with the text
 // of its JSON value: what Build makes the same snapshot from.
 func (s *Snapshot) Texts() iter.Seq2[string, string] { return s.texts.All() }
+
+// Encode writes the texts of the variables that were set, which is all that Decode needs.
+func (s *Snapshot) Encode(w *binary.Writer) {
+	w.Uvarint(uint64(s.texts.Len()))
+	for name, text := range s.texts.All() {
+		w.String(name)
+		w.String(text)
+	}
+}
+
+// DecodeSnapshot reads what Encode wrote, and builds the snapshot of the texts again. It returns an
+// error for bytes that are cut, or texts that no snapshot can be made of.
+func DecodeSnapshot(r *binary.Reader) (*Snapshot, error) {
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	if n > uint64(r.Left()) { // a variable takes at least two bytes
+		return nil, fmt.Errorf("%w: %d variables", binary.ErrShort, n)
+	}
+	texts := make(map[string]string, n)
+	for range n {
+		name, text := r.String(), r.String()
+		if err := r.Err(); err != nil {
+			return nil, err
+		}
+		texts[name] = text
+	}
+	return Build(texts)
+}
 
 // Apply returns the snapshot that has the variables of set at the text of their value, and the
 // variables of unset at their default, and every other variable as s has it. It returns s itself

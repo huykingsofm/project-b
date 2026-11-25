@@ -6,7 +6,7 @@
 
 | Part | Value |
 |---|---|
-| state | `sim.ConfigState`: the tick and the snapshot, which holds the value of every variable and the text of its JSON value for each one that was set (`Snapshot.Texts()`, in the order of the names); a checkpoint writes the tick and these texts, and reads them back with `config.Build` |
+| state | `sim.ConfigState`: the tick and the snapshot, which holds the value of every variable and the text of its JSON value for each one that was set (`Snapshot.Texts()`, in the order of the names); a checkpoint writes the tick and `Snapshot.Encode`, and reads them back with `config.DecodeSnapshot` |
 | read | `State.Snapshot()` is the only way out: a `config.ReadOnlySnapshot`, which a `Var[T].Get` resolves; the snapshot never changes, so a copy of the state shares it |
 | change | `ConfigState.ApplyConfigChange(set, unset)`, which is `Snapshot.Apply`: the snapshot is a new one when a variable ends with another value, stays when none does, and a wrong value refuses the whole change |
 | codecs | `sim.NewCodecs()` makes codecs that have it, as every cluster needs them |
