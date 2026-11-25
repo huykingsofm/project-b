@@ -81,11 +81,11 @@ type Cluster struct {
 	engines []Stepper
 
 	// store is the configuration of the world outside the game, which the cluster brings into the
-	// configuration engine; nil means none. synced is the configuration that the engine has, or is
-	// sent, from it, and syncedGen the generation of the document that made it.
-	store     *config.Store
-	synced    config.ReadOnlySnapshot
-	syncedGen uint64
+	// configuration engine; nil means none. syncedConfig is the configuration that the engine has,
+	// or is sent, from it, and syncedConfigGeneration the generation of the document that made it.
+	store                  *config.Store
+	syncedConfig           config.ReadOnlySnapshot
+	syncedConfigGeneration uint64
 }
 
 // NewCluster makes a cluster that has its configuration engine and no other, in the environment:
@@ -102,7 +102,7 @@ func NewCluster(
 	}
 	return &Cluster{
 		Env: env, config: ce, engines: []Stepper{ce},
-		store: store, synced: ce.State().Snapshot(),
+		store: store, syncedConfig: ce.State().Snapshot(),
 	}, nil
 }
 
@@ -118,19 +118,19 @@ func (c *Cluster) syncConfig() {
 		return
 	}
 	cur := c.store.Current()
-	if cur.Generation == 0 || cur.Generation == c.syncedGen {
+	if cur.Generation == 0 || cur.Generation == c.syncedConfigGeneration {
 		return
 	}
-	cmd, changed, err := sim.NewUpdateConfigCommand(c.synced, cur.Document)
+	cmd, changed, err := sim.NewUpdateConfigCommand(c.syncedConfig, cur.Document)
 	if err != nil {
 		logging.Error("the configuration of the store is refused", "err", err)
-		c.syncedGen = cur.Generation
+		c.syncedConfigGeneration = cur.Generation
 		return
 	}
 	if changed && !c.config.Send(cmd) {
 		return
 	}
-	c.synced, c.syncedGen = cur.Snapshot, cur.Generation
+	c.syncedConfig, c.syncedConfigGeneration = cur.Snapshot, cur.Generation
 }
 
 // ConfigEngine returns the configuration engine of the cluster: the one to send an
