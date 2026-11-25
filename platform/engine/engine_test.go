@@ -18,7 +18,7 @@ func newToyEnv(t testing.TB) *Env {
 		t.Fatal(err)
 	}
 	return &Env{
-		Router: NewRouter(), Cfg: config.NewStore(), EventLog: &eventlog.MemLog{},
+		Router: NewRouter(), EventLog: &eventlog.MemLog{},
 		Stable: NewStableStateStore(), Codecs: codecs, QueueSize: 16, Emitter: NopEmitter{},
 		Acks: NewAckBoard(),
 	}
@@ -26,7 +26,7 @@ func newToyEnv(t testing.TB) *Env {
 
 func toyCluster(t testing.TB, ids ...sim.StateID) (*Cluster, []*Engine[*toyState]) {
 	t.Helper()
-	c := NewCluster(newToyEnv(t))
+	c := newCluster(t, newToyEnv(t))
 	var engines []*Engine[*toyState]
 	for _, id := range ids {
 		e := New(&toyState{id: id}, c.Env, 1)
@@ -89,7 +89,8 @@ func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T
 	mem := c.Env.EventLog.(*eventlog.MemLog)
 	var deps []sim.StateDependency
 	for _, r := range mem.Records {
-		if dep, ok := r.Dependency(); ok && r.Engine == 2 {
+		// every engine reads the configuration at every tick: that is not what is asked here
+		if dep, ok := r.Dependency(); ok && r.Engine == 2 && dep.Source != sim.ConfigStateID {
 			deps = append(deps, dep)
 		}
 	}

@@ -7,18 +7,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
-// Env is what every engine of a cluster shares: the router that carries their messages, the
-// configuration they read, the event log they write, the store of the states they publish, the
-// emitter where they give what changed, the codecs that read back what they wrote, and the writer
-// of their checkpoints.
+// Env is what every engine of a cluster shares: the router that carries their messages, the replay
+// log they write, the store of the states they publish (the configuration is read from it, from
+// the state of the configuration engine), the emitter where they give what changed, the codecs that
+// read back what they wrote, and the writer of their checkpoints.
 type Env struct {
 	Router    MessageRouter
-	Cfg       ConfigSource
 	EventLog  eventlog.Log
 	Stable    StableStore
 	Codecs    *sim.Codecs
@@ -62,8 +63,6 @@ type Stepper interface {
 	Tick() uint64
 	// Hash is the hash of what the engine goes on from (see Engine.Hash).
 	Hash(h sim.Hasher) uint64
-	// ConfigVersionSeen is the version of the configuration the engine read last.
-	ConfigVersionSeen() uint64
 	// SentMessages are the messages the engine sent and holds until their receivers say they hold
 	// them safe.
 	SentMessages() []sim.Message
@@ -75,14 +74,48 @@ type Stepper interface {
 var _ Stepper = (*Engine[sim.State])(nil)
 
 // Cluster is the engines of a game, built and wired. It knows only that they are engines: what each
-// does is the business of its state.
+// does is the business of its state. The first of them is the configuration engine, which every
+// cluster has.
 type Cluster struct {
 	Env     *Env
+	config  *Engine[*configengine.State]
 	engines []Stepper
 }
 
-// NewCluster makes an empty cluster in the environment.
-func NewCluster(env *Env) *Cluster { return &Cluster{Env: env} }
+// NewCluster makes a cluster that has its configuration engine and no other, in the environment:
+// from the checkpoint that the source has for it, or new with every variable at its default. It
+// returns an error when that checkpoint cannot make the engine. The environment's codecs must know
+// the configuration engine (see NewCodecs).
+func NewCluster(env *Env, seed uint64, checkpoints CheckpointSource) (*Cluster, error) {
+	ce, err := NewOrRestore(configengine.NewState(), env, seed, checkpoints)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration engine: %w", err)
+	}
+	return &Cluster{Env: env, config: ce, engines: []Stepper{ce}}, nil
+}
+
+// ConfigEngine returns the configuration engine of the cluster: the one to send an
+// UpdateConfigCommand to.
+func (c *Cluster) ConfigEngine() *Engine[*configengine.State] { return c.config }
+
+// Reader reads the latest copy that each engine published, with no lock and without the log: for
+// whoever is outside the engines and asks (a gateway, a config service). An engine reads through
+// its own view, which the replay log records. It finds nothing in the environment of a replay.
+func (c *Cluster) Reader() sim.StableReader {
+	if r, ok := c.Env.Stable.(sim.StableReader); ok {
+		return r
+	}
+	return noCopies{}
+}
+
+// Config is the configuration as the configuration engine last published it, or the defaults when
+// it published none.
+func (c *Cluster) Config() config.ReadOnlySnapshot { return sim.ConfigOf(c.Reader()) }
+
+// noCopies is the reader of an environment that keeps no copy to read.
+type noCopies struct{}
+
+func (noCopies) Read(sim.StateID) (sim.State, error) { return nil, sim.ErrStateNotFound }
 
 // Add puts an engine in the cluster, after the engines that are already in it.
 func (c *Cluster) Add(e Stepper) { c.engines = append(c.engines, e) }

@@ -29,7 +29,7 @@ import (
 const tile = 1024
 
 func TestEnteringTheWorldPutsTheCharacterInAZoneLayer(t *testing.T) {
-	c, rec, _, _ := testkit.NewWorld(t, 1, 0)
+	c, rec, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 
 	if _, ok := c.ZoneLayer(testkit.Layer1).State().CharacterEntityByCharacterID(1); !ok {
@@ -41,7 +41,7 @@ func TestEnteringTheWorldPutsTheCharacterInAZoneLayer(t *testing.T) {
 }
 
 func TestAFullZoneLayerSendsTheNextCharacterToAnotherZoneLayer(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
 	// zonelayer 1 holds two characters, so the third goes to zonelayer 2
@@ -52,7 +52,7 @@ func TestAFullZoneLayerSendsTheNextCharacterToAnotherZoneLayer(t *testing.T) {
 }
 
 func TestRunsOfMovementAreAppliedInOrderThroughTheCooldown(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	l := c.ZoneLayer(testkit.Layer1)
 	start, _ := l.State().CharacterEntityByCharacterID(1)
@@ -75,7 +75,7 @@ func TestRunsOfMovementAreAppliedInOrderThroughTheCooldown(t *testing.T) {
 }
 
 func TestChatInEachScope(t *testing.T) {
-	c, rec, _, _ := testkit.NewWorld(t, 1, 0)
+	c, rec, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 
 	c.ZoneLayer(testkit.Layer1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "zonelayer"})
@@ -108,7 +108,7 @@ func TestChatInEachScope(t *testing.T) {
 }
 
 func TestNormalAttackCooldownAndShield(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
 	l := c.ZoneLayer(testkit.Layer1)
@@ -155,7 +155,7 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 }
 
 func TestAttackOnATargetThatIsNotThereDoesNothing(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	l := c.ZoneLayer(testkit.Layer1)
 	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 9})
@@ -166,7 +166,7 @@ func TestAttackOnATargetThatIsNotThereDoesNothing(t *testing.T) {
 }
 
 func TestAKilledCharacterStaysDead(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.EnterCharacter(t, c, testkit.Zone1, testkit.NewCharacter(2, "Binh", 2, 1000, 0))
 	for range 3 {
@@ -181,7 +181,7 @@ func TestAKilledCharacterStaysDead(t *testing.T) {
 }
 
 func TestAZoneLayerHealsEveryCharacterEveryPeriod(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 10)
+	c, _, _ := testkit.NewWorld(t, 1, 10)
 	hurt := testkit.NewCharacter(1, "An", 100, 1000, 0)
 	hurt.SetHealth(50)
 	testkit.EnterCharacter(t, c, testkit.Zone1, hurt)
@@ -194,7 +194,7 @@ func TestAZoneLayerHealsEveryCharacterEveryPeriod(t *testing.T) {
 }
 
 func TestAnExitMovesTheCharacterAtOnceToAZoneLayerOfTheOtherZone(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.WalkToTheEastExit(t, c, 1)
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
@@ -211,7 +211,7 @@ func TestAnExitMovesTheCharacterAtOnceToAZoneLayerOfTheOtherZone(t *testing.T) {
 }
 
 func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone2, 9, "Full") // zone 2 takes one character, so it is now full
 	testkit.WalkToTheEastExit(t, c, 1)
 	c.ZoneLayer(testkit.Layer1).Send(
@@ -268,7 +268,7 @@ func TestAnExitToAZoneThatIsNotBuiltDoesNothing(t *testing.T) {
 }
 
 func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.WalkToTheEastExit(t, c, 1)
 	// The zonelayer that the exit will choose goes away after it published how many characters it
 	// holds, so the exit sees room and the message to it cannot be delivered.
@@ -295,7 +295,7 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettled(
 	t *testing.T,
 ) {
-	c, _, j, _ := testkit.NewWorld(t, 1, 0)
+	c, _, j := testkit.NewWorld(t, 1, 0)
 	testkit.WalkToTheEastExit(t, c, 1)
 	// the zonelayer is removed: the world forgets it, and the router has no engine for it
 	c.World.State().RemoveZoneLayer(testkit.Layer3)
@@ -336,7 +336,7 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 }
 
 func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *testing.T) {
-	c, _, j, _ := testkit.NewWorld(t, 1, 0)
+	c, _, j := testkit.NewWorld(t, 1, 0)
 	layer := testkit.Layer1
 	say := func(seq uint64) sim.Message {
 		m := sim.NewActionMessage[*zonelayerstate.State](
@@ -372,10 +372,9 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 }
 
 func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testing.T) {
-	c, _, j, cfg := testkit.NewWorld(t, 1, 0)
-	if _, err := cfg.Apply(map[string]string{"eventlog.hash_every_ticks": "5"}); err != nil {
-		t.Fatal(err)
-	}
+	c, _, j := testkit.NewWorld(t, 1, 0)
+	every5 := map[string]string{"eventlog.hash_every_ticks": "5"}
+	testkit.SetConfig(t, c, testkit.Sender{T: t}, every5)
 	testkit.Steps(t, c, 22)
 	ticks := map[sim.StateID][]uint64{}
 	for _, r := range j.Records {
@@ -402,7 +401,7 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 
 func TestTheSameInputsGiveTheSameEventLog(t *testing.T) {
 	run := func() []eventlog.Record {
-		c, _, j, _ := testkit.NewWorld(t, 7, 0)
+		c, _, j := testkit.NewWorld(t, 7, 0)
 		testkit.Enter(t, c, testkit.Zone1, 1, "An")
 		testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
 		c.ZoneLayer(testkit.Layer1).Send(
@@ -424,7 +423,7 @@ func TestTheSameInputsGiveTheSameEventLog(t *testing.T) {
 }
 
 func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(done) }()
@@ -452,7 +451,7 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 }
 
 func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testing.T) {
-	c, rec, _, _ := testkit.NewWorld(t, 1, 0)
+	c, rec, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	itemID := c.ZoneLayer(testkit.Layer1).State().
 		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
@@ -477,7 +476,7 @@ func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testi
 }
 
 func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
 	itemID := c.ZoneLayer(testkit.Layer1).State().
@@ -498,7 +497,7 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 }
 
 func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	at := state.Vec{X: 2500, Y: 2500}
@@ -525,7 +524,7 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 }
 
 func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	itemID := c.ZoneLayer(testkit.Layer1).State().
@@ -554,7 +553,7 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 }
 
 func TestAnEngineDoesNotTakeANilCommand(t *testing.T) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	l := c.ZoneLayer(testkit.Layer1)
 	if c.World.Send(nil) || c.Zone(testkit.Zone1).Send(nil) || l.Send(nil) {
 		t.Fatal("an engine took a nil command")

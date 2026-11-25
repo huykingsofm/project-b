@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -18,8 +19,11 @@ import (
 // what the engines wrote can be read back. The map of a zone is not written with its state; tilesOf
 // gives the map of the zone with an ID when a zone is read.
 func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, error) {
-	c := sim.NewCodecs()
-	err := errs.Join(
+	c, err := engine.NewCodecs()
+	if err != nil {
+		return nil, err
+	}
+	err = errs.Join(
 		c.RegisterState(worldstate.DecodeState),
 		c.RegisterState(
 			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {

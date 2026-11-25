@@ -18,7 +18,7 @@ import (
 func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCooldowns(
 	t *testing.T,
 ) {
-	c, _, _, _ := testkit.NewWorld(t, 1, 0)
+	c, _, _ := testkit.NewWorld(t, 1, 0)
 	kept := testkit.NewCharacter(1, "An", 100, 1000, 0)
 	kept.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 5)
 	kept.SetCooldown(action.ZoneLayerCharacterMoveActionCooldownKey, 7)

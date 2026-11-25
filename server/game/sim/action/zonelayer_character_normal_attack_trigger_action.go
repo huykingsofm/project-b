@@ -42,7 +42,7 @@ func (a ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelay
 
 // Apply sets the cooldown and adds the hit to the plan, or does nothing.
 func (a ZoneLayerCharacterNormalAttackTriggerAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	p *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
@@ -68,7 +68,7 @@ func (a ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 	s.SetCooldown(
 		a.CharacterID,
 		ZoneLayerCharacterNormalAttackTriggerActionCooldownKey,
-		c.Tick+uint64(zoneLayerCharacterNormalAttackTriggerActionCooldown.Get(c.Cfg)),
+		c.Tick+uint64(zoneLayerCharacterNormalAttackTriggerActionCooldown.Get(r.Config())),
 	)
 	p.Append(
 		ZoneLayerCharacterDamageAction{

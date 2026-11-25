@@ -39,8 +39,7 @@ var benchRecords = map[string]Record{
 			},
 		},
 	},
-	"hash":        {Tick: 123456, Body: Hash{Value: 0xdeadbeefcafef00d}},
-	"config read": {Tick: 123456, Body: ConfigRead{Version: 5}},
+	"hash": {Tick: 123456, Body: Hash{Value: 0xdeadbeefcafef00d}},
 	"stable read": {
 		Tick: 123456, Body: StableRead{Source: sim.StateID(12), CopyTick: 123455},
 	},
@@ -82,7 +81,7 @@ func BenchmarkDecodeRecord(b *testing.B) {
 	}
 }
 
-// tickRecorder records the ticks of one engine: a config read, a stable read, a hash, 5 commands
+// tickRecorder records the ticks of one engine: two stable reads, a hash, 5 commands
 // and the rest inbound messages, as a busy zonelayer does.
 type tickRecorder struct {
 	log     *FileLog
@@ -103,7 +102,7 @@ func newTickRecorder(log *FileLog, engine sim.StateID, records int) *tickRecorde
 }
 
 func (r *tickRecorder) tick(tick uint64) {
-	r.log.Append(r.engine, tick, ConfigRead{Version: 5})
+	r.log.Append(r.engine, tick, StableRead{Source: sim.ConfigStateID, CopyTick: tick})
 	for range r.records - 8 {
 		r.log.Append(r.engine, tick, Inbound{Message: r.message})
 	}

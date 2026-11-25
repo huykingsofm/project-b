@@ -6,7 +6,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
@@ -35,12 +34,10 @@ func toyClusterThatCheckpoints(
 	t.Helper()
 	env := newToyEnv(t)
 	env.Checkpoints = w
-	if _, err := env.Cfg.(*config.Store).Apply(map[string]string{
+	c := newCluster(t, env)
+	setConfig(t, c, map[string]string{
 		"checkpoint.every_ticks": "5", "eventlog.hash_every_ticks": "1000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	c := NewCluster(env)
+	})
 	var engines []*Engine[*toyState]
 	for _, id := range ids {
 		e := New(&toyState{id: id}, env, 1)

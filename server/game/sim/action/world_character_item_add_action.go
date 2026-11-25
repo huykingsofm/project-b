@@ -51,8 +51,8 @@ func (a WorldCharacterItemAddAction) Apply(
 	_ *sim.Plan[*worldstate.State],
 ) {
 	left := s.AddItemToCharacter(a.CharacterID, a.ItemID, a.Count,
-		worldCharacterItemAddActionInventorySlotLimit.Get(c.Cfg), uint32(
-			worldCharacterItemAddActionStackLimit.Get(c.Cfg),
+		worldCharacterItemAddActionInventorySlotLimit.Get(r.Config()), uint32(
+			worldCharacterItemAddActionStackLimit.Get(r.Config()),
 		))
 	if left == 0 {
 		return

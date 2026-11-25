@@ -66,7 +66,6 @@ func compareWithFiles(
 	for _, k := range []eventlog.Kind{
 		eventlog.KindInbound,
 		eventlog.KindCommand,
-		eventlog.KindConfig,
 		eventlog.KindHash,
 		eventlog.KindStableRead,
 	} {
@@ -78,8 +77,8 @@ func compareWithFiles(
 
 func TestTheFilesOfAWholeClusterRunHoldWhatTheMemoryLogHolds(t *testing.T) {
 	dir := t.TempDir()
-	c, mem, file, cfg := testkit.NewTeeWorld(t, dir)
-	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
+	c, mem, file := testkit.NewTeeWorld(t, dir)
+	testkit.RunScenario(t, c, testkit.Sender{T: t})
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +92,9 @@ func TestTheFilesOfAWholeClusterRunHoldWhatTheMemoryLogHolds(t *testing.T) {
 // sender gave it, so its command records are not compared.)
 func TestACommandThatIsCopiedGivesTheSameRunAsOneThatIsNot(t *testing.T) {
 	run := func(roundTrip bool) ([]eventlog.Record, []uint64) {
-		c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
+		c, _, mem := testkit.NewWorld(t, 7, 10)
 		s := testkit.Sender{T: t, RoundTrip: roundTrip, Reuses: true, Codecs: c.Env.Codecs}
-		testkit.RunScenario(t, c, cfg, s)
+		testkit.RunScenario(t, c, s)
 		var hashes []eventlog.Record
 		for _, r := range mem.Records {
 			if r.Kind() == eventlog.KindHash {
@@ -124,7 +123,7 @@ func TestACommandThatIsCopiedGivesTheSameRunAsOneThatIsNot(t *testing.T) {
 
 func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t *testing.T) {
 	dir := t.TempDir()
-	c, mem, file, _ := testkit.NewTeeWorld(t, dir)
+	c, mem, file := testkit.NewTeeWorld(t, dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(done) }()

@@ -7,10 +7,8 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -32,19 +30,15 @@ func aWorldThatCheckpointsToFiles(
 	t *testing.T, dir string,
 ) (*game.Cluster, *eventlog.MemLog, *checkpoint.FileWriter) {
 	t.Helper()
-	cfg := config.NewStore()
-	if _, err := cfg.Apply(everySeventhTick); err != nil {
-		t.Fatal(err)
-	}
 	mem, files := &eventlog.MemLog{}, checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
-		WithConfig(cfg).
 		WithEventLog(mem).
 		WithCheckpointWriter(files).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
+	testkit.SetConfig(t, c, testkit.Sender{T: t}, everySeventhTick)
 	return c, mem, files
 }
 
@@ -158,9 +152,7 @@ func TestEveryEngineWritesACheckpointFileEveryPeriodThatMakesItAgainWithTheHashO
 	}
 
 	// a replay, whose engines take no checkpoint, hashes at the same ticks
-	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine(), replay.Options{
-		ConfigVersions: map[uint64]map[string]string{1: everySeventhTick},
-	})
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine())
 	if err != nil {
 		t.Fatal(err)
 	}

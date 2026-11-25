@@ -99,9 +99,9 @@ func WriteLineCache(dir string, c LineCache) error {
 	return atomicfile.Write(filepath.Join(dir, lineCacheFile), c.encode())
 }
 
-// ConfigSource is where the variables of the configuration are read from.
+// ConfigSource is where the variables of the configuration are read from: a cluster is one.
 type ConfigSource interface {
-	Snapshot() *config.Snapshot
+	Config() config.ReadOnlySnapshot
 }
 
 // LineCacheWriter writes the cache of the recovery line of a cluster each time a FileLog says that
@@ -138,9 +138,9 @@ func (w *LineCacheWriter) SafeChanged(safe map[sim.StateID]uint64, final bool) {
 
 // due says whether an engine is a period past what was written.
 func (w *LineCacheWriter) due(safe map[sim.StateID]uint64) bool {
-	var snapshot *config.Snapshot
+	var snapshot config.ReadOnlySnapshot
 	if w.cfg != nil {
-		snapshot = w.cfg.Snapshot()
+		snapshot = w.cfg.Config()
 	}
 	every := uint64(lineCacheEvery.Get(snapshot))
 	for id, tick := range safe {

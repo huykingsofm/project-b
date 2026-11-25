@@ -3,7 +3,6 @@ package replay
 import (
 	"maps"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -12,7 +11,7 @@ import (
 
 // What follows are the adapters that stand in for the parts of the cluster that a replay does not
 // have: the router (which does not deliver what the engines send but compares it), the published
-// states (which give each read the copy the log says it found), the configuration, and the event
+// states (which give each read the copy the log says it found), and the event
 // log (which compares what the engine records with what the log holds).
 
 // msgKey names a message: who sent it and which message of the sender it was.
@@ -153,12 +152,6 @@ func (s *replayStable) held() int {
 	}
 	return n
 }
-
-// replayConfig is the configuration of a replay: the snapshot of the version that the engine about
-// to run read.
-type replayConfig struct{ snap *config.Snapshot }
-
-func (c *replayConfig) Snapshot() *config.Snapshot { return c.snap }
 
 // verifyLog is the event log of a replay: it checks that the engine records, in the same order,
 // exactly what it recorded the first time. A hash is worked out and compared.

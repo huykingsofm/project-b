@@ -310,13 +310,18 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 	}
 }
 
+// fixedConfig is a ConfigSource that always gives the same snapshot.
+type fixedConfig struct{ snapshot config.ReadOnlySnapshot }
+
+func (f fixedConfig) Config() config.ReadOnlySnapshot { return f.snapshot }
+
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	cfg := config.NewStore()
-	if _, err := cfg.Apply(map[string]string{"replay.line_cache_every_ticks": "10"}); err != nil {
+	snapshot, _, err := config.Build(1, map[string]string{"replay.line_cache_every_ticks": "10"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	w := NewLineCacheWriter(dir, cfg)
+	w := NewLineCacheWriter(dir, fixedConfig{snapshot})
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {

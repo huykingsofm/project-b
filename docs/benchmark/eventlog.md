@@ -13,7 +13,7 @@ Conventions and how to run: [index](index.md). Behavior: [eventlog](../eventlog.
 | `BenchmarkFileTickSaturated` | `platform/eventlog` | ticks of 100 records with no pause, faster than an engine can tick, so the goroutine that writes falls behind |
 | `BenchmarkFileTickManyEngines` | `platform/eventlog` | 12 engines on 12 goroutines, each with its own log, ticks of 100 records with no pause |
 
-- A tick is a config read, a stable read, a hash, 5 commands and the rest inbound messages. The hash is a constant: taking a hash is the cost of the engine.
+- A tick is two stable reads, a hash, 5 commands and the rest inbound messages. The hash is a constant: taking a hash is the cost of the engine.
 - Segments of 64 MiB, a backlog of 64 batches and a sync every second, in a temporary directory; the numbers are of WSL2 with its page cache, so they say nothing of the speed of a disk.
 - `BenchmarkFileTickPaced` has a fixed workload: its `ns/op` and `B/op` are of the whole run and mean nothing; its metrics are in ns/tick.
 - `stalls` is how many `Commit` calls had to wait for the goroutine that writes.
@@ -27,13 +27,11 @@ Building and reading a record, ns/op:
 | EncodeRecord, inbound, a message with 2 actions | 84.6 | 0 | 0 |
 | EncodeRecord, command: move | 31.9 | 0 | 0 |
 | EncodeRecord, command: chat | 33.9 | 0 | 0 |
-| EncodeRecord, config read | 7.8 | 0 | 0 |
 | EncodeRecord, hash | 7.5 | 0 | 0 |
 | EncodeRecord, stable read | 12.7 | 0 | 0 |
 | DecodeRecord, inbound, a message with 2 actions | 357 | 328 | 8 |
 | DecodeRecord, command: move | 96.3 | 80 | 3 |
 | DecodeRecord, command: chat | 124.7 | 136 | 4 |
-| DecodeRecord, config read | 40.9 | 48 | 1 |
 | DecodeRecord, hash | 49.7 | 56 | 2 |
 | DecodeRecord, stable read | 61.8 | 64 | 2 |
 

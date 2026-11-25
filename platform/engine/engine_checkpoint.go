@@ -31,7 +31,6 @@ type EngineCheckpoint[S sim.State] struct {
 	State           S
 	ActionScheduler sim.ActionScheduler[S]
 	Rand            *rand.Rand
-	CfgVersionSeen  uint64 // the version of the configuration the engine read last
 	Peer            peerData
 }
 
@@ -89,10 +88,6 @@ func DecodeEngineCheckpoint[S sim.State](
 	if c.Rand, err = rand.Decode(r); err != nil {
 		return EngineCheckpoint[S]{}, fmt.Errorf("%d: its random numbers: %w", id, err)
 	}
-	c.CfgVersionSeen = r.Uvarint()
-	if err := r.Err(); err != nil {
-		return EngineCheckpoint[S]{}, fmt.Errorf("%d: %w", id, err)
-	}
 	if c.Peer, err = decodePeerData(codecs, r, version); err != nil {
 		return EngineCheckpoint[S]{}, fmt.Errorf("%d: %w", id, err)
 	}
@@ -105,8 +100,8 @@ func DecodeEngineCheckpoint[S sim.State](
 }
 
 // Encode writes the checkpoint: the version of the data, the state ID (which has the type of the
-// state in it), the tick, then the state, the scheduler, the random numbers, the version of the
-// configuration, and what the peer knows.
+// state in it), the tick, then the state, the scheduler, the random numbers, and what the peer
+// knows.
 func (c EngineCheckpoint[S]) Encode() ([]byte, error) {
 	var w binary.Writer
 	w.Uvarint(1) // the version of the data
@@ -121,7 +116,6 @@ func (c EngineCheckpoint[S]) Encode() ([]byte, error) {
 	if err := c.Rand.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: its random numbers: %w", c.ID, err)
 	}
-	w.Uvarint(c.CfgVersionSeen)
 	if err := c.Peer.Encode(&w); err != nil {
 		return nil, fmt.Errorf("%v: %w", c.ID, err)
 	}
@@ -148,7 +142,7 @@ func (c EngineCheckpoint[S]) Restore(env *Env, seed uint64) (*Engine[S], error) 
 	e := New(c.State, env, seed)
 	e.tick = c.Tick
 	e.actionScheduler = c.ActionScheduler
-	e.rng, e.cfgVersionSeen = c.Rand, c.CfgVersionSeen
+	e.rng = c.Rand
 	e.peer.restoreFrom(c.Peer)
 	return e, nil
 }

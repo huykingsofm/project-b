@@ -127,8 +127,17 @@ func recoveryLine(
 		if err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", engine, err)
 		}
+		var previous uint64
 		for r.Next() {
 			rec := r.Record()
+			if rec.Tick < previous {
+				r.Close()
+				return nil, fmt.Errorf(
+					"the log of %v: a record of the tick %d comes after the tick %d",
+					engine, rec.Tick, previous,
+				)
+			}
+			previous = rec.Tick
 			if dep, ok := rec.Dependency(); ok {
 				depends[engine] = append(depends[engine], dependencyAt{tick: rec.Tick, dep: dep})
 			}

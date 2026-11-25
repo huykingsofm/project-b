@@ -22,22 +22,14 @@ type Noticer interface {
 	Notice(actor any, key string, args ...any)
 }
 
-// ConfigSource is what an engine needs of the configuration: the snapshot it takes once for each
-// tick. A config.Store is one; a replay gives the engines the version that the log says they read.
-type ConfigSource interface {
-	Snapshot() *config.Snapshot
-}
-
 // Engine is the engine of a state of type S: it owns the state and is the only one that changes it.
 // Every engine of a game is one of these, whatever its state is.
 type Engine[S sim.State] struct {
 	peer peer // what the engine has to talk to the other engines
 	st   S
 
-	rng            *rand.Rand // the random numbers of the engine and where they are
-	cfg            ConfigSource
-	cfgVersionSeen uint64 // the version of the configuration the engine read last
-	eventLog       eventlog.Log
+	rng      *rand.Rand // the random numbers of the engine and where they are
+	eventLog eventlog.Log
 
 	actionScheduler sim.ActionScheduler[S]
 	stateRegistry   sim.Registry[S]
@@ -82,7 +74,7 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 		), st: st, tick: st.Tick(),
 		// the seed of the cluster and the ID of the engine decide the random numbers, so the same
 		// inputs give the same run
-		rng: rand.NewPCG(seed, uint64(me)), cfg: env.Cfg, eventLog: env.EventLog,
+		rng: rand.NewPCG(seed, uint64(me)), eventLog: env.EventLog,
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, checkpoints: env.Checkpoints, planPool: planPoolOf[S](),
 		periodOffset: periodOffsetOf(me),
@@ -191,10 +183,10 @@ func (e *Engine[S]) Step() error {
 			e.peer.me, ErrTickMismatch, got, e.tick,
 		)
 	}
-	cfg := e.snapshot(e.tick)
-	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand, Cfg: cfg}
 	e.stateRegistry.Begin(e.tick)
 	e.peer.view.begin(e.tick)
+	cfg := e.tickConfig()
+	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand}
 	e.peer.handleReturnedMessages(cfg, e.tick, e.eventLog)
 
 	e.actionBuffer = e.actionBuffer[:0]
@@ -275,12 +267,9 @@ func (e *Engine[S]) Checkpoint() EngineCheckpoint[S] {
 func (e *Engine[S]) checkpointWith(st S) EngineCheckpoint[S] {
 	return EngineCheckpoint[S]{
 		ID: e.peer.me, Tick: e.tick, State: st, ActionScheduler: e.actionScheduler.Clone(),
-		Rand: e.rng.Clone(), CfgVersionSeen: e.cfgVersionSeen, Peer: e.peer.data.Clone(),
+		Rand: e.rng.Clone(), Peer: e.peer.data.Clone(),
 	}
 }
-
-// ConfigVersionSeen is the version of the configuration the engine read last.
-func (e *Engine[S]) ConfigVersionSeen() uint64 { return e.cfgVersionSeen }
 
 // SentMessages are the messages the engine sent and has not had acked: the engine sends them again
 // until their receivers say they hold them safe. The messages are the engine's own.
@@ -328,8 +317,8 @@ func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 }
 
 // Hash is the hash of the engine: of everything a checkpoint of it holds that the engine goes on
-// from: its state, what it waits for, what only it knows (the place of its random numbers, the
-// version of the configuration it read), and what its peer knows (the number of its messages and
+// from: its state, what it waits for, what only it knows (the place of its random numbers), and
+// what its peer knows (the number of its messages and
 // the last it took from each sender, and the messages it holds to send again). A restore that
 // differs from the engine it came from in any of them has another hash, and a replay finds it.
 func (e *Engine[S]) Hash(h sim.Hasher) uint64 {
@@ -354,24 +343,23 @@ func (e *Engine[S]) Hash(h sim.Hasher) uint64 {
 }
 
 // encodeOwnData writes what only the engine knows besides its state, its scheduler and its peer:
-// the place of its random numbers and the version of the configuration it read.
+// the place of its random numbers.
 func (e *Engine[S]) encodeOwnData(w *binary.Writer) error {
 	if err := e.rng.Encode(w); err != nil {
 		return fmt.Errorf("its random numbers: %w", err)
 	}
-	w.Uvarint(e.cfgVersionSeen)
 	return nil
 }
 
-// snapshot takes the configuration once for the whole tick, and records the version when the
-// engine reads a new one.
-func (e *Engine[S]) snapshot(tick uint64) *config.Snapshot {
-	s := e.cfg.Snapshot()
-	if s.Version() != e.cfgVersionSeen {
-		e.cfgVersionSeen = s.Version()
-		e.eventLog.Append(e.peer.me, tick, eventlog.ConfigRead{Version: s.Version()})
+// tickConfig is the configuration for the whole tick: the one in the state of the configuration
+// engine, which the engine that owns it reads from its own state and every other engine from the
+// copy that its view keeps for the tick, so the event log says which copy each tick read. It is
+// the defaults when no copy was published.
+func (e *Engine[S]) tickConfig() config.ReadOnlySnapshot {
+	if r, ok := any(e.st).(sim.ConfigReader); ok {
+		return r.Snapshot()
 	}
-	return s
+	return sim.ConfigOf(e.peer.view)
 }
 
 // periodOffsetOf is where an engine starts the count of a period: the hash of its ID. The IDs of

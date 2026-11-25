@@ -30,7 +30,6 @@
 | `State` | the state, a copy that no one changes |
 | `ActionScheduler` | what the engine waits for, each action a clone |
 | `Rand` | the random numbers of the engine, a clone that goes on from where they are |
-| `CfgVersionSeen` | the version of the configuration the engine read last |
 | `Peer` | the number of the last message the engine sent, the last taken from each sender, and the unsettled messages, each a clone |
 
 ## What is written
@@ -45,7 +44,6 @@ In this order:
 | state | the data of the state, by its `Encode` (below) |
 | scheduler | the last tick it gave out, and the actions set for the ticks to come (the next one included), by tick and in order |
 | random numbers | where the generator of the engine is (the PCG), as its own bytes |
-| configuration | the version of the configuration the engine first read last |
 | `sentSeq` | the number of the last message the engine sent |
 | `lastRecvSeq` | the last number taken from each sender, in the order of the state IDs |
 | unsettled messages | the messages that are to go, and the messages that went and were not acked, each written whole ([unsettled messages](unsettled_messages.md)) |
@@ -78,7 +76,7 @@ In this order:
 |---|---|
 | state | the hash of the state |
 | scheduler, self list | each action as the bytes it is written as, so a field only the action knows (a shield that started) changes it |
-| what only the engine knows | the bytes the checkpoint writes for it: random numbers, the version of the configuration |
+| what only the engine knows | the bytes the checkpoint writes for it: random numbers |
 | what its peer knows | the bytes the checkpoint writes for it: `sentSeq`, `lastRecvSeq`, the messages that are to go |
 
 - A restore that differs from the engine it came from in any of them has another hash, and a replay finds it.

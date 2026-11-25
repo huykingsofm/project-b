@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -30,24 +29,19 @@ type engineRun struct {
 	copiesRead []copyKey
 	// recordsMade is how many of tickRecords the engine has made while it runs the tick.
 	recordsMade int
-	// configVersion is the version of the configuration in effect for the engine.
-	configVersion uint64
 }
 
 type replayRun struct {
 	cluster *engine.Cluster
 	// engines are the engines of the cluster, in the order that Step runs them in.
 	engines stablemap.Map[sim.StateID, *engineRun]
-	configs map[uint64]*config.Snapshot
-	opts    Options
 	router  *replayRouter
 	stable  *replayStable
-	cfg     *replayConfig
 	verify  *verifyLog
 	div     *divergences
 }
 
-func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
+func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
 	logs := p.logs
 	idx, err := buildIndex(logs, b.Seed(), b.QueueSize(), p.starts)
 	if err != nil {
@@ -55,10 +49,7 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 	}
 	div := &divergences{}
 	r := &replayRun{
-		configs: map[uint64]*config.Snapshot{},
-		opts:    opts,
-		cfg:     &replayConfig{snap: config.Defaults()},
-		div:     div,
+		div: div,
 	}
 	r.router = &replayRouter{
 		Router:             engine.NewRouter(),
@@ -71,7 +62,7 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 	r.stable = newReplayStable(idx.copyReads)
 	r.verify = &verifyLog{engines: &r.engines, div: div}
 	env := &engine.Env{
-		Router: r.router, Cfg: r.cfg, EventLog: r.verify, Stable: r.stable,
+		Router: r.router, EventLog: r.verify, Stable: r.stable,
 		Codecs: b.Codecs(), QueueSize: idx.maxQueueSize, Emitter: engine.NopEmitter{},
 	}
 	var checkpoints engine.CheckpointSource = engine.NoCheckpoints{}
@@ -121,10 +112,9 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 
 // begin takes an engine that was made from a checkpoint to where its log goes on from it. The
 // records of the tick it starts at are in the checkpoint already, so they are not given to it, but
-// for the hash, which says that the engine that was made is the one that was recorded. What the
-// engine knew of the configuration, and the messages that it sent and that are not settled, are
-// what the records after the tick refer to. Its state is published, since the tick that does it
-// has run.
+// for the hash, which says that the engine that was made is the one that was recorded. The
+// messages that it sent and that are not settled are what the records after the tick refer to. Its
+// state is published, since the tick that does it has run.
 func (r *replayRun) begin(address sim.StateID, er *engineRun, idx *index) error {
 	eng := er.engine
 	start := er.lastRanTick
@@ -149,7 +139,6 @@ func (r *replayRun) begin(address sim.StateID, er *engineRun, idx *index) error 
 		r.div.add(address, "the engine made from the checkpoint of the tick %d has the hash %d, "+
 			"the log has %d", start, got, logged)
 	}
-	er.configVersion = eng.ConfigVersionSeen()
 	for _, m := range eng.SentMessages() {
 		if key := keyOf(m.Head()); idx.msgsToBeReturned[key] {
 			r.router.sent[key] = m
@@ -251,26 +240,6 @@ func (r *replayRun) play() error {
 	}
 }
 
-// snapshotOf returns the configuration of a version, made once.
-func (r *replayRun) snapshotOf(e sim.StateID, version uint64) *config.Snapshot {
-	if s, ok := r.configs[version]; ok {
-		return s
-	}
-	s := config.Defaults()
-	if version != 0 {
-		overrides, known := r.opts.ConfigVersions[version]
-		if !known {
-			r.div.add(e, "the version %d of the configuration is not given to the replay", version)
-		} else if built, _, err := config.Build(version, overrides); err != nil {
-			r.div.add(e, "the version %d of the configuration cannot be built: %v", version, err)
-		} else {
-			s = built
-		}
-	}
-	r.configs[version] = s
-	return s
-}
-
 // stepEngine gives an engine what its log says it was given at its next tick, and runs the tick.
 func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 	eng := er.engine
@@ -280,8 +249,6 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 	}
 	for _, rec := range er.tickRecords {
 		switch body := rec.Body.(type) {
-		case eventlog.ConfigRead:
-			er.configVersion = body.Version
 		case eventlog.Command:
 			if err := eng.SendBaseCommand(body.Command); err != nil {
 				return fmt.Errorf("%v tick %d: %w", id, tick, err)
@@ -300,7 +267,6 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 			}
 		}
 	}
-	r.cfg.snap = r.snapshotOf(id, er.configVersion)
 	if err := eng.Step(); err != nil {
 		return err
 	}

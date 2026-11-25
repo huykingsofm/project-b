@@ -15,7 +15,7 @@ import "github.com/huykingsofm/project-b/platform/sim"
 //   - the messages of other engines and the commands of clients, in the order the engine took them,
 //     at the tick it took them;
 //   - the messages the engine sent that came back undelivered, at the tick it settled them;
-//   - the version of the configuration, at the tick an engine first read a new one.
+//   - which copy of another engine it first read at each tick, the configuration engine included.
 //
 // What the engines send themselves (the self list, the scheduler) is not recorded: it
 // follows from the state and the inputs and is made again by the replay. Randomness comes from the
@@ -23,10 +23,9 @@ import "github.com/huykingsofm/project-b/platform/sim"
 type Log interface {
 	// Append records what the engine took, sent or read at the tick: a message in full (Inbound),
 	// one of its own that came back undelivered (Returned), a command of a client (Command), the
-	// version of the configuration it first read (ConfigRead), the hash of its state (Hash), or
-	// which copy of another engine it read first (StableRead). Whether a queue was full or an
-	// engine gone depends on the time, so a replay cannot work out a Returned; the message itself
-	// is made again by the replay of the sender.
+	// hash of its state (Hash), or which copy of another engine it read first (StableRead).
+	// Whether a queue was full or an engine gone depends on the time, so a replay cannot work out a
+	// Returned; the message itself is made again by the replay of the sender.
 	Append(engine sim.StateID, tick uint64, body Body)
 	// EndTick says that the engine has recorded all it will record for the tick. A log that writes
 	// to a file hands what it has kept for the tick to the goroutine that writes it.

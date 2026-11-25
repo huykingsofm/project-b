@@ -54,7 +54,7 @@ func (c *peer) sendToUnsettled(m sim.Message) { c.data.unsettledMessages.AddUnse
 
 // handleReturnedMessages takes what came back undelivered since the last tick and runs what each
 // says to do.
-func (c *peer) handleReturnedMessages(cfg *config.Snapshot, tick uint64, rpl eventlog.Log) {
+func (c *peer) handleReturnedMessages(cfg config.ReadOnlySnapshot, tick uint64, rpl eventlog.Log) {
 	for _, r := range channels.Drain(c.in.Back) {
 		rpl.Append(c.me, tick, eventlog.Returned{Header: r.Message.Head(), Reason: r.Reason})
 		c.bounce.handle(cfg, r.Message, r.Reason)
@@ -122,7 +122,7 @@ func (c *peer) receivedActions[S sim.State](tick uint64, rpl eventlog.Log) []sim
 // message that cannot be delivered is handled at once, and the event log records that it came
 // back, at the tick of the send.
 func (c *peer) flushUnsettledMessages(
-	cfg *config.Snapshot, tick uint64, fresh []sim.Message, rpl eventlog.Log,
+	cfg config.ReadOnlySnapshot, tick uint64, fresh []sim.Message, rpl eventlog.Log,
 ) {
 	c.releaseAckedMessages()
 	for _, m := range append(c.data.unsettledMessages.TakeUnsent(), fresh...) {
@@ -155,7 +155,7 @@ func (c *peer) releaseAckedMessages() {
 // sendAgain sends the messages that went and whose ack is late. One whose receiver is gone comes
 // back to this engine as a message that could not be delivered, and is let go of: the same way as
 // when the receiver is retired while the message waits in its queue.
-func (c *peer) sendAgain(cfg *config.Snapshot, tick uint64) {
+func (c *peer) sendAgain(cfg config.ReadOnlySnapshot, tick uint64) {
 	var gone []int
 	for _, i := range c.data.unsettledMessages.Due(tick) {
 		m := c.data.unsettledMessages.Message(i)

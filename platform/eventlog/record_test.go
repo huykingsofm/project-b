@@ -10,7 +10,7 @@ import (
 func TestEveryKindOfTheRegisterHasADecoderAndABodyThatReturnsIt(t *testing.T) {
 	bodies := []Body{
 		Inbound{Message: benchMessage(1)}, Command{Command: toyChat{}},
-		ConfigRead{}, Hash{}, StableRead{}, Returned{}, Retired{},
+		Hash{}, StableRead{}, Returned{}, Retired{},
 	}
 	for kind := KindInbound; kind <= KindRetired; kind++ { // the last kind of the register
 		if _, ok := decoders[kind]; !ok {
@@ -30,7 +30,6 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 	same := [][2]Body{
 		{Inbound{Message: benchMessage(7)}, Inbound{Message: benchMessage(7)}},
 		{Command{Command: move}, Command{Command: move}},
-		{ConfigRead{Version: 1}, ConfigRead{Version: 1}},
 		{Hash{Value: 9}, Hash{Value: 9}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 4}},
 		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureFull}},
@@ -43,11 +42,10 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 	different := [][2]Body{
 		{Inbound{Message: benchMessage(7)}, Inbound{Message: benchMessage(8)}},
 		{Command{Command: move}, Command{Command: toyMove{Ticks: 4}}},
-		{ConfigRead{Version: 1}, ConfigRead{Version: 2}},
 		{Hash{Value: 9}, Hash{Value: 10}},
 		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 5}},
 		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureRetired}},
-		{ConfigRead{Version: 9}, Hash{Value: 9}}, // the same number in another kind
+		{Hash{Value: 9}, StableRead{Source: 9, CopyTick: 9}}, // the same number in another kind
 	}
 	for _, p := range different {
 		if p[0].Same(p[1]) {
@@ -73,7 +71,6 @@ func TestOnlyAMessageAndAReadOfACopyMakeAnEngineDependOnAnother(t *testing.T) {
 		"a read with no copy":   {StableRead{Source: 5}, none, false},
 		"a hash":                {Hash{Value: 1}, none, false},
 		"a command":             {Command{Command: toyChat{}}, none, false},
-		"a configuration":       {ConfigRead{Version: 2}, none, false},
 		"a message back":        {Returned{Header: sim.Header{From: 1, Tick: 5}}, none, false},
 	} {
 		got, ok := Record{Body: tc.body}.Dependency()

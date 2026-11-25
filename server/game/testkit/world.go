@@ -3,7 +3,6 @@ package testkit
 import (
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
@@ -74,18 +73,17 @@ func WorldBuilder(t testing.TB, seed uint64, regenEvery uint64) *game.ClusterBui
 // tell their clients.
 func NewWorld(
 	t testing.TB, seed uint64, regenEvery uint64,
-) (*game.Cluster, *Recorder, *eventlog.MemLog, *config.Store) {
+) (*game.Cluster, *Recorder, *eventlog.MemLog) {
 	t.Helper()
-	rec, eventLog, cfg := &Recorder{}, &eventlog.MemLog{}, config.NewStore()
+	rec, eventLog := &Recorder{}, &eventlog.MemLog{}
 	c, err := WorldBuilder(t, seed, regenEvery).
-		WithConfig(cfg).
 		WithEventLog(eventLog).
 		WithEmitter(rec).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c, rec, eventLog, cfg
+	return c, rec, eventLog
 }
 
 // Steps runs n ticks of every engine of the cluster, and fails the test when one fails.

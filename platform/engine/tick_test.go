@@ -29,7 +29,7 @@ func TestAnEngineStartsAtTheTickOfItsState(t *testing.T) {
 }
 
 func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testing.T) {
-	c := NewCluster(newToyEnv(t))
+	c := newCluster(t, newToyEnv(t))
 	stuck := New(&stuckToy{toyState{id: 1}}, c.Env, 1)
 	after := New(&toyState{id: 2}, c.Env, 1)
 	c.Add(stuck)
@@ -51,7 +51,7 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 }
 
 func TestRunStopsEveryEngineWhenOneFails(t *testing.T) {
-	c := NewCluster(newToyEnv(t))
+	c := newCluster(t, newToyEnv(t))
 	c.Add(New(&stuckToy{toyState{id: 1}}, c.Env, 1))
 	c.Add(New(&toyState{id: 2}, c.Env, 1))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

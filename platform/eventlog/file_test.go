@@ -52,7 +52,7 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 	move := toyMove{CharacterID: 7, Dir: 1, Ticks: 3}
 	chat := toyChat{FromID: 1, Text: "psst"}
 
-	log.Append(engine, tick, ConfigRead{Version: 5})
+	log.Append(engine, tick, Hash{Value: 5})
 	log.Append(engine, tick, Inbound{Message: inbound})
 	log.Append(engine, tick, Returned{
 		Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.DeliveryFailureFull,
@@ -64,7 +64,7 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 	log.Append(engine, tick, Hash{Value: 0xdeadbeefcafef00d + tick})
 	log.EndTick(engine, tick)
 	return []Record{
-		{Engine: engine, Tick: tick, Body: ConfigRead{Version: 5}},
+		{Engine: engine, Tick: tick, Body: Hash{Value: 5}},
 		{Engine: engine, Tick: tick, Body: Inbound{Message: inbound}},
 		{
 			Engine: engine,
@@ -201,9 +201,9 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 	dir := t.TempDir()
 	log := NewFileLog(dir, testFileLogOptions)
 	engine := sim.StateID(1)
-	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.Append(engine, 1, Hash{Value: 1})
 	log.Append(engine, 1, Command{}) // no command: it cannot be written
-	log.Append(engine, 1, ConfigRead{Version: 2})
+	log.Append(engine, 1, Hash{Value: 2})
 	log.EndTick(engine, 1)
 	if log.Err() == nil {
 		t.Fatal("the log was not marked as failed")
@@ -212,8 +212,8 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 		t.Fatal("Close did not return the error")
 	}
 	got, err := readLog(t, dir, engine, 0)
-	if err != nil || len(got) != 2 || got[0].Body != (ConfigRead{Version: 1}) ||
-		got[1].Body != (ConfigRead{Version: 2}) {
+	if err != nil || len(got) != 2 || got[0].Body != (Hash{Value: 1}) ||
+		got[1].Body != (Hash{Value: 2}) {
 		t.Fatalf("%d records, error %v; want the two that could be written", len(got), err)
 	}
 }
@@ -223,14 +223,14 @@ func TestATickWithNoRecordIsAFrameWithOnlyItsTick(t *testing.T) {
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
 	log.EndTick(engine, 1)
-	log.Append(engine, 2, ConfigRead{Version: 3})
+	log.Append(engine, 2, Hash{Value: 3})
 	log.EndTick(engine, 2)
 	log.EndTick(engine, 3)
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
 	got, err := readLog(t, dir, engine, 0)
-	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (ConfigRead{Version: 3}) {
+	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (Hash{Value: 3}) {
 		t.Fatalf("records %v, error %v; want the one of tick 2", got, err)
 	}
 	r, err := segmentlog.OpenReader(engineDir(dir, engine), 0)
@@ -251,8 +251,8 @@ func TestRecordsOfAnotherTickAreAnErrorAndAreNotWritten(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, ConfigRead{Version: 1})
-	log.Append(engine, 2, ConfigRead{Version: 2}) // not the tick of the frame
+	log.Append(engine, 1, Hash{Value: 1})
+	log.Append(engine, 2, Hash{Value: 2}) // not the tick of the frame
 	if log.Err() == nil {
 		t.Fatal("a record of another tick was not refused")
 	}
@@ -286,7 +286,7 @@ func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
 		{byte(KindReturned), 1},
 		{byte(KindHash), 1, 2},
 		{byte(KindCommand), 0xff, 0xff, 0x7f},
-		{byte(KindConfig), 1, 9},
+		{byte(KindStableRead), 1},
 	} {
 		if _, err := decodeRecord(toyCodecs(), engine, formatVersion, 1, p); err == nil {
 			t.Errorf("%v was read", p)
@@ -301,14 +301,14 @@ func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachReco
 		engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644,
 	)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.Append(engine, 1, Hash{Value: 1})
 	if log.Err() == nil {
 		t.Fatal("a log that could not be opened is not marked as failed")
 	}
 	// the obstacle goes away: an engine that tried again for each record would now open its log
 	os.Remove(engineDir(dir, engine))
 	for tick := uint64(2); tick < 10; tick++ {
-		log.Append(engine, tick, ConfigRead{Version: 1})
+		log.Append(engine, tick, Hash{Value: 1})
 		log.EndTick(engine, tick)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
@@ -329,7 +329,7 @@ func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
 		t.Fatalf("Durable of an engine with no log = %d", got)
 	}
 	for tick := uint64(1); tick <= 7; tick++ {
-		log.Append(engine, tick, ConfigRead{Version: tick})
+		log.Append(engine, tick, Hash{Value: tick})
 		log.EndTick(engine, tick)
 		if got := log.Durable(engine); got > tick {
 			t.Fatalf("Durable = %d at the tick %d", got, tick)
@@ -378,7 +378,7 @@ func TestATickThatTookAMessageIsNotSafeUntilTheTickOfItsSenderIs(t *testing.T) {
 	defer log.Close()
 	// b takes at its tick 2 the message that a sent at its tick 3; b syncs often and a does not
 	// write at all yet
-	log.Append(b, 1, ConfigRead{Version: 1})
+	log.Append(b, 1, Hash{Value: 1})
 	log.EndTick(b, 1)
 	log.Append(b, 2, Inbound{Message: aMessageFrom(a, 1, 3)})
 	log.EndTick(b, 2)
@@ -460,13 +460,13 @@ func TestAFrameMustFollowTheLastOfTheLog(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, ConfigRead{Version: 1})
+	log.Append(engine, 1, Hash{Value: 1})
 	log.EndTick(engine, 1)
 	log.EndTick(engine, 2)
 	if log.Err() != nil {
 		t.Fatalf("error %v", log.Err())
 	}
-	log.Append(engine, 4, ConfigRead{Version: 2})
+	log.Append(engine, 4, Hash{Value: 2})
 	log.EndTick(engine, 4) // not the tick after 2: it is not written
 	if log.Err() == nil {
 		t.Fatal("a frame that does not follow was accepted")
@@ -490,7 +490,7 @@ func TestTheFirstFrameOfALogIsTheTickOne(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 4, ConfigRead{Version: 1})
+	log.Append(engine, 4, Hash{Value: 1})
 	log.EndTick(engine, 4) // a log has the tick 1 as its first
 	if log.Err() == nil {
 		t.Fatal("a first frame of the tick 4 was accepted")

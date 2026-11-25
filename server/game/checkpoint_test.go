@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -25,19 +24,16 @@ import (
 // ticks.
 func aWorldToCheckpoint(t testing.TB) *game.Cluster {
 	t.Helper()
-	return aWorldToCheckpointWith(t, config.NewStore(), nil)
+	return aWorldToCheckpointWith(t, nil)
 }
 
-// aWorldToCheckpointWith is aWorldToCheckpoint with the configuration and the writer of the
-// checkpoints given; with no writer the engines take none.
-func aWorldToCheckpointWith(
-	t testing.TB, cfg *config.Store, w engine.CheckpointWriter,
-) *game.Cluster {
+// aWorldToCheckpointWith is aWorldToCheckpoint with the writer of the checkpoints given; with no
+// writer the engines take none.
+func aWorldToCheckpointWith(t testing.TB, w engine.CheckpointWriter) *game.Cluster {
 	t.Helper()
 	tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
 	c, err := game.NewBuilder().
 		WithSeed(7).
-		WithConfig(cfg).
 		WithCheckpointWriter(w).
 		WithEventLog(&eventlog.MemLog{}).
 		WithWorld(game.WorldParams{ID: testkit.World}).
@@ -87,7 +83,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 // engine has been made, and with the codecs of the cluster.
 func aFreshEnv(c *game.Cluster) *engine.Env {
 	return &engine.Env{
-		Router: engine.NewRouter(), Cfg: config.NewStore(), EventLog: eventlog.NopLog{},
+		Router: engine.NewRouter(), EventLog: eventlog.NopLog{},
 		Stable: engine.NewStableStateStore(), Codecs: c.Env.Codecs, QueueSize: 16,
 		Emitter: engine.NopEmitter{},
 	}
@@ -404,14 +400,13 @@ func (discardingWriter) Offer(sim.StateID, uint64, func() ([]byte, error)) {}
 // stepping is the world of aWorldToCheckpoint that takes a checkpoint at every tick, or at none.
 func stepping(b *testing.B, checkpointAtEveryTick bool) *game.Cluster {
 	b.Helper()
-	cfg := config.NewStore()
 	if !checkpointAtEveryTick {
-		return aWorldToCheckpointWith(b, cfg, nil)
+		return aWorldToCheckpointWith(b, nil)
 	}
-	if _, err := cfg.Apply(map[string]string{"checkpoint.every_ticks": "1"}); err != nil {
-		b.Fatal(err)
-	}
-	return aWorldToCheckpointWith(b, cfg, discardingWriter{})
+	c := aWorldToCheckpointWith(b, discardingWriter{})
+	testkit.SetConfig(b, c, testkit.Sender{T: b}, map[string]string{"checkpoint.every_ticks": "1"})
+	testkit.Steps(b, c, 1) // the configuration is the new one from here
+	return c
 }
 
 // benchmarkStep measures a tick of an engine with nothing sent to it: the clone it publishes, the

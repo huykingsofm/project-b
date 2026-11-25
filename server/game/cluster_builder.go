@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -42,7 +41,6 @@ type ZoneLayerParams struct {
 // default for everything that has one; each With method sets one thing and returns the builder, so
 // calls chain, and Build makes the cluster.
 type ClusterBuilder struct {
-	cfg       *config.Store
 	seed      uint64
 	queueSize int
 	eventLog  eventlog.Log
@@ -55,24 +53,15 @@ type ClusterBuilder struct {
 	zoneLayers []ZoneLayerParams
 }
 
-// NewBuilder returns a builder with the defaults: a configuration store with every default value,
+// NewBuilder returns a builder with the defaults:
 // seed 0, a queue of 256 for each engine, a event log that records nothing, an emitter that
 // discards, and no writer of checkpoints, so the engines take none.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
-		cfg:       config.NewStore(),
 		queueSize: 256,
 		eventLog:  eventlog.NopLog{},
 		emitter:   engine.NopEmitter{},
 	}
-}
-
-// WithConfig sets the configuration store that the engines read. A nil store keeps the default.
-func (b *ClusterBuilder) WithConfig(cfg *config.Store) *ClusterBuilder {
-	if cfg != nil {
-		b.cfg = cfg
-	}
-	return b
 }
 
 // WithSeed sets the seed that the random numbers of the engines come from.
@@ -210,7 +199,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		return nil, err
 	}
 	env := &engine.Env{
-		Router: engine.NewRouter(), Cfg: b.cfg, EventLog: b.eventLog,
+		Router: engine.NewRouter(), EventLog: b.eventLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
@@ -258,7 +247,7 @@ func (b *ClusterBuilder) assemble(
 			layerID := worldState.AddZoneLayer()
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
 			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID)
-			le, err := engineOf(layerState, env, b.seed, checkpoints)
+			le, err := engine.NewOrRestore(layerState, env, b.seed, checkpoints)
 			if err != nil {
 				return nil, err
 			}
@@ -267,18 +256,22 @@ func (b *ClusterBuilder) assemble(
 			}
 			layerEngines = append(layerEngines, le)
 		}
-		ze, err := engineOf(zoneState, env, b.seed, checkpoints)
+		ze, err := engine.NewOrRestore(zoneState, env, b.seed, checkpoints)
 		if err != nil {
 			return nil, err
 		}
 		zoneEngines = append(zoneEngines, ze)
 	}
-	world, err := engineOf(worldState, env, b.seed, checkpoints)
+	world, err := engine.NewOrRestore(worldState, env, b.seed, checkpoints)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Cluster{Cluster: engine.NewCluster(env), World: world}
+	base, err := engine.NewCluster(env, b.seed, checkpoints)
+	if err != nil {
+		return nil, err
+	}
+	c := &Cluster{Cluster: base, World: world}
 	for _, l := range layerEngines {
 		c.Add(l)
 	}
@@ -287,23 +280,4 @@ func (b *ClusterBuilder) assemble(
 	}
 	c.Add(c.World)
 	return c, nil
-}
-
-// engineOf makes the engine of a state that was just made: from the checkpoint that the source has
-// for its ID, if it has one, and new otherwise.
-func engineOf[S sim.State](
-	fresh S, env *engine.Env, seed uint64, checkpoints engine.CheckpointSource,
-) (*engine.Engine[S], error) {
-	data, ok, err := checkpoints.Checkpoint(fresh.ID())
-	if err != nil {
-		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
-	}
-	if !ok {
-		return engine.New(fresh, env, seed), nil
-	}
-	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
-	if err != nil {
-		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
-	}
-	return c.Restore(env, seed)
 }

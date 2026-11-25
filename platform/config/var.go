@@ -20,11 +20,13 @@ func (v Var[T]) Name() string { return v.name }
 
 // Get returns the value of the variable in s, or its default when s is nil. A value that is a
 // slice or a map is shared by every reader of the snapshot: do not change it.
-func (v Var[T]) Get(s *Snapshot) T {
-	if s == nil {
-		return v.def
+func (v Var[T]) Get(s ReadOnlySnapshot) T {
+	if s != nil {
+		if val, ok := s.lookup(v.idx); ok {
+			return val.(T)
+		}
 	}
-	return s.vals[v.idx].(T)
+	return v.def
 }
 
 // declaration is what the registry keeps of a variable. It carries everything that depends on
@@ -50,6 +52,15 @@ func newRegistry() *registry { return &registry{byName: map[string]int{}} }
 
 // std is the registry that NewVar uses.
 var std = newRegistry()
+
+// declarations returns the declared variables, in the order they were declared. It ends the
+// declaration of variables, as a snapshot does.
+func (r *registry) declarations() []declaration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.frozen = true
+	return r.decls
+}
 
 func (r *registry) add(d declaration) int {
 	r.mu.Lock()
