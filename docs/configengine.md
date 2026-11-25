@@ -1,6 +1,6 @@
 # Configuration engine
 
-`platform/sim` (`config.go`, `config_state.go`, `config_update.go`). The engine that owns the configuration. Every cluster has one (`engine.NewCluster` makes it, first, and `Cluster.ConfigEngine()` returns it); its state is of the last state type (`sim.ConfigStateType`, 255) and its ID is `sim.ConfigStateID`. Where the variables are declared and parsed: `platform/config`.
+`platform/sim/config.go`. The engine that owns the configuration. Every cluster has one (`engine.NewCluster` makes it, first, and `Cluster.ConfigEngine()` returns it); its state is of the last state type (`sim.ConfigStateType`, 255) and its ID is `sim.ConfigStateID`. Where the variables are declared and parsed: `platform/config`.
 
 ## What it holds
 

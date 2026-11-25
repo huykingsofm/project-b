@@ -6,6 +6,7 @@ import (
 
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/errs"
 )
 
 // ActionDecoder, CommandDecoder, StateDecoder and OnFailDecoder read one kind of what the codecs
@@ -50,7 +51,12 @@ func NewCodecs() *Codecs {
 		messages: map[StateType]stateMessageDecoder{},
 	}
 	// the registers are empty, so this fails only when the numbers of the configuration meet others
-	if err := registerConfig(c); err != nil {
+	err := errs.Join(
+		c.RegisterState(DecodeConfigState),
+		c.RegisterCommand(decodeUpdateConfigCommand),
+		c.RegisterAction(decodeUpdateConfigAction),
+	)
+	if err != nil {
 		panic(fmt.Sprintf("the codecs of the configuration cannot be registered: %v", err))
 	}
 	return c
