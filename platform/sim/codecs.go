@@ -2,6 +2,7 @@ package sim
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -139,8 +140,11 @@ func (c *Codecs) DecodeAction(
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	if code > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: action %d", ErrUnknownCode, code)
+	}
 	decode, ok := c.Actions.Lookup(ActionID(code))
-	if !ok || code > 0xffff {
+	if !ok {
 		return nil, fmt.Errorf("%w: action %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)

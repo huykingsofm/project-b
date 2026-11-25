@@ -11,5 +11,5 @@ import (
 // meet them.
 const (
 	UpdateConfigCommandID sim.CommandID = math.MaxUint16
-	UpdateConfigActionID  sim.ActionID  = math.MaxUint16
+	UpdateConfigActionID  sim.ActionID  = math.MaxUint32
 )

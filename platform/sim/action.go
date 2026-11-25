@@ -4,7 +4,7 @@ import "github.com/huykingsofm/project-b/shared/codec/binary"
 
 // ActionID names a kind of action, by a number: the game keeps the register. An action returns its
 // own with its method ID(). A number is never changed or reused, because the event log writes it.
-type ActionID uint16
+type ActionID uint32
 
 // Encoder is what an action has to be written: its fields, without its ID.
 type Encoder interface {
