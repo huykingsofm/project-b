@@ -17,7 +17,7 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 	name := declare[string](r, "name", "x", nil)
 	keys := declare[[]string](r, "keys", nil, nil)
 
-	d, _, err := r.build(nil)
+	d, err := r.build(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,11 +26,11 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 		t.Fatal("a variable without an override is not at its default")
 	}
 
-	s, unknown, err := r.build(map[string]string{
+	s, err := r.build(map[string]string{
 		"count": "7", "ratio": "0.25", "on": "true", "name": `"abc"`, "keys": `["a","b"]`,
 	})
-	if err != nil || len(unknown) != 0 {
-		t.Fatalf("build: %v, unknown %v", err, unknown)
+	if err != nil {
+		t.Fatalf("build: %v", err)
 	}
 	if count.Get(s) != 7 || ratio.Get(s) != 0.25 || !on.Get(s) || name.Get(s) != "abc" ||
 		!slices.Equal(keys.Get(s), []string{"a", "b"}) {
@@ -52,7 +52,7 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 	declare(r, "other", 1, []Option[int]{Min(0)})
 
 	for _, text := range []string{`"seven"`, "11", "3 4", "", "2.5"} {
-		snap, _, err := r.build(map[string]string{"count": text, "other": "5"})
+		snap, err := r.build(map[string]string{"count": text, "other": "5"})
 		if err == nil || snap != nil || !strings.Contains(err.Error(), "count") {
 			t.Errorf(
 				"override %q: snapshot %v, error %v; want no snapshot and an error naming count",
@@ -63,7 +63,7 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 		}
 	}
 
-	_, _, err := r.build(map[string]string{"count": "99", "name": "5", "other": "-1"})
+	_, err := r.build(map[string]string{"count": "99", "name": "5", "other": "-1"})
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -74,15 +74,15 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 	}
 }
 
-func TestUnknownNamesAreReturnedInOrderAndIgnored(t *testing.T) {
+func TestUnknownNamesAreIgnored(t *testing.T) {
 	r := newRegistry()
 	count := declare(r, "count", 3, []Option[int](nil))
-	s, unknown, err := r.build(map[string]string{"zeta": "1", "count": "4", "alpha": "2"})
+	s, err := r.build(map[string]string{"zeta": "1", "count": "4", "alpha": "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(unknown, []string{"alpha", "zeta"}) || count.Get(s) != 4 {
-		t.Fatalf("unknown %v, count %d", unknown, count.Get(s))
+	if count.Get(s) != 4 {
+		t.Fatalf("count %d", count.Get(s))
 	}
 }
 
@@ -94,7 +94,7 @@ func TestAnOptionCanReplaceHowTheTextIsRead(t *testing.T) {
 		"x",
 		[]Option[string]{Parse(func(text string) (string, error) { return text, nil })},
 	)
-	s, _, err := r.build(map[string]string{"name": "plain text"})
+	s, err := r.build(map[string]string{"name": "plain text"})
 	if err != nil || name.Get(s) != "plain text" {
 		t.Fatalf("name = %q, %v", name.Get(s), err)
 	}

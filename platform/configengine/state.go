@@ -72,7 +72,7 @@ func (s *State) ApplyConfigChange(set []Override, unset []string) error {
 	for _, name := range unset {
 		next.Delete(name)
 	}
-	snap, _, err := config.Build(overridesOf(&next))
+	snap, err := config.Build(overridesOf(&next))
 	if err != nil {
 		return fmt.Errorf("the configuration is refused: %w", err)
 	}
@@ -128,7 +128,7 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 		}
 		s.overrides.Set(name, text)
 	}
-	snap, _, err := config.Build(overridesOf(&s.overrides))
+	snap, err := config.Build(overridesOf(&s.overrides))
 	if err != nil {
 		return nil, fmt.Errorf("the overrides of the configuration: %w", err)
 	}

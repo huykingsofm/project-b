@@ -116,11 +116,10 @@ func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
 // build makes a snapshot from the defaults and the overrides, which are the text of a JSON value
 // by variable name. Every override is parsed into the type of its variable and checked against
 // its options: if any of them is wrong, no snapshot is made and the error names each one, so a
-// bad document never replaces a good configuration. A name that is not declared is returned in
-// unknown and otherwise ignored.
+// bad document never replaces a good configuration. A name that is not declared is ignored.
 func (r *registry) build(
 	overrides map[string]string,
-) (snap *Snapshot, unknown []string, err error) {
+) (*Snapshot, error) {
 	r.mu.Lock()
 	r.frozen = true
 	decls, byName := r.decls, r.byName
@@ -141,7 +140,6 @@ func (r *registry) build(
 	for _, name := range names {
 		i, ok := byName[name]
 		if !ok {
-			unknown = append(unknown, name)
 			continue
 		}
 		v, perr := decls[i].parse(overrides[name])
@@ -152,7 +150,7 @@ func (r *registry) build(
 		vals[i] = v
 	}
 	if len(errs) > 0 {
-		return nil, unknown, errors.Join(errs...)
+		return nil, errors.Join(errs...)
 	}
-	return &Snapshot{vals: vals}, unknown, nil
+	return &Snapshot{vals: vals}, nil
 }

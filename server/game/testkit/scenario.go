@@ -40,15 +40,15 @@ func (s Sender) Via[C sim.BaseCommand](c C) C {
 	return got.(C)
 }
 
-// ScenarioConfigVersion is the configuration that the scenario makes: the overrides that stay in
-// force, and its own.
-func ScenarioConfigVersion(kept map[string]string) map[string]string {
-	version := maps.Clone(kept)
-	if version == nil {
-		version = map[string]string{}
+// ScenarioConfigDocument is the document of the configuration that the scenario sets: the overrides
+// that stay in force, and its own.
+func ScenarioConfigDocument(kept map[string]string) map[string]string {
+	document := maps.Clone(kept)
+	if document == nil {
+		document = map[string]string{}
 	}
-	version["zonelayer.normal_attack.cooldown_ticks"] = "5"
-	return version
+	document["zonelayer.normal_attack.cooldown_ticks"] = "5"
+	return document
 }
 
 // SetConfig sends the configuration engine of the cluster the command that takes the configuration
@@ -67,7 +67,7 @@ func SetConfig(t testing.TB, c *game.Cluster, s Sender, document map[string]stri
 }
 
 // RunScenario runs a cluster through chat in each scope, a shield, an attack, a pickup, a run of
-// movement, a new version of the config, a character that enters with cooldowns and one that
+// movement, a new document of the config, a character that enters with cooldowns and one that
 // crosses to another zone, long enough for every engine to record a hash.
 func RunScenario(t testing.TB, c *game.Cluster, s Sender) {
 	t.Helper()
@@ -116,8 +116,8 @@ func RunScenarioKeeping(
 		s.Via(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
 	)
 	Steps(t, c, 6)
-	// a new version of the config: the engines record that they read it
-	SetConfig(t, c, s, ScenarioConfigVersion(kept))
+	// a new document of the config: the engines record that they read it
+	SetConfig(t, c, s, ScenarioConfigDocument(kept))
 	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
 	Steps(t, c, 14)
 	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))

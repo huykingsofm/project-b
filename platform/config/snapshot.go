@@ -61,11 +61,11 @@ var (
 // Defaults returns the snapshot with every variable at its default, the same one each time. The
 // first call, like Build, ends the declaration of variables.
 func Defaults() *Snapshot {
-	defaultsOnce.Do(func() { defaultsSnapshot, _, _ = std.build(nil) })
+	defaultsOnce.Do(func() { defaultsSnapshot, _ = std.build(nil) })
 	return defaultsSnapshot
 }
 
 // Build returns the snapshot with the overrides applied to the defaults.
-func Build(overrides map[string]string) (snap *Snapshot, unknown []string, err error) {
+func Build(overrides map[string]string) (*Snapshot, error) {
 	return std.build(overrides)
 }
