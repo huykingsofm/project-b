@@ -39,9 +39,9 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `cut.go` | `Plan.Cut` and the archive of what it cuts |
 | `line_cache.go` | the cache of the line and its writer |
 | `replay.go` | `Run`, `Recover`, `Builder`, `Options`, `Result`, `DivergenceError` |
-| `run.go` | the run: the order of the engines, how an engine that starts from a checkpoint begins, the records of a tick, the inputs of a tick |
+| `run.go` | the run: `engineRun` (what a replay holds of one engine: the engine, its limit, the tick it has run to, its log and the records of the tick loaded, the version of the configuration) in a `stablemap.Map` that keeps the order of `Step`; how an engine that starts from a checkpoint begins; the inputs of a tick |
 | `index.go` | the pass over each log before the run: how many reads each copy has, which messages came back, a hash of each message as it was taken, the size of the queues, the seed |
-| `logs.go` | `Logs`, `MemoryLogs`, `FileLogs`, and the cursor that reads the records of one engine a tick at a time |
+| `logs.go` | `Logs`, `MemoryLogs`, `FileLogs`, and the `tickReader` that reads the records of one engine a tick at a time |
 | `adapters.go` | `replayRouter`, `replayStable`, `replayConfig` and `verifyLog` |
 | `divergence.go` | the first difference of each engine |
 

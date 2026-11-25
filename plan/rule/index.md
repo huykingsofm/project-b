@@ -10,6 +10,10 @@ Each rule has a file of its own that says what it forbids or requires, why, and 
 
 Every design follows SOLID, and above all it is open for extension: a new kind, use or provider is added by writing new code, never by changing code that works, so what varies is given to a mechanism (a function, an interface, an entry that declares itself) and not branched on inside it. Refactoring may be as strong as the design needs, including deleting a part and replacing it wholly with a new design; when the replacement changes what the owner decided, it is proposed to the owner first. When R0 conflicts with another rule, the other is read in its light.
 
+### [R36. Before writing, look for what already does it (hard)](r36-look-for-what-exists.md)
+
+Before a function, a type, a file or a test helper is written, the project is searched for one that does the same, or nearly the same, by name, by what it takes and returns, and by shape. It is used when there is one, changed to serve both uses when one is near, and two that do the same are merged in the same change; a new one is written only when none can serve, and the change says why.
+
 ## 1. Architecture
 
 ### [R1. Layers depend on each other only through interfaces the caller defines (hard)](r01-layer-dependency.md)

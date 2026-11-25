@@ -7,6 +7,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
 // What follows are the adapters that stand in for the parts of the cluster that a replay does not
@@ -67,12 +68,6 @@ type readKey struct {
 	reader sim.StateID
 	tick   uint64
 	source sim.StateID
-}
-
-// replayNeed is a copy that a tick of an engine reads: whose, and the tick it was taken at.
-type replayNeed struct {
-	source   sim.StateID
-	copyTick uint64
 }
 
 // replayStable is the store of a replay: it keeps the copies that some read will ask for, by
@@ -165,29 +160,21 @@ type replayConfig struct{ snap *config.Snapshot }
 
 func (c *replayConfig) Snapshot() *config.Snapshot { return c.snap }
 
-// tickWindow is what the log of an engine holds for the tick the engine is about to run, or runs:
-// its records, and the copies that the reads among them find.
-type tickWindow struct {
-	tick    uint64
-	records []eventlog.Record
-	needs   []replayNeed
-}
-
 // verifyLog is the event log of a replay: it checks that the engine records, in the same order,
 // exactly what it recorded the first time. A hash is worked out and compared.
 type verifyLog struct {
-	windows map[sim.StateID]*tickWindow
-	pos     map[sim.StateID]int // how many records of the window the engine has made
+	engines *stablemap.Map[sim.StateID, *engineRun]
 	div     *divergences
 }
 
 func (v *verifyLog) expect(engine sim.StateID, got eventlog.Record) {
 	var records []eventlog.Record
-	if w := v.windows[engine]; w != nil {
-		records = w.records
+	i := 0
+	if er, ok := v.engines.Get(engine); ok && er.loaded {
+		records = er.tickRecords
+		i = er.recordsMade
+		er.recordsMade++
 	}
-	i := v.pos[engine]
-	v.pos[engine]++
 	if i >= len(records) {
 		v.div.add(engine,
 			"tick %d: the replay recorded a %T that the log does not have", got.Tick, got.Body)
@@ -210,13 +197,14 @@ func (v *verifyLog) Append(e sim.StateID, tick uint64, body eventlog.Body) {
 func (v *verifyLog) Safe(sim.StateID) uint64 { return ^uint64(0) }
 
 func (v *verifyLog) EndTick(e sim.StateID, _ uint64) {
-	w := v.windows[e]
-	if w == nil {
+	er, ok := v.engines.Get(e)
+	if !ok || !er.loaded {
 		return
 	}
-	if i := v.pos[e]; i < len(w.records) {
+	if er.recordsMade < len(er.tickRecords) {
+		missing := er.tickRecords[er.recordsMade]
 		v.div.add(e, "tick %d: the log has a %T that the replay did not make",
-			w.records[i].Tick, w.records[i].Body)
-		v.pos[e] = len(w.records)
+			missing.Tick, missing.Body)
+		er.recordsMade = len(er.tickRecords)
 	}
 }

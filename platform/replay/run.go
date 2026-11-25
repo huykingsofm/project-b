@@ -8,17 +8,36 @@ import (
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/stablemap"
 )
+
+// engineRun is what a replay holds of one engine: the engine, how far it has to run and has run,
+// and where its log is.
+type engineRun struct {
+	engine engine.Stepper
+	// limitTick is the last tick to run: the limit of the engine in the plan.
+	limitTick uint64
+	// lastRanTick is the last tick that has run.
+	lastRanTick uint64
+	// tickReader reads its log a tick at a time; nil when it has none.
+	tickReader *tickReader
+	// loaded says that the records of the tick to run next are loaded: false before, and again
+	// after the tick has run.
+	loaded bool
+	// tickRecords are the records that the log holds for the tick to run next, in order.
+	tickRecords []eventlog.Record
+	// copiesRead are the copies that the reads among tickRecords find.
+	copiesRead []copyKey
+	// recordsMade is how many of tickRecords the engine has made while it runs the tick.
+	recordsMade int
+	// configVersion is the version of the configuration in effect for the engine.
+	configVersion uint64
+}
 
 type replayRun struct {
 	cluster *engine.Cluster
-	engines map[sim.StateID]engine.Stepper
-	order   []sim.StateID
-	limits  map[sim.StateID]uint64
-	cur     map[sim.StateID]uint64
-	cursors map[sim.StateID]*cursor
-	windows map[sim.StateID]*tickWindow
-	version map[sim.StateID]uint64
+	// engines are the engines of the cluster, in the order that Step runs them in.
+	engines stablemap.Map[sim.StateID, *engineRun]
 	configs map[uint64]*config.Snapshot
 	opts    Options
 	router  *replayRouter
@@ -36,12 +55,6 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 	}
 	div := &divergences{}
 	r := &replayRun{
-		engines: map[sim.StateID]engine.Stepper{},
-		limits:  p.limits,
-		cur:     map[sim.StateID]uint64{},
-		cursors: map[sim.StateID]*cursor{},
-		windows: map[sim.StateID]*tickWindow{},
-		version: map[sim.StateID]uint64{},
 		configs: map[uint64]*config.Snapshot{},
 		opts:    opts,
 		cfg:     &replayConfig{snap: config.Defaults()},
@@ -56,7 +69,7 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 		div:                div,
 	}
 	r.stable = newReplayStable(idx.copyReads)
-	r.verify = &verifyLog{windows: r.windows, pos: map[sim.StateID]int{}, div: div}
+	r.verify = &verifyLog{engines: &r.engines, div: div}
 	env := &engine.Env{
 		Router: r.router, Cfg: r.cfg, EventLog: r.verify, Stable: r.stable,
 		Codecs: b.Codecs(), QueueSize: idx.maxQueueSize, Emitter: engine.NopEmitter{},
@@ -76,18 +89,18 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 				id, e.Tick(), start,
 			)
 		}
-		r.engines[id] = e
-		r.order = append(r.order, id)
-		r.cur[id] = e.Tick()
+		r.engines.Set(id, &engineRun{engine: e, limitTick: p.limits[id], lastRanTick: e.Tick()})
 	}
 	div.name = func(id sim.StateID) string {
-		if e, ok := r.engines[id]; ok {
-			return fmt.Sprintf("%s %d", e.TypeName(), id)
+		if er, ok := r.engines.Get(id); ok {
+			return fmt.Sprintf("%s %d", er.engine.TypeName(), id)
 		}
 		return fmt.Sprint(id)
 	}
 	for _, address := range logs.Engines() {
-		if _, ok := r.engines[address]; !ok {
+		er, ok := r.engines.Get(address)
+		if !ok {
+			r.close()
 			return nil, fmt.Errorf(
 				"the log of %v is not the log of an engine of the cluster", address,
 			)
@@ -97,8 +110,8 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 			r.close()
 			return nil, fmt.Errorf("the log of %v: %w", address, err)
 		}
-		r.cursors[address] = newCursor(src)
-		if err := r.begin(address, idx); err != nil {
+		er.tickReader = newTickReader(src)
+		if err := r.begin(address, er, idx); err != nil {
 			r.close()
 			return nil, err
 		}
@@ -112,13 +125,13 @@ func newReplayRun(b Builder, p *Plan, opts Options) (*replayRun, error) {
 // engine knew of the configuration, and the messages that it sent and that are not settled, are
 // what the records after the tick refer to. Its state is published, since the tick that does it
 // has run.
-func (r *replayRun) begin(address sim.StateID, idx *index) error {
-	eng := r.engines[address]
-	start := r.cur[address]
+func (r *replayRun) begin(address sim.StateID, er *engineRun, idx *index) error {
+	eng := er.engine
+	start := er.lastRanTick
 	if start == 0 {
 		return nil
 	}
-	records, err := r.cursors[address].take(start)
+	records, err := er.tickReader.take(start)
 	if err != nil {
 		return fmt.Errorf("the log of %v: %w", address, err)
 	}
@@ -136,7 +149,7 @@ func (r *replayRun) begin(address sim.StateID, idx *index) error {
 		r.div.add(address, "the engine made from the checkpoint of the tick %d has the hash %d, "+
 			"the log has %d", start, got, logged)
 	}
-	r.version[address] = eng.ConfigVersionSeen()
+	er.configVersion = eng.ConfigVersionSeen()
 	for _, m := range eng.SentMessages() {
 		if key := keyOf(m.Head()); idx.msgsToBeReturned[key] {
 			r.router.sent[key] = m
@@ -148,46 +161,56 @@ func (r *replayRun) begin(address sim.StateID, idx *index) error {
 
 // close lets go of the logs.
 func (r *replayRun) close() {
-	for _, c := range r.cursors {
-		c.close()
+	for _, er := range r.engines.All() {
+		if er.tickReader != nil {
+			er.tickReader.close()
+		}
 	}
+}
+
+// ticks is the last tick that each engine has run.
+func (r *replayRun) ticks() map[sim.StateID]uint64 {
+	out := map[sim.StateID]uint64{}
+	for id, er := range r.engines.All() {
+		out[id] = er.lastRanTick
+	}
+	return out
 }
 
 // load reads the records of the tick that an engine is about to run, once, and tells the registry
 // which copy each read among them will find.
-func (r *replayRun) load(e sim.StateID, tick uint64) (*tickWindow, error) {
-	if w := r.windows[e]; w != nil && w.tick == tick {
-		return w, nil
+func (r *replayRun) load(id sim.StateID, er *engineRun) error {
+	if er.loaded {
+		return nil
 	}
-	w := &tickWindow{tick: tick}
-	if c := r.cursors[e]; c != nil {
-		records, err := c.take(tick)
+	tick := er.lastRanTick + 1
+	er.tickRecords, er.copiesRead, er.recordsMade = nil, nil, 0
+	if er.tickReader != nil {
+		records, err := er.tickReader.take(tick)
 		if err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", e, err)
+			return fmt.Errorf("the log of %v: %w", id, err)
 		}
-		w.records = records
+		er.tickRecords = records
 	}
-	for _, rec := range w.records {
+	for _, rec := range er.tickRecords {
 		if read, ok := rec.Body.(eventlog.StableRead); ok {
-			r.stable.expect(readKey{e, tick, read.Source}, read.CopyTick)
+			r.stable.expect(readKey{id, tick, read.Source}, read.CopyTick)
 			if read.CopyTick > 0 {
-				w.needs = append(w.needs, replayNeed{read.Source, read.CopyTick})
+				er.copiesRead = append(er.copiesRead, copyKey{read.Source, read.CopyTick})
 			}
 		}
 	}
-	r.windows[e] = w
-	r.verify.pos[e] = 0
-	return w, nil
+	er.loaded = true
+	return nil
 }
 
-// ready reports whether the engine can run its tick: every copy that tick read exists.
-func (r *replayRun) ready(e sim.StateID, tick uint64) (bool, error) {
-	w, err := r.load(e, tick)
-	if err != nil {
+// ready reports whether the engine can run its next tick: every copy that tick read exists.
+func (r *replayRun) ready(id sim.StateID, er *engineRun) (bool, error) {
+	if err := r.load(id, er); err != nil {
 		return false, err
 	}
-	for _, n := range w.needs {
-		if _, ok := r.engines[n.source]; ok && r.cur[n.source] < n.copyTick {
+	for _, c := range er.copiesRead {
+		if source, ok := r.engines.Get(c.source); ok && source.lastRanTick < c.tick {
 			return false, nil
 		}
 	}
@@ -198,21 +221,21 @@ func (r *replayRun) ready(e sim.StateID, tick uint64) (bool, error) {
 func (r *replayRun) play() error {
 	for {
 		progressed, done := false, true
-		for _, e := range r.order {
-			for r.cur[e] < r.limits[e] {
-				ok, err := r.ready(e, r.cur[e]+1)
+		for id, er := range r.engines.All() {
+			for er.lastRanTick < er.limitTick {
+				ok, err := r.ready(id, er)
 				if err != nil {
 					return err
 				}
 				if !ok {
 					break
 				}
-				if err := r.stepEngine(e, r.cur[e]+1); err != nil {
+				if err := r.stepEngine(id, er); err != nil {
 					return err
 				}
 				progressed = true
 			}
-			if r.cur[e] < r.limits[e] {
+			if er.lastRanTick < er.limitTick {
 				done = false
 			}
 		}
@@ -248,24 +271,24 @@ func (r *replayRun) snapshotOf(e sim.StateID, version uint64) *config.Snapshot {
 	return s
 }
 
-// stepEngine gives an engine what its log says it was given at the tick, and runs the tick.
-func (r *replayRun) stepEngine(e sim.StateID, tick uint64) error {
-	eng := r.engines[e]
-	w, err := r.load(e, tick)
-	if err != nil {
+// stepEngine gives an engine what its log says it was given at its next tick, and runs the tick.
+func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
+	eng := er.engine
+	tick := er.lastRanTick + 1
+	if err := r.load(id, er); err != nil {
 		return err
 	}
-	for _, rec := range w.records {
+	for _, rec := range er.tickRecords {
 		switch body := rec.Body.(type) {
 		case eventlog.ConfigRead:
-			r.version[e] = body.Version
+			er.configVersion = body.Version
 		case eventlog.Command:
 			if err := eng.SendBaseCommand(body.Command); err != nil {
-				return fmt.Errorf("%v tick %d: %w", e, tick, err)
+				return fmt.Errorf("%v tick %d: %w", id, tick, err)
 			}
 		case eventlog.Inbound:
 			if !r.router.inject(body.Message) {
-				return fmt.Errorf("%v tick %d: a message could not be put in its queue", e, tick)
+				return fmt.Errorf("%v tick %d: a message could not be put in its queue", id, tick)
 			}
 		case eventlog.Returned:
 			key := keyOf(body.Header)
@@ -277,10 +300,11 @@ func (r *replayRun) stepEngine(e sim.StateID, tick uint64) error {
 			}
 		}
 	}
-	r.cfg.snap = r.snapshotOf(e, r.version[e])
+	r.cfg.snap = r.snapshotOf(id, er.configVersion)
 	if err := eng.Step(); err != nil {
 		return err
 	}
-	r.cur[e] = tick
+	er.lastRanTick = tick
+	er.loaded = false // the records of the next tick are loaded when it is asked for
 	return nil
 }

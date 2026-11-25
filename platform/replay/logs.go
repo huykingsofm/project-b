@@ -100,26 +100,26 @@ func sortedIDs(ids func(yield func(sim.StateID) bool)) []sim.StateID {
 	return out
 }
 
-// cursor reads the records of one engine a tick at a time, in the order of the ticks, and holds
+// tickReader reads the records of one engine a tick at a time, in the order of the ticks, and holds
 // the first record of the next tick while it waits for it.
-type cursor struct {
+type tickReader struct {
 	src   eventlog.Source
 	ahead eventlog.Record
 	have  bool
 }
 
-func newCursor(src eventlog.Source) *cursor {
-	c := &cursor{src: src}
+func newTickReader(src eventlog.Source) *tickReader {
+	c := &tickReader{src: src}
 	c.advance()
 	return c
 }
 
-func (c *cursor) advance() { c.have = c.src.Next(); c.ahead = c.src.Record() }
+func (c *tickReader) advance() { c.have = c.src.Next(); c.ahead = c.src.Record() }
 
 // take returns the records of the tick, which must be asked for in rising order, one after another.
 // A record of an earlier tick than the one asked for means the log is not in the order of its
 // ticks.
-func (c *cursor) take(tick uint64) ([]eventlog.Record, error) {
+func (c *tickReader) take(tick uint64) ([]eventlog.Record, error) {
 	var out []eventlog.Record
 	for c.have && c.ahead.Tick <= tick {
 		if c.ahead.Tick < tick {
@@ -136,4 +136,4 @@ func (c *cursor) take(tick uint64) ([]eventlog.Record, error) {
 	return out, nil
 }
 
-func (c *cursor) close() error { return c.src.Close() }
+func (c *tickReader) close() error { return c.src.Close() }

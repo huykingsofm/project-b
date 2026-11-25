@@ -82,7 +82,9 @@ func Run(b Builder, p *Plan, opts Options) (*Result, error) {
 	if err := run.play(); err != nil {
 		return nil, err
 	}
-	return &Result{Plan: p, Cluster: run.cluster, Ticks: run.cur, Divergences: run.div.list()}, nil
+	return &Result{
+		Plan: p, Cluster: run.cluster, Ticks: run.ticks(), Divergences: run.div.list(),
+	}, nil
 }
 
 // Recover cuts the logs and the checkpoints under dir to the recovery line, then makes the cluster
