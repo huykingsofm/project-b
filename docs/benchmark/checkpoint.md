@@ -36,8 +36,8 @@ The run of this table found the machine slower than the runs before it: the clon
 | StepZoneLayerTakingACheckpoint | 68,400 | 112,900 | 893 | |
 | StepWorld | 266,000 | 583,100 | 2,020 | |
 | StepWorldTakingACheckpoint | 363,000 | 583,700 | 2,032 | |
-| WriteFileZoneLayer | 2,630,000 | 1,600 | 22 | 8.3 KB |
-| WriteFileWorld | 3,000,000 | 1,600 | 22 | 122 KB |
+| WriteFileZoneLayer | 2,678,000 | 1,543 | 19 | 8.3 KB |
+| WriteFileWorld | 2,911,000 | 1,509 | 19 | 122 KB |
 
 ## Reading
 

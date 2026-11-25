@@ -7,19 +7,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
 // Env is what every engine of a cluster shares: the router that carries their messages, the
-// configuration they read, the replay log they write, the store of the states they publish, the
+// configuration they read, the event log they write, the store of the states they publish, the
 // emitter where they give what changed, the codecs that read back what they wrote, and the writer
 // of their checkpoints.
 type Env struct {
 	Router    MessageRouter
 	Cfg       ConfigSource
-	ReplayLog replay.Log
+	EventLog  eventlog.Log
 	Stable    StableStore
 	Codecs    *sim.Codecs
 	QueueSize int
@@ -58,6 +58,18 @@ type Stepper interface {
 	TypeName() string
 	// SendBaseCommand gives the engine a command that was read without its type, as a replay does.
 	SendBaseCommand(c sim.BaseCommand) error
+	// Tick is the tick the engine is at: the last it ran, or the one it was made at.
+	Tick() uint64
+	// Hash is the hash of what the engine goes on from (see Engine.Hash).
+	Hash(h sim.Hasher) uint64
+	// ConfigVersionSeen is the version of the configuration the engine read last.
+	ConfigVersionSeen() uint64
+	// SentMessages are the messages the engine sent and holds until their receivers say they hold
+	// them safe.
+	SentMessages() []sim.Message
+	// PublishState publishes a copy of the state as it is, for the other engines to read: an
+	// engine that was made from a checkpoint has not run the tick that publishes it.
+	PublishState()
 }
 
 var _ Stepper = (*Engine[sim.State])(nil)

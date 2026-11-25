@@ -12,7 +12,7 @@ import (
 
 // The IDs of the kinds: the register. The numbers count up from 1 and 0 is no kind. A new kind
 // takes the next number, at the end of the list, and a number is never changed or reused, because
-// the replay log writes it.
+// the event log writes it.
 const (
 	RetryID sim.OnFailID = iota + 1
 	RedirectID

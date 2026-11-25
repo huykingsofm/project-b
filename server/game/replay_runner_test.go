@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/replay"
-	"github.com/huykingsofm/project-b/platform/replay/runner"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game"
@@ -23,32 +23,32 @@ import (
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
+// runOn replays the logs from tick 0 to the recovery line of the logs.
+func runOn(b replay.Builder, logs replay.Logs, opts replay.Options) (*replay.Result, error) {
+	plan, err := replay.PlanFrom(logs, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return replay.Run(b, plan, opts)
+}
+
 // readAll reads the files of a log into memory, to count what they hold.
-func readAll(t *testing.T, dir string, codecs *sim.Codecs) runner.MemoryLogs {
+func readAll(t *testing.T, dir string, codecs *sim.Codecs) eventlog.MemoryLogs {
 	t.Helper()
-	engines, err := replay.Engines(dir)
+	engines, err := eventlog.Engines(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logs := runner.MemoryLogs{}
+	logs := eventlog.MemoryLogs{}
 	for _, e := range engines {
-		if logs[e], err = replay.ReadAll(dir, e, codecs); err != nil {
+		if logs[e], err = eventlog.ReadAll(dir, e, codecs); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return logs
 }
 
-// logsOf groups the records of a memory log by engine.
-func logsOf(mem *replay.MemLog) runner.MemoryLogs {
-	logs := runner.MemoryLogs{}
-	for _, r := range mem.Records {
-		logs[r.Engine] = append(logs[r.Engine], r)
-	}
-	return logs
-}
-
-func countKind(logs runner.MemoryLogs, k replay.Kind) int {
+func countKind(logs eventlog.MemoryLogs, k eventlog.Kind) int {
 	n := 0
 	for _, records := range logs {
 		for _, r := range records {
@@ -61,7 +61,7 @@ func countKind(logs runner.MemoryLogs, k replay.Kind) int {
 }
 
 // theConfigOfTheScenario is the one new version of the configuration that runScenario makes.
-var theConfigOfTheScenario = runner.Options{
+var theConfigOfTheScenario = replay.Options{
 	ConfigVersions: map[uint64]map[string]string{
 		1: {"zonelayer.normal_attack.cooldown_ticks": "5"},
 	},
@@ -74,24 +74,24 @@ func TestAReplayOfAWholeClusterRunMatchesItsLogFromMemoryAndFromFiles(t *testing
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	fromFiles, err := runner.FileLogs(dir, c.Env.Codecs)
+	fromFiles, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	counted := map[string]runner.MemoryLogs{
-		"memory": logsOf(mem), "files": readAll(t, dir, c.Env.Codecs),
+	counted := map[string]eventlog.MemoryLogs{
+		"memory": mem.ByEngine(), "files": readAll(t, dir, c.Env.Codecs),
 	}
-	sources := map[string]runner.Logs{"memory": logsOf(mem), "files": fromFiles}
+	sources := map[string]replay.Logs{"memory": mem.ByEngine(), "files": fromFiles}
 	for name, logs := range sources {
-		for _, kind := range []replay.Kind{
-			replay.KindInbound, replay.KindCommand, replay.KindConfig, replay.KindHash,
-			replay.KindStableRead,
+		for _, kind := range []eventlog.Kind{
+			eventlog.KindInbound, eventlog.KindCommand, eventlog.KindConfig, eventlog.KindHash,
+			eventlog.KindStableRead,
 		} {
 			if countKind(counted[name], kind) == 0 {
 				t.Fatalf("%s: the scenario recorded no record of kind %d", name, kind)
 			}
 		}
-		result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+		result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -115,10 +115,10 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
 	layer := testkit.Layer1
 
-	without := func(kind replay.Kind) runner.Logs {
-		logs := logsOf(mem)
-		cut := slices.IndexFunc(logs[layer], func(r replay.Record) bool {
-			c, isCommand := r.Body.(replay.Command)
+	without := func(kind eventlog.Kind) replay.Logs {
+		logs := mem.ByEngine()
+		cut := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
+			c, isCommand := r.Body.(eventlog.Command)
 			_, move := c.Command.(command.ZoneLayerCharacterMoveCommand)
 			return r.Kind() == kind && (!isCommand || move)
 		})
@@ -128,11 +128,11 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 		logs[layer] = slices.Delete(slices.Clone(logs[layer]), cut, cut+1)
 		return logs
 	}
-	for name, logs := range map[string]runner.Logs{
-		"a command taken out": without(replay.KindCommand),
-		"a hash taken out":    without(replay.KindHash),
+	for name, logs := range map[string]replay.Logs{
+		"a command taken out": without(eventlog.KindCommand),
+		"a hash taken out":    without(eventlog.KindHash),
 	} {
-		result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+		result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -145,14 +145,14 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 		}
 	}
 
-	logs := logsOf(mem)
-	i := slices.IndexFunc(logs[layer], func(r replay.Record) bool {
-		return r.Kind() == replay.KindHash
+	logs := mem.ByEngine()
+	i := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
+		return r.Kind() == eventlog.KindHash
 	})
 	logs[layer] = slices.Clone(logs[layer])
-	hash := logs[layer][i].Body.(replay.Hash)
-	logs[layer][i].Body = replay.Hash{Value: hash.Value ^ 1} // not the hash of the state
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	hash := logs[layer][i].Body.(eventlog.Hash)
+	logs[layer][i].Body = eventlog.Hash{Value: hash.Value ^ 1} // not the hash of the state
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 	if err != nil || len(result.Divergences) == 0 {
 		t.Fatalf("a wrong hash was not found: %v, %v", result, err)
 	}
@@ -161,7 +161,7 @@ func TestAReplayFindsALogThatWasChangedAndSaysWhichEngineDiffers(t *testing.T) {
 func TestAReplayWithoutTheConfigThatWasReadSaysSo(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logsOf(mem), runner.Options{})
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine(), replay.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,13 +208,13 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 
 // hashEveryTick is the configuration that makes every engine record the hash of its state at every
 // tick, so that a replay is compared with the run at every tick and ends where the run ended.
-var hashEveryTick = runner.Options{
-	ConfigVersions: map[uint64]map[string]string{1: {"replay_log.hash_every_ticks": "1"}},
+var hashEveryTick = replay.Options{
+	ConfigVersions: map[uint64]map[string]string{1: {"eventlog.hash_every_ticks": "1"}},
 }
 
 // everyTickHashed is the world of testkit.NewWorld(1, 0) with the hash of every engine recorded
 // at every tick.
-func everyTickHashed(t *testing.T) (*game.Cluster, *replay.MemLog) {
+func everyTickHashed(t *testing.T) (*game.Cluster, *eventlog.MemLog) {
 	t.Helper()
 	c, _, mem, cfg := testkit.NewWorld(t, 1, 0)
 	if _, err := cfg.Apply(hashEveryTick.ConfigVersions[1]); err != nil {
@@ -226,14 +226,14 @@ func everyTickHashed(t *testing.T) (*game.Cluster, *replay.MemLog) {
 // replayAndCompare replays what the memory log holds of the world of testkit.NewWorld(1, 0)
 // and requires that nothing differs and that zonelayer 1 ends as it did: the character put back
 // where it was.
-func replayAndCompare(t *testing.T, c *game.Cluster, mem *replay.MemLog) {
+func replayAndCompare(t *testing.T, c *game.Cluster, mem *eventlog.MemLog) {
 	t.Helper()
-	logs := logsOf(mem)
-	if countKind(logs, replay.KindReturned) != 1 {
+	logs := mem.ByEngine()
+	if countKind(logs, eventlog.KindReturned) != 1 {
 		t.Fatalf("%d records of a message that came back, want 1",
-			countKind(logs, replay.KindReturned))
+			countKind(logs, eventlog.KindReturned))
 	}
-	result, err := runner.Run(testkit.WorldBuilder(t, 1, 0), logs, hashEveryTick)
+	result, err := runOn(testkit.WorldBuilder(t, 1, 0), logs, hashEveryTick)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,10 +257,10 @@ func replayAndCompare(t *testing.T, c *game.Cluster, mem *replay.MemLog) {
 func TestAReplayFindsASenderThatDoesNotMakeTheMessageTheReceiverRecorded(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	layer := testkit.Layer1
-	at := slices.IndexFunc(logs[layer], func(r replay.Record) bool {
-		inbound, isInbound := r.Body.(replay.Inbound)
+	at := slices.IndexFunc(logs[layer], func(r eventlog.Record) bool {
+		inbound, isInbound := r.Body.(eventlog.Inbound)
 		if !isInbound {
 			return false
 		}
@@ -275,10 +275,10 @@ func TestAReplayFindsASenderThatDoesNotMakeTheMessageTheReceiverRecorded(t *test
 	forged := sim.NewActionMessage[*zonelayerstate.State](
 		testkit.Layer1, onfail.Drop{},
 		action.ZoneLayerChatSendAction{FromID: 1, Text: "not what was said"},
-	).Stamp(logs[layer][at].Body.(replay.Inbound).Message.Head())
-	logs[layer][at].Body = replay.Inbound{Message: forged}
+	).Stamp(logs[layer][at].Body.(eventlog.Inbound).Message.Head())
+	logs[layer][at].Body = eventlog.Inbound{Message: forged}
 
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,11 +300,11 @@ func BenchmarkRunScenarioLive(b *testing.B) {
 func BenchmarkReplayCluster(b *testing.B) {
 	c, _, mem, cfg := testkit.NewWorld(b, 7, 10)
 	testkit.RunScenario(b, c, cfg, testkit.Sender{T: b})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	b.ReportAllocs()
 	var ticks uint64
 	for b.Loop() {
-		result, err := runner.Run(testkit.WorldBuilder(b, 7, 10), logs, theConfigOfTheScenario)
+		result, err := runOn(testkit.WorldBuilder(b, 7, 10), logs, theConfigOfTheScenario)
 		if err != nil || len(result.Divergences) != 0 {
 			b.Fatalf("%v %v", err, result.Divergences)
 		}
@@ -319,7 +319,7 @@ func BenchmarkReplayCluster(b *testing.B) {
 // countingLogs counts how many sources of the logs were opened and closed, and can make one of
 // them fail.
 type countingLogs struct {
-	runner.Logs
+	replay.Logs
 	opened, closed int
 	opens          map[sim.StateID]int
 	failOn         sim.StateID
@@ -327,8 +327,8 @@ type countingLogs struct {
 	failAt         int // at this record
 }
 
-func (c *countingLogs) Open(e sim.StateID) (runner.Source, error) {
-	src, err := c.Logs.Open(e)
+func (c *countingLogs) Open(e sim.StateID, from uint64) (eventlog.Source, error) {
+	src, err := c.Logs.Open(e, from)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +345,7 @@ func (c *countingLogs) Open(e sim.StateID) (runner.Source, error) {
 }
 
 type countingSource struct {
-	runner.Source
+	eventlog.Source
 	logs   *countingLogs
 	failAt int
 	n      int
@@ -371,10 +371,15 @@ func (s *countingSource) Close() error { s.logs.closed++; return s.Source.Close(
 func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 
 	counting := &countingLogs{Logs: logs}
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), counting, theConfigOfTheScenario)
+	plan, err := replay.PlanFrom(counting, nil, nil) // reads each log once, for the line
+	if err != nil {
+		t.Fatal(err)
+	}
+	counting.opened, counting.closed = 0, 0
+	result, err := replay.Run(testkit.WorldBuilder(t, 7, 10), plan, theConfigOfTheScenario)
 	if err != nil || len(result.Divergences) != 0 {
 		t.Fatalf("%v %v", err, result.Divergences)
 	}
@@ -383,11 +388,12 @@ func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *test
 			counting.opened, counting.closed, want)
 	}
 
-	for _, open := range []int{1, 2} { // the failure is met while indexing, and while running
+	// the failure is met while the plan works out the line, while indexing, and while running
+	for _, open := range []int{1, 2, 3} {
 		failing := &countingLogs{
 			Logs: logs, failOn: testkit.Layer1, failOnOpen: open, failAt: 5,
 		}
-		_, err = runner.Run(testkit.WorldBuilder(t, 7, 10), failing, theConfigOfTheScenario)
+		_, err = runOn(testkit.WorldBuilder(t, 7, 10), failing, theConfigOfTheScenario)
 		if err == nil || !strings.Contains(err.Error(), "the disk went away") {
 			t.Fatalf("a log that fails at the record 5 of its open number %d: %v", open, err)
 		}
@@ -400,14 +406,14 @@ func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *test
 func TestALogWhoseRecordsAreNotInTheOrderOfTheirTicksIsAnError(t *testing.T) {
 	c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, cfg, testkit.Sender{T: t})
-	logs := logsOf(mem)
+	logs := mem.ByEngine()
 	layer := testkit.Layer1
 	records := slices.Clone(logs[layer])
 	last := len(records) - 1
 	records[0], records[last] = records[last], records[0] // the last tick first
 	logs[layer] = records
 	builder := testkit.WorldBuilder(t, 7, 10)
-	if _, err := runner.Run(builder, logs, theConfigOfTheScenario); err == nil {
+	if _, err := runOn(builder, logs, theConfigOfTheScenario); err == nil {
 		t.Fatal("a log out of the order of its ticks was replayed")
 	}
 }
@@ -420,15 +426,15 @@ func TestFilesMadeWithAnotherSeedThanTheBuilderHasAreRefused(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	logs, err := runner.FileLogs(dir, c.Env.Codecs)
+	logs, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = runner.Run(testkit.WorldBuilder(t, 8, 10), logs, theConfigOfTheScenario)
+	_, err = runOn(testkit.WorldBuilder(t, 8, 10), logs, theConfigOfTheScenario)
 	if err == nil || !strings.Contains(err.Error(), "seed") {
 		t.Fatalf("files made with the seed 7 and a builder with 8: %v", err)
 	}
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 	if err != nil || len(result.Divergences) != 0 {
 		t.Fatalf("the same seed: %v %v", err, result.Divergences)
 	}
@@ -449,25 +455,30 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	engines, err := replay.Engines(dir)
+	engines, err := eventlog.Engines(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	whole, err := replay.RecoveryLine(dir, c.Env.Codecs)
+	planBefore, err := replay.MakePlan(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
+	whole := planBefore.Limits()
 	// a crash: the first zonelayer lost its log after tick 7, and the others kept theirs; what it
 	// sent at ticks 10 and 30 was taken by the world and by the third zonelayer
 	const kept = 7
 	layerDir := filepath.Join(dir, "zonelayer-"+fmt.Sprint(testkit.Layer1.Local()))
-	if err = segmentlog.CutAfter(layerDir, kept); err != nil {
+	if err = segmentlog.CutAfter(layerDir, kept, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	limits, err := replay.CutToRecoveryLine(dir, c.Env.Codecs)
+	plan, err := replay.MakePlan(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := plan.Cut(); err != nil {
+		t.Fatal(err)
+	}
+	limits := plan.Limits()
 	if limits[testkit.Layer1] != kept {
 		t.Fatalf("the zonelayer is cut at %d, want %d", limits[testkit.Layer1], kept)
 	}
@@ -480,11 +491,11 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if cut == 0 {
 		t.Fatal("no engine took what the zonelayer sent after tick 7: the test checks nothing")
 	}
-	logs, err := runner.FileLogs(dir, c.Env.Codecs)
+	logs, err := eventlog.NewFileLogs(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logs, theConfigOfTheScenario)
 	if err != nil {
 		t.Fatal(err)
 	}

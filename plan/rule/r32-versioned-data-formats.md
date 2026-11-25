@@ -1,9 +1,9 @@
 # R32. A change to how data is encoded makes a new version, never overwrites the old (hard, after pre-alpha)
 
-Data that is written and read back later (the replay log, a checkpoint, anything with an `Encode` and a `Decode`) has two versions, each with its own owner:
+Data that is written and read back later (the event log, a checkpoint, anything with an `Encode` and a `Decode`) has two versions, each with its own owner:
 
 - **The version of the format of the container**, such as the `segmentlog` version in the header of a segment. It describes how the library frames bytes (header, records, commits) and nothing about what they mean. Only the library changes it, and it reads every version it has ever written.
-- **The version of the data**, such as the format version in the meta of a segment of the replay log. It describes how the data of the business is encoded: commands, actions, characters, items. It is written by the user of the container, and the reader passes it to `Decode`, so every `Decode` knows which version of the bytes it is reading. A data type that is inside another (a `Character` in a command) is read by the version of the whole, not by one of its own.
+- **The version of the data**, such as the format version in the meta of a segment of the event log. It describes how the data of the business is encoded: commands, actions, characters, items. It is written by the user of the container, and the reader passes it to `Decode`, so every `Decode` knows which version of the bytes it is reading. A data type that is inside another (a `Character` in a command) is read by the version of the whole, not by one of its own.
 
 A change that breaks the bytes of data that has an `Encode` (a field added, removed, moved or retyped, a meaning changed, an ID reused) makes a new version of the data:
 

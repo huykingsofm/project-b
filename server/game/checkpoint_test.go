@@ -6,7 +6,7 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game"
@@ -39,7 +39,7 @@ func aWorldToCheckpointWith(
 		WithSeed(7).
 		WithConfig(cfg).
 		WithCheckpointWriter(w).
-		WithReplayLog(&replay.MemLog{}).
+		WithEventLog(&eventlog.MemLog{}).
 		WithWorld(game.WorldParams{ID: testkit.World}).
 		WithZone(game.ZoneParams{ID: testkit.Zone1, Tiles: tiles}).
 		WithZoneLayers(game.ZoneLayerParams{
@@ -87,7 +87,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 // engine has been made, and with the codecs of the cluster.
 func aFreshEnv(c *game.Cluster) *engine.Env {
 	return &engine.Env{
-		Router: engine.NewRouter(), Cfg: config.NewStore(), ReplayLog: replay.NopLog{},
+		Router: engine.NewRouter(), Cfg: config.NewStore(), EventLog: eventlog.NopLog{},
 		Stable: engine.NewStableStateStore(), Codecs: c.Env.Codecs, QueueSize: 16,
 		Emitter: engine.NopEmitter{},
 	}

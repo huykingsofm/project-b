@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -288,7 +289,7 @@ func (w *Writer) create(begin uint64) (*os.File, int64, error) {
 		return nil, 0, err
 	}
 	// the file is not durable until its entry in the directory is
-	if err := syncDir(w.dir); err != nil {
+	if err := atomicfile.SyncDir(w.dir); err != nil {
 		f.Close()
 		return nil, 0, err
 	}

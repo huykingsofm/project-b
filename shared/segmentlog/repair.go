@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -17,11 +19,11 @@ import (
 // not repaired and is reported when the segment is read.
 //
 // What repair removes is not thrown away: the bytes that were cut are kept next to the segment, in
-// a file named <segment>.discarded-<offset>, and a warning says so, because the bytes after the
-// last whole batch are a batch that a crash cut or whole batches after damage in the middle of the
-// segment, and repair cannot tell the two apart. A segment whose header is of another format, or
-// whose header does not match its crc, is not repaired: Open returns the error and the file is left
-// as it is.
+// a file named <segment>.<now>.discarded-<offset>, and a warning says so, because the bytes after
+// the last whole batch are a batch that a crash cut or whole batches after damage in the middle of
+// the segment, and repair cannot tell the two apart. A segment whose header is of another format,
+// or whose header does not match its crc, is not repaired: Open returns the error and the file is
+// left as it is.
 func repair(dir string) error {
 	segments, err := Segments(dir)
 	if err != nil || len(segments) == 0 {
@@ -69,9 +71,9 @@ func repair(dir string) error {
 	return nil
 }
 
-// keepDiscarded copies the bytes of a segment from `from` to `to` to a file next to it, and warns.
+// keepDiscarded copies the bytes of a segment from `from` to `to` to a file in dir, and warns.
 func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
-	name := fmt.Sprintf("%s.discarded-%d", path, from)
+	name := filepath.Join(dir, discardedName(path, from))
 	out, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
@@ -98,7 +100,7 @@ func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
 		"kept_in",
 		filepath.Base(name),
 	)
-	return syncDir(dir)
+	return atomicfile.SyncDir(dir)
 }
 
 // removeSegment deletes a segment and makes the deletion durable.
@@ -106,20 +108,12 @@ func removeSegment(dir, path string) error {
 	if err := os.Remove(path); err != nil {
 		return err
 	}
-	return syncDir(dir)
+	return atomicfile.SyncDir(dir)
 }
 
-// syncDir forces the entries of a directory to disk: the file that was made, or deleted, in it is
-// not durable until then, and after a power loss a segment that was synced could be missing from
-// its directory.
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	if err := d.Sync(); err != nil {
-		d.Close()
-		return fmt.Errorf("sync of the directory %s: %w", dir, err)
-	}
-	return d.Close()
+// discardedName is the name of the file that keeps what is cut from the segment at path, from the
+// offset: the name of the segment with the time of the cut before its extension, so that what is
+// kept by two cuts of one segment never meets, then `.discarded-<offset>`.
+func discardedName(path string, from int64) string {
+	return fmt.Sprintf("%s.discarded-%d", atomicfile.Stamped(filepath.Base(path), time.Now()), from)
 }

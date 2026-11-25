@@ -728,7 +728,7 @@ func TestWhatOpenCutsFromTheLastSegmentIsKeptNextToItWhetherItWasATornBatchOrDam
 
 		segmentlog.Open(dir, opts) // repairs; its writer is not used
 		after, _ := os.ReadFile(path)
-		kept, err := filepath.Glob(path + ".discarded-*")
+		kept, err := filepath.Glob(filepath.Join(dir, "seg-*.discarded-*"))
 		if err != nil || len(kept) != 1 {
 			t.Fatalf("%s: %d files of discarded bytes, want 1", name, len(kept))
 		}
@@ -830,7 +830,7 @@ func TestASegmentThatIsClosedSyncsItsBatches(t *testing.T) {
 
 func TestCutAfterKeepsTheRecordsUpToAnIDAndWhatIsCutIsKept(t *testing.T) {
 	for _, last := range []uint64{0, 1, 17, 18, 59, 60, 100} { // across and at the ends of segments
-		dir := t.TempDir()
+		dir, archive := t.TempDir(), filepath.Join(t.TempDir(), "archive")
 		o := opts
 		o.SegmentBytes = 200 // a few batches in a segment
 		w := open(t, dir, o)
@@ -838,7 +838,7 @@ func TestCutAfterKeepsTheRecordsUpToAnIDAndWhatIsCutIsKept(t *testing.T) {
 		if err := w.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if err := segmentlog.CutAfter(dir, last); err != nil {
+		if err := segmentlog.CutAfter(dir, last, archive); err != nil {
 			t.Fatalf("a cut after %d: %v", last, err)
 		}
 		got, err := readAll(t, dir, 0)
@@ -849,9 +849,14 @@ func TestCutAfterKeepsTheRecordsUpToAnIDAndWhatIsCutIsKept(t *testing.T) {
 			t.Fatalf("a cut after %d leaves %d records, want %d", last, len(got), want)
 		}
 		wantTicks(t, got, 1, 1+uint64(len(got)))
-		// what was cut is in a file that the log does not see
+		// what was cut is in the archive, where the log does not see it, and not next to the
+		// segments
+		if matches, _ := filepath.Glob(filepath.Join(dir, "*.discarded-*")); len(matches) != 0 {
+			t.Fatalf("a cut after %d left %v next to the segments", last, matches)
+		}
 		if last < 60 {
-			if matches, _ := filepath.Glob(filepath.Join(dir, "*.discarded-*")); len(matches) == 0 {
+			kept, _ := filepath.Glob(filepath.Join(archive, "*.discarded-*"))
+			if len(kept) == 0 {
 				t.Fatalf("a cut after %d kept nothing of what it cut", last)
 			}
 		}
@@ -891,7 +896,7 @@ func TestCutAfterReadsOnlyTheSegmentThatHoldsTheCut(t *testing.T) {
 	if _, err := readAll(t, dir, 0); !errors.Is(err, segmentlog.ErrCorrupt) {
 		t.Fatalf("a read of the damaged segment: %v", err)
 	}
-	if err := segmentlog.CutAfter(dir, 150); err != nil {
+	if err := segmentlog.CutAfter(dir, 150, t.TempDir()); err != nil {
 		t.Fatalf("a cut after 150, which is in a segment that is not damaged: %v", err)
 	}
 	got, err := readAll(t, dir, 150)
@@ -906,7 +911,8 @@ func TestCutAfterCutsAtTheStartOfTheBatchOfTheFirstRecordThatGoes(t *testing.T) 
 	w := open(t, dir, opts)
 	writeBatches(t, w, 0, 6, 3) // the tick t has the IDs 3t, 3t+1 and 3t+2
 	w.Close()
-	if err := segmentlog.CutAfter(dir, 10); err != nil { // 10 is the second record of the tick 3
+	// 10 is the second record of the tick 3
+	if err := segmentlog.CutAfter(dir, 10, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	counts, err := readTicks(t, dir)
@@ -926,17 +932,17 @@ func TestCutAfterThatCutsNothingChangesNothing(t *testing.T) {
 	write(t, w, 1, 11)
 	w.Close()
 	before, _ := os.ReadDir(dir)
-	if err := segmentlog.CutAfter(dir, 1000); err != nil {
+	if err := segmentlog.CutAfter(dir, 1000, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	if err := segmentlog.CutAfter(dir, 10); err != nil { // the last record is kept
+	if err := segmentlog.CutAfter(dir, 10, t.TempDir()); err != nil { // the last record is kept
 		t.Fatal(err)
 	}
 	after, _ := os.ReadDir(dir)
 	if len(before) != len(after) {
 		t.Fatalf("%d files before and %d after", len(before), len(after))
 	}
-	if err := segmentlog.CutAfter(filepath.Join(dir, "nothing"), 1); err != nil {
+	if err := segmentlog.CutAfter(filepath.Join(dir, "nothing"), 1, t.TempDir()); err != nil {
 		t.Fatalf("a log that does not exist: %v", err)
 	}
 }

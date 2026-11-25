@@ -6,7 +6,7 @@
 //
 //	go run ./server/cmd/world
 //
-// With -replay-dir it also writes the replay log and the checkpoints of every engine to files under
+// With -replay-dir it also writes the event log and the checkpoints of every engine to files under
 // that directory, and reads them back at the end to say what each engine recorded:
 //
 //	go run ./server/cmd/world -replay-dir /tmp/replay
@@ -21,7 +21,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -66,7 +66,7 @@ var (
 func main() {
 	replayDir := flag.String(
 		"replay-dir", "",
-		"write the replay log and the checkpoints of every engine under this directory",
+		"write the event log and the checkpoints of every engine under this directory",
 	)
 	flag.Parse()
 
@@ -114,25 +114,25 @@ func main() {
 	if _, err := cfg.Apply(map[string]string{"checkpoint.every_ticks": "10"}); err != nil {
 		fail("the configuration is refused", err)
 	}
-	var replayLog replay.Log = replay.NopLog{}
-	var replayFile *replay.FileLog
+	var eventLog eventlog.Log = eventlog.NopLog{}
+	var replayFile *eventlog.FileLog
 	var checkpointFiles *checkpoint.FileWriter
 	var checkpoints engine.CheckpointWriter // none without files: the engines then take none
 	if *replayDir != "" {
 		checkpointFiles = checkpoint.NewFileWriter(*replayDir, 64)
 		checkpoints = checkpointFiles
-		replayFile = replay.NewFileLog(
+		replayFile = eventlog.NewFileLog(
 			*replayDir,
-			replay.FileLogOptions{
+			eventlog.FileLogOptions{
 				Seed: seed, SegmentBytes: 1 << 20, SyncEvery: time.Second, Backlog: 64,
 			},
 		)
-		replayLog = replayFile
+		eventLog = replayFile
 	}
 
 	cluster, err := game.NewBuilder().
 		WithSeed(seed).
-		WithReplayLog(replayLog).
+		WithEventLog(eventLog).
 		WithConfig(cfg).
 		WithCheckpointWriter(checkpoints).
 		WithEmitter(printer{}).
@@ -235,19 +235,19 @@ func main() {
 	if replayFile != nil {
 		checkpointFiles.Close()
 		if err := replayFile.Close(); err != nil {
-			fail("the replay log could not be written", err)
+			fail("the event log could not be written", err)
 		}
-		engines, err := replay.Engines(*replayDir)
+		engines, err := eventlog.Engines(*replayDir)
 		if err != nil {
-			fail("the replay log could not be listed", err)
+			fail("the event log could not be listed", err)
 		}
-		fmt.Printf("\nthe replay log under %s, read back:\n", *replayDir)
+		fmt.Printf("\nthe event log under %s, read back:\n", *replayDir)
 		for _, e := range engines {
-			reader, err := replay.ReadFileLog(*replayDir, e, 0, cluster.Env.Codecs)
+			reader, err := eventlog.ReadFileLog(*replayDir, e, 0, cluster.Env.Codecs)
 			if err != nil {
-				fail("the replay log could not be read", err)
+				fail("the event log could not be read", err)
 			}
-			counts, last := map[replay.Kind]int{}, uint64(0)
+			counts, last := map[eventlog.Kind]int{}, uint64(0)
 			for reader.Next() {
 				counts[reader.Record().Kind()]++
 				last = reader.Record().Tick
@@ -255,7 +255,7 @@ func main() {
 			readErr := reader.Err()
 			reader.Close()
 			if readErr != nil {
-				fail("the replay log is damaged", readErr)
+				fail("the event log is damaged", readErr)
 			}
 			ticks, err := checkpoint.Ticks(*replayDir, e)
 			if err != nil {
@@ -263,9 +263,9 @@ func main() {
 			}
 			fmt.Printf("  %s: %d inbound, %d commands, %d config, %d hashes, %d stable "+
 				"reads, up to tick %d; checkpoints at %v\n",
-				label(e), counts[replay.KindInbound], counts[replay.KindCommand],
-				counts[replay.KindConfig], counts[replay.KindHash],
-				counts[replay.KindStableRead], last, ticks)
+				label(e), counts[eventlog.KindInbound], counts[eventlog.KindCommand],
+				counts[eventlog.KindConfig], counts[eventlog.KindHash],
+				counts[eventlog.KindStableRead], last, ticks)
 		}
 	}
 }

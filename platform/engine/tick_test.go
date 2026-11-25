@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 )
@@ -41,7 +41,7 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 	if after.Tick() != 0 {
 		t.Fatal("an engine after the one that failed ran its tick")
 	}
-	if len(c.Env.ReplayLog.(*replay.MemLog).Records) != 0 {
+	if len(c.Env.EventLog.(*eventlog.MemLog).Records) != 0 {
 		t.Fatal("the engine that failed recorded something of the tick")
 	}
 	m := sim.NewActionMessage[*toyState](2, onfail.Drop{})

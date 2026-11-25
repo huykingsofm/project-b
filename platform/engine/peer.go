@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/channels"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -16,7 +16,7 @@ import (
 // peer is what every engine has to talk to the other engines: its address and channels, the
 // router it sends through, what it reads of the others, the bouncer that runs what a message says
 // a failed delivery means, and the numbers and acks that keep a message from being lost or taken
-// twice. What it takes and what comes back is written to the replay log of the engine, which the
+// twice. What it takes and what comes back is written to the event log of the engine, which the
 // engine gives it with each call that writes to it.
 type peer struct {
 	data peerData // what a checkpoint holds of the peer
@@ -54,17 +54,17 @@ func (c *peer) sendToUnsettled(m sim.Message) { c.data.unsettledMessages.AddUnse
 
 // handleReturnedMessages takes what came back undelivered since the last tick and runs what each
 // says to do.
-func (c *peer) handleReturnedMessages(cfg *config.Snapshot, tick uint64, rpl replay.Log) {
+func (c *peer) handleReturnedMessages(cfg *config.Snapshot, tick uint64, rpl eventlog.Log) {
 	for _, r := range channels.Drain(c.in.Back) {
-		rpl.Append(c.me, tick, replay.Returned{Header: r.Message.Head(), Reason: r.Reason})
+		rpl.Append(c.me, tick, eventlog.Returned{Header: r.Message.Head(), Reason: r.Reason})
 		c.bounce.handle(cfg, r.Message, r.Reason)
 	}
 }
 
 // receivedMessages takes the messages that other engines sent since the last tick, in the order
 // they arrived, as copies that share nothing with what their senders keep, and writes each to the
-// replay log.
-func (c *peer) receivedMessages(tick uint64, rpl replay.Log) []sim.Message {
+// event log.
+func (c *peer) receivedMessages(tick uint64, rpl eventlog.Log) []sim.Message {
 	var messages []sim.Message
 	for _, m := range channels.Drain(c.in.In) {
 		if c.seenBefore(m.Head()) {
@@ -73,7 +73,7 @@ func (c *peer) receivedMessages(tick uint64, rpl replay.Log) []sim.Message {
 		// the sender keeps the message until it is acked, and the actions of the message may change
 		// as they run: the engine runs a copy that shares nothing with it
 		m = m.Clone()
-		rpl.Append(c.me, tick, replay.Inbound{Message: m})
+		rpl.Append(c.me, tick, eventlog.Inbound{Message: m})
 		if h := m.Head(); h.Seq != 0 {
 			c.takenMessages = append(
 				c.takenMessages, takenMessage{tick: tick, sender: h.From, seq: h.Seq},
@@ -106,7 +106,7 @@ func (c *peer) seenBefore(h sim.Header) bool {
 
 // receivedActions returns the actions of the messages that were sent to an engine whose state is of
 // type S, in the order they arrived.
-func (c *peer) receivedActions[S sim.State](tick uint64, rpl replay.Log) []sim.Action[S] {
+func (c *peer) receivedActions[S sim.State](tick uint64, rpl eventlog.Log) []sim.Action[S] {
 	var out []sim.Action[S]
 	for _, m := range c.receivedMessages(tick, rpl) {
 		if typed, ok := m.(*sim.ActionMessage[S]); ok {
@@ -119,10 +119,10 @@ func (c *peer) receivedActions[S sim.State](tick uint64, rpl replay.Log) []sim.A
 // flushUnsettledMessages sends what the engine wants to send: first the messages that earlier
 // failures made necessary, then what the actions of this tick put in the outbox; and it sends
 // again, with the number they have, the messages that went and have not been acked for a while. A
-// message that cannot be delivered is handled at once, and the replay log records that it came
+// message that cannot be delivered is handled at once, and the event log records that it came
 // back, at the tick of the send.
 func (c *peer) flushUnsettledMessages(
-	cfg *config.Snapshot, tick uint64, fresh []sim.Message, rpl replay.Log,
+	cfg *config.Snapshot, tick uint64, fresh []sim.Message, rpl eventlog.Log,
 ) {
 	c.releaseAckedMessages()
 	for _, m := range append(c.data.unsettledMessages.TakeUnsent(), fresh...) {
@@ -130,7 +130,7 @@ func (c *peer) flushUnsettledMessages(
 		m = m.Stamp(sim.Header{From: c.me, Seq: c.data.sentSeq, Tick: tick})
 		reason, ok := c.router.Deliver(m)
 		if !ok {
-			rpl.Append(c.me, tick, replay.Returned{Header: m.Head(), Reason: reason})
+			rpl.Append(c.me, tick, eventlog.Returned{Header: m.Head(), Reason: reason})
 			c.bounce.handle(cfg, m, reason)
 			continue
 		}
@@ -171,9 +171,9 @@ func (c *peer) sendAgain(cfg *config.Snapshot, tick uint64) {
 }
 
 // publishAcks says to each sender the number up to which this engine holds its messages safe: the
-// ticks up to what the replay log says is safe are no longer lost to a crash. A log that records
+// ticks up to what the event log says is safe are no longer lost to a crash. A log that records
 // nothing says every tick is. The engine calls it at the end of each tick.
-func (c *peer) publishAcks(rpl replay.Log) {
+func (c *peer) publishAcks(rpl eventlog.Log) {
 	if c.ackBoard == nil || len(c.takenMessages) == 0 {
 		return
 	}

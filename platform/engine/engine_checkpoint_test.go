@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
@@ -36,7 +36,7 @@ func toyClusterThatCheckpoints(
 	env := newToyEnv(t)
 	env.Checkpoints = w
 	if _, err := env.Cfg.(*config.Store).Apply(map[string]string{
-		"checkpoint.every_ticks": "5", "replay_log.hash_every_ticks": "1000",
+		"checkpoint.every_ticks": "5", "eventlog.hash_every_ticks": "1000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -51,10 +51,10 @@ func toyClusterThatCheckpoints(
 }
 
 // hashTicks returns, for each engine, the ticks at which its log has a hash.
-func hashTicks(mem *replay.MemLog) map[sim.StateID][]uint64 {
+func hashTicks(mem *eventlog.MemLog) map[sim.StateID][]uint64 {
 	out := map[sim.StateID][]uint64{}
 	for _, r := range mem.Records {
-		if r.Kind() == replay.KindHash {
+		if r.Kind() == eventlog.KindHash {
 			out[r.Engine] = append(out[r.Engine], r.Tick)
 		}
 	}
@@ -74,7 +74,7 @@ func TestAnEngineTakesACheckpointEveryPeriodFromItsOwnOffsetAndHashesAtIt(t *tes
 	for _, o := range w.offered {
 		offered[o.engine] = append(offered[o.engine], o.tick)
 	}
-	hashed := hashTicks(c.Env.ReplayLog.(*replay.MemLog))
+	hashed := hashTicks(c.Env.EventLog.(*eventlog.MemLog))
 	starts := map[uint64]bool{}
 	for _, id := range ids {
 		var want []uint64
@@ -109,7 +109,7 @@ func TestAnEngineTakesACheckpointEveryPeriodFromItsOwnOffsetAndHashesAtIt(t *tes
 			t.Fatal(err)
 		}
 	}
-	if got := hashTicks(plain.Env.ReplayLog.(*replay.MemLog)); !maps.EqualFunc(
+	if got := hashTicks(plain.Env.EventLog.(*eventlog.MemLog)); !maps.EqualFunc(
 		got, hashed, slices.Equal,
 	) {
 		t.Fatalf("without a writer the hashes are at %v, with one at %v", got, hashed)
@@ -161,9 +161,9 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 			restored.Tick(), taken.tick)
 	}
 	var logged uint64
-	for _, r := range c.Env.ReplayLog.(*replay.MemLog).Records {
-		if r.Kind() == replay.KindHash && r.Tick == taken.tick {
-			logged = r.Body.(replay.Hash).Value
+	for _, r := range c.Env.EventLog.(*eventlog.MemLog).Records {
+		if r.Kind() == eventlog.KindHash && r.Tick == taken.tick {
+			logged = r.Body.(eventlog.Hash).Value
 		}
 	}
 	if logged != hashAt {

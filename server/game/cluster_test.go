@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game"
@@ -306,9 +306,9 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	)
 	testkit.Steps(t, c, 10)
 
-	var returned []replay.Record
+	var returned []eventlog.Record
 	for _, r := range j.Records {
-		if r.Kind() == replay.KindReturned {
+		if r.Kind() == eventlog.KindReturned {
 			returned = append(returned, r)
 		}
 	}
@@ -316,7 +316,7 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 		t.Fatalf("%d records of a message that came back, want 1", len(returned))
 	}
 	got := returned[0]
-	body := got.Body.(replay.Returned)
+	body := got.Body.(eventlog.Returned)
 	layer := testkit.Layer1
 	if got.Engine != layer || body.Header.From != layer ||
 		body.Header.Seq == 0 || body.Reason != sim.DeliveryFailureRetired {
@@ -324,7 +324,7 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	}
 	var settledAt uint64
 	for _, r := range j.Records {
-		inbound, ok := r.Body.(replay.Inbound)
+		inbound, ok := r.Body.(eventlog.Inbound)
 		if ok && r.Engine == testkit.Layer1 &&
 			inbound.Message.Head().From == testkit.Layer1 && r.Tick > got.Tick {
 			settledAt = r.Tick // the compensation, which is sent to itself, is taken after
@@ -362,7 +362,7 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 	}
 	taken := 0
 	for _, r := range j.Records {
-		if r.Kind() == replay.KindInbound && r.Engine == layer {
+		if r.Kind() == eventlog.KindInbound && r.Engine == layer {
 			taken++
 		}
 	}
@@ -373,13 +373,13 @@ func TestASecondCopyOfAMessageIsDroppedAndAMessageWithNoNumberIsNeverACopy(t *te
 
 func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testing.T) {
 	c, _, j, cfg := testkit.NewWorld(t, 1, 0)
-	if _, err := cfg.Apply(map[string]string{"replay_log.hash_every_ticks": "5"}); err != nil {
+	if _, err := cfg.Apply(map[string]string{"eventlog.hash_every_ticks": "5"}); err != nil {
 		t.Fatal(err)
 	}
 	testkit.Steps(t, c, 22)
 	ticks := map[sim.StateID][]uint64{}
 	for _, r := range j.Records {
-		if r.Kind() == replay.KindHash {
+		if r.Kind() == eventlog.KindHash {
 			ticks[r.Engine] = append(ticks[r.Engine], r.Tick)
 		}
 	}
@@ -400,8 +400,8 @@ func TestEachActorRecordsTheHashOfItsStateAtEveryNthTickFromItsOwnStart(t *testi
 	}
 }
 
-func TestTheSameInputsGiveTheSameReplayLog(t *testing.T) {
-	run := func() []replay.Record {
+func TestTheSameInputsGiveTheSameEventLog(t *testing.T) {
+	run := func() []eventlog.Record {
 		c, _, j, _ := testkit.NewWorld(t, 7, 0)
 		testkit.Enter(t, c, testkit.Zone1, 1, "An")
 		testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
@@ -416,10 +416,10 @@ func TestTheSameInputsGiveTheSameReplayLog(t *testing.T) {
 		return j.Records
 	}
 	a, b := run(), run()
-	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y replay.Record) bool {
+	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y eventlog.Record) bool {
 		return x.Engine == y.Engine && x.Tick == y.Tick && x.Body.Same(y.Body)
 	}) {
-		t.Fatal("two runs of the same inputs recorded different replay logs")
+		t.Fatal("two runs of the same inputs recorded different event logs")
 	}
 }
 
@@ -438,7 +438,7 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		// a new view each time: it keeps what it reads
-		view := c.Env.Stable.View(testkit.Zone1, replay.NopLog{})
+		view := c.Env.Stable.View(testkit.Zone1, eventlog.NopLog{})
 		if layerCount(view, testkit.Layer1) == 1 && layerCount(view, testkit.Layer3) == 1 {
 			break
 		}

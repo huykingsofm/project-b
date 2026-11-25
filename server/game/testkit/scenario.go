@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
@@ -39,10 +40,31 @@ func (s Sender) Via[C sim.BaseCommand](c C) C {
 	return got.(C)
 }
 
+// ScenarioConfigVersion is the configuration that the scenario makes: the overrides that stay in
+// force, and its own.
+func ScenarioConfigVersion(kept map[string]string) map[string]string {
+	version := maps.Clone(kept)
+	if version == nil {
+		version = map[string]string{}
+	}
+	version["zonelayer.normal_attack.cooldown_ticks"] = "5"
+	return version
+}
+
 // RunScenario runs a cluster through chat in each scope, a shield, an attack, a pickup, a run of
 // movement, a new version of the config, a character that enters with cooldowns and one that
 // crosses to another zone, long enough for every engine to record a hash.
 func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
+	t.Helper()
+	RunScenarioKeeping(t, c, cfg, s, nil)
+}
+
+// RunScenarioKeeping is RunScenario for a store whose configuration has overrides that stay in
+// force when the scenario makes its new version of it: a version holds the whole document, so
+// without them the variables they name go back to their defaults.
+func RunScenarioKeeping(
+	t testing.TB, c *game.Cluster, cfg *config.Store, s Sender, kept map[string]string,
+) {
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)
 	an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
@@ -80,7 +102,7 @@ func RunScenario(t testing.TB, c *game.Cluster, cfg *config.Store, s Sender) {
 	)
 	Steps(t, c, 6)
 	if _, err := cfg.Apply(
-		map[string]string{"zonelayer.normal_attack.cooldown_ticks": "5"},
+		ScenarioConfigVersion(kept),
 	); err != nil { // a new version of the config: the engines record that they read it
 		t.Fatal(err)
 	}

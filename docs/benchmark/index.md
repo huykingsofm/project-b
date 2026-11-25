@@ -10,10 +10,10 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | [logging.md](logging.md) | a log call and the encoding of a batch | `shared/logging` |
 | [bitset.md](bitset.md) | `bitset.Array` against `[]bool` | `shared/bitset` |
 | [segmentlog.md](segmentlog.md) | appending to and reading the segment log | `shared/segmentlog` |
-| [replay_log.md](replay_log.md) | recording and reading the replay log in files | `platform/replay` |
+| [eventlog.md](eventlog.md) | recording and reading the event log in files | `platform/eventlog` |
 | [plan.md](plan.md) | filling a plan and finding actions in it | `platform/sim` |
 | [codec.md](codec.md) | writing and reading a message with its actions | `platform/sim` |
-| [replay_runner.md](replay_runner.md) | replaying a whole cluster run against its log | `platform/replay/runner` |
+| [replay.md](replay.md) | replaying a whole cluster run against its log, the recovery line with and without its cache, and the replay from tick 0 and from the checkpoints | `server/game` |
 | [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine, taking it at a tick, and its file | `engine`, `platform/checkpoint` |
 
 ## Run
@@ -27,9 +27,9 @@ The results of the benchmarks, as of the code now. Rule: [R13](../../plan/rule/r
 | logging | `shared/logging` |
 | the bitset | `shared/bitset` |
 | the segment log | `shared/segmentlog` |
-| the replay log | `platform/replay` |
-| the replay runner | `platform/replay/runner` |
+| the event log | `platform/eventlog` |
 | the checkpoint | `server/game`, `platform/checkpoint` |
+| the replay and the recovery | `server/game` |
 
 - Record the median of the runs.
 

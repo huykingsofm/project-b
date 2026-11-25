@@ -1,6 +1,6 @@
 # Benchmarks of the codecs of actions and messages
 
-Conventions and how to run: [index](index.md). Behavior: [replay_log](../replay_log.md#messages-and-actions).
+Conventions and how to run: [index](index.md). Behavior: [eventlog](../eventlog.md#messages-and-actions).
 
 ## Benchmarks
 
