@@ -84,7 +84,7 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 func aFreshEnv(c *game.Cluster) *engine.Env {
 	return &engine.Env{
 		Router: engine.NewRouter(), EventLog: eventlog.NopLog{},
-		Stable: engine.NewStableStateStore(), Codecs: c.Env.Codecs, QueueSize: 16,
+		Stable: engine.NewStableStateStore(nil), Codecs: c.Env.Codecs, QueueSize: 16,
 		Emitter: engine.NopEmitter{},
 	}
 }

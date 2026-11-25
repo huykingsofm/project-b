@@ -185,10 +185,9 @@ func (e *Engine[S]) Step() error {
 	}
 	e.stateRegistry.Begin(e.tick)
 	e.peer.view.begin(e.tick)
-	cfg := e.tickConfig()
-	e.stateRegistry.Cfg = cfg
+	cfg := e.stateRegistry.Config()
 	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand}
-	e.peer.handleReturnedMessages(cfg, e.tick, e.eventLog)
+	e.peer.handleReturnedMessages(e.tick, e.eventLog)
 
 	e.actionBuffer = e.actionBuffer[:0]
 	e.planScheduled()
@@ -223,7 +222,7 @@ func (e *Engine[S]) Step() error {
 	}
 	published := e.st.Clone().(S)
 	e.stable.Publish(published)
-	e.peer.flushUnsettledMessages(cfg, e.tick, e.stateRegistry.Take(), e.eventLog)
+	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
 		e.offerCheckpoint(published)
@@ -350,22 +349,6 @@ func (e *Engine[S]) encodeOwnData(w *binary.Writer) error {
 		return fmt.Errorf("its random numbers: %w", err)
 	}
 	return nil
-}
-
-// tickConfig is the configuration for the whole tick: the one in the state of the configuration
-// engine, which the engine that owns it reads from its own state and every other engine from the
-// copy that its view keeps for the tick, so the event log says which copy each tick read. It is
-// the defaults when no copy was published.
-func (e *Engine[S]) tickConfig() config.ReadOnlySnapshot {
-	if cs, ok := any(e.st).(*sim.ConfigState); ok {
-		return cs.Snapshot()
-	}
-	if st, err := e.peer.view.Read(sim.ConfigStateID); err == nil {
-		if cs, ok := st.(*sim.ConfigState); ok {
-			return cs.Snapshot()
-		}
-	}
-	return config.Defaults()
 }
 
 // periodOffsetOf is where an engine starts the count of a period: the hash of its ID. The IDs of

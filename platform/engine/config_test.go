@@ -35,7 +35,7 @@ func TestAnEngineReadsTheConfigurationFromTheCopyOfTheConfigurationEngineAtEvery
 			t.Errorf("at tick %d the engine read the copy of tick %d", tick, reads[tick])
 		}
 	}
-	if got := checkpointEvery.Get(engines[0].tickConfig()); got != 5 {
+	if got := checkpointEvery.Get(engines[0].stateRegistry.Config()); got != 5 {
 		t.Fatalf("the engine reads %d ticks between checkpoints, want 5", got)
 	}
 	if got := checkpointEvery.Get(c.Config()); got != 5 {
@@ -54,17 +54,20 @@ func TestAnEngineThatFindsNoConfigurationEngineReadsTheDefaultsAndTheLogSaysTher
 	if reads := configReads(env.EventLog.(*eventlog.MemLog), 1); len(reads) != 1 || reads[1] != 0 {
 		t.Fatalf("the log says %v, want the read of tick 1 with no copy", reads)
 	}
-	if e.tickConfig() != config.ReadOnlySnapshot(config.Defaults()) {
+	if e.stateRegistry.Config() != config.ReadOnlySnapshot(config.Defaults()) {
 		t.Fatal("the engine does not read the defaults")
 	}
 }
 
-func TestTheConfigurationEngineReadsItsOwnStateAndRecordsNoReadOfItself(t *testing.T) {
+func TestTheConfigurationEngineReadsTheCopyOfItsLastTickLikeAnyOtherEngine(t *testing.T) {
 	c, _ := toyCluster(t)
-	if err := c.Step(); err != nil {
-		t.Fatal(err)
+	for range 3 {
+		if err := c.Step(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if reads := configReads(c.Env.EventLog.(*eventlog.MemLog), sim.ConfigStateID); len(reads) != 0 {
-		t.Fatalf("the configuration engine recorded a read of itself: %v", reads)
+	reads := configReads(c.Env.EventLog.(*eventlog.MemLog), sim.ConfigStateID)
+	if reads[1] != 0 || reads[2] != 1 || reads[3] != 2 {
+		t.Fatalf("the configuration engine read the copies of the ticks %v", reads)
 	}
 }

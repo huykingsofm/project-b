@@ -18,17 +18,17 @@
 | 1 | a config service makes the command from the document it has: `sim.NewUpdateConfigCommand(current, document)`; `current` is `cluster.Config()`; no command (`false`) when no variable would change, an error when a value is wrong |
 | 2 | `cluster.ConfigEngine().Send(cmd)`: `UpdateConfigCommand` translates to `UpdateConfigAction`, which calls `ApplyConfigChange` |
 | 3 | the engine publishes its state at the end of the tick; the other engines read the new copy from their next tick |
-| after a recovery | the engine is made from its checkpoint and its log like any other, so its overrides go on; the service sends the difference between its document and `cluster.Config()` |
+| after a recovery | the engine is made from its checkpoint and its log like any other, so its configuration goes on; the service sends the difference between its document and `cluster.Config()` |
 
 ## Reading it
 
 | Who | How |
 |---|---|
-| an engine, at the start of each tick | the copy of the configuration engine that its `StableView` keeps for the tick (`tickConfig`); the engine that owns the configuration reads its own state |
+| an engine, at the start of each tick | the copy of the configuration engine that its `StableView` keeps for the tick (the engine reads it with `Registry.Config()`, and its `peer` for the resend of messages); the engine that owns the configuration reads the copy of its last tick like any other, and the log records that read |
 | an action | `Registry.Config()`: the same copy, so every action of a tick sees one configuration |
 | the event log | the first read in a tick is a `StableRead` of `sim.ConfigStateID` with the tick of the copy, so a replay gives each tick the copy it read, and the engine depends on that tick of the configuration engine |
 | no copy published | the defaults (`config.Defaults()`), and the `StableRead` has tick 0 |
-| from outside the engines | `Cluster.Config()` and `Cluster.Reader()`: the latest copy, with no lock and no record in the log |
+| from outside the engines | `Cluster.Config()`, which is the `config.Live` of the cluster (the builder takes one with `WithLiveConfig`, for what is made before the cluster, such as the `LineCacheWriter`), and `Cluster.Reader()`: the latest copy, with no lock and no record in the log; the store changes the live configuration each time the configuration engine publishes |
 
 ## IDs
 

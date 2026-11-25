@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"github.com/huykingsofm/project-b/platform/config"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -318,8 +319,9 @@ func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := NewLineCacheWriter(dir)
-	w.ReadConfigWith(state.Snapshot)
+	live := config.NewLive()
+	live.Set(state.Snapshot())
+	w := NewLineCacheWriter(dir, live)
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {
@@ -349,7 +351,7 @@ func TestALogThatTellsTheWriterOfTheCacheLeavesTheCacheOfWhatWasSafeWhenItClosed
 	dir := t.TempDir()
 	a, b := sim.StateID(1), sim.StateID(2)
 	opts := testFileLogOptions
-	opts.OnSafe = NewLineCacheWriter(dir)
+	opts.OnSafe = NewLineCacheWriter(dir, nil)
 	log := eventlog.NewFileLog(dir, opts)
 	ticks(log, a, 5, nil)
 	ticks(log, b, 8, nil)

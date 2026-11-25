@@ -41,9 +41,6 @@ type Registry[S State] struct {
 	Tick uint64
 	// Stable reads the states of the other engines.
 	Stable StableReader
-	// Cfg is the configuration of the tick, which the engine sets at the start of the tick. Nil
-	// means the defaults.
-	Cfg config.ReadOnlySnapshot
 
 	self []Timed[S]
 }
@@ -52,10 +49,12 @@ type Registry[S State] struct {
 // the configuration engine that the engine first read in the tick, so every action of the tick sees
 // one configuration, or the defaults when there is none.
 func (r *Registry[S]) Config() config.ReadOnlySnapshot {
-	if r.Cfg == nil {
-		return config.Defaults()
+	if r.Stable != nil {
+		if cs, err := r.Get[*ConfigState](ConfigStateID); err == nil {
+			return cs.Snapshot()
+		}
 	}
-	return r.Cfg
+	return config.Defaults()
 }
 
 // Begin sets the tick that the registry is used at.

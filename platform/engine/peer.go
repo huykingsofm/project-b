@@ -52,9 +52,21 @@ func newPeer(
 // at the next flush. The bouncer gives the messages it is asked to resend to it.
 func (c *peer) sendToUnsettled(m sim.Message) { c.data.unsettledMessages.AddUnsent(m) }
 
+// config is the configuration that this tick reads, from the copy of the configuration engine in
+// the stable view: the first read of the tick is the one the event log records.
+func (c *peer) config() config.ReadOnlySnapshot {
+	if st, err := c.view.Read(sim.ConfigStateID); err == nil {
+		if cs, ok := st.(*sim.ConfigState); ok {
+			return cs.Snapshot()
+		}
+	}
+	return config.Defaults()
+}
+
 // handleReturnedMessages takes what came back undelivered since the last tick and runs what each
 // says to do.
-func (c *peer) handleReturnedMessages(cfg config.ReadOnlySnapshot, tick uint64, rpl eventlog.Log) {
+func (c *peer) handleReturnedMessages(tick uint64, rpl eventlog.Log) {
+	cfg := c.config()
 	for _, r := range channels.Drain(c.in.Back) {
 		rpl.Append(c.me, tick, eventlog.Returned{Header: r.Message.Head(), Reason: r.Reason})
 		c.bounce.handle(cfg, r.Message, r.Reason)
@@ -121,9 +133,8 @@ func (c *peer) receivedActions[S sim.State](tick uint64, rpl eventlog.Log) []sim
 // again, with the number they have, the messages that went and have not been acked for a while. A
 // message that cannot be delivered is handled at once, and the event log records that it came
 // back, at the tick of the send.
-func (c *peer) flushUnsettledMessages(
-	cfg config.ReadOnlySnapshot, tick uint64, fresh []sim.Message, rpl eventlog.Log,
-) {
+func (c *peer) flushUnsettledMessages(tick uint64, fresh []sim.Message, rpl eventlog.Log) {
+	cfg := c.config()
 	c.releaseAckedMessages()
 	for _, m := range append(c.data.unsettledMessages.TakeUnsent(), fresh...) {
 		c.data.sentSeq++
@@ -139,7 +150,7 @@ func (c *peer) flushUnsettledMessages(
 			c.data.unsettledMessages.MarkSent(m, tick, cfg)
 		}
 	}
-	c.sendAgain(cfg, tick)
+	c.sendAgain(tick)
 }
 
 // releaseAckedMessages lets go of the messages that their receivers say they hold safe.
@@ -155,7 +166,8 @@ func (c *peer) releaseAckedMessages() {
 // sendAgain sends the messages that went and whose ack is late. One whose receiver is gone comes
 // back to this engine as a message that could not be delivered, and is let go of: the same way as
 // when the receiver is retired while the message waits in its queue.
-func (c *peer) sendAgain(cfg config.ReadOnlySnapshot, tick uint64) {
+func (c *peer) sendAgain(tick uint64) {
+	cfg := c.config()
 	var gone []int
 	for _, i := range c.data.unsettledMessages.Due(tick) {
 		m := c.data.unsettledMessages.Message(i)

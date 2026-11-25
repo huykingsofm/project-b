@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -45,6 +46,8 @@ type ClusterBuilder struct {
 	queueSize int
 	eventLog  eventlog.Log
 	emitter   engine.Emitter
+	// live follows the configuration engine for whoever is outside the engines
+	live *config.Live
 	// checkpoints writes the checkpoints the engines take; nil: they take none
 	checkpoints engine.CheckpointWriter
 
@@ -61,6 +64,7 @@ func NewBuilder() *ClusterBuilder {
 		queueSize: 256,
 		eventLog:  eventlog.NopLog{},
 		emitter:   engine.NopEmitter{},
+		live:      config.NewLive(),
 	}
 }
 
@@ -76,6 +80,16 @@ func (b *ClusterBuilder) Seed() uint64 { return b.seed }
 // WithQueueSize sets how many commands and messages the queue of an engine holds.
 func (b *ClusterBuilder) WithQueueSize(size int) *ClusterBuilder {
 	b.queueSize = size
+	return b
+}
+
+// WithLiveConfig sets the live configuration that the cluster keeps up to date as the configuration
+// engine publishes, for what is made before the cluster and needs the configuration (see
+// replay.NewLineCacheWriter). A nil one keeps the default, which no one else holds.
+func (b *ClusterBuilder) WithLiveConfig(live *config.Live) *ClusterBuilder {
+	if live != nil {
+		b.live = live
+	}
 	return b
 }
 
@@ -200,7 +214,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 	}
 	env := &engine.Env{
 		Router: engine.NewRouter(), EventLog: b.eventLog,
-		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
+		Stable: engine.NewStableStateStore(b.live), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
 	return b.assemble(env, engine.NoCheckpoints{})

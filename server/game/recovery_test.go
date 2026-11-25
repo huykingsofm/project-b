@@ -1,6 +1,7 @@
 package game_test
 
 import (
+	"github.com/huykingsofm/project-b/platform/config"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,20 +23,21 @@ func aWorldThatWroteItsFilesAndStopped(
 	t testing.TB, dir string, every map[string]string, idleTicks int,
 ) *game.Cluster {
 	t.Helper()
-	cache := replay.NewLineCacheWriter(dir)
+	live := config.NewLive()
+	cache := replay.NewLineCacheWriter(dir, live)
 	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8,
 		OnSafe: cache,
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
+		WithLiveConfig(live).
 		WithEventLog(file).
 		WithCheckpointWriter(files).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cache.ReadConfigWith(c.Config)
 	testkit.SetConfig(t, c, testkit.Sender{T: t}, every)
 	testkit.RunScenarioKeeping(t, c, testkit.Sender{T: t}, every)
 	testkit.Steps(t, c, idleTicks)

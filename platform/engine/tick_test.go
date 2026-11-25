@@ -41,8 +41,10 @@ func TestAStateThatDoesNotMoveItsTickStopsTheClusterAndNothingElseRuns(t *testin
 	if after.Tick() != 0 {
 		t.Fatal("an engine after the one that failed ran its tick")
 	}
-	if len(c.Env.EventLog.(*eventlog.MemLog).Records) != 0 {
-		t.Fatal("the engine that failed recorded something of the tick")
+	for _, r := range c.Env.EventLog.(*eventlog.MemLog).Records {
+		if r.Engine == 1 || r.Engine == 2 {
+			t.Fatalf("an engine that did not run recorded something of the tick: %+v", r)
+		}
 	}
 	m := sim.NewActionMessage[*toyState](2, onfail.Drop{})
 	if reason, ok := c.Env.Router.Deliver(m); ok || reason != sim.DeliveryFailureStopping {

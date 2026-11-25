@@ -110,10 +110,8 @@ func (c *Cluster) Reader() sim.StableReader {
 // Config is the configuration as the configuration engine last published it, or the defaults when
 // it published none.
 func (c *Cluster) Config() config.ReadOnlySnapshot {
-	if st, err := c.Reader().Read(sim.ConfigStateID); err == nil {
-		if cs, ok := st.(*sim.ConfigState); ok {
-			return cs.Snapshot()
-		}
+	if s, ok := c.Env.Stable.(*StableStateStore); ok {
+		return s.Live().Get()
 	}
 	return config.Defaults()
 }
