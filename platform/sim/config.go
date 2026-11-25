@@ -2,6 +2,7 @@ package sim
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 
@@ -125,27 +126,22 @@ type UpdateConfigCommand struct {
 	Unset []string
 }
 
-// NewUpdateConfigCommand makes the command that takes the configuration current has to the one the
-// document says: the text of the JSON value of each variable that it sets, by name; the others are
-// at their default. It says false, with no command, when no variable would change. It returns an
-// error, with no command, when the document is not a configuration: the names that no variable has
-// are left out, as config.Build does.
+// NewUpdateConfigCommand makes the command that takes the configuration current has to the wanted
+// one: the variables of wanted that have another value, set to their text, and the ones that went
+// back to their default, unset. It says false, with no command, when no variable would change.
 func NewUpdateConfigCommand(
-	current config.ReadOnlySnapshot, document map[string]string,
-) (UpdateConfigCommand, bool, error) {
-	wanted, err := config.Build(document)
-	if err != nil {
-		return UpdateConfigCommand{}, false, err
-	}
+	current config.ReadOnlySnapshot, wanted *config.Snapshot,
+) (UpdateConfigCommand, bool) {
+	texts := maps.Collect(wanted.Texts())
 	var c UpdateConfigCommand
 	for _, name := range wanted.Diff(current) {
-		if text, ok := document[name]; ok {
+		if text, ok := texts[name]; ok {
 			c.Set = append(c.Set, ConfigOverride{Name: name, Text: text})
 		} else {
 			c.Unset = append(c.Unset, name)
 		}
 	}
-	return c, len(c.Set)+len(c.Unset) > 0, nil
+	return c, len(c.Set)+len(c.Unset) > 0
 }
 
 func (UpdateConfigCommand) ID() CommandID { return UpdateConfigCommandID }

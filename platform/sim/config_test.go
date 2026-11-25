@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
@@ -106,25 +107,29 @@ func TestAStateWrittenAndReadBackHasTheSameHashAndTheSameConfiguration(t *testin
 	}
 }
 
-func TestACommandMakesTheChangeFromTheDocumentAndSaysNothingWhenNothingChanges(t *testing.T) {
+func wantedConfig(t *testing.T, document map[string]string) *config.Snapshot {
+	t.Helper()
+	snap, err := config.Build(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
+func TestACommandMakesTheChangeToTheWantedSnapshotAndSaysNothingWhenNothingChanges(t *testing.T) {
 	s := NewConfigState()
-	doc := map[string]string{MaxDepth.Name(): "7", "no.such.variable": "1"}
-	cmd, changed, err := NewUpdateConfigCommand(s.Snapshot(), doc)
-	if err != nil || !changed || !reflect.DeepEqual(cmd.Set, setMaxDepth("7")) ||
-		len(cmd.Unset) != 0 {
-		t.Fatalf("command %+v, changed %v, err %v", cmd, changed, err)
+	wanted := wantedConfig(t, map[string]string{MaxDepth.Name(): "7", "no.such.variable": "1"})
+	cmd, changed := NewUpdateConfigCommand(s.Snapshot(), wanted)
+	if !changed || !reflect.DeepEqual(cmd.Set, setMaxDepth("7")) || len(cmd.Unset) != 0 {
+		t.Fatalf("command %+v, changed %v", cmd, changed)
 	}
 	_ = s.ApplyConfigChange(cmd.Set, cmd.Unset)
-	if _, changed, err := NewUpdateConfigCommand(s.Snapshot(), doc); changed || err != nil {
-		t.Fatalf("the same document: changed %v, err %v", changed, err)
+	if _, changed := NewUpdateConfigCommand(s.Snapshot(), wanted); changed {
+		t.Fatal("the same snapshot made a command")
 	}
-	cmd, changed, err = NewUpdateConfigCommand(s.Snapshot(), map[string]string{})
-	if err != nil || !changed || !reflect.DeepEqual(cmd.Unset, []string{MaxDepth.Name()}) {
-		t.Fatalf("an empty document: %+v, changed %v, err %v", cmd, changed, err)
-	}
-	tooDeep := map[string]string{MaxDepth.Name(): "99"}
-	if _, _, err := NewUpdateConfigCommand(nil, tooDeep); err == nil {
-		t.Fatal("a document with a wrong value was taken")
+	cmd, changed = NewUpdateConfigCommand(s.Snapshot(), config.Defaults())
+	if !changed || !reflect.DeepEqual(cmd.Unset, []string{MaxDepth.Name()}) {
+		t.Fatalf("the defaults: %+v, changed %v", cmd, changed)
 	}
 }
 

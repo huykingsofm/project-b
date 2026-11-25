@@ -121,12 +121,7 @@ func (c *Cluster) syncConfig() {
 	if cur.Generation == 0 || cur.Generation == c.syncedConfigGeneration {
 		return
 	}
-	cmd, changed, err := sim.NewUpdateConfigCommand(c.syncedConfig, cur.Document)
-	if err != nil {
-		logging.Error("the configuration of the store is refused", "err", err)
-		c.syncedConfigGeneration = cur.Generation
-		return
-	}
+	cmd, changed := sim.NewUpdateConfigCommand(c.syncedConfig, cur.Snapshot)
 	if changed && !c.config.Send(cmd) {
 		return
 	}

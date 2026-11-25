@@ -1,17 +1,11 @@
 package config
 
-import (
-	"maps"
-	"sync/atomic"
-)
+import "sync/atomic"
 
-// Current is what a Store holds at one moment: the document that the configuration was made from,
-// the snapshot of it, and how many documents the store has taken.
+// Current is what a Store holds at one moment: the snapshot of the last document it took, which
+// holds the text of every variable that the document set, and how many documents the store has
+// taken.
 type Current struct {
-	// Document is the text of the JSON value by variable name that the snapshot was built from. It
-	// is a copy: the caller may keep it.
-	Document map[string]string
-	// Snapshot is the configuration that the document makes.
 	Snapshot *Snapshot
 	// Generation is how many documents were applied; 0 when none was.
 	Generation uint64
@@ -42,9 +36,7 @@ func (s *Store) Apply(document map[string]string) error {
 	if err != nil {
 		return err
 	}
-	s.cur.Store(&Current{
-		Document: maps.Clone(document), Snapshot: snap, Generation: s.cur.Load().Generation + 1,
-	})
+	s.cur.Store(&Current{Snapshot: snap, Generation: s.cur.Load().Generation + 1})
 	select {
 	case s.changed <- struct{}{}:
 	default: // one signal is waiting already, and it reads the latest
@@ -52,14 +44,12 @@ func (s *Store) Apply(document map[string]string) error {
 	return nil
 }
 
-// Current returns what the store holds now. The document is a copy. A nil store holds the defaults.
+// Current returns what the store holds now. A nil store holds the defaults.
 func (s *Store) Current() Current {
 	if s == nil {
 		return Current{Snapshot: Defaults()}
 	}
-	c := *s.cur.Load()
-	c.Document = maps.Clone(c.Document)
-	return c
+	return *s.cur.Load()
 }
 
 // Snapshot returns the configuration that the store holds now.

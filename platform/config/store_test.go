@@ -6,7 +6,7 @@ import (
 
 func TestAStoreThatTookNoDocumentHoldsTheDefaultsAtGenerationZero(t *testing.T) {
 	cur := NewStore().Current()
-	if cur.Generation != 0 || cur.Snapshot != Defaults() || len(cur.Document) != 0 {
+	if cur.Generation != 0 || cur.Snapshot != Defaults() {
 		t.Fatalf("current %+v", cur)
 	}
 	var none *Store
@@ -36,9 +36,5 @@ func TestADocumentIsTakenWholeAndSignalsOnceWhateverTheNumberOfApplys(t *testing
 	case <-s.Changed():
 		t.Fatal("two Applys left two signals: a reader reads the latest anyway")
 	default:
-	}
-	doc["config.test.unused"] = "changed by the caller"
-	if s.Current().Document["config.test.unused"] != "1" {
-		t.Fatal("the store shares its document with the caller")
 	}
 }

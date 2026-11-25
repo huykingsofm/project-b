@@ -16,7 +16,7 @@
 | Step | What happens |
 |---|---|
 | 1 | whoever has the configuration of the world outside the game (a file, a service) gives it to the `config.Store` of the cluster: `store.Apply(document)`, the text of the JSON value of each variable that is not at its default, by name. A wrong value is refused there and changes nothing |
-| 2 | the cluster sends it: at the start of every `Step`, and in `Run` when the store signals (`Changed()`) or at every period, it makes the command from the document of the store and what it sent last, `sim.NewUpdateConfigCommand`, and `ConfigEngine().Send(cmd)`. No command when no variable would change; when the engine cannot take it, the next call sends it again. A store that took no document leaves the engine as it is |
+| 2 | the cluster sends it: at the start of every `Step`, and in `Run` when the store signals (`Changed()`) or at every period, it makes the command from the snapshot of the store and what it sent last, `sim.NewUpdateConfigCommand(current, wanted)`, and `ConfigEngine().Send(cmd)`. No command when no variable would change; when the engine cannot take it, the next call sends it again. A store that took no document leaves the engine as it is |
 | 3 | `UpdateConfigCommand` translates to `UpdateConfigAction`, which calls `ApplyConfigChange`; the command is in the log of the configuration engine |
 | 4 | the engine publishes its state at the end of the tick; the other engines read the new copy from their next tick |
 | after a recovery | the engine is made from its checkpoint and its log like any other, so its configuration goes on; the cluster starts from what the engine holds, and the first call sends the difference with the store |
