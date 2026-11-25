@@ -186,6 +186,7 @@ func (e *Engine[S]) Step() error {
 	e.stateRegistry.Begin(e.tick)
 	e.peer.view.begin(e.tick)
 	cfg := e.tickConfig()
+	e.stateRegistry.Cfg = cfg
 	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand}
 	e.peer.handleReturnedMessages(cfg, e.tick, e.eventLog)
 
@@ -359,7 +360,12 @@ func (e *Engine[S]) tickConfig() config.ReadOnlySnapshot {
 	if cs, ok := any(e.st).(*sim.ConfigState); ok {
 		return cs.Snapshot()
 	}
-	return sim.ConfigOf(e.peer.view)
+	if st, err := e.peer.view.Read(sim.ConfigStateID); err == nil {
+		if cs, ok := st.(*sim.ConfigState); ok {
+			return cs.Snapshot()
+		}
+	}
+	return config.Defaults()
 }
 
 // periodOffsetOf is where an engine starts the count of a period: the hash of its ID. The IDs of

@@ -106,20 +106,22 @@ func WriteLineCache(dir string, c LineCache) error {
 // and is called by one goroutine at a time, so it needs no lock.
 type LineCacheWriter struct {
 	dir     string
-	reader  atomic.Pointer[sim.StableReader]
+	config  atomic.Pointer[func() config.ReadOnlySnapshot]
 	written map[sim.StateID]uint64
 }
 
 // NewLineCacheWriter makes the writer of the cache of the cluster in dir. It uses the default of
-// the period until ReadConfigFrom says where the configuration is.
+// the period until ReadConfigWith says where the configuration is.
 func NewLineCacheWriter(dir string) *LineCacheWriter {
 	return &LineCacheWriter{dir: dir}
 }
 
-// ReadConfigFrom says the reader of the cluster (cluster.Reader()), whose copy of the
-// configuration engine gives the period. The writer is made before the cluster, as the observer of
-// its log, so this is called once the cluster is built; it can be called from any goroutine.
-func (w *LineCacheWriter) ReadConfigFrom(r sim.StableReader) { w.reader.Store(&r) }
+// ReadConfigWith says how to get the configuration of the cluster (cluster.Config), which gives
+// the period. The writer is made before the cluster, as the observer of its log, so this is called
+// once the cluster is built; it can be called from any goroutine.
+func (w *LineCacheWriter) ReadConfigWith(get func() config.ReadOnlySnapshot) {
+	w.config.Store(&get)
+}
 
 // SafeChanged writes the cache when it is due, or when final. A cache that cannot be written is
 // logged, and the next one is tried when it is due: a recovery without it reads more, and nothing
@@ -139,11 +141,11 @@ func (w *LineCacheWriter) SafeChanged(safe map[sim.StateID]uint64, final bool) {
 
 // due says whether an engine is a period past what was written.
 func (w *LineCacheWriter) due(safe map[sim.StateID]uint64) bool {
-	var r sim.StableReader
-	if p := w.reader.Load(); p != nil {
-		r = *p
+	var snapshot config.ReadOnlySnapshot
+	if get := w.config.Load(); get != nil {
+		snapshot = (*get)()
 	}
-	every := uint64(lineCacheEvery.Get(sim.ConfigOf(r)))
+	every := uint64(lineCacheEvery.Get(snapshot))
 	for id, tick := range safe {
 		if tick >= w.written[id]+every {
 			return true

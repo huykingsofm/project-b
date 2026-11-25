@@ -35,7 +35,7 @@ func aWorldThatWroteItsFilesAndStopped(
 	if err != nil {
 		t.Fatal(err)
 	}
-	cache.ReadConfigFrom(c.Reader())
+	cache.ReadConfigWith(c.Config)
 	testkit.SetConfig(t, c, testkit.Sender{T: t}, every)
 	testkit.RunScenarioKeeping(t, c, testkit.Sender{T: t}, every)
 	testkit.Steps(t, c, idleTicks)

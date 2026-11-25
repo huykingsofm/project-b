@@ -309,16 +309,6 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 	}
 }
 
-// fixedConfig is a StableReader that holds a configuration engine with the overrides given.
-type fixedConfig struct{ state *sim.ConfigState }
-
-func (f fixedConfig) Read(id sim.StateID) (sim.State, error) {
-	if id != sim.ConfigStateID {
-		return nil, sim.ErrStateNotFound
-	}
-	return f.state, nil
-}
-
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
 	state := sim.NewConfigState()
@@ -329,7 +319,7 @@ func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testi
 		t.Fatal(err)
 	}
 	w := NewLineCacheWriter(dir)
-	w.ReadConfigFrom(fixedConfig{state})
+	w.ReadConfigWith(state.Snapshot)
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {

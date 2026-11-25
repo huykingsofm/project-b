@@ -3,7 +3,6 @@ package sim
 import (
 	"math"
 
-	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/shared/errs"
 )
 
@@ -30,18 +29,4 @@ func registerConfig(c *Codecs) error {
 		c.RegisterCommand(decodeUpdateConfigCommand),
 		c.RegisterAction(decodeUpdateConfigAction),
 	)
-}
-
-// ConfigOf returns the configuration that the state of the configuration engine, read from a
-// StableReader, holds, or the defaults when no engine published one: the configuration engine has
-// not run yet, or the reader does not find it.
-func ConfigOf(r StableReader) config.ReadOnlySnapshot {
-	if r != nil {
-		if st, err := r.Read(ConfigStateID); err == nil {
-			if cs, ok := st.(*ConfigState); ok {
-				return cs.Snapshot()
-			}
-		}
-	}
-	return config.Defaults()
 }
