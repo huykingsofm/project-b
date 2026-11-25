@@ -7,7 +7,7 @@ import "github.com/huykingsofm/project-b/shared/codec/binary"
 // CommandID names a kind of command, by a number: the game keeps the register. A command returns
 // its own with its method ID(). A number is never changed or reused, because the event log
 // writes it.
-type CommandID uint16
+type CommandID uint32
 
 // BaseCommand is what the commands of every state type have in common: an ID, and how to write the
 // fields of the command as bytes, for the event log. Reading them back is a function of each

@@ -35,7 +35,7 @@
 | What | Number |
 |---|---|
 | state type | 255 |
-| `UpdateConfigCommandID` | 65535: the last of the register of commands (16 bits) |
+| `UpdateConfigCommandID` | 4294967295: the last of the register of commands (32 bits) |
 | `UpdateConfigActionID` | 4294967295: the last of the register of actions (32 bits) |
 
 The numbers of the game count up from 1, so they never meet these.

@@ -174,8 +174,11 @@ func (c *Codecs) DecodeCommand(
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	if code > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: command %d", ErrUnknownCode, code)
+	}
 	decode, ok := c.Commands.Lookup(CommandID(code))
-	if !ok || code > 0xffff {
+	if !ok {
 		return nil, fmt.Errorf("%w: command %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)

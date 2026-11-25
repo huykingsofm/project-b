@@ -10,6 +10,6 @@ import (
 // as its state is the last of the types, so the game's own numbers, which count up from 1, never
 // meet them.
 const (
-	UpdateConfigCommandID sim.CommandID = math.MaxUint16
+	UpdateConfigCommandID sim.CommandID = math.MaxUint32
 	UpdateConfigActionID  sim.ActionID  = math.MaxUint32
 )
