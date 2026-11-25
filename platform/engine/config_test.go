@@ -35,11 +35,11 @@ func TestAnEngineReadsTheConfigurationFromTheCopyOfTheConfigurationEngineAtEvery
 			t.Errorf("at tick %d the engine read the copy of tick %d", tick, reads[tick])
 		}
 	}
-	if got := engines[0].tickConfig().Version(); got != 1 {
-		t.Fatalf("the engine reads version %d, want 1", got)
+	if got := checkpointEvery.Get(engines[0].tickConfig()); got != 5 {
+		t.Fatalf("the engine reads %d ticks between checkpoints, want 5", got)
 	}
-	if got := c.Config().Version(); got != 1 {
-		t.Fatalf("the cluster says version %d, want 1", got)
+	if got := checkpointEvery.Get(c.Config()); got != 5 {
+		t.Fatalf("the cluster says %d ticks between checkpoints, want 5", got)
 	}
 }
 

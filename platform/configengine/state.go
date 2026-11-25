@@ -20,11 +20,10 @@ type Override struct {
 }
 
 // State is the state of the configuration engine: the overrides of the variables over their
-// defaults, the version they make, and the snapshot of them. The snapshot never changes, so a copy
+// defaults, and the snapshot of them. The snapshot never changes, so a copy
 // of the state shares it with the state it was made from.
 type State struct {
 	tick      uint64
-	version   uint64
 	overrides stablemap.Map[string, string]
 	snap      *config.Snapshot
 }
@@ -32,7 +31,7 @@ type State struct {
 var _ sim.State = (*State)(nil)
 var _ sim.ConfigReader = (*State)(nil)
 
-// NewState makes the state of a configuration that has every variable at its default, at version 0.
+// NewState makes the state of a configuration that has every variable at its default, .
 func NewState() *State { return &State{snap: config.Defaults()} }
 
 // ID is the ID of the state: the configuration engine of a cluster is one.
@@ -51,7 +50,7 @@ func (s *State) NextTick() { s.tick++ }
 // shared, because it never changes.
 func (s *State) Clone() sim.State {
 	return &State{
-		tick: s.tick, version: s.version, overrides: s.overrides.Clone(), snap: s.snap,
+		tick: s.tick, overrides: s.overrides.Clone(), snap: s.snap,
 	}
 }
 
@@ -63,7 +62,7 @@ func (s *State) Snapshot() config.ReadOnlySnapshot { return s.snap }
 
 // ApplyConfigChange sets the variables of set to the text of their value, and puts the variables
 // of unset back to their default. When no variable ends with another value than it had, nothing
-// changes and the version stays; otherwise the version is one more. It returns an error, and
+// changes; otherwise the snapshot is a new one. It returns an error, and
 // changes nothing, when a value is wrong.
 func (s *State) ApplyConfigChange(set []Override, unset []string) error {
 	next := s.overrides.Clone()
@@ -73,14 +72,14 @@ func (s *State) ApplyConfigChange(set []Override, unset []string) error {
 	for _, name := range unset {
 		next.Delete(name)
 	}
-	snap, _, err := config.Build(s.version+1, overridesOf(&next))
+	snap, _, err := config.Build(overridesOf(&next))
 	if err != nil {
 		return fmt.Errorf("the configuration is refused: %w", err)
 	}
 	if len(snap.Diff(s.snap)) == 0 {
 		return nil
 	}
-	s.overrides, s.version, s.snap = next, s.version+1, snap
+	s.overrides, s.snap = next, snap
 	return nil
 }
 
@@ -89,10 +88,9 @@ func overridesOf(m *stablemap.Map[string, string]) map[string]string {
 	return maps.Collect(m.All())
 }
 
-// Encode writes the state: its tick, its version and its overrides.
+// Encode writes the state: its tick and its overrides.
 func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(s.tick)
-	w.Uvarint(s.version)
 	w.Uvarint(uint64(s.overrides.Len()))
 	for name, text := range s.overrides.All() {
 		w.String(name)
@@ -105,7 +103,6 @@ func (s *State) Encode(w *binary.Writer) error {
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
 	h.U64(s.tick)
-	h.U64(s.version)
 	for name, text := range s.overrides.All() {
 		h.String(name)
 		h.String(text)
@@ -116,7 +113,7 @@ func (s *State) Hash() uint64 {
 // DecodeState reads what Encode wrote, and makes the snapshot of the overrides again. It returns an
 // error for bytes that are cut, or overrides that no snapshot can be made of.
 func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
-	s := &State{tick: r.Uvarint(), version: r.Uvarint()}
+	s := &State{tick: r.Uvarint()}
 	n := r.Uvarint()
 	if err := r.Err(); err != nil {
 		return nil, err
@@ -131,7 +128,7 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 		}
 		s.overrides.Set(name, text)
 	}
-	snap, _, err := config.Build(s.version, overridesOf(&s.overrides))
+	snap, _, err := config.Build(overridesOf(&s.overrides))
 	if err != nil {
 		return nil, fmt.Errorf("the overrides of the configuration: %w", err)
 	}

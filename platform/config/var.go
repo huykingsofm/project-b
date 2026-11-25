@@ -119,7 +119,7 @@ func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
 // bad document never replaces a good configuration. A name that is not declared is returned in
 // unknown and otherwise ignored.
 func (r *registry) build(
-	version uint64, overrides map[string]string,
+	overrides map[string]string,
 ) (snap *Snapshot, unknown []string, err error) {
 	r.mu.Lock()
 	r.frozen = true
@@ -154,5 +154,5 @@ func (r *registry) build(
 	if len(errs) > 0 {
 		return nil, unknown, errors.Join(errs...)
 	}
-	return &Snapshot{version: version, vals: vals}, unknown, nil
+	return &Snapshot{vals: vals}, unknown, nil
 }

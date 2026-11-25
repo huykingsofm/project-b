@@ -317,7 +317,7 @@ func (f fixedConfig) Config() config.ReadOnlySnapshot { return f.snapshot }
 
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	snapshot, _, err := config.Build(1, map[string]string{"replay.line_cache_every_ticks": "10"})
+	snapshot, _, err := config.Build(map[string]string{"replay.line_cache_every_ticks": "10"})
 	if err != nil {
 		t.Fatal(err)
 	}

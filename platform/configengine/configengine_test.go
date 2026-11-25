@@ -12,36 +12,37 @@ func setMaxDepth(text string) []Override {
 	return []Override{{Name: sim.MaxDepth.Name(), Text: text}}
 }
 
-func TestANewStateHasEveryVariableAtItsDefaultAtVersionZero(t *testing.T) {
+func TestANewStateHasEveryVariableAtItsDefault(t *testing.T) {
 	s := NewState()
 	snap := s.Snapshot()
-	if snap.Version() != 0 || sim.MaxDepth.Get(snap) != 4 {
-		t.Fatalf("version %d, max depth %d", snap.Version(), sim.MaxDepth.Get(snap))
+	if sim.MaxDepth.Get(snap) != 4 {
+		t.Fatalf("max depth %d", sim.MaxDepth.Get(snap))
 	}
 	if s.ID() != sim.ConfigStateID || s.Type() != sim.ConfigStateType {
 		t.Fatalf("the state is %d of the type %d", s.ID(), s.Type())
 	}
 }
 
-func TestAChangeSetsAVariableAndAnUnsetPutsItBackAndEachMakesAVersion(t *testing.T) {
+func TestAChangeSetsAVariableAndAnUnsetPutsItBack(t *testing.T) {
 	s := NewState()
 	if err := s.ApplyConfigChange(setMaxDepth("7"), nil); err != nil {
 		t.Fatal(err)
 	}
-	if snap := s.Snapshot(); snap.Version() != 1 || sim.MaxDepth.Get(snap) != 7 {
-		t.Fatalf("after a set: version %d, max depth %d", snap.Version(), sim.MaxDepth.Get(snap))
+	if snap := s.Snapshot(); sim.MaxDepth.Get(snap) != 7 {
+		t.Fatalf("after a set: max depth %d", sim.MaxDepth.Get(snap))
 	}
 	if err := s.ApplyConfigChange(nil, []string{sim.MaxDepth.Name()}); err != nil {
 		t.Fatal(err)
 	}
-	if snap := s.Snapshot(); snap.Version() != 2 || sim.MaxDepth.Get(snap) != 4 {
-		t.Fatalf("after an unset: version %d, max depth %d", snap.Version(), sim.MaxDepth.Get(snap))
+	if snap := s.Snapshot(); sim.MaxDepth.Get(snap) != 4 {
+		t.Fatalf("after an unset: max depth %d", sim.MaxDepth.Get(snap))
 	}
 }
 
-func TestAChangeThatLeavesEveryVariableAsItWasMakesNoVersion(t *testing.T) {
+func TestAChangeThatLeavesEveryVariableAsItWasMakesNoNewSnapshot(t *testing.T) {
 	s := NewState()
 	_ = s.ApplyConfigChange(setMaxDepth("7"), nil)
+	before := s.Snapshot()
 	for name, c := range map[string]struct {
 		set   []Override
 		unset []string
@@ -50,8 +51,8 @@ func TestAChangeThatLeavesEveryVariableAsItWasMakesNoVersion(t *testing.T) {
 		"a variable at default": {unset: []string{sim.MaxDepth.Name() + "-not"}},
 		"a name that is none":   {set: []Override{{Name: "no.such.variable", Text: "1"}}},
 	} {
-		if err := s.ApplyConfigChange(c.set, c.unset); err != nil || s.Snapshot().Version() != 1 {
-			t.Errorf("%s: version %d (%v), want 1", name, s.Snapshot().Version(), err)
+		if err := s.ApplyConfigChange(c.set, c.unset); err != nil || s.Snapshot() != before {
+			t.Errorf("%s: a new snapshot was made (%v)", name, err)
 		}
 	}
 }
@@ -75,7 +76,7 @@ func TestACloneIsNotChangedByTheStateItCameFromAndTheOtherWayRound(t *testing.T)
 	_ = s.ApplyConfigChange(setMaxDepth("7"), nil)
 	clone := s.Clone().(*State)
 	_ = s.ApplyConfigChange(setMaxDepth("9"), nil)
-	if sim.MaxDepth.Get(clone.Snapshot()) != 7 || clone.Snapshot().Version() != 1 {
+	if sim.MaxDepth.Get(clone.Snapshot()) != 7 {
 		t.Fatal("the clone followed the state")
 	}
 	_ = clone.ApplyConfigChange(setMaxDepth("3"), nil)
@@ -96,8 +97,7 @@ func TestAStateWrittenAndReadBackHasTheSameHashAndTheSameConfiguration(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Hash() != s.Hash() || got.Tick() != 1 || sim.MaxDepth.Get(got.Snapshot()) != 7 ||
-		got.Snapshot().Version() != 1 {
+	if got.Hash() != s.Hash() || got.Tick() != 1 || sim.MaxDepth.Get(got.Snapshot()) != 7 {
 		t.Fatal("the state that was read back differs")
 	}
 	for n := range len(w.B) {

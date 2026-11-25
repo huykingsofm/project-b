@@ -17,7 +17,7 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 	name := declare[string](r, "name", "x", nil)
 	keys := declare[[]string](r, "keys", nil, nil)
 
-	d, _, err := r.build(0, nil)
+	d, _, err := r.build(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 		t.Fatal("a variable without an override is not at its default")
 	}
 
-	s, unknown, err := r.build(1, map[string]string{
+	s, unknown, err := r.build(map[string]string{
 		"count": "7", "ratio": "0.25", "on": "true", "name": `"abc"`, "keys": `["a","b"]`,
 	})
 	if err != nil || len(unknown) != 0 {
@@ -43,9 +43,6 @@ func TestVariablesOfAnyKindAreParsedFromTheTextOfAJSONValue(t *testing.T) {
 			keys.Get(s),
 		)
 	}
-	if s.Version() != 1 {
-		t.Fatalf("version = %d", s.Version())
-	}
 }
 
 func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
@@ -55,7 +52,7 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 	declare(r, "other", 1, []Option[int]{Min(0)})
 
 	for _, text := range []string{`"seven"`, "11", "3 4", "", "2.5"} {
-		snap, _, err := r.build(1, map[string]string{"count": text, "other": "5"})
+		snap, _, err := r.build(map[string]string{"count": text, "other": "5"})
 		if err == nil || snap != nil || !strings.Contains(err.Error(), "count") {
 			t.Errorf(
 				"override %q: snapshot %v, error %v; want no snapshot and an error naming count",
@@ -66,7 +63,7 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 		}
 	}
 
-	_, _, err := r.build(1, map[string]string{"count": "99", "name": "5", "other": "-1"})
+	_, _, err := r.build(map[string]string{"count": "99", "name": "5", "other": "-1"})
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -80,7 +77,7 @@ func TestABadOverrideRefusesTheWholeDocumentAndNamesEachOne(t *testing.T) {
 func TestUnknownNamesAreReturnedInOrderAndIgnored(t *testing.T) {
 	r := newRegistry()
 	count := declare(r, "count", 3, []Option[int](nil))
-	s, unknown, err := r.build(1, map[string]string{"zeta": "1", "count": "4", "alpha": "2"})
+	s, unknown, err := r.build(map[string]string{"zeta": "1", "count": "4", "alpha": "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +94,7 @@ func TestAnOptionCanReplaceHowTheTextIsRead(t *testing.T) {
 		"x",
 		[]Option[string]{Parse(func(text string) (string, error) { return text, nil })},
 	)
-	s, _, err := r.build(1, map[string]string{"name": "plain text"})
+	s, _, err := r.build(map[string]string{"name": "plain text"})
 	if err != nil || name.Get(s) != "plain text" {
 		t.Fatalf("name = %q, %v", name.Get(s), err)
 	}
@@ -119,7 +116,7 @@ func TestADefaultThatBreaksALimitAndALateDeclarationPanic(t *testing.T) {
 	)
 	declare(r, "b", 1, []Option[int](nil))
 	mustPanic("a name declared twice", func() { declare(r, "b", 1, []Option[int](nil)) })
-	r.build(0, nil)
+	r.build(nil)
 	mustPanic(
 		"a declaration after the first snapshot", func() { declare(r, "c", 1, []Option[int](nil)) },
 	)

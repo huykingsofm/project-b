@@ -25,7 +25,7 @@ type UpdateConfigCommand struct {
 func NewUpdateConfigCommand(
 	current config.ReadOnlySnapshot, document map[string]string,
 ) (UpdateConfigCommand, bool, error) {
-	wanted, _, err := config.Build(0, document)
+	wanted, _, err := config.Build(document)
 	if err != nil {
 		return UpdateConfigCommand{}, false, err
 	}

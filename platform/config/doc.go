@@ -8,5 +8,5 @@
 // parsing and its own checks. A value comes in as the text of its JSON, as it is stored, and is
 // parsed into the exact type of the variable, so a value of the wrong type or outside its limits
 // is refused whole. An engine reads the snapshot once at the start of its tick, from the state
-// of the configuration engine, so a whole tick sees one version.
+// of the configuration engine, so a whole tick sees one configuration.
 package config
