@@ -8,7 +8,7 @@ import (
 )
 
 // LateConfig is the configuration of a cluster that is built after what asks for it, such as the
-// observer of a replay log, which the builder is given first. It is the defaults until Set says
+// observer of an event log, which the builder is given first. It is the defaults until Set says
 // which cluster it is.
 type LateConfig struct{ cluster atomic.Pointer[game.Cluster] }
 

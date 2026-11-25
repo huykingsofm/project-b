@@ -100,7 +100,7 @@ func (c *Cluster) ConfigEngine() *Engine[*configengine.State] { return c.config 
 
 // Reader reads the latest copy that each engine published, with no lock and without the log: for
 // whoever is outside the engines and asks (a gateway, a config service). An engine reads through
-// its own view, which the replay log records. It finds nothing in the environment of a replay.
+// its own view, which the event log records. It finds nothing in the environment of a replay.
 func (c *Cluster) Reader() sim.StableReader {
 	if r, ok := c.Env.Stable.(sim.StableReader); ok {
 		return r

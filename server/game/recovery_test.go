@@ -138,7 +138,7 @@ func TestARecoveryWhoseCheckpointIsOfAnotherTickIsAnErrorAndNotADivergence(t *te
 }
 
 // What a recovery costs of a world that ran the scenario and then 3,000 ticks more, and took a
-// checkpoint every 500 ticks (see docs/benchmark/recovery.md).
+// checkpoint every 500 ticks (see docs/benchmark/replay.md).
 var everyFiveHundredTicks = map[string]string{"checkpoint.every_ticks": "500"}
 
 const idleTicksOfTheBenchmarks = 3000
