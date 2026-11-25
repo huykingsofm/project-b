@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
@@ -78,7 +77,7 @@ var _ Stepper = (*Engine[sim.State])(nil)
 // cluster has.
 type Cluster struct {
 	Env     *Env
-	config  *Engine[*configengine.State]
+	config  *Engine[*sim.ConfigState]
 	engines []Stepper
 }
 
@@ -87,7 +86,7 @@ type Cluster struct {
 // returns an error when that checkpoint cannot make the engine. The environment's codecs must know
 // the configuration engine (see NewCodecs).
 func NewCluster(env *Env, seed uint64, checkpoints CheckpointSource) (*Cluster, error) {
-	ce, err := NewOrRestore(configengine.NewState(), env, seed, checkpoints)
+	ce, err := NewOrRestore(sim.NewConfigState(), env, seed, checkpoints)
 	if err != nil {
 		return nil, fmt.Errorf("the configuration engine: %w", err)
 	}
@@ -96,7 +95,7 @@ func NewCluster(env *Env, seed uint64, checkpoints CheckpointSource) (*Cluster, 
 
 // ConfigEngine returns the configuration engine of the cluster: the one to send an
 // UpdateConfigCommand to.
-func (c *Cluster) ConfigEngine() *Engine[*configengine.State] { return c.config }
+func (c *Cluster) ConfigEngine() *Engine[*sim.ConfigState] { return c.config }
 
 // Reader reads the latest copy that each engine published, with no lock and without the log: for
 // whoever is outside the engines and asks (a gateway, a config service). An engine reads through

@@ -39,15 +39,21 @@ type Codecs struct {
 	messages map[StateType]stateMessageDecoder
 }
 
-// NewCodecs makes empty codecs.
+// NewCodecs makes codecs that know what every cluster has, the configuration engine, and nothing
+// else: the game registers its own states, actions and commands in them.
 func NewCodecs() *Codecs {
-	return &Codecs{
+	c := &Codecs{
 		Actions:  codec.New[ActionID, BaseAction, ActionDecoder](BaseAction.ID),
 		Commands: codec.New[CommandID, BaseCommand, CommandDecoder](BaseCommand.ID),
 		States:   codec.New[StateType, State, StateDecoder](State.Type),
 		OnFails:  codec.New[OnFailID, OnFail, OnFailDecoder](OnFail.ID),
 		messages: map[StateType]stateMessageDecoder{},
 	}
+	// the registers are empty, so this fails only when the numbers of the configuration meet others
+	if err := registerConfig(c); err != nil {
+		panic(fmt.Sprintf("the codecs of the configuration cannot be registered: %v", err))
+	}
+	return c
 }
 
 // RegisterState registers a type of state: decode reads it, and the type of state and its Go type

@@ -143,7 +143,6 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/clone` | the contract for copying: a value, or a type with `Clone`; the containers use it ([R29](../plan/rule/r29-clone-or-value.md)) |
 | `shared/testing/aliasing` | for tests: finds memory that two values share, and checks that a type is a value or has `Clone` |
 | `platform/config` | `Var[T]` with defaults and limits; an immutable snapshot, read as a `ReadOnlySnapshot`; a whole set is rejected when one value is wrong |
-| `platform/configengine` | the engine that owns the configuration ([configengine](configengine.md)) |
 
 ## Temporary values
 

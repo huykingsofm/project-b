@@ -356,8 +356,8 @@ func (e *Engine[S]) encodeOwnData(w *binary.Writer) error {
 // copy that its view keeps for the tick, so the event log says which copy each tick read. It is
 // the defaults when no copy was published.
 func (e *Engine[S]) tickConfig() config.ReadOnlySnapshot {
-	if r, ok := any(e.st).(sim.ConfigReader); ok {
-		return r.Snapshot()
+	if cs, ok := any(e.st).(*sim.ConfigState); ok {
+		return cs.Snapshot()
 	}
 	return sim.ConfigOf(e.peer.view)
 }

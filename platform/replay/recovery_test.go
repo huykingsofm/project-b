@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
@@ -311,7 +310,7 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 }
 
 // fixedConfig is a StableReader that holds a configuration engine with the overrides given.
-type fixedConfig struct{ state *configengine.State }
+type fixedConfig struct{ state *sim.ConfigState }
 
 func (f fixedConfig) Read(id sim.StateID) (sim.State, error) {
 	if id != sim.ConfigStateID {
@@ -322,9 +321,9 @@ func (f fixedConfig) Read(id sim.StateID) (sim.State, error) {
 
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	state := configengine.NewState()
+	state := sim.NewConfigState()
 	err := state.ApplyConfigChange(
-		[]configengine.Override{{Name: "replay.line_cache_every_ticks", Text: "10"}}, nil,
+		[]sim.ConfigOverride{{Name: "replay.line_cache_every_ticks", Text: "10"}}, nil,
 	)
 	if err != nil {
 		t.Fatal(err)

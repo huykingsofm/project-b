@@ -33,8 +33,7 @@ shared/                             libraries of our own, each a package; import
   codec/                            Registry: kinds told apart by a number, each with the function that reads it
 platform/                           what any game that runs in ticks is made of; imports nothing of the game
   config/                           Var[T] with defaults and limits, values parsed from JSON text, an immutable Snapshot
-  configengine/                     the engine that owns the configuration: its state, the command that changes it
-  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs
+  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs, and the state of the configuration engine
     onfail/                         the kinds of OnFail (retry, redirect, compensate, notify, escalate, drop)
   engine/                           Engine[S] that runs any state, the router, the store of published states, the cluster
   eventlog/                         the event log of an engine, in memory and in files; where each engine's directory is

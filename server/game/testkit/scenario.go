@@ -4,7 +4,6 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game"
@@ -57,7 +56,7 @@ func ScenarioConfigDocument(kept map[string]string) map[string]string {
 // the command is taken.
 func SetConfig(t testing.TB, c *game.Cluster, s Sender, document map[string]string) {
 	t.Helper()
-	cmd, changed, err := configengine.NewUpdateConfigCommand(c.Config(), document)
+	cmd, changed, err := sim.NewUpdateConfigCommand(c.Config(), document)
 	if err != nil {
 		t.Fatal(err)
 	}

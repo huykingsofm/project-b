@@ -1,21 +1,21 @@
 # Configuration engine
 
-`platform/configengine`. The engine that owns the configuration. Every cluster has one (`engine.NewCluster` makes it, first, and `Cluster.ConfigEngine()` returns it); its state is of the last state type (`sim.ConfigStateType`, 255) and its ID is `sim.ConfigStateID`. Where the variables are declared and parsed: `platform/config`.
+`platform/sim` (`config.go`, `config_state.go`, `config_update.go`). The engine that owns the configuration. Every cluster has one (`engine.NewCluster` makes it, first, and `Cluster.ConfigEngine()` returns it); its state is of the last state type (`sim.ConfigStateType`, 255) and its ID is `sim.ConfigStateID`. Where the variables are declared and parsed: `platform/config`.
 
 ## What it holds
 
 | Part | Value |
 |---|---|
-| state | `configengine.State`: the tick, the overrides (variable name and the text of its JSON value) and the snapshot made from them |
+| state | `sim.ConfigState`: the tick, the overrides (variable name and the text of its JSON value) and the snapshot made from them |
 | read | `State.Snapshot()` is the only way out: a `config.ReadOnlySnapshot`, which a `Var[T].Get` resolves; the snapshot never changes, so a copy of the state shares it |
 | change | `State.ApplyConfigChange(set, unset)`: the snapshot is a new one when a variable ends with another value, stays when none does, and a wrong value refuses the whole change |
-| codecs | `configengine.Register(c)`; `engine.NewCodecs()` makes codecs that have it |
+| codecs | `sim.NewCodecs()` makes codecs that have it, as every cluster needs them |
 
 ## Changing it
 
 | Step | What happens |
 |---|---|
-| 1 | a config service makes the command from the document it has: `configengine.NewUpdateConfigCommand(current, document)`; `current` is `cluster.Config()`; no command (`false`) when no variable would change, an error when a value is wrong |
+| 1 | a config service makes the command from the document it has: `sim.NewUpdateConfigCommand(current, document)`; `current` is `cluster.Config()`; no command (`false`) when no variable would change, an error when a value is wrong |
 | 2 | `cluster.ConfigEngine().Send(cmd)`: `UpdateConfigCommand` translates to `UpdateConfigAction`, which calls `ApplyConfigChange` |
 | 3 | the engine publishes its state at the end of the tick; the other engines read the new copy from their next tick |
 | after a recovery | the engine is made from its checkpoint and its log like any other, so its overrides go on; the service sends the difference between its document and `cluster.Config()` |

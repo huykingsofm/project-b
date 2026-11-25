@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -145,7 +144,7 @@ func main() {
 		fail("the cluster could not be built", err)
 	}
 
-	updateConfig, changed, err := configengine.NewUpdateConfigCommand(
+	updateConfig, changed, err := sim.NewUpdateConfigCommand(
 		cluster.Config(), map[string]string{"checkpoint.every_ticks": "10"},
 	)
 	if err != nil {

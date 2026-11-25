@@ -3,7 +3,6 @@ package engine
 import (
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -172,7 +171,7 @@ func newCluster(t testing.TB, env *Env) *Cluster {
 // document, which is taken at the next tick of the cluster.
 func setConfig(t testing.TB, c *Cluster, document map[string]string) {
 	t.Helper()
-	cmd, changed, err := configengine.NewUpdateConfigCommand(c.Config(), document)
+	cmd, changed, err := sim.NewUpdateConfigCommand(c.Config(), document)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,10 +181,7 @@ func setConfig(t testing.TB, c *Cluster, document map[string]string) {
 }
 
 func toyCodecs() (*sim.Codecs, error) {
-	c, err := NewCodecs()
-	if err != nil {
-		return nil, err
-	}
+	c := sim.NewCodecs()
 	return c, errs.Join(
 		c.RegisterState(decodeToyState),
 		c.RegisterAction(decodeToyAction),
