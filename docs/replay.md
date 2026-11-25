@@ -15,7 +15,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `replay.Run(builder, plan)` | runs the engines again on the plan and returns the `Result`; changes nothing on the disk |
 | `replay.Recover(dir, builder)` | `MakePlan`, `Cut` and `Run`; an engine that did not do what its log says is a `*DivergenceError`, returned with the result |
 | `eventlog.NewFileLogs(dir, codecs)`, `eventlog.MemoryLogs`, `eventlog.MemLog` | where the records come from: the files of a `FileLog`, and records in memory (below) |
-| `replay.ReadLineCache(dir)`, `replay.WriteLineCache(dir, cache)`, `replay.NewLineCacheWriter(dir, cfg)` | the cache of the line (below); `cfg` is a `replay.ConfigSource` (`Config()`, which a cluster has), or nil for the defaults |
+| `replay.ReadLineCache(dir)`, `replay.WriteLineCache(dir, cache)`, `replay.NewLineCacheWriter(dir)` | the cache of the line (below); the writer uses the default of the period until `ReadConfigFrom(cluster.Reader())` says where the configuration is |
 
 | Part | Value |
 |---|---|

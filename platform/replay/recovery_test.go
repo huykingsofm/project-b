@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/configengine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
@@ -310,18 +310,27 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 	}
 }
 
-// fixedConfig is a ConfigSource that always gives the same snapshot.
-type fixedConfig struct{ snapshot config.ReadOnlySnapshot }
+// fixedConfig is a StableReader that holds a configuration engine with the overrides given.
+type fixedConfig struct{ state *configengine.State }
 
-func (f fixedConfig) Config() config.ReadOnlySnapshot { return f.snapshot }
+func (f fixedConfig) Read(id sim.StateID) (sim.State, error) {
+	if id != sim.ConfigStateID {
+		return nil, sim.ErrStateNotFound
+	}
+	return f.state, nil
+}
 
 func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testing.T) {
 	dir := t.TempDir()
-	snapshot, _, err := config.Build(map[string]string{"replay.line_cache_every_ticks": "10"})
+	state := configengine.NewState()
+	err := state.ApplyConfigChange(
+		[]configengine.Override{{Name: "replay.line_cache_every_ticks", Text: "10"}}, nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := NewLineCacheWriter(dir, fixedConfig{snapshot})
+	w := NewLineCacheWriter(dir)
+	w.ReadConfigFrom(fixedConfig{state})
 	read := func() map[sim.StateID]uint64 {
 		c, found, err := ReadLineCache(dir)
 		if err != nil || !found {
@@ -351,7 +360,7 @@ func TestALogThatTellsTheWriterOfTheCacheLeavesTheCacheOfWhatWasSafeWhenItClosed
 	dir := t.TempDir()
 	a, b := sim.StateID(1), sim.StateID(2)
 	opts := testFileLogOptions
-	opts.OnSafe = NewLineCacheWriter(dir, nil)
+	opts.OnSafe = NewLineCacheWriter(dir)
 	log := eventlog.NewFileLog(dir, opts)
 	ticks(log, a, 5, nil)
 	ticks(log, b, 8, nil)

@@ -22,10 +22,10 @@ func aWorldThatWroteItsFilesAndStopped(
 	t testing.TB, dir string, every map[string]string, idleTicks int,
 ) *game.Cluster {
 	t.Helper()
-	late := &testkit.LateConfig{}
+	cache := replay.NewLineCacheWriter(dir)
 	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8,
-		OnSafe: replay.NewLineCacheWriter(dir, late),
+		OnSafe: cache,
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
@@ -35,7 +35,7 @@ func aWorldThatWroteItsFilesAndStopped(
 	if err != nil {
 		t.Fatal(err)
 	}
-	late.Set(c)
+	cache.ReadConfigFrom(c.Reader())
 	testkit.SetConfig(t, c, testkit.Sender{T: t}, every)
 	testkit.RunScenarioKeeping(t, c, testkit.Sender{T: t}, every)
 	testkit.Steps(t, c, idleTicks)

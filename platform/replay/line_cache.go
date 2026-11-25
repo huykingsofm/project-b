@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -99,26 +100,26 @@ func WriteLineCache(dir string, c LineCache) error {
 	return atomicfile.Write(filepath.Join(dir, lineCacheFile), c.encode())
 }
 
-// ConfigSource is where the variables of the configuration are read from: a cluster is one.
-type ConfigSource interface {
-	Config() config.ReadOnlySnapshot
-}
-
 // LineCacheWriter writes the cache of the recovery line of a cluster each time a FileLog says that
 // some engine has gone `replay.line_cache_every_ticks` ticks past what the cache says of it, and
 // once more when the log is closed. It is the replay.SafeObserver of the FileLog of the cluster,
 // and is called by one goroutine at a time, so it needs no lock.
 type LineCacheWriter struct {
 	dir     string
-	cfg     ConfigSource
+	reader  atomic.Pointer[sim.StableReader]
 	written map[sim.StateID]uint64
 }
 
-// NewLineCacheWriter makes the writer of the cache of the cluster in dir. A nil cfg reads the
-// default of the period.
-func NewLineCacheWriter(dir string, cfg ConfigSource) *LineCacheWriter {
-	return &LineCacheWriter{dir: dir, cfg: cfg}
+// NewLineCacheWriter makes the writer of the cache of the cluster in dir. It uses the default of
+// the period until ReadConfigFrom says where the configuration is.
+func NewLineCacheWriter(dir string) *LineCacheWriter {
+	return &LineCacheWriter{dir: dir}
 }
+
+// ReadConfigFrom says the reader of the cluster (cluster.Reader()), whose copy of the
+// configuration engine gives the period. The writer is made before the cluster, as the observer of
+// its log, so this is called once the cluster is built; it can be called from any goroutine.
+func (w *LineCacheWriter) ReadConfigFrom(r sim.StableReader) { w.reader.Store(&r) }
 
 // SafeChanged writes the cache when it is due, or when final. A cache that cannot be written is
 // logged, and the next one is tried when it is due: a recovery without it reads more, and nothing
@@ -138,11 +139,11 @@ func (w *LineCacheWriter) SafeChanged(safe map[sim.StateID]uint64, final bool) {
 
 // due says whether an engine is a period past what was written.
 func (w *LineCacheWriter) due(safe map[sim.StateID]uint64) bool {
-	var snapshot config.ReadOnlySnapshot
-	if w.cfg != nil {
-		snapshot = w.cfg.Config()
+	var r sim.StableReader
+	if p := w.reader.Load(); p != nil {
+		r = *p
 	}
-	every := uint64(lineCacheEvery.Get(snapshot))
+	every := uint64(lineCacheEvery.Get(sim.ConfigOf(r)))
 	for id, tick := range safe {
 		if tick >= w.written[id]+every {
 			return true
