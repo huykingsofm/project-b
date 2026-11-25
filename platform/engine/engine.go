@@ -279,6 +279,17 @@ func (e *Engine[S]) checkpointWith(st S) EngineCheckpoint[S] {
 	}
 }
 
+// ConfigVersionSeen is the version of the configuration the engine read last.
+func (e *Engine[S]) ConfigVersionSeen() uint64 { return e.cfgVersionSeen }
+
+// SentMessages are the messages the engine sent and has not had acked: the engine sends them again
+// until their receivers say they hold them safe. The messages are the engine's own.
+func (e *Engine[S]) SentMessages() []sim.Message { return e.peer.data.unsettledMessages.Sent() }
+
+// PublishState publishes a copy of the state as it is. A tick does it at its end; an engine made
+// from a checkpoint calls it before its first tick, so that what the others read of it is there.
+func (e *Engine[S]) PublishState() { e.stable.Publish(e.st.Clone().(S)) }
+
 // planScheduled adds the actions that were scheduled for this tick, among them what the engine set
 // for itself in the last tick.
 func (e *Engine[S]) planScheduled() {

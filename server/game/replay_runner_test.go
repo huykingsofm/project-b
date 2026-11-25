@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/recovery"
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/replay/runner"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -327,8 +328,8 @@ type countingLogs struct {
 	failAt         int // at this record
 }
 
-func (c *countingLogs) Open(e sim.StateID) (runner.Source, error) {
-	src, err := c.Logs.Open(e)
+func (c *countingLogs) Open(e sim.StateID, from uint64) (runner.Source, error) {
+	src, err := c.Logs.Open(e, from)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +454,7 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if err != nil {
 		t.Fatal(err)
 	}
-	whole, err := replay.RecoveryLine(dir, c.Env.Codecs)
+	whole, err := recovery.RecoveryLine(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,10 +462,10 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	// sent at ticks 10 and 30 was taken by the world and by the third zonelayer
 	const kept = 7
 	layerDir := filepath.Join(dir, "zonelayer-"+fmt.Sprint(testkit.Layer1.Local()))
-	if err = segmentlog.CutAfter(layerDir, kept); err != nil {
+	if err = segmentlog.CutAfter(layerDir, kept, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	limits, err := replay.CutToRecoveryLine(dir, c.Env.Codecs)
+	limits, err := recovery.CutToRecoveryLine(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}

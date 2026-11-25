@@ -177,7 +177,9 @@ func TestEnginesThatRunOnTheirOwnGoroutinesWriteTheirCheckpointsWhileTheyGoOn(t 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		c.Run(ctx, time.Millisecond)
+		// slow enough for the writer, which syncs each file, to keep up with the 6 engines: a
+		// checkpoint that finds its queue full is dropped, and the test wants them all
+		c.Run(ctx, 10*time.Millisecond)
 	}()
 	for _, id := range testkit.ClusterEngines { // until each has two at least
 		for {

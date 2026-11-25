@@ -1,9 +1,11 @@
-package replay
+package recovery
 
 import (
 	"fmt"
 
+	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
@@ -15,22 +17,29 @@ import (
 // send, or read a copy that its source did not publish, and each engine can be made again by
 // running its own log, with no other. A tick that is kept is whole: a tick is cut with everything
 // that follows it.
+//
+// The cache of the line (ReadLineCache) says up to which tick of each engine nothing is cut, so the
+// dependencies of the ticks after it are all that is read. A cache that says more than a log holds
+// is not used, and the logs are read whole.
 func RecoveryLine(dir string, codecs *sim.Codecs) (map[sim.StateID]uint64, error) {
-	engines, err := Engines(dir)
+	engines, err := replay.Engines(dir)
 	if err != nil {
 		return nil, err
 	}
+	limits := map[sim.StateID]uint64{}
+	for _, engine := range engines {
+		if limits[engine], err = segmentlog.LastFrameID(replay.EngineDir(dir, engine)); err != nil {
+			return nil, fmt.Errorf("the log of %v: %w", engine, err)
+		}
+	}
+	known := knownSafe(dir, limits)
 	type dependencyAt struct {
 		tick uint64
 		dep  sim.StateDependency
 	}
-	limits := map[sim.StateID]uint64{}
 	depends := map[sim.StateID][]dependencyAt{}
 	for _, engine := range engines {
-		if limits[engine], err = segmentlog.LastFrameID(EngineDir(dir, engine)); err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", engine, err)
-		}
-		r, err := ReadFileLog(dir, engine, 0, codecs)
+		r, err := replay.ReadFileLog(dir, engine, known[engine]+1, codecs)
 		if err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", engine, err)
 		}
@@ -63,28 +72,26 @@ func RecoveryLine(dir string, codecs *sim.Codecs) (map[sim.StateID]uint64, error
 	return limits, nil
 }
 
-// CutToRecoveryLine cuts the log of each engine under dir to the tick that RecoveryLine says, and
-// returns those ticks. What is cut is kept next to the segments, in files that the log does not
-// see (see segmentlog.CutAfter), and a log that is already at its tick is not touched. No log may
-// be open for writing. After it, each log ends at a tick that no crash takes back, and an engine
-// that goes on is made for the log with the tick after it.
-func CutToRecoveryLine(dir string, codecs *sim.Codecs) (map[sim.StateID]uint64, error) {
-	limits, err := RecoveryLine(dir, codecs)
+// knownSafe is the tick of each engine up to which the cache says nothing is cut, and 0 for an
+// engine it says nothing of. A cache that cannot be read, or that says more than a log holds
+// (last is the last tick of each log), is logged and not used: the logs are read whole.
+func knownSafe(dir string, last map[sim.StateID]uint64) map[sim.StateID]uint64 {
+	cache, found, err := ReadLineCache(dir)
 	if err != nil {
-		return nil, err
+		logging.Warn("the cache of the recovery line is not used", "dir", dir, "err", err)
+		return nil
 	}
-	for engine, limit := range limits {
-		logDir := EngineDir(dir, engine)
-		last, err := segmentlog.LastFrameID(logDir)
-		if err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", engine, err)
-		}
-		if last <= limit {
-			continue
-		}
-		if err := segmentlog.CutAfter(logDir, limit); err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", engine, err)
+	if !found {
+		return nil
+	}
+	for engine, safe := range cache.Safe {
+		if end, has := last[engine]; !has || safe > end {
+			logging.Warn(
+				"the cache of the recovery line is not used: it says more than the log holds",
+				"dir", dir, "engine", engine, "safe", safe, "log_ends_at", end, "has_log", has,
+			)
+			return nil
 		}
 	}
-	return limits, nil
+	return cache.Safe
 }

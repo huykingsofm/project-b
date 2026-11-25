@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -69,9 +70,9 @@ func repair(dir string) error {
 	return nil
 }
 
-// keepDiscarded copies the bytes of a segment from `from` to `to` to a file next to it, and warns.
+// keepDiscarded copies the bytes of a segment from `from` to `to` to a file in dir, and warns.
 func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
-	name := fmt.Sprintf("%s.discarded-%d", path, from)
+	name := filepath.Join(dir, fmt.Sprintf("%s.discarded-%d", filepath.Base(path), from))
 	out, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
@@ -98,7 +99,7 @@ func keepDiscarded(dir string, f *os.File, path string, from, to int64) error {
 		"kept_in",
 		filepath.Base(name),
 	)
-	return syncDir(dir)
+	return atomicfile.SyncDir(dir)
 }
 
 // removeSegment deletes a segment and makes the deletion durable.
@@ -106,20 +107,5 @@ func removeSegment(dir, path string) error {
 	if err := os.Remove(path); err != nil {
 		return err
 	}
-	return syncDir(dir)
-}
-
-// syncDir forces the entries of a directory to disk: the file that was made, or deleted, in it is
-// not durable until then, and after a power loss a segment that was synced could be missing from
-// its directory.
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	if err := d.Sync(); err != nil {
-		d.Close()
-		return fmt.Errorf("sync of the directory %s: %w", dir, err)
-	}
-	return d.Close()
+	return atomicfile.SyncDir(dir)
 }

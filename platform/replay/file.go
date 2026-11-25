@@ -27,6 +27,17 @@ type FileLogOptions struct {
 	SegmentBytes int64
 	SyncEvery    time.Duration
 	Backlog      int
+	// OnSafe is told what is safe for every engine each time it moves, and once more when the log
+	// is closed. It is called on the goroutine that works out what is safe, so it must not wait
+	// long. Nil: no one is told.
+	OnSafe SafeObserver
+}
+
+// SafeObserver is told what a FileLog says is safe (see FileLog.Safe), for every engine that has a
+// log. final is true for the last call, made when the log is closed and everything is on the disk.
+// A recovery reads its cache of the recovery line from what it is told.
+type SafeObserver interface {
+	SafeChanged(safe map[sim.StateID]uint64, final bool)
 }
 
 // FileLog is a Log that writes to files, one log for each engine, in the directory
@@ -200,11 +211,14 @@ func (f *FileLog) Safe(engine sim.StateID) uint64 {
 }
 
 // settle works out again what is safe for every engine, until none changes: an engine whose tick
-// depends on a tick of another waits for that engine, and that engine may wait for another.
-func (f *FileLog) settle() {
+// depends on a tick of another waits for that engine, and that engine may wait for another. It
+// tells the observer of the log when something moved, and always when final.
+func (f *FileLog) settle(final bool) {
 	var engineLogs []*engineLog
-	f.engines.Range(func(_, v any) bool {
+	var ids []sim.StateID
+	f.engines.Range(func(k, v any) bool {
 		engineLogs = append(engineLogs, v.(*engineLog))
+		ids = append(ids, k.(sim.StateID))
 		return true
 	})
 	safeOf := func(id sim.StateID) uint64 {
@@ -213,15 +227,24 @@ func (f *FileLog) settle() {
 		}
 		return 0
 	}
+	moved := false
 	for changed := true; changed; {
 		changed = false
 		for _, l := range engineLogs {
 			if safe := l.dependencies.Safe(l.Durable(), safeOf); safe > l.safe.Load() {
 				l.safe.Store(safe)
-				changed = true
+				changed, moved = true, true
 			}
 		}
 	}
+	if f.opts.OnSafe == nil || !(moved || final) {
+		return
+	}
+	safe := make(map[sim.StateID]uint64, len(ids))
+	for i, id := range ids {
+		safe[id] = engineLogs[i].safe.Load()
+	}
+	f.opts.OnSafe.SafeChanged(safe, final)
 }
 
 // watch works out what is safe each time that a log has synced, until Close.
@@ -230,7 +253,7 @@ func (f *FileLog) watch() {
 	for {
 		select {
 		case <-f.synced:
-			f.settle()
+			f.settle(false)
 		case <-f.stop:
 			return
 		}
@@ -275,7 +298,7 @@ func (f *FileLog) Close() error {
 		if running {
 			<-f.watching
 		}
-		f.settle() // every log is on the disk now
+		f.settle(true) // every log is on the disk now
 	})
 	if err := f.Err(); err != nil {
 		errs = append(errs, err)

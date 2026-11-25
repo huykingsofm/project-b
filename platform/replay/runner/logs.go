@@ -3,6 +3,7 @@ package runner
 import (
 	"maps"
 	"slices"
+	"sort"
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -19,10 +20,11 @@ type Source interface {
 
 // Logs is where the records of a run come from: a source for each engine that recorded something,
 // which can be opened as often as needed. The runner reads each once to index it and once to run
-// it.
+// it. A source gives the records of the tick from and of the ticks after it, as an engine that
+// starts from a checkpoint needs no more.
 type Logs interface {
 	Engines() []sim.StateID
-	Open(engine sim.StateID) (Source, error)
+	Open(engine sim.StateID, from uint64) (Source, error)
 }
 
 // Seeded is a Source that knows the seed of the run it was recorded in, as the files of a
@@ -37,9 +39,11 @@ type MemoryLogs map[sim.StateID][]replay.Record
 // Engines returns the engines that have records, in the order of their addresses.
 func (m MemoryLogs) Engines() []sim.StateID { return sortedIDs(maps.Keys(m)) }
 
-// Open returns a source of the records of the engine.
-func (m MemoryLogs) Open(engine sim.StateID) (Source, error) {
-	return &memorySource{records: m[engine]}, nil
+// Open returns a source of the records of the engine from the tick from.
+func (m MemoryLogs) Open(engine sim.StateID, from uint64) (Source, error) {
+	records := m[engine]
+	i := sort.Search(len(records), func(i int) bool { return records[i].Tick >= from })
+	return &memorySource{records: records[i:]}, nil
 }
 
 type memorySource struct {
@@ -80,8 +84,8 @@ func FileLogs(dir string, codecs *sim.Codecs) (Logs, error) {
 
 func (f fileLogs) Engines() []sim.StateID { return f.engines }
 
-func (f fileLogs) Open(engine sim.StateID) (Source, error) {
-	r, err := replay.ReadFileLog(f.dir, engine, 0, f.codecs)
+func (f fileLogs) Open(engine sim.StateID, from uint64) (Source, error) {
+	r, err := replay.ReadFileLog(f.dir, engine, from, f.codecs)
 	if err != nil {
 		return nil, err
 	}

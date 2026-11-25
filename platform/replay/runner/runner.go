@@ -23,7 +23,9 @@ type Builder interface {
 	Seed() uint64
 	QueueSize() int
 	Codecs() *sim.Codecs
-	BuildIn(env *engine.Env) (*engine.Cluster, error)
+	// BuildIn makes each engine from the checkpoint that the source has for it, and new when it has
+	// none.
+	BuildIn(env *engine.Env, checkpoints engine.CheckpointSource) (*engine.Cluster, error)
 }
 
 // Options are what a replay needs that the records do not hold.
@@ -31,6 +33,13 @@ type Options struct {
 	// ConfigVersions says what each version of the configuration was made of: the overrides that
 	// were given to config.Store.Apply to make it. Version 0 is the defaults.
 	ConfigVersions map[uint64]map[string]string
+	// Starts says the tick each engine starts at: the tick of the checkpoint it is made from, which
+	// Checkpoints gives. An engine that is not in it starts at tick 0, new. The log of an engine
+	// that starts at a tick has the hash of the engine at that tick, which the replay compares with
+	// the engine that was made.
+	Starts map[sim.StateID]uint64
+	// Checkpoints gives the checkpoint of each engine that starts above tick 0. Nil: none.
+	Checkpoints engine.CheckpointSource
 }
 
 // Result is what a replay found.
@@ -45,10 +54,10 @@ type Result struct {
 	Divergences []string
 }
 
-// Run runs the cluster that b describes again from tick 0, on the records in logs, and
-// reports whether each engine did what its log says. The builder must describe the cluster that was
-// recorded (the same engines, states and seed); what it sets for the replay log, the emitter and
-// the configuration is not used.
+// Run runs the cluster that b describes again, on the records in logs, each engine from tick 0 or
+// from the checkpoint that opts says, and reports whether each engine did what its log says. The
+// builder must describe the cluster that was recorded (the same engines, states and seed); what it
+// sets for the replay log, the emitter and the configuration is not used.
 //
 // It returns an error when the replay cannot run: the builder is wrong, an engine has a record it
 // cannot be given, or the engines wait for each other for ever. A difference between the run and

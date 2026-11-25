@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 )
 
 // CutAfter cuts the log in dir after the record with the ID limit: the records whose ID is greater
@@ -12,15 +15,16 @@ import (
 // that holds the record after limit, and reads only that one. The segment is cut at the start of
 // the batch of the first record that goes, which can take with it records of that batch that were
 // to be kept, and the segments after it are taken out of the log. Nothing is thrown away: what is
-// cut is kept next to the segment, in a file named <segment>.discarded-<offset> (a segment that is
-// taken out whole is renamed so, with the offset 0), which Segments does not see, and a warning
-// says so. A log with no record after limit is not changed. The log must not be open for writing:
-// a Writer is opened on the log that is left, and the ID of its next record is limit + 1.
+// cut is kept in archiveDir, in a file named <segment>.discarded-<offset> (a segment that is taken
+// out whole is moved there with the offset 0), where Segments does not see it, and a warning says
+// so. archiveDir is made when it is needed, and must be on the same volume as dir. A log with no
+// record after limit is not changed. The log must not be open for writing: a Writer is opened on
+// the log that is left, and the ID of its next record is limit + 1.
 //
 // It is what a recovery does to the log of an engine whose last ticks were lost to a crash that
 // another engine, which depends on them, did not lose: both go back to the last tick that no crash
 // takes back.
-func CutAfter(dir string, limit uint64) error {
+func CutAfter(dir string, limit uint64, archiveDir string) error {
 	segments, err := Segments(dir)
 	if err != nil {
 		return err
@@ -45,19 +49,22 @@ func CutAfter(dir string, limit uint64) error {
 	if cutAt < 0 && firstOut == len(segments) {
 		return nil
 	}
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		return err
+	}
 	// from the end, so that a crash in the middle leaves a log that is whole and longer than it
 	// should be, and not one with a hole: the cut is made again
 	for i := len(segments) - 1; i >= firstOut; i-- {
-		if err := discardSegment(dir, segments[i].Path); err != nil {
+		if err := discardSegment(archiveDir, segments[i].Path); err != nil {
 			return err
 		}
 	}
 	if cutAt >= 0 {
-		if err := cutSegment(dir, segments[holder].Path, cutAt); err != nil {
+		if err := cutSegment(archiveDir, segments[holder].Path, cutAt); err != nil {
 			return err
 		}
 	}
-	return syncDir(dir)
+	return atomicfile.SyncDir(dir)
 }
 
 // firstRecordAfter finds where a segment is to be cut: the start of the batch that holds the first
@@ -91,8 +98,8 @@ func firstRecordAfter(path string, limit uint64) (at int64, whole bool, err erro
 	}
 }
 
-// cutSegment cuts a segment at an offset, keeping what is cut.
-func cutSegment(dir, path string, at int64) error {
+// cutSegment cuts a segment at an offset, keeping what is cut in archiveDir.
+func cutSegment(archiveDir, path string, at int64) error {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
 		return err
@@ -103,7 +110,7 @@ func cutSegment(dir, path string, at int64) error {
 		return err
 	}
 	if size > at {
-		if err := keepDiscarded(dir, f, path, at, size); err != nil {
+		if err := keepDiscarded(archiveDir, f, path, at, size); err != nil {
 			return err
 		}
 	}
@@ -113,11 +120,15 @@ func cutSegment(dir, path string, at int64) error {
 	return f.Sync()
 }
 
-// discardSegment takes a segment out of the log without throwing it away.
-func discardSegment(dir, path string) error {
-	name := fmt.Sprintf("%s.discarded-%d", path, 0)
+// discardSegment takes a segment out of the log without throwing it away: it is moved to
+// archiveDir.
+func discardSegment(archiveDir, path string) error {
+	name := filepath.Join(archiveDir, fmt.Sprintf("%s.discarded-%d", filepath.Base(path), 0))
 	if err := os.Rename(path, name); err != nil {
 		return err
 	}
-	return syncDir(dir)
+	if err := atomicfile.SyncDir(archiveDir); err != nil {
+		return err
+	}
+	return atomicfile.SyncDir(filepath.Dir(path))
 }

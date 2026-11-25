@@ -15,7 +15,7 @@ type copyKey struct {
 
 // index is what the runner has to know of the whole of the logs before it runs the first tick,
 // kept small: a number for each message, a count for each copy that is read, and the last tick of
-// each engine. It is made by one pass over each log.
+// each engine. It is made by one pass over each log, from the tick an engine starts at.
 type index struct {
 	// last is the last tick that each engine has to run: the last tick of its own log, or of a copy
 	// of it that another engine reads.
@@ -34,21 +34,26 @@ type index struct {
 
 // buildIndex reads each log once. It returns an error when a log cannot be read and when a log
 // was made with another seed than the one of the builder.
-func buildIndex(logs Logs, seed uint64, queue int) (*index, error) {
+func buildIndex(
+	logs Logs, seed uint64, queue int, starts map[sim.StateID]uint64,
+) (*index, error) {
 	idx := &index{
 		last: map[sim.StateID]uint64{}, queue: queue, uses: map[copyKey]int{},
 		returned: map[msgKey]bool{}, want: map[msgKey]uint64{},
 	}
 	for _, address := range logs.Engines() {
-		if err := idx.add(logs, address, seed); err != nil {
+		if err := idx.add(logs, address, seed, starts[address]); err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", address, err)
 		}
 	}
 	return idx, nil
 }
 
-func (idx *index) add(logs Logs, address sim.StateID, seed uint64) error {
-	src, err := logs.Open(address)
+// add reads the log of an engine that starts at the tick start. What the records of the ticks up
+// to start say is in the checkpoint it starts from, so they are not looked at, but for the last
+// tick.
+func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error {
+	src, err := logs.Open(address, start)
 	if err != nil {
 		return err
 	}
@@ -66,10 +71,13 @@ func (idx *index) add(logs Logs, address sim.StateID, seed uint64) error {
 				)
 			}
 		}
+		idx.last[address] = max(idx.last[address], rec.Tick)
+		if rec.Tick <= start {
+			continue
+		}
 		if rec.Tick != tick {
 			tick, taken = rec.Tick, 0
 		}
-		idx.last[address] = max(idx.last[address], rec.Tick)
 		switch body := rec.Body.(type) {
 		case replay.Inbound:
 			idx.want[keyOf(body.Message.Head())] = replay.HashMessage(body.Message)

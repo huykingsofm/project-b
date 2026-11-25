@@ -59,7 +59,7 @@ func TestATemporaryFileThatACrashLeftIsNotACheckpointAndIsWrittenOver(t *testing
 	if err := os.MkdirAll(engineDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	half := Path(dir, engineA, 9) + tmpSuffix
+	half := Path(dir, engineA, 9) + ".tmp"
 	if err := os.WriteFile(half, []byte("half a checkpoint that is longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -146,3 +146,47 @@ func benchmarkWriteFile(b *testing.B, size int) {
 // docs/benchmark/checkpoint.md).
 func BenchmarkWriteFileZoneLayer(b *testing.B) { benchmarkWriteFile(b, 8_300) }
 func BenchmarkWriteFileWorld(b *testing.B)     { benchmarkWriteFile(b, 122_000) }
+
+func TestTheLatestCheckpointAtOrBelowATickIsTheOneOnOrBeforeIt(t *testing.T) {
+	dir := t.TempDir()
+	w := NewFileWriter(dir, 8)
+	for _, tick := range []uint64{7, 14, 21} {
+		w.Offer(engineA, tick, bytesOf([]byte("a")))
+	}
+	w.Close()
+	for _, c := range []struct {
+		tick uint64
+		want uint64
+		ok   bool
+	}{{6, 0, false}, {7, 7, true}, {13, 7, true}, {14, 14, true}, {1000, 21, true}} {
+		got, ok, err := LatestAtOrBelow(dir, engineA, c.tick)
+		if err != nil || ok != c.ok || got != c.want {
+			t.Fatalf("at or below %d: %d, %v (%v), want %d, %v", c.tick, got, ok, err, c.want, c.ok)
+		}
+	}
+	if _, ok, err := LatestAtOrBelow(dir, engineB, 100); ok || err != nil {
+		t.Fatalf("an engine with no checkpoint: %v, %v", ok, err)
+	}
+}
+
+func TestAnArchivedCheckpointIsNotOneAnyMoreAndIsKeptInTheArchive(t *testing.T) {
+	dir := t.TempDir()
+	w := NewFileWriter(dir, 8)
+	w.Offer(engineA, 7, bytesOf([]byte("seven")))
+	w.Offer(engineA, 14, bytesOf([]byte("fourteen")))
+	w.Close()
+	archive := filepath.Join(dir, ".archive", "cut-1", "a")
+	if err := Archive(dir, engineA, 14, archive); err != nil {
+		t.Fatal(err)
+	}
+	if ticks, _ := Ticks(dir, engineA); !slices.Equal(ticks, []uint64{7}) {
+		t.Fatalf("the ticks are %v, want only 7", ticks)
+	}
+	if got, err := os.ReadFile(filepath.Join(archive, fileName(14))); err != nil ||
+		string(got) != "fourteen" {
+		t.Fatalf("the archived file holds %q (%v)", got, err)
+	}
+	if err := Archive(dir, engineA, 14, archive); err == nil {
+		t.Fatal("a checkpoint that is not there was archived")
+	}
+}

@@ -58,6 +58,18 @@ type Stepper interface {
 	TypeName() string
 	// SendBaseCommand gives the engine a command that was read without its type, as a replay does.
 	SendBaseCommand(c sim.BaseCommand) error
+	// Tick is the tick the engine is at: the last it ran, or the one it was made at.
+	Tick() uint64
+	// Hash is the hash of what the engine goes on from (see Engine.Hash).
+	Hash(h sim.Hasher) uint64
+	// ConfigVersionSeen is the version of the configuration the engine read last.
+	ConfigVersionSeen() uint64
+	// SentMessages are the messages the engine sent and holds until their receivers say they hold
+	// them safe.
+	SentMessages() []sim.Message
+	// PublishState publishes a copy of the state as it is, for the other engines to read: an
+	// engine that was made from a checkpoint has not run the tick that publishes it.
+	PublishState()
 }
 
 var _ Stepper = (*Engine[sim.State])(nil)

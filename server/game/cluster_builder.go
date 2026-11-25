@@ -214,17 +214,21 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}
-	return b.assemble(env)
+	return b.assemble(env, engine.NoCheckpoints{})
 }
 
 // BuildIn makes the engines of the world and connects them in the environment given instead of one
 // of its own: a replay gives the engines its own router, published states, configuration, replay
-// log and emitter. It returns an error when what the builder holds cannot make a cluster.
-func (b *ClusterBuilder) BuildIn(env *engine.Env) (*engine.Cluster, error) {
+// log and emitter. An engine for which checkpoints has a checkpoint is made from it, at its tick;
+// the others are made new. It returns an error when what the builder holds cannot make a cluster,
+// or a checkpoint cannot make its engine.
+func (b *ClusterBuilder) BuildIn(
+	env *engine.Env, checkpoints engine.CheckpointSource,
+) (*engine.Cluster, error) {
 	if err := b.check(); err != nil {
 		return nil, err
 	}
-	c, err := b.assemble(env)
+	c, err := b.assemble(env, checkpoints)
 	if err != nil {
 		return nil, err
 	}
@@ -234,8 +238,11 @@ func (b *ClusterBuilder) BuildIn(env *engine.Env) (*engine.Cluster, error) {
 // assemble makes the engines of the world in the environment given and connects them: the same
 // engines whether the environment is the one of a cluster that runs or the one of a replay. The
 // zonelayers are added to the cluster first, then the zones, then the world, which is the order
-// that Step runs them in.
-func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
+// that Step runs them in. An engine whose checkpoint the source has is made from it, whatever the
+// state that was just made says: the states made here give the engines their IDs, and nothing else.
+func (b *ClusterBuilder) assemble(
+	env *engine.Env, checkpoints engine.CheckpointSource,
+) (*Cluster, error) {
 	layers := map[sim.StateID]ZoneLayerParams{}
 	for _, l := range b.zoneLayers {
 		layers[l.ZoneID] = l
@@ -251,16 +258,27 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 			layerID := worldState.AddZoneLayer()
 			zoneState.AddZoneLayer(layerID, lp.Capacity)
 			layerState := zonelayerstate.NewState(layerID, zp.ID, b.world.ID)
-			le := engine.New(layerState, env, b.seed)
+			le, err := engineOf(layerState, env, b.seed, checkpoints)
+			if err != nil {
+				return nil, err
+			}
 			if err := EnsureRegen(le, lp.RegenEvery); err != nil {
 				return nil, err
 			}
 			layerEngines = append(layerEngines, le)
 		}
-		zoneEngines = append(zoneEngines, engine.New(zoneState, env, b.seed))
+		ze, err := engineOf(zoneState, env, b.seed, checkpoints)
+		if err != nil {
+			return nil, err
+		}
+		zoneEngines = append(zoneEngines, ze)
+	}
+	world, err := engineOf(worldState, env, b.seed, checkpoints)
+	if err != nil {
+		return nil, err
 	}
 
-	c := &Cluster{Cluster: engine.NewCluster(env), World: engine.New(worldState, env, b.seed)}
+	c := &Cluster{Cluster: engine.NewCluster(env), World: world}
 	for _, l := range layerEngines {
 		c.Add(l)
 	}
@@ -269,4 +287,23 @@ func (b *ClusterBuilder) assemble(env *engine.Env) (*Cluster, error) {
 	}
 	c.Add(c.World)
 	return c, nil
+}
+
+// engineOf makes the engine of a state that was just made: from the checkpoint that the source has
+// for its ID, if it has one, and new otherwise.
+func engineOf[S sim.State](
+	fresh S, env *engine.Env, seed uint64, checkpoints engine.CheckpointSource,
+) (*engine.Engine[S], error) {
+	data, ok, err := checkpoints.Checkpoint(fresh.ID())
+	if err != nil {
+		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
+	}
+	if !ok {
+		return engine.New(fresh, env, seed), nil
+	}
+	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
+	if err != nil {
+		return nil, fmt.Errorf("the checkpoint of %v: %w", fresh.ID(), err)
+	}
+	return c.Restore(env, seed)
 }

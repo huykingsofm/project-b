@@ -29,7 +29,7 @@ type replayRun struct {
 }
 
 func newReplayRun(b Builder, logs Logs, opts Options) (*replayRun, error) {
-	idx, err := buildIndex(logs, b.Seed(), b.QueueSize())
+	idx, err := buildIndex(logs, b.Seed(), b.QueueSize(), opts.Starts)
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +56,24 @@ func newReplayRun(b Builder, logs Logs, opts Options) (*replayRun, error) {
 		Router: r.router, Cfg: r.cfg, ReplayLog: r.verify, Stable: r.stable,
 		Codecs: b.Codecs(), QueueSize: idx.queue, Emitter: engine.NopEmitter{},
 	}
-	if r.cluster, err = b.BuildIn(env); err != nil {
+	var checkpoints engine.CheckpointSource = engine.NoCheckpoints{}
+	if opts.Checkpoints != nil {
+		checkpoints = opts.Checkpoints
+	}
+	if r.cluster, err = b.BuildIn(env, checkpoints); err != nil {
 		return nil, err
 	}
 	for _, e := range r.cluster.Engines() {
-		r.engines[e.StateID()] = e
-		r.order = append(r.order, e.StateID())
+		id := e.StateID()
+		if start := opts.Starts[id]; e.Tick() != start {
+			return nil, fmt.Errorf(
+				"the engine %v is made at the tick %d and the replay starts it at %d",
+				id, e.Tick(), start,
+			)
+		}
+		r.engines[id] = e
+		r.order = append(r.order, id)
+		r.cur[id] = e.Tick()
 	}
 	div.name = func(id sim.StateID) string {
 		if e, ok := r.engines[id]; ok {
@@ -75,14 +87,58 @@ func newReplayRun(b Builder, logs Logs, opts Options) (*replayRun, error) {
 				"the log of %v is not the log of an engine of the cluster", address,
 			)
 		}
-		src, err := logs.Open(address)
+		src, err := logs.Open(address, opts.Starts[address])
 		if err != nil {
 			r.close()
 			return nil, fmt.Errorf("the log of %v: %w", address, err)
 		}
 		r.cursors[address] = newCursor(src)
+		if err := r.begin(address, idx); err != nil {
+			r.close()
+			return nil, err
+		}
 	}
 	return r, nil
+}
+
+// begin takes an engine that was made from a checkpoint to where its log goes on from it. The
+// records of the tick it starts at are in the checkpoint already, so they are not given to it, but
+// for the hash, which says that the engine that was made is the one that was recorded. What the
+// engine knew of the configuration, and the messages that it sent and that are not settled, are
+// what the records after the tick refer to. Its state is published, since the tick that does it
+// has run.
+func (r *replayRun) begin(address sim.StateID, idx *index) error {
+	eng := r.engines[address]
+	start := r.cur[address]
+	if start == 0 {
+		return nil
+	}
+	records, err := r.cursors[address].take(start)
+	if err != nil {
+		return fmt.Errorf("the log of %v: %w", address, err)
+	}
+	logged, found := uint64(0), false
+	for _, rec := range records {
+		if h, ok := rec.Body.(replay.Hash); ok {
+			logged, found = h.Value, true
+		}
+	}
+	switch got := eng.Hash(sim.NewHasher()); {
+	case !found:
+		r.div.add(address,
+			"the log has no hash at the tick %d, where the checkpoint was taken", start)
+	case got != logged:
+		r.div.add(address, "the engine made from the checkpoint of the tick %d has the hash %d, "+
+			"the log has %d", start, got, logged)
+	}
+	r.version[address] = eng.ConfigVersionSeen()
+	for _, m := range eng.SentMessages() {
+		if key := keyOf(m.Head()); idx.returned[key] {
+			r.router.sent[key] = m
+		}
+	}
+	eng.PublishState()
+	return nil
 }
 
 // close lets go of the logs.

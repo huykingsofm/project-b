@@ -1,6 +1,6 @@
 # Segment log
 
-`shared/segmentlog`. An append-only log of records divided into segment files. A record is a payload and a segment has a header with a meta, and the package looks into neither: whoever uses the log decides what is in them (an engine, a seed). Each record has an ID that the log counts (below). It imports only `shared/logging`.
+`shared/segmentlog`. An append-only log of records divided into segment files. A record is a payload and a segment has a header with a meta, and the package looks into neither: whoever uses the log decides what is in them (an engine, a seed). Each record has an ID that the log counts (below). It imports only `shared/logging` and `shared/atomicfile`.
 
 ## Files
 
@@ -73,9 +73,9 @@ One directory for each log. A segment is `seg-<index>.pbsl`, the index in 20 dig
 
 | Call | What it does |
 |---|---|
-| `CutAfter(dir, limit)` | cuts the log after the record with the ID `limit`: the records with a greater ID go; the log must not be open for writing, and the ID of the next record of a Writer opened on what is left is `limit + 1` |
+| `CutAfter(dir, limit, archiveDir)` | cuts the log after the record with the ID `limit`: the records with a greater ID go to `archiveDir`; the log must not be open for writing, and the ID of the next record of a Writer opened on what is left is `limit + 1` |
 
-- The segment that holds the record after `limit` is found like the one of `OpenReader` (the headers of about log2(n) segments) and is the only one that is read. It is cut at the start of the batch of that record, which takes with it the records of the batch that were to be kept; the segments after it are taken out of the log, from the last, so that a crash in the middle leaves a log that is whole and longer than it should be. Nothing is thrown away: the bytes that were cut are in `<segment>.discarded-<offset>`, a segment taken out whole is renamed `<segment>.discarded-0`, which `Segments` does not see, and a warning says so.
+- The segment that holds the record after `limit` is found like the one of `OpenReader` (the headers of about log2(n) segments) and is the only one that is read. It is cut at the start of the batch of that record, which takes with it the records of the batch that were to be kept; the segments after it are taken out of the log, from the last, so that a crash in the middle leaves a log that is whole and longer than it should be. Nothing is thrown away: the bytes that were cut are in `<archiveDir>/<segment>.discarded-<offset>`, a segment taken out whole is moved there as `<segment>.discarded-0`, where `Segments` does not see it, and a warning says so. `archiveDir` is made when something is cut, and is on the same volume as `dir`.
 - A log with no record after `limit` is not changed, a `limit` before the first record cuts all of the log, and a log that does not exist is empty.
 
 ## Repair

@@ -45,18 +45,11 @@
 - What a tick depends on is made by its records (`Record.Dependency()`): the log of each engine keeps it, tick by tick, for the ticks that are not safe yet. A goroutine of the `FileLog` works out again what is safe for every engine each time a log has synced (`segmentlog.Options.OnSync`), until none changes, and `Close` does it once more when every log is on the disk.
 - A tick that depends on an engine whose log is not opened yet waits for it, and a tick whose dependencies are all safe stays safe, so a dependency is looked at once.
 - An engine whose log was there before it was opened is safe up to the last tick of that log: what is in a log is what a restart goes on from.
+- `FileLogOptions.OnSafe` (a `replay.SafeObserver`) is called with what is safe of every engine each time it moves, and once more, with `final` true, when the log is closed. It is called on the goroutine that works out what is safe. The cache of the recovery line is written from it ([recovery](recovery.md#cache-of-the-line)).
 
 ## Recovery line
 
-| Call | What it does |
-|---|---|
-| `replay.RecoveryLine(dir, codecs)` | the last tick of each log under `dir` that a recovery keeps |
-| `replay.CutToRecoveryLine(dir, codecs)` | cuts each log to that tick (`segmentlog.CutAfter`, so what is cut is kept next to the segments) and returns the ticks; no log may be open for writing |
-
-- An engine starts at the last tick of its log and is cut before the first tick that depends (`Record.Dependency()`) on a tick of another engine that is cut away, or of an engine that has no log (its limit is 0). This is repeated until nothing changes, since an engine that was cut may be what another depends on. A tick is cut whole, with the commands of the clients that it took, and with everything after it.
-- What is left is a state of the cluster in which no engine took a message that its sender did not send, or read a copy that its source did not publish. Each engine can be made again from its own log, with no other: the logs that are left replay with no divergence (`runner.Run`), which a test checks on a cluster whose first zonelayer lost its tail.
-- It is the same rule as `Safe`, from the other side: `Safe` is what the line is while the cluster runs, and the line is what `Safe` was when it stopped, or less.
-- Not here yet: checkpoint files, so that an engine is made from one and run to its limit instead of from tick 0, and the engines that go on live after it ([roadmap](../plan/en/roadmap.md)).
+The recovery line, the cut of the logs to it and the cache of it are in [recovery](recovery.md).
 
 ## Records
 
@@ -184,7 +177,7 @@ Each of these is part of the format of the log: it never changes, is never used 
 
 ## Not here yet
 
-- Checkpoints and the scheduler in a checkpoint. The replay from tick 0 is in [replay_runner](replay_runner.md).
+- The replay and the recovery from the logs are in [replay_runner](replay_runner.md) and [recovery](recovery.md).
 - A `Close` is needed to write what the last ticks recorded: until then they are in memory and on the way to disk.
 
 Benchmarks: [replay_log](benchmark/replay_log.md).

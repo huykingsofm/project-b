@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -497,5 +498,49 @@ func TestTheFirstFrameOfALogIsTheTickOne(t *testing.T) {
 	log.Close()
 	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 0 {
 		t.Fatalf("the last frame of the log is %d, error %v, want none", last, err)
+	}
+}
+
+// safeCalls records what a FileLog tells its observer.
+type safeCalls struct {
+	mu    sync.Mutex
+	calls []map[sim.StateID]uint64
+	final []bool
+}
+
+func (s *safeCalls) SafeChanged(safe map[sim.StateID]uint64, final bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, safe)
+	s.final = append(s.final, final)
+}
+
+func TestTheObserverOfALogIsToldWhatIsSafeOfEveryEngineAndOnceMoreWhenTheLogIsClosed(t *testing.T) {
+	dir := t.TempDir()
+	observer := &safeCalls{}
+	opts := testFileLogOptions
+	opts.OnSafe = observer
+	log := NewFileLog(dir, opts)
+	a, b := sim.StateID(1), sim.StateID(2)
+	for tick := uint64(1); tick <= 4; tick++ {
+		log.EndTick(a, tick)
+		log.EndTick(b, tick)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	observer.mu.Lock()
+	defer observer.mu.Unlock()
+	n := len(observer.calls)
+	if n == 0 || !observer.final[n-1] {
+		t.Fatalf("%d calls, the last final: %v", n, observer.final)
+	}
+	if last := observer.calls[n-1]; !reflect.DeepEqual(last, map[sim.StateID]uint64{a: 4, b: 4}) {
+		t.Fatalf("the last call says %v, want both at 4", last)
+	}
+	for i := 0; i < n-1; i++ {
+		if observer.final[i] {
+			t.Fatalf("the call %d is final, and is not the last", i)
+		}
 	}
 }

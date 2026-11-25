@@ -11,16 +11,16 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 )
 
 // A checkpoint is the file `ckpt-<tick>.snap` in the directory of its engine, the tick in 20
-// digits so that the names sort as the ticks do. It is written to `ckpt-<tick>.snap.tmp`, synced,
-// and renamed, so a file with the name of a checkpoint is always whole; a temporary file that a
-// crash left is not a checkpoint, and is written over when the same tick is written again.
+// digits so that the names sort as the ticks do. It is written with atomicfile, so a file with the
+// name of a checkpoint is always whole; a temporary file that a crash left is not a checkpoint, and
+// is written over when the same tick is written again.
 const (
 	namePrefix = "ckpt-"
 	nameSuffix = ".snap"
-	tmpSuffix  = ".tmp"
 )
 
 // fileName is the name of the checkpoint of an engine at the tick.
@@ -68,45 +68,38 @@ func Read(dir string, engine sim.StateID, tick uint64) ([]byte, error) {
 	return os.ReadFile(Path(dir, engine, tick))
 }
 
-// writeFile writes the checkpoint of an engine at the tick: to a temporary file, which is synced
-// and then renamed, and the directory is synced after it, so that the checkpoint is on the disk
-// whole when it returns, or not there at all.
+// writeFile writes the checkpoint of an engine at the tick, whole or not at all (see atomicfile).
 func writeFile(dir string, engine sim.StateID, tick uint64, data []byte) error {
-	engineDir := replay.EngineDir(dir, engine)
-	if err := os.MkdirAll(engineDir, 0o755); err != nil {
-		return err
-	}
-	path := Path(dir, engine, tick)
-	tmp := path + tmpSuffix
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Sync()
-	}
-	if closeErr := f.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	return syncDir(engineDir)
+	return atomicfile.Write(Path(dir, engine, tick), data)
 }
 
-// syncDir syncs a directory, so that a file renamed in it stays there after a crash.
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
+// LatestAtOrBelow is the tick of the latest checkpoint that an engine has at or below tick, and
+// false when it has none.
+func LatestAtOrBelow(dir string, engine sim.StateID, tick uint64) (uint64, bool, error) {
+	ticks, err := Ticks(dir, engine)
 	if err != nil {
+		return 0, false, err
+	}
+	i, _ := slices.BinarySearch(ticks, tick+1) // the first tick above the one asked for
+	if i == 0 {
+		return 0, false, nil
+	}
+	return ticks[i-1], true, nil
+}
+
+// Archive moves the checkpoint of an engine at the tick to archiveDir, which is made when it is
+// needed and must be on the same volume as dir: the checkpoint is no longer one, and is not
+// deleted. The directories are synced, so that a crash does not bring it back.
+func Archive(dir string, engine sim.StateID, tick uint64, archiveDir string) error {
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
 		return err
 	}
-	err = d.Sync()
-	if closeErr := d.Close(); err == nil {
-		err = closeErr
+	from := Path(dir, engine, tick)
+	if err := os.Rename(from, filepath.Join(archiveDir, fileName(tick))); err != nil {
+		return err
 	}
-	return err
+	if err := atomicfile.SyncDir(archiveDir); err != nil {
+		return err
+	}
+	return atomicfile.SyncDir(filepath.Dir(from))
 }

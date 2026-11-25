@@ -18,20 +18,20 @@ What has been built and what is to be built, in the order it is done. What is bu
 | A retired engine ends its log with a `Retired` frame, and its ID is never given again | `done` |
 | The recovery line of a cluster, and the logs cut to it | `done` |
 | Checkpoint files: each engine takes its own checkpoint every period from an offset of its own (the hash of its ID, as for the hash of the log), copied at the end of the tick and written by one writer for the cluster out of the goroutines of the engines; the log has the hash at the tick of each; all are kept for now (see [checkpoint](../../docs/checkpoint.md)) | `done` |
+| Recovery line cache: the `Safe` of every engine, written to a file of its own by the observer of the replay log every `recovery.line_cache_every_ticks` and when the log is closed; a recovery reads each log from the tick after its cached one, and reads it whole when the cache says more than a log holds (see [recovery](../../docs/recovery.md)) | `done` |
+| Checkpoints above the line: moved, with what is cut of the logs, to the archive of the cut (`.archive/cut-<n>/`), and never deleted (see [recovery](../../docs/recovery.md#cut)) | `done` |
+| Replay from a checkpoint: each engine is made from its latest checkpoint at or below its limit (an earlier one where another engine reads a copy of it before) and run on its own log to its limit, with the hash of the log at the checkpoint compared with the engine that was made (see [recovery](../../docs/recovery.md#start-of-an-engine)) | `done` |
 
 ## To build
 
-What is left of the recovery of a cluster: the logs can be cut to the recovery line and then replayed from tick 0 with no divergence, and every engine writes its checkpoints to files; what is not there yet is to start from them and to go on.
+What is left of the recovery of a cluster: the logs and the checkpoints can be cut to the recovery line and every engine replayed from its checkpoint to its limit with no divergence; what is not there yet is to go on live from there.
 
 | Piece | What it is |
 |---|---|
-| Recovery line cache | the `Safe` of every engine, written to a file of its own by the goroutine that works out what is safe (a temporary file that is synced and renamed); a recovery reads the log of an engine from the tick after its cached one and not from the tick 1, after it checked that no cached tick is above the end of its log (if one is, the cache is not used and the logs are read whole); it is written again after a cut, and it is made with the replay from a checkpoint, since that is what makes the read of the logs from the tick 1 the slow part |
-| Checkpoints above the line | the checkpoints of an engine whose tick is above its limit are dropped, since they hold what was cut |
-| Replay from a checkpoint | each engine is made from its latest checkpoint at or below its limit and run on its own log to its limit, instead of from tick 0 |
 | Handover | when every engine has run to its limit they go on live: the logs are written on after the cut, the unsettled messages are those of the checkpoints, and the acks are made again |
 | Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
 | Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
-| To measure | the size of the unsettled messages in a checkpoint; the time of a recovery, from tick 0 and from a checkpoint |
+| To measure | the size of the unsettled messages in a checkpoint |
 
 ## Later
 
