@@ -35,17 +35,17 @@ The first two kinds are built in phase 0; the others are added when needed, and 
 
 An item has an ID of its own and exactly one owner (an entity on the ground, an inventory or a corpse). Inventories belong to the world, combat stats to the zonelayer (R28). Picking up: the zonelayer removes the item first and then sends a message to the world; if the message is lost, the item is lost but never duplicated, and the log can restore it.
 
-## Replay log and checkpoint
+## Event log and checkpoint
 
 Agreed (phase 1).
 
 - **One writer per engine, one log for the cluster.** Each engine writes only to its own files, with no shared lock; the files are one log of the cluster, read as one when replayed (see the end of this section).
-- **Two layers.** `shared/segmentlog` is a general append-only log: it knows segments, framing and the crash repair, and nothing of ticks or engines. The replay log puts what it needs in the two places the segment log leaves to its user, the meta of a segment header and the payload of a record.
+- **Two layers.** `shared/segmentlog` is a general append-only log: it knows segments, framing and the crash repair, and nothing of ticks or engines. The event log puts what it needs in the two places the segment log leaves to its user, the meta of a segment header and the payload of a record.
 - **Segments.** `<dir>/<name>-<id>/seg-<index>.pbsl` (name of the type of the state, ID of the state; for example `zonelayer-4/seg-00000000000000000000.pbsl`), the index in 20 digits counted from 0 in the order the segments were made, closed when it reaches a configured size.
-- **Record framing like Kafka's.** `[u32 length][u32 crc][payload]`, and a batch (a tick) ends with a commit marker, so a batch is all or nothing. After a crash, a half-written record or a batch with no commit at the end is detected through the length, the crc and the commit, and cut off (and kept next to the segment). The payload is the replay log's own: `[kind][tick][body]`, with the tick whole in each record so that a record does not depend on its segment.
-- **Segment header.** Magic, format version and a meta. The replay log's meta is the format version of its records, the engine address, the seed, and the tick of the first record of the segment; a tick is found by reading the meta of about log2(n) segments, so no index file is needed.
+- **Record framing like Kafka's.** `[u32 length][u32 crc][payload]`, and a batch (a tick) ends with a commit marker, so a batch is all or nothing. After a crash, a half-written record or a batch with no commit at the end is detected through the length, the crc and the commit, and cut off (and kept next to the segment). The payload is the event log's own: `[kind][tick][body]`, with the tick whole in each record so that a record does not depend on its segment.
+- **Segment header.** Magic, format version and a meta. The event log's meta is the format version of its records, the engine address, the seed, and the tick of the first record of the segment; a tick is found by reading the meta of about log2(n) segments, so no index file is needed.
 - **Record bodies.** Commands and actions are written as numbers of registers (action ID, command ID, cooldown key); a command writes its own fields with its `Encode`, and a function in its file reads them, found by the ID in a table, so a new kind is new code and changes nothing that exists.
-- **No cost during the tick.** The methods of `replay.Log` only append to a reused per-tick buffer. When the tick ends, the buffer goes to one writer goroutine that writes each batch with one `Write` and syncs at a configured interval (group commit), not on every tick.
+- **No cost during the tick.** The methods of `eventlog.Log` only append to a reused per-tick buffer. When the tick ends, the buffer goes to one writer goroutine that writes each batch with one `Write` and syncs at a configured interval (group commit), not on every tick.
 - **Checkpoint.** One file `ckpt-<tick>.snap` for each engine (written to a temporary file, synced, then renamed), with no set for the cluster: each engine is on its own. The period is a config parameter, rarer than the hash, and offset per engine by the hash of its ID. What it holds and how it is taken: see the end of this section.
 - **Recovery.** Of the cluster, not of an engine: it is the replay runner playing the logs from the checkpoints of the engines. See the end of this section.
 - **S3.** Pushing closed segments and checkpoints to S3 is in the plan at low priority (phase 6), not now.
@@ -115,7 +115,7 @@ Replay is the engines running again, not a second implementation:
 | messages out and returned | the router | caught by the replay and delivered as the receivers recorded; returned as the log says |
 | copies of other engines | the latest published | the copy of the tick recorded |
 | configuration | the store | the content of the version recorded, from the control stream |
-| events to clients and the replay log | the emitter and the file log | nothing |
+| events to clients and the event log | the emitter and the file log | nothing |
 
 - **Going live is making the engines again in the real environment (agreed):** after the log is played to its end, each replayed engine is checkpointed at its last tick, and an engine is restored from that checkpoint (`Restore...Engine`) in the environment with the real router, store, emitter and file log; it goes on from its own tick. A replayed engine never runs live, so no engine that runs carries an adapter of the replay and the path of a running engine has no extra indirection. Recovery and replay share the runner; they differ in what is made at the end.
 - What making them again needs:
@@ -130,7 +130,7 @@ Replay is the engines running again, not a second implementation:
 Costs and risks:
 
 - The runner is one goroutine that plays the engines in turn: replay costs about what the cluster costs live on one core, which is the machine the server targets. Running it in parallel as live does, one goroutine for each engine that waits for what it depends on, is a task of the plan.
-- The log is bigger by the bodies of the messages; the benchmark of the replay log records it.
+- The log is bigger by the bodies of the messages; the benchmark of the event log records it.
 - An engine added at run time needs the control stream; its shape is fixed now (R22) and the feature comes with the zonelayers that are added and removed.
 
 The order of the work, one commit for each step, all in one pull request, each step with its tests:
@@ -146,7 +146,7 @@ The order of the work, one commit for each step, all in one pull request, each s
 | Idea | What it must achieve in project-b | Phase | Status |
 |---|---|---|---|
 | Entity as an interface | `ID`, `KindID`, `Position`, `Radius`, `BoundingBox`; `CharacterEntity`, `ItemEntity`; a pickup action; appear and disappear events | 0 | detail pending approval |
-| Checkpoint and replay log | The log is written to a file, append-only, in segments; periodic checkpoints offset between engines; recovery is the replay of the cluster from the checkpoints of the engines | 1 | agreed, the cluster-wide form pending approval |
+| Checkpoint and event log | The log is written to a file, append-only, in segments; periodic checkpoints offset between engines; recovery is the replay of the cluster from the checkpoints of the engines | 1 | agreed, the cluster-wide form pending approval |
 | Early playable slice | Protobuf protocol, WebSocket gateway, TypeScript and PixiJS client, fighting, monsters, drops, pickup | 2 | agreed |
 | Grid | A spatial index for fast lookup by area, and localizing the map (each entity belongs to cells by its `BoundingBox`, queries by cell) | 3 | agreed |
 | Sight (AOI) | Who sees whom; entering and leaving sight; which cells changed in the tick | 3 | pending approval |

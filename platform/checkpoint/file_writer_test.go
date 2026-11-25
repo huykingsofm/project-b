@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 )
 
@@ -55,7 +55,7 @@ func TestAnEngineWithNoDirectoryHasNoCheckpoint(t *testing.T) {
 
 func TestATemporaryFileThatACrashLeftIsNotACheckpointAndIsWrittenOver(t *testing.T) {
 	dir := t.TempDir()
-	engineDir := replay.EngineDir(dir, engineA)
+	engineDir := eventlog.EngineDir(dir, engineA)
 	if err := os.MkdirAll(engineDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

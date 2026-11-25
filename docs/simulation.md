@@ -6,7 +6,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 | Layer | Holds | Code |
 |---|---|---|
-| platform | the interfaces `State`, `Action[S]`, `Command[S]`, `Message`; the plan, the scheduler, the registry an action is given, the codecs; the engine `Engine[S]` that runs any state; the router, the store of published states, the replay log and the replay runner | `platform/sim`, `platform/engine`, `platform/replay` |
+| platform | the interfaces `State`, `Action[S]`, `Command[S]`, `Message`; the plan, the scheduler, the registry an action is given, the codecs; the engine `Engine[S]` that runs any state; the router, the store of published states, the event log and the replay runner | `platform/sim`, `platform/engine`, `platform/eventlog` |
 | game | the three states below, their events, the actions and commands that change them, the tile map, the builder of the cluster | `server/game` |
 | shared | libraries that import nothing of the project | `shared` |
 
@@ -55,7 +55,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 5. Hand the events to the emitter.
 6. Publish a `Clone` of the state (other engines read the latest copy).
 7. Send the messages the actions put in the outbox; a message that cannot be delivered is decided by its own `OnFail`; send again the unsettled messages that went and were not acked ([unsettled messages](unsettled_messages.md));
-8. Write the hash when it is due, and close the tick for the replay log; say to the senders what is safe.
+8. Write the hash when it is due, and close the tick for the event log; say to the senders what is safe.
 
 | When a tick fails | What happens |
 |---|---|
@@ -82,7 +82,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - A message decides what a failed delivery means with its `OnFail`: [action/index](action/index.md#failed-delivery).
 - The kind runs itself (`OnFail.Handle`) on the bouncer of the engine (`platform/engine/bounce.go`), through `sim.Bouncer`.
-- A message and its `OnFail` are written by one codec (`platform/sim/codecs.go`): [replay_log](replay_log.md#messages-and-actions).
+- A message and its `OnFail` are written by one codec (`platform/sim/codecs.go`): [eventlog](eventlog.md#messages-and-actions).
 - The engine that takes a message runs a clone of it (`Message.Clone`: each action and the `OnFail` with their `Clone`): the sender keeps the message until it is acked, and an action may change what it holds as it runs.
 
 ## Chat
@@ -108,11 +108,11 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `Cluster`, `Env` | the engines, in the order they were added (the order of `Step`), and what they share |
 | `game.ClusterBuilder` | `NewBuilder`, `With...`, `Build`: builds the cluster of this game; gives every state its ID |
 | `Router` | carries messages between engines through `OutgoingChannel` |
-| `peer` | what an engine has to talk to the other engines: the `IncomingChannel`, the router, the `StableView`, the bouncer, the numbers of the messages, the unsettled messages and the acks; the engine itself holds its random numbers, its configuration and its replay log |
+| `peer` | what an engine has to talk to the other engines: the `IncomingChannel`, the router, the `StableView`, the bouncer, the numbers of the messages, the unsettled messages and the acks; the engine itself holds its random numbers, its configuration and its event log |
 | `StableStateStore` | the latest published state of every engine, whatever its type |
-| `StableView` | what one engine reads of the store; fixed within a tick, first read of each state written to the replay log |
+| `StableView` | what one engine reads of the store; fixed within a tick, first read of each state written to the event log |
 | `Emitter` | one; the events of every engine, which the game interprets |
-| `replay.Log` | records the input from outside and the state hash (sparse, offset per engine, and at each checkpoint); `EndTick` says an engine is done with a tick; `replay.MemLog` keeps the records in memory, `replay.FileLog` writes them to files ([replay_log](replay_log.md)) |
+| `eventlog.Log` | records the input from outside and the state hash (sparse, offset per engine, and at each checkpoint); `EndTick` says an engine is done with a tick; `eventlog.MemLog` keeps the records in memory, `eventlog.FileLog` writes them to files ([eventlog](eventlog.md)) |
 | `CheckpointWriter` | writes the checkpoints that the engines take at the end of a tick, out of their goroutines; `checkpoint.FileWriter` writes them to files ([checkpoint](checkpoint.md)) |
 | `PlanPool[S]` | one per type of state |
 | `sim.Codecs` | the registers that read back states, actions, commands and kinds of `OnFail`; the game fills them (`game.NewCodecs`) and puts them in `Env` |
@@ -132,12 +132,12 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]` (`V` says its own priority, `Priority() P`, as a `Prioritier[P]`; the zero queue is ready): elements taken by priority and then by arrival, which remembers what it held in the round, with the same columns on all of it (`Add`, `BuildFrom`, `Next`, `All`, `Pending`) |
 | `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
-| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; and `Version`, the version of the data that a `Decode` reads, for the replay log; refuses a number or a Go type that two kinds share |
+| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; and `Version`, the version of the data that a `Decode` reads, for the event log; refuses a number or a Go type that two kinds share |
 | `shared/bimap` | two-way map (the zonelayer state links characters and bodies with it) |
 | `shared/channels` | `Drain` |
 | `shared/logging` | key=value log lines; a call only fills a channel ([logging](logging.md)) |
 | `shared/bitset` | K bits, the walls of a `TileMap` ([bitset](bitset.md)) |
-| `shared/segmentlog` | append-only log in segment files, under the replay log ([segmentlog](segmentlog.md)) |
+| `shared/segmentlog` | append-only log in segment files, under the event log ([segmentlog](segmentlog.md)) |
 | `shared/codec/binary` | integers (checked against the type they are read as) and strings as bytes: `Writer` and `Reader` |
 | `shared/errs` | `Join`: joins what many registrations returned into one error |
 | `shared/clone` | the contract for copying: a value, or a type with `Clone`; the containers use it ([R29](../plan/rule/r29-clone-or-value.md)) |
@@ -150,8 +150,8 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Replay
 
-- Needs the inputs from outside and what only the time decides (`platform/replay/`); what engines send themselves is made again from the state.
+- Needs the inputs from outside and what only the time decides (`platform/eventlog/`); what engines send themselves is made again from the state.
 - The hash an engine records is the hash of its state, of what it waits for and of what only it knows ([checkpoint](checkpoint.md#hash)).
 - An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the version of the config it first read, the hash of its state every few ticks, and which copy of another engine it read first.
-- In files: [replay_log](replay_log.md).
-- Run again from the records, on the real engines with other adapters: [replay_runner](replay_runner.md). Cut to the recovery line and run again from the checkpoints: [recovery](recovery.md).
+- In files: [eventlog](eventlog.md).
+- Run again from the records, on the real engines with other adapters: [replay](replay.md). Cut to the recovery line and run again from the checkpoints: [replay](replay.md).

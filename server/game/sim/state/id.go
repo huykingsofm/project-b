@@ -13,7 +13,7 @@ import (
 )
 
 // The types of the states of the game, which the codecs register. A number is never changed or
-// reused, because checkpoints and the replay log write it.
+// reused, because checkpoints and the event log write it.
 const (
 	WorldType sim.StateType = iota + 1
 	ZoneType

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -18,7 +18,7 @@ func newToyEnv(t testing.TB) *Env {
 		t.Fatal(err)
 	}
 	return &Env{
-		Router: NewRouter(), Cfg: config.NewStore(), ReplayLog: &replay.MemLog{},
+		Router: NewRouter(), Cfg: config.NewStore(), EventLog: &eventlog.MemLog{},
 		Stable: NewStableStateStore(), Codecs: codecs, QueueSize: 16, Emitter: NopEmitter{},
 		Acks: NewAckBoard(),
 	}
@@ -46,14 +46,14 @@ func TestAStepRunsTheCommandsPublishesTheStateAndRecordsTheCommand(t *testing.T)
 	if a.State().Total != 5 || a.Tick() != 1 {
 		t.Fatalf("total %d at tick %d, want 5 at 1", a.State().Total, a.Tick())
 	}
-	published, err := c.Env.Stable.View(2, replay.NopLog{}).Read(1)
+	published, err := c.Env.Stable.View(2, eventlog.NopLog{}).Read(1)
 	if err != nil || published.(*toyState).Total != 5 || published.(*toyState) == a.State() {
 		t.Fatalf("the published state is %+v, %v: want a copy with the total", published, err)
 	}
-	mem := c.Env.ReplayLog.(*replay.MemLog)
+	mem := c.Env.EventLog.(*eventlog.MemLog)
 	commands := 0
 	for _, r := range mem.Records {
-		if r.Kind() == replay.KindCommand && r.Engine == 1 && r.Tick == 1 {
+		if r.Kind() == eventlog.KindCommand && r.Engine == 1 && r.Tick == 1 {
 			commands++
 		}
 	}
@@ -86,7 +86,7 @@ func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T
 	c.Step()
 	c.Step()
 	c.Step() // a sends at its tick 3: b takes the message in the same step
-	mem := c.Env.ReplayLog.(*replay.MemLog)
+	mem := c.Env.EventLog.(*eventlog.MemLog)
 	var deps []sim.StateDependency
 	for _, r := range mem.Records {
 		if dep, ok := r.Dependency(); ok && r.Engine == 2 {
@@ -181,7 +181,7 @@ func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
 }
 
 // BenchmarkEngineHash is the hash of an engine that holds messages to send and messages that went
-// and were not acked: what is taken at the period of the hash of the replay log.
+// and were not acked: what is taken at the period of the hash of the event log.
 func BenchmarkEngineHash(b *testing.B) {
 	env := newToyEnv(b)
 	e := New(&toyState{id: 1}, env, 1)

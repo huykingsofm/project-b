@@ -5,7 +5,7 @@ and combat, effects, storage, network, accounts, a client, tools and content (th
 [plan/en/phases.md](plan/en/phases.md)). What exists today is the simulation core, which touches
 nothing outside: no gateway, no database, no network. Outside code gives it commands and takes what
 changed. It builds and its tests pass;
-`go run ./server/cmd/world` runs the whole flow as a script and prints what the clients would hear; with `-replay-dir <dir>` it also writes the replay log of every engine to files and reads it back.
+`go run ./server/cmd/world` runs the whole flow as a script and prints what the clients would hear; with `-replay-dir <dir>` it also writes the event log of every engine to files and reads it back.
 
 ```
 make hooks   # once for each clone: runs make ci before every commit
@@ -35,7 +35,9 @@ platform/                           what any game that runs in ticks is made of;
   sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs
     onfail/                         the kinds of OnFail (retry, redirect, compensate, notify, escalate, drop)
   engine/                           Engine[S] that runs any state, the router, the store of published states, the cluster
-  replay/                           the replay log, in memory and in files; runner/ plays a cluster again against it
+  eventlog/                         the event log of an engine, in memory and in files; where each engine's directory is
+  checkpoint/                       the checkpoint files of an engine, and the writer of them
+  replay/                           plays a cluster again from the event logs and the checkpoints: the recovery line (the plan), the cut, the run
 server/
   cmd/world/                        a script that runs the whole flow
   game/                             this game: the states, actions and commands, and the builder of the cluster

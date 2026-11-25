@@ -6,7 +6,7 @@ import (
 )
 
 // KindID names a kind of entity, by a number. A number is never changed or reused, because
-// checkpoints and the replay log write it; 0 is no kind. Every kind of the game is in this one
+// checkpoints and the event log write it; 0 is no kind. Every kind of the game is in this one
 // list, so a kind means one thing whichever state holds it, and each state holds the kinds that it
 // chooses (the entities of a kind are in the package entity below the state).
 type KindID uint16

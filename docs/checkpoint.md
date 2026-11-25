@@ -12,7 +12,7 @@
 | `c.Restore(env, seed)` | makes the engine of a checkpoint, at its tick; the engine takes what the checkpoint holds |
 | `checkpoint.LatestAtOrBelow(dir, id, tick)` | the tick of the latest checkpoint file of an engine at or below `tick`, and false when there is none |
 | `checkpoint.Archive(dir, id, tick, archiveDir)` | moves the checkpoint file of an engine at a tick to `archiveDir`: it is no longer a checkpoint, and is not deleted; the file is named `ckpt-<tick>.<now>.snap` there (`atomicfile.Stamped`), so that two moves never meet |
-| `engine.CheckpointSource` | what a builder asks for the checkpoint of each engine it makes (`Checkpoint(id)`); `engine.NoCheckpoints` has none; `recovery.CheckpointFiles` gives the files |
+| `engine.CheckpointSource` | what a builder asks for the checkpoint of each engine it makes (`Checkpoint(id)`); `engine.NoCheckpoints` has none; `replay.CheckpointFiles` gives the files |
 | `checkpoint.NewFileWriter(dir, queue)` | the `engine.CheckpointWriter` of a cluster: one goroutine that writes the checkpoints of every engine to files under `dir`, with a queue of `queue`; `Close` writes what waits and stops it |
 | `checkpoint.Ticks(dir, id)` | the ticks at which an engine has a checkpoint file, in rising order |
 | `checkpoint.Read(dir, id, tick)` | the bytes of the checkpoint of an engine at a tick |
@@ -56,7 +56,7 @@ In this order:
 |---|---|
 | the events of the state | they are not data (R18); the engine gives them to its clients at the end of the tick |
 | the map of a zone | it never changes, and the ID of the zone finds it |
-| the queues of the engine | what was not yet taken from them is in the replay log |
+| the queues of the engine | what was not yet taken from them is in the event log |
 | `View`, the registry of the tick, the emitters | made again by the engine |
 
 ## State, by type
@@ -91,28 +91,28 @@ Each engine takes its own checkpoints, with no set for the cluster: no checkpoin
 |---|---|
 | when | at every tick for which `(tick + offset mod every) mod every` is 0 |
 | `every` | the config variable `checkpoint.every_ticks` (600) |
-| offset | the hash of the ID of the engine, the same offset as for the hash of the replay log, so the engines of a cluster are spread over the ticks of a period |
+| offset | the hash of the ID of the engine, the same offset as for the hash of the event log, so the engines of a cluster are spread over the ticks of a period |
 | where in `Step` | after the messages of the tick are sent, before `EndTick` |
 | on the goroutine of the engine | an `EngineCheckpoint` whose state is the clone that was just published, which no one changes; the scheduler, the random numbers and what the peer knows are cloned |
 | on the goroutine of the writer | the checkpoint is encoded (`Encode`), and the file is written |
-| the hash | the replay log has the hash of the engine at every tick a checkpoint is taken at, whether the hash is due or not; a replay, whose engines take no checkpoint, hashes at the same ticks, since it depends on the configuration and the tick alone |
+| the hash | the event log has the hash of the engine at every tick a checkpoint is taken at, whether the hash is due or not; a replay, whose engines take no checkpoint, hashes at the same ticks, since it depends on the configuration and the tick alone |
 | no writer in `Env` | no checkpoint is taken (a replay) |
 
 ## Files
 
 | Key | Value |
 |---|---|
-| path | `<dir>/<name>-<id>/ckpt-<tick>.snap`, in the directory of the engine next to its replay log (`replay.EngineDir`); the tick in 20 digits |
+| path | `<dir>/<name>-<id>/ckpt-<tick>.snap`, in the directory of the engine next to its event log (`eventlog.EngineDir`); the tick in 20 digits |
 | how it is written | with `atomicfile.Write` ([atomicfile](atomicfile.md)): to `ckpt-<tick>.snap.tmp`, synced, renamed, then the directory is synced: a file with the name of a checkpoint is whole |
 | a temporary file left by a crash | not a checkpoint; written over when the same tick is written again |
 | order | one writer for the cluster, in the order the checkpoints were offered |
 | a full queue, or a writer that is closed | the checkpoint is dropped, logged and counted (`Dropped`); the engine goes on, and its next checkpoint is a period later |
 | a checkpoint that cannot be encoded or written | logged and counted (`Failed`); no file is left |
-| deleted | never: all are kept for now; the ones above the recovery line go to the archive of the cut ([recovery](recovery.md#cut)) |
+| deleted | never: all are kept for now; the ones above the recovery line go to the archive of the cut ([replay](replay.md#cut)) |
 
 ## Starting from a checkpoint
 
-- A replay or a recovery makes each engine from its latest checkpoint at or below its limit, and runs it on its log: [recovery](recovery.md), [replay_runner](replay_runner.md#an-engine-that-starts-from-a-checkpoint).
+- A replay or a recovery makes each engine from its latest checkpoint at or below its limit, and runs it on its log: [replay](replay.md#an-engine-that-starts-from-a-checkpoint).
 - The engine made from a checkpoint has the hash that the log recorded at the tick of the checkpoint, which the replay checks.
 - The same builder makes the engines that go on live after it; that is not built yet.
 

@@ -30,7 +30,7 @@ func (id StateID) Type() StateType { return StateType(id >> 56) }
 func (id StateID) Local() uint64 { return uint64(id) & MaxLocalStateID }
 
 // StateType names a kind of state, by a number that the game registers with the codecs: see
-// Codecs.RegisterState. A number is never changed or reused, because checkpoints and the replay log
+// Codecs.RegisterState. A number is never changed or reused, because checkpoints and the event log
 // write it.
 type StateType uint8
 

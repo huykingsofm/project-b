@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -125,10 +125,10 @@ func TestTheBoardOnlyGoesUp(t *testing.T) {
 	}
 }
 
-// aLogThatSaysWhatIsSafe is a replay log for the tests of acks: what it says is safe is set by the
+// aLogThatSaysWhatIsSafe is a event log for the tests of acks: what it says is safe is set by the
 // test.
 type aLogThatSaysWhatIsSafe struct {
-	replay.MemLog
+	eventlog.MemLog
 	safe map[sim.StateID]uint64
 }
 
@@ -139,7 +139,7 @@ func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engi
 	t.Helper()
 	env := newToyEnv(t)
 	log := &aLogThatSaysWhatIsSafe{safe: map[sim.StateID]uint64{}}
-	env.ReplayLog = log
+	env.EventLog = log
 	c := NewCluster(env)
 	a, b := New(&toyState{id: 1}, env, 1), New(&toyState{id: 2}, env, 1)
 	c.Add(a)
@@ -215,8 +215,8 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 		t.Fatalf("a still holds %d messages for a receiver that is gone", held.Len())
 	}
 	returned := 0
-	for _, r := range c.Env.ReplayLog.(*aLogThatSaysWhatIsSafe).Records {
-		if r.Kind() == replay.KindReturned && r.Engine == 1 {
+	for _, r := range c.Env.EventLog.(*aLogThatSaysWhatIsSafe).Records {
+		if r.Kind() == eventlog.KindReturned && r.Engine == 1 {
 			returned++
 		}
 	}
@@ -251,10 +251,10 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	dir := t.TempDir()
 	env := newToyEnv(t)
-	log := replay.NewFileLog(dir, replay.FileLogOptions{
+	log := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
 	})
-	env.ReplayLog = log
+	env.EventLog = log
 	c := NewCluster(env)
 	first := New(&toyState{id: 1}, env, 1)
 	c.Add(first)
@@ -276,7 +276,7 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := replay.ReadFileLog(dir, 1, 0, codecs)
+	r, err := eventlog.ReadFileLog(dir, 1, 0, codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,10 +285,10 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	var retiredAt uint64
 	for r.Next() {
 		rec := r.Record()
-		if rec.Kind() == replay.KindRetired {
+		if rec.Kind() == eventlog.KindRetired {
 			retiredAt = rec.Tick
 		}
-		if rec.Kind() == replay.KindCommand || rec.Kind() == replay.KindRetired {
+		if rec.Kind() == eventlog.KindCommand || rec.Kind() == eventlog.KindRetired {
 			ticks = append(ticks, rec.Tick)
 		}
 	}

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/channels"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -37,7 +37,7 @@ type Engine[S sim.State] struct {
 	rng            *rand.Rand // the random numbers of the engine and where they are
 	cfg            ConfigSource
 	cfgVersionSeen uint64 // the version of the configuration the engine read last
-	replayLog      replay.Log
+	eventLog       eventlog.Log
 
 	actionScheduler sim.ActionScheduler[S]
 	stateRegistry   sim.Registry[S]
@@ -55,11 +55,11 @@ type Engine[S sim.State] struct {
 	periodOffset uint64
 }
 
-// replayLogHashEvery is every how many ticks an engine records its hash: it costs as much as the
+// eventLogHashEvery is every how many ticks an engine records its hash: it costs as much as the
 // state is big, so it is worked out and recorded a period of ticks apart and not at every tick. A
 // replay that finds a difference at a hash runs the ticks since the one before it again to find
 // where it began. The engine records it at every tick it takes a checkpoint at as well.
-var replayLogHashEvery = config.NewVar("replay_log.hash_every_ticks", 20, config.Range(1, 100000))
+var eventLogHashEvery = config.NewVar("eventlog.hash_every_ticks", 20, config.Range(1, 100000))
 
 // checkpointEvery is every how many ticks an engine takes a checkpoint, at the end of the tick: a
 // replay or a recovery starts an engine from its latest checkpoint instead of from the tick 1. It
@@ -78,11 +78,11 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 	me := st.ID()
 	e := &Engine[S]{
 		peer: newPeer(
-			me, env.Router, env.Stable.View(me, env.ReplayLog), env.QueueSize, env.Acks,
+			me, env.Router, env.Stable.View(me, env.EventLog), env.QueueSize, env.Acks,
 		), st: st, tick: st.Tick(),
 		// the seed of the cluster and the ID of the engine decide the random numbers, so the same
 		// inputs give the same run
-		rng: rand.NewPCG(seed, uint64(me)), cfg: env.Cfg, replayLog: env.ReplayLog,
+		rng: rand.NewPCG(seed, uint64(me)), cfg: env.Cfg, eventLog: env.EventLog,
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, checkpoints: env.Checkpoints, planPool: planPoolOf[S](),
 		periodOffset: periodOffsetOf(me),
@@ -103,8 +103,8 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 // back to its senders. The engine is not used after.
 func (e *Engine[S]) Remove() {
 	e.tick++
-	e.replayLog.Append(e.peer.me, e.tick, replay.Retired{})
-	e.replayLog.EndTick(e.peer.me, e.tick)
+	e.eventLog.Append(e.peer.me, e.tick, eventlog.Retired{})
+	e.eventLog.EndTick(e.peer.me, e.tick)
 	e.stable.Remove(e.peer.me)
 	e.peer.retire()
 }
@@ -176,7 +176,7 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  6. publish a copy of the state;
 //  7. send the messages that the actions put in the outbox;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
-//  9. write the hash of the engine to the replay log, when it is due or a checkpoint was due,
+//  9. write the hash of the engine to the event log, when it is due or a checkpoint was due,
 //     and close the tick for the log.
 //
 // It first takes the state to the next tick, and returns an error, having done nothing else, when
@@ -195,7 +195,7 @@ func (e *Engine[S]) Step() error {
 	ctx := &sim.Context{Tick: e.tick, Rand: e.rng.Rand, Cfg: cfg}
 	e.stateRegistry.Begin(e.tick)
 	e.peer.view.begin(e.tick)
-	e.peer.handleReturnedMessages(cfg, e.tick, e.replayLog)
+	e.peer.handleReturnedMessages(cfg, e.tick, e.eventLog)
 
 	e.actionBuffer = e.actionBuffer[:0]
 	e.planScheduled()
@@ -230,16 +230,16 @@ func (e *Engine[S]) Step() error {
 	}
 	published := e.st.Clone().(S)
 	e.stable.Publish(published)
-	e.peer.flushUnsettledMessages(cfg, e.tick, e.stateRegistry.Take(), e.replayLog)
+	e.peer.flushUnsettledMessages(cfg, e.tick, e.stateRegistry.Take(), e.eventLog)
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
 		e.offerCheckpoint(published)
 	}
-	if checkpointDue || e.dueAt(e.tick, uint64(replayLogHashEvery.Get(cfg))) {
-		e.replayLog.Append(e.peer.me, e.tick, replay.Hash{Value: e.Hash(sim.NewHasher())})
+	if checkpointDue || e.dueAt(e.tick, uint64(eventLogHashEvery.Get(cfg))) {
+		e.eventLog.Append(e.peer.me, e.tick, eventlog.Hash{Value: e.Hash(sim.NewHasher())})
 	}
-	e.replayLog.EndTick(e.peer.me, e.tick)
-	e.peer.publishAcks(e.replayLog)
+	e.eventLog.EndTick(e.peer.me, e.tick)
+	e.peer.publishAcks(e.eventLog)
 	return nil
 }
 
@@ -298,14 +298,14 @@ func (e *Engine[S]) planScheduled() {
 
 // planMessages adds the actions of the messages that other engines sent, in the order they arrived.
 func (e *Engine[S]) planMessages() {
-	e.actionBuffer = append(e.actionBuffer, e.peer.receivedActions[S](e.tick, e.replayLog)...)
+	e.actionBuffer = append(e.actionBuffer, e.peer.receivedActions[S](e.tick, e.eventLog)...)
 }
 
 // planCommands takes the commands that clients sent since the last tick, writes them to the replay
 // log and adds their actions.
 func (e *Engine[S]) planCommands() {
 	for _, c := range channels.Drain(e.commands) {
-		e.replayLog.Append(e.peer.me, e.tick, replay.Command{Command: c})
+		e.eventLog.Append(e.peer.me, e.tick, eventlog.Command{Command: c})
 		e.actionBuffer = append(e.actionBuffer, c.Translate()...)
 	}
 }
@@ -369,7 +369,7 @@ func (e *Engine[S]) snapshot(tick uint64) *config.Snapshot {
 	s := e.cfg.Snapshot()
 	if s.Version() != e.cfgVersionSeen {
 		e.cfgVersionSeen = s.Version()
-		e.replayLog.Append(e.peer.me, tick, replay.ConfigRead{Version: s.Version()})
+		e.eventLog.Append(e.peer.me, tick, eventlog.ConfigRead{Version: s.Version()})
 	}
 	return s
 }

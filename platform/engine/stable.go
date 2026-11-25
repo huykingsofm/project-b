@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/registry"
 )
@@ -15,7 +15,7 @@ type StableStore interface {
 	// Remove forgets what an engine published, as the engine is removed.
 	Remove(id sim.StateID)
 	// View returns what the engine with the ID reads of the store.
-	View(reader sim.StateID, replayLog replay.Log) *StableView
+	View(reader sim.StateID, eventLog eventlog.Log) *StableView
 }
 
 // CopySource says which copy of an engine a StableView finds when its engine reads one at a tick. A
@@ -50,9 +50,9 @@ func (s *StableStateStore) Remove(id sim.StateID) { s.states.Remove(id) }
 
 // View returns what the engine with the ID reads of the store. The store does not give its states
 // out itself: an engine reads them through its own view, which keeps the first copy it reads of
-// each ID in a tick (see StableView) and writes the read to the replay log.
-func (s *StableStateStore) View(reader sim.StateID, replayLog replay.Log) *StableView {
-	return NewStableView(s, reader, replayLog)
+// each ID in a tick (see StableView) and writes the read to the event log.
+func (s *StableStateStore) View(reader sim.StateID, eventLog eventlog.Log) *StableView {
+	return NewStableView(s, reader, eventLog)
 }
 
 // Copy returns the latest published copy, or nil.
@@ -66,23 +66,23 @@ func (s *StableStateStore) Copy(_ sim.StateID, _ uint64, id sim.StateID) sim.Sta
 // returns the same copy, so what an engine knows of the others does not change while its plan runs
 // (the store itself gives the latest copy at the moment of the read, and the other engines publish
 // at any time; a replay gives the copy that the log says was read). The first read of each state in
-// a tick is written to the replay log, with the tick of the copy, so that a replay can give the
+// a tick is written to the event log, with the tick of the copy, so that a replay can give the
 // engine the same one. Only the goroutine of its engine uses it, so it takes no lock.
 type StableView struct {
-	source    CopySource
-	replayLog replay.Log
-	me        sim.StateID
-	tick      uint64
-	states    map[sim.StateID]sim.State
+	source   CopySource
+	eventLog eventlog.Log
+	me       sim.StateID
+	tick     uint64
+	states   map[sim.StateID]sim.State
 }
 
 var _ sim.StableReader = (*StableView)(nil)
 
 // NewStableView makes the view of the engine with the ID, which finds the copies that the source
-// gives, and writes each first read of a tick to the replay log.
-func NewStableView(source CopySource, reader sim.StateID, replayLog replay.Log) *StableView {
+// gives, and writes each first read of a tick to the event log.
+func NewStableView(source CopySource, reader sim.StateID, eventLog eventlog.Log) *StableView {
 	return &StableView{
-		source: source, replayLog: replayLog, me: reader, states: map[sim.StateID]sim.State{},
+		source: source, eventLog: eventLog, me: reader, states: map[sim.StateID]sim.State{},
 	}
 }
 
@@ -102,7 +102,7 @@ func (v *StableView) Read(id sim.StateID) (sim.State, error) {
 		if st != nil {
 			copyTick = st.Tick()
 		}
-		v.replayLog.Append(v.me, v.tick, replay.StableRead{Source: id, CopyTick: copyTick})
+		v.eventLog.Append(v.me, v.tick, eventlog.StableRead{Source: id, CopyTick: copyTick})
 	}
 	if st == nil {
 		return nil, sim.ErrStateNotFound

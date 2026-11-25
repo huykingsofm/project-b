@@ -24,15 +24,15 @@ func TestABuilderWithOnlyAWorldBuildsAClusterWithTheDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Step() // the default emitters and replay log take what the engines give, and discard it
+	c.Step() // the default emitters and event log take what the engines give, and discard it
 	if c.World == nil {
 		t.Fatal("no world engine")
 	}
 }
 
-func TestANilEmitterOrReplayLogKeepsTheDefault(t *testing.T) {
+func TestANilEmitterOrEventLogKeepsTheDefault(t *testing.T) {
 	c, err := game.NewBuilder().
-		WithReplayLog(nil).WithEmitter(nil).WithConfig(nil).
+		WithEventLog(nil).WithEmitter(nil).WithConfig(nil).
 		WithWorld(game.WorldParams{ID: worldID(1)}).
 		WithZone(game.ZoneParams{ID: zoneID(2), Tiles: smallMap(t)}).
 		WithZoneLayers(game.ZoneLayerParams{ZoneID: zoneID(2), Count: 1, Capacity: 2}).

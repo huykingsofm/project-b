@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/atomicfile"
 )
@@ -31,14 +31,14 @@ func fileName(tick uint64) string {
 
 // Path is the file of the checkpoint of an engine at the tick, under the directory of a cluster.
 func Path(dir string, engine sim.StateID, tick uint64) string {
-	return filepath.Join(replay.EngineDir(dir, engine), fileName(tick))
+	return filepath.Join(eventlog.EngineDir(dir, engine), fileName(tick))
 }
 
 // Ticks lists the ticks at which an engine has a checkpoint under the directory of a cluster, in
 // rising order. A file that is not named as a checkpoint is not one; an engine with no directory
 // has none.
 func Ticks(dir string, engine sim.StateID) ([]uint64, error) {
-	entries, err := os.ReadDir(replay.EngineDir(dir, engine))
+	entries, err := os.ReadDir(eventlog.EngineDir(dir, engine))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
@@ -45,7 +45,7 @@ type ClusterBuilder struct {
 	cfg       *config.Store
 	seed      uint64
 	queueSize int
-	replayLog replay.Log
+	eventLog  eventlog.Log
 	emitter   engine.Emitter
 	// checkpoints writes the checkpoints the engines take; nil: they take none
 	checkpoints engine.CheckpointWriter
@@ -56,13 +56,13 @@ type ClusterBuilder struct {
 }
 
 // NewBuilder returns a builder with the defaults: a configuration store with every default value,
-// seed 0, a queue of 256 for each engine, a replay log that records nothing, an emitter that
+// seed 0, a queue of 256 for each engine, a event log that records nothing, an emitter that
 // discards, and no writer of checkpoints, so the engines take none.
 func NewBuilder() *ClusterBuilder {
 	return &ClusterBuilder{
 		cfg:       config.NewStore(),
 		queueSize: 256,
-		replayLog: replay.NopLog{},
+		eventLog:  eventlog.NopLog{},
 		emitter:   engine.NopEmitter{},
 	}
 }
@@ -90,10 +90,10 @@ func (b *ClusterBuilder) WithQueueSize(size int) *ClusterBuilder {
 	return b
 }
 
-// WithReplayLog sets where the engines write what a replay needs. A nil log keeps the default.
-func (b *ClusterBuilder) WithReplayLog(log replay.Log) *ClusterBuilder {
+// WithEventLog sets where the engines write what a replay needs. A nil log keeps the default.
+func (b *ClusterBuilder) WithEventLog(log eventlog.Log) *ClusterBuilder {
 	if log != nil {
-		b.replayLog = log
+		b.eventLog = log
 	}
 	return b
 }
@@ -210,7 +210,7 @@ func (b *ClusterBuilder) Build() (*Cluster, error) {
 		return nil, err
 	}
 	env := &engine.Env{
-		Router: engine.NewRouter(), Cfg: b.cfg, ReplayLog: b.replayLog,
+		Router: engine.NewRouter(), Cfg: b.cfg, EventLog: b.eventLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
 	}

@@ -22,7 +22,7 @@ type CheckpointWriter interface {
 // at: its state, what it waits for, what only it knows and what its peer knows. It shares nothing
 // with the engine it was taken from, which runs on, so it may be encoded on another goroutine.
 //
-// The queues of the engine are not in it: what was not yet taken from them is in the replay log.
+// The queues of the engine are not in it: what was not yet taken from them is in the event log.
 // What the engine does again and again is an action that waits, so it is in the scheduler and
 // there is nothing else to keep for it.
 type EngineCheckpoint[S sim.State] struct {

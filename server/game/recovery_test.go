@@ -3,15 +3,13 @@ package game_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/recovery"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/replay"
-	"github.com/huykingsofm/project-b/platform/replay/runner"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/testkit"
@@ -24,7 +22,7 @@ func configVersionsOf(every map[string]string) map[uint64]map[string]string {
 	return map[uint64]map[string]string{1: every, 2: testkit.ScenarioConfigVersion(every)}
 }
 
-// aWorldThatWroteItsFilesAndStopped runs the scenario in a world that writes its replay log and its
+// aWorldThatWroteItsFilesAndStopped runs the scenario in a world that writes its event log and its
 // checkpoints under dir at the period every says, goes on for idleTicks ticks more, and closes
 // both.
 func aWorldThatWroteItsFilesAndStopped(
@@ -35,14 +33,14 @@ func aWorldThatWroteItsFilesAndStopped(
 	if _, err := cfg.Apply(every); err != nil {
 		t.Fatal(err)
 	}
-	file := replay.NewFileLog(dir, replay.FileLogOptions{
+	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8,
-		OnSafe: recovery.NewLineCacheWriter(dir, cfg),
+		OnSafe: replay.NewLineCacheWriter(dir, cfg),
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
 		WithConfig(cfg).
-		WithReplayLog(file).
+		WithEventLog(file).
 		WithCheckpointWriter(files).
 		Build()
 	if err != nil {
@@ -59,16 +57,12 @@ func aWorldThatWroteItsFilesAndStopped(
 
 // recoverTheWorld recovers the world that aWorldThatWroteItsFilesAndStopped wrote, and fails the
 // test when an engine differs from its log.
-func recoverTheWorld(t testing.TB, dir string, every map[string]string) *recovery.Result {
+func recoverTheWorld(t testing.TB, dir string, every map[string]string) *replay.Result {
 	t.Helper()
-	result, err := recovery.Recover(dir, testkit.WorldBuilder(t, 7, 10),
-		recovery.Options{ConfigVersions: configVersionsOf(every)})
+	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10),
+		replay.Options{ConfigVersions: configVersionsOf(every)})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(result.Replay.Divergences) != 0 {
-		t.Fatalf("the recovery differs from the logs:\n%s",
-			strings.Join(result.Replay.Divergences, "\n"))
 	}
 	return result
 }
@@ -77,17 +71,17 @@ func TestARecoveryMakesEveryEngineFromItsCheckpointAndRunsItsLogWithNoDivergence
 	dir := t.TempDir()
 	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
 	result := recoverTheWorld(t, dir, everySeventhTick)
+	limits, starts := result.Plan.Limits(), result.Plan.Starts()
 	for _, id := range testkit.ClusterEngines {
-		start := result.Starts[id]
-		if start == 0 || start > result.Limits[id] {
-			t.Fatalf("%v starts at %d, with the line at %d: want a checkpoint",
-				id, start, result.Limits[id])
+		start := starts[id]
+		if start == 0 || start > limits[id] {
+			t.Fatalf("%v starts at %d, line at %d: want a checkpoint", id, start, limits[id])
 		}
-		if got := result.Replay.Ticks[id]; got < start || got > result.Limits[id] {
-			t.Fatalf("%v ran to %d: want it between %d and %d", id, got, start, result.Limits[id])
+		if got := result.Ticks[id]; got < start || got > limits[id] {
+			t.Fatalf("%v ran to %d: want it between %d and %d", id, got, start, limits[id])
 		}
 	}
-	if got := result.Replay.Ticks[testkit.Layer1]; got <= result.Starts[testkit.Layer1] {
+	if got := result.Ticks[testkit.Layer1]; got <= starts[testkit.Layer1] {
 		t.Fatalf("the zonelayer ran no tick after its checkpoint (%d)", got)
 	}
 }
@@ -99,7 +93,7 @@ func TestARecoveryAfterAZonelayerLostItsTailGoesBackToAnEarlierCheckpointAndArch
 	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
 	// a crash: the first zonelayer lost its log after tick 7, and the others kept theirs
 	const kept = 7
-	layerDir := replay.EngineDir(dir, testkit.Layer1)
+	layerDir := eventlog.EngineDir(dir, testkit.Layer1)
 	if err := segmentlog.CutAfter(layerDir, kept, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +102,10 @@ func TestARecoveryAfterAZonelayerLostItsTailGoesBackToAnEarlierCheckpointAndArch
 		t.Fatal(err)
 	}
 	result := recoverTheWorld(t, dir, everySeventhTick)
-	if result.Limits[testkit.Layer1] != kept || result.Starts[testkit.Layer1] > kept {
+	limit, start := result.Plan.Limits()[testkit.Layer1], result.Plan.Starts()[testkit.Layer1]
+	if limit != kept || start > kept {
 		t.Fatalf("the zonelayer is at %d and starts at %d: want a line at %d and a start at or "+
-			"below it", result.Limits[testkit.Layer1], result.Starts[testkit.Layer1], kept)
+			"below it", limit, start, kept)
 	}
 	after, _ := checkpoint.Ticks(dir, testkit.Layer1)
 	if len(after) >= len(before) {
@@ -124,9 +119,9 @@ func TestARecoveryAfterAZonelayerLostItsTailGoesBackToAnEarlierCheckpointAndArch
 		t.Fatalf("%d checkpoints in the archive, want %d", len(archived), len(before)-len(after))
 	}
 	for _, id := range testkit.ClusterEngines {
-		if result.Replay.Ticks[id] > result.Limits[id] {
+		if result.Ticks[id] > result.Plan.Limits()[id] {
 			t.Fatalf("%v ran to %d, past its line %d",
-				id, result.Replay.Ticks[id], result.Limits[id])
+				id, result.Ticks[id], result.Plan.Limits()[id])
 		}
 	}
 }
@@ -147,9 +142,9 @@ func TestARecoveryWhoseCheckpointIsOfAnotherTickIsAnErrorAndNotADivergence(t *te
 	if err := os.WriteFile(last, older, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := recovery.Recover(
+	if _, err := replay.Recover(
 		dir, testkit.WorldBuilder(t, 7, 10),
-		recovery.Options{ConfigVersions: configVersionsOf(everySeventhTick)},
+		replay.Options{ConfigVersions: configVersionsOf(everySeventhTick)},
 	); err == nil {
 		t.Fatal("a checkpoint of another tick was taken")
 	}
@@ -173,7 +168,7 @@ func BenchmarkRecoveryLineWithTheCacheAtTheEndOfTheLogs(b *testing.B) {
 	codecs := testkit.WorldBuilder(b, 7, 10).Codecs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := recovery.RecoveryLine(dir, codecs); err != nil {
+		if _, err := replay.MakePlan(dir, codecs); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -187,28 +182,25 @@ func BenchmarkRecoveryLineWithNoCache(b *testing.B) {
 	codecs := testkit.WorldBuilder(b, 7, 10).Codecs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := recovery.RecoveryLine(dir, codecs); err != nil {
+		if _, err := replay.MakePlan(dir, codecs); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func benchmarkReplay(b *testing.B, startsOf func(*recovery.Result) map[sim.StateID]uint64) {
+func benchmarkReplay(b *testing.B, planOf func(dir string, c *sim.Codecs) (*replay.Plan, error)) {
 	dir := aLongWorld(b)
-	result := recoverTheWorld(b, dir, everyFiveHundredTicks)
-	starts := startsOf(result)
+	recoverTheWorld(b, dir, everyFiveHundredTicks)
 	builder := testkit.WorldBuilder(b, 7, 10)
+	plan, err := planOf(dir, builder.Codecs())
+	if err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 	for b.Loop() {
-		logs, err := runner.FileLogs(dir, builder.Codecs())
-		if err != nil {
-			b.Fatal(err)
-		}
-		replayed, err := runner.Run(builder, logs, runner.Options{
-			ConfigVersions: configVersionsOf(everyFiveHundredTicks),
-			Starts:         starts,
-			Checkpoints:    recovery.CheckpointFiles(dir, starts),
-		})
+		replayed, err := replay.Run(
+			builder, plan, replay.Options{ConfigVersions: configVersionsOf(everyFiveHundredTicks)},
+		)
 		if err != nil || len(replayed.Divergences) != 0 {
 			b.Fatalf("%v %v", err, replayed.Divergences)
 		}
@@ -216,11 +208,17 @@ func benchmarkReplay(b *testing.B, startsOf func(*recovery.Result) map[sim.State
 }
 
 func BenchmarkReplayFromTheCheckpoints(b *testing.B) {
-	benchmarkReplay(b, func(r *recovery.Result) map[sim.StateID]uint64 { return r.Starts })
+	benchmarkReplay(b, replay.MakePlan)
 }
 
 func BenchmarkReplayFromTickZero(b *testing.B) {
-	benchmarkReplay(b, func(*recovery.Result) map[sim.StateID]uint64 { return nil })
+	benchmarkReplay(b, func(dir string, c *sim.Codecs) (*replay.Plan, error) {
+		logs, err := replay.FileLogs(dir, c)
+		if err != nil {
+			return nil, err
+		}
+		return replay.PlanFrom(logs, nil, nil)
+	})
 }
 
 func BenchmarkRecover(b *testing.B) {

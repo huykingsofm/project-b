@@ -7,19 +7,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
 // Env is what every engine of a cluster shares: the router that carries their messages, the
-// configuration they read, the replay log they write, the store of the states they publish, the
+// configuration they read, the event log they write, the store of the states they publish, the
 // emitter where they give what changed, the codecs that read back what they wrote, and the writer
 // of their checkpoints.
 type Env struct {
 	Router    MessageRouter
 	Cfg       ConfigSource
-	ReplayLog replay.Log
+	EventLog  eventlog.Log
 	Stable    StableStore
 	Codecs    *sim.Codecs
 	QueueSize int

@@ -99,7 +99,7 @@ type Message interface {
 type MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 
 // OnFailID names a kind of OnFail, by a number: see the register in package onfail. A kind returns
-// its own with its method ID(). A number is never changed or reused, because the replay log writes
+// its own with its method ID(). A number is never changed or reused, because the event log writes
 // it.
 type OnFailID uint16
 

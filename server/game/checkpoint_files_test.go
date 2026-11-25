@@ -9,8 +9,8 @@ import (
 	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/replay"
-	"github.com/huykingsofm/project-b/platform/replay/runner"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -30,16 +30,16 @@ var everySeventhTick = map[string]string{"checkpoint.every_ticks": "7"}
 // 7 ticks to files under dir and records its log in memory.
 func aWorldThatCheckpointsToFiles(
 	t *testing.T, dir string,
-) (*game.Cluster, *replay.MemLog, *checkpoint.FileWriter) {
+) (*game.Cluster, *eventlog.MemLog, *checkpoint.FileWriter) {
 	t.Helper()
 	cfg := config.NewStore()
 	if _, err := cfg.Apply(everySeventhTick); err != nil {
 		t.Fatal(err)
 	}
-	mem, files := &replay.MemLog{}, checkpoint.NewFileWriter(dir, 64)
+	mem, files := &eventlog.MemLog{}, checkpoint.NewFileWriter(dir, 64)
 	c, err := testkit.WorldBuilder(t, 7, 10).
 		WithConfig(cfg).
-		WithReplayLog(mem).
+		WithEventLog(mem).
 		WithCheckpointWriter(files).
 		Build()
 	if err != nil {
@@ -83,10 +83,10 @@ func hashOfRestored(
 }
 
 // loggedHashes returns the hash that the log has for each engine at each tick.
-func loggedHashes(mem *replay.MemLog) map[sim.StateID]map[uint64]uint64 {
+func loggedHashes(mem *eventlog.MemLog) map[sim.StateID]map[uint64]uint64 {
 	out := map[sim.StateID]map[uint64]uint64{}
 	for _, r := range mem.Records {
-		if h, ok := r.Body.(replay.Hash); ok {
+		if h, ok := r.Body.(eventlog.Hash); ok {
 			if out[r.Engine] == nil {
 				out[r.Engine] = map[uint64]uint64{}
 			}
@@ -99,7 +99,7 @@ func loggedHashes(mem *replay.MemLog) map[sim.StateID]map[uint64]uint64 {
 // checkTheFilesOfEveryEngine checks that every engine of the cluster has checkpoints under dir,
 // a period apart, and that each makes an engine with the hash that the log has at its tick.
 func checkTheFilesOfEveryEngine(
-	t *testing.T, c *game.Cluster, mem *replay.MemLog, dir string, every uint64,
+	t *testing.T, c *game.Cluster, mem *eventlog.MemLog, dir string, every uint64,
 ) map[sim.StateID][]uint64 {
 	t.Helper()
 	hashes := loggedHashes(mem)
@@ -158,7 +158,7 @@ func TestEveryEngineWritesACheckpointFileEveryPeriodThatMakesItAgainWithTheHashO
 	}
 
 	// a replay, whose engines take no checkpoint, hashes at the same ticks
-	result, err := runner.Run(testkit.WorldBuilder(t, 7, 10), logsOf(mem), runner.Options{
+	result, err := runOn(testkit.WorldBuilder(t, 7, 10), logsOf(mem), replay.Options{
 		ConfigVersions: map[uint64]map[string]string{1: everySeventhTick},
 	})
 	if err != nil {

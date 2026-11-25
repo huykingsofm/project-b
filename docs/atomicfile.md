@@ -11,4 +11,4 @@
 | `atomicfile.SyncDir(dir)` | forces the entries of a directory to disk, so that a file made, renamed or deleted in it is there after a crash |
 
 - A temporary file that a crash left is not the file; the next `Write` of the same path writes over it.
-- Used by the checkpoint files ([checkpoint](checkpoint.md)), the cache of the recovery line ([recovery](recovery.md)) and the segment log ([segmentlog](segmentlog.md)).
+- Used by the checkpoint files ([checkpoint](checkpoint.md)), the cache of the recovery line ([replay](replay.md)) and the segment log ([segmentlog](segmentlog.md)).

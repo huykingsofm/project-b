@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 )
 
@@ -25,8 +25,8 @@ func readToy(t *testing.T, view *StableView, id sim.StateID) *toyState {
 
 func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 	stable := NewStableStateStore()
-	replayLog := &replay.MemLog{}
-	view := stable.View(1, replayLog)
+	eventLog := &eventlog.MemLog{}
+	view := stable.View(1, eventLog)
 
 	first := publishedAt(stable, 3)
 	view.begin(10)
@@ -46,7 +46,7 @@ func TestWhatAnEngineReadsOfAnotherStaysTheSameForTheTick(t *testing.T) {
 
 func TestAStateThatWasNotPublishedIsNotFoundAndTheReadIsKeptForTheTick(t *testing.T) {
 	stable := NewStableStateStore()
-	view := stable.View(1, &replay.MemLog{})
+	view := stable.View(1, &eventlog.MemLog{})
 	view.begin(10)
 	if _, err := view.Read(8); !errors.Is(err, sim.ErrStateNotFound) {
 		t.Fatalf("a state that nobody published: %v", err)
@@ -66,10 +66,10 @@ func TestAStateThatWasNotPublishedIsNotFoundAndTheReadIsKeptForTheTick(t *testin
 	}
 }
 
-func TestTheFirstReadOfEachStateInATickIsWrittenToTheReplayLog(t *testing.T) {
+func TestTheFirstReadOfEachStateInATickIsWrittenToTheEventLog(t *testing.T) {
 	stable := NewStableStateStore()
-	replayLog := &replay.MemLog{}
-	view := stable.View(1, replayLog)
+	eventLog := &eventlog.MemLog{}
+	view := stable.View(1, eventLog)
 	publishedAt(stable, 3)
 
 	view.begin(10)
@@ -79,18 +79,18 @@ func TestTheFirstReadOfEachStateInATickIsWrittenToTheReplayLog(t *testing.T) {
 	view.begin(11)
 	view.Read(7)
 
-	var got []replay.Record
-	for _, r := range replayLog.Records {
-		if r.Kind() == replay.KindStableRead {
+	var got []eventlog.Record
+	for _, r := range eventLog.Records {
+		if r.Kind() == eventlog.KindStableRead {
 			got = append(got, r)
 		}
 	}
-	read := func(tick uint64, source sim.StateID, copyTick uint64) replay.Record {
-		return replay.Record{
-			Engine: 1, Tick: tick, Body: replay.StableRead{Source: source, CopyTick: copyTick},
+	read := func(tick uint64, source sim.StateID, copyTick uint64) eventlog.Record {
+		return eventlog.Record{
+			Engine: 1, Tick: tick, Body: eventlog.StableRead{Source: source, CopyTick: copyTick},
 		}
 	}
-	want := []replay.Record{read(10, 7, 3), read(10, 8, 0), read(11, 7, 3)}
+	want := []eventlog.Record{read(10, 7, 3), read(10, 8, 0), read(11, 7, 3)}
 	if len(got) != len(want) {
 		t.Fatalf("records %+v, want %+v", got, want)
 	}

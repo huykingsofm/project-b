@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -14,8 +14,8 @@ import (
 )
 
 // recordsOf returns the records of the memory log that belong to an engine, in order.
-func recordsOf(mem *replay.MemLog, e sim.StateID) []replay.Record {
-	var out []replay.Record
+func recordsOf(mem *eventlog.MemLog, e sim.StateID) []eventlog.Record {
+	var out []eventlog.Record
 	for _, r := range mem.Records {
 		if r.Engine != e {
 			continue
@@ -28,17 +28,17 @@ func recordsOf(mem *replay.MemLog, e sim.StateID) []replay.Record {
 // compareWithFiles reads the log of every engine and checks that it is the memory log of that
 // engine.
 func compareWithFiles(
-	t *testing.T, dir string, mem *replay.MemLog, codecs *sim.Codecs,
+	t *testing.T, dir string, mem *eventlog.MemLog, codecs *sim.Codecs,
 ) {
 	t.Helper()
-	kinds := map[replay.Kind]int{}
+	kinds := map[eventlog.Kind]int{}
 	for _, e := range testkit.ClusterEngines {
 		want := recordsOf(mem, e)
-		r, err := replay.ReadFileLog(dir, e, 0, codecs)
+		r, err := eventlog.ReadFileLog(dir, e, 0, codecs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var got []replay.Record
+		var got []eventlog.Record
 		for r.Next() {
 			got = append(got, r.Record())
 		}
@@ -63,12 +63,12 @@ func compareWithFiles(
 			kinds[rec.Kind()]++
 		}
 	}
-	for _, k := range []replay.Kind{
-		replay.KindInbound,
-		replay.KindCommand,
-		replay.KindConfig,
-		replay.KindHash,
-		replay.KindStableRead,
+	for _, k := range []eventlog.Kind{
+		eventlog.KindInbound,
+		eventlog.KindCommand,
+		eventlog.KindConfig,
+		eventlog.KindHash,
+		eventlog.KindStableRead,
 	} {
 		if kinds[k] == 0 {
 			t.Errorf("no record of kind %d in the scenario", k)
@@ -92,13 +92,13 @@ func TestTheFilesOfAWholeClusterRunHoldWhatTheMemoryLogHolds(t *testing.T) {
 // every tick that records one and the same state at the end. (The memory log keeps a command as the
 // sender gave it, so its command records are not compared.)
 func TestACommandThatIsCopiedGivesTheSameRunAsOneThatIsNot(t *testing.T) {
-	run := func(roundTrip bool) ([]replay.Record, []uint64) {
+	run := func(roundTrip bool) ([]eventlog.Record, []uint64) {
 		c, _, mem, cfg := testkit.NewWorld(t, 7, 10)
 		s := testkit.Sender{T: t, RoundTrip: roundTrip, Reuses: true, Codecs: c.Env.Codecs}
 		testkit.RunScenario(t, c, cfg, s)
-		var hashes []replay.Record
+		var hashes []eventlog.Record
 		for _, r := range mem.Records {
-			if r.Kind() == replay.KindHash {
+			if r.Kind() == eventlog.KindHash {
 				hashes = append(hashes, r)
 			}
 		}
@@ -146,11 +146,11 @@ func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t
 	}
 	for _, e := range []sim.StateID{testkit.World, testkit.Zone1, testkit.Layer1} {
 		want := recordsOf(mem, e)
-		r, err := replay.ReadFileLog(dir, e, 0, c.Env.Codecs)
+		r, err := eventlog.ReadFileLog(dir, e, 0, c.Env.Codecs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var got []replay.Record
+		var got []eventlog.Record
 		for r.Next() {
 			got = append(got, r.Record())
 		}

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -74,18 +74,18 @@ func WorldBuilder(t testing.TB, seed uint64, regenEvery uint64) *game.ClusterBui
 // tell their clients.
 func NewWorld(
 	t testing.TB, seed uint64, regenEvery uint64,
-) (*game.Cluster, *Recorder, *replay.MemLog, *config.Store) {
+) (*game.Cluster, *Recorder, *eventlog.MemLog, *config.Store) {
 	t.Helper()
-	rec, replayLog, cfg := &Recorder{}, &replay.MemLog{}, config.NewStore()
+	rec, eventLog, cfg := &Recorder{}, &eventlog.MemLog{}, config.NewStore()
 	c, err := WorldBuilder(t, seed, regenEvery).
 		WithConfig(cfg).
-		WithReplayLog(replayLog).
+		WithEventLog(eventLog).
 		WithEmitter(rec).
 		Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c, rec, replayLog, cfg
+	return c, rec, eventLog, cfg
 }
 
 // Steps runs n ticks of every engine of the cluster, and fails the test when one fails.
