@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
@@ -42,6 +43,12 @@ type Engine[S sim.State] struct {
 	// none (a replay)
 	checkpoints CheckpointWriter
 	tick        uint64
+	// control is where the engine hands the requests of its actions to remove an engine; nil when
+	// it ignores them (a replay)
+	control ClusterController
+	// removal is a request that Run remove the engine, and removed says that it was
+	removal chan struct{}
+	removed atomic.Bool
 	// periodOffset is where the engine starts the count of a period (see dueAt): the hash of its
 	// ID, so that the engines of a cluster are spread over the ticks of a period
 	periodOffset uint64
@@ -77,7 +84,7 @@ func New[S sim.State](st S, env *Env, seed uint64) *Engine[S] {
 		rng: rand.NewPCG(seed, uint64(me)), eventLog: env.EventLog,
 		commands: make(chan sim.Command[S], env.QueueSize), stable: env.Stable,
 		emitter: env.Emitter, checkpoints: env.Checkpoints, planPool: planPoolOf[S](),
-		periodOffset: periodOffsetOf(me),
+		periodOffset: periodOffsetOf(me), control: env.Control, removal: make(chan struct{}, 1),
 	}
 	e.stateRegistry.Me, e.stateRegistry.Stable = me, e.peer.view
 	e.peer.bounce.resend = e.peer.sendToUnsettled
@@ -105,9 +112,23 @@ func (e *Engine[S]) Remove() {
 // The engine does not run a tick, so the copy of its state that the other engines read goes, and
 // what they read after is nothing.
 func (e *Engine[S]) RemoveAlreadyRecorded() {
+	e.removed.Store(true)
 	e.stable.Remove(e.peer.me)
-	e.peer.retire()
+	e.peer.stopReceivingAndGiveBackWaitingMessages()
 }
+
+// RequestRemoval asks the engine to remove itself, at the end of the tick it runs or before the
+// next one: Run does it. It does not wait and may be called from any goroutine; a second request,
+// or one to an engine that has no Run, does nothing.
+func (e *Engine[S]) RequestRemoval() {
+	select {
+	case e.removal <- struct{}{}:
+	default:
+	}
+}
+
+// Removed says that the engine was removed.
+func (e *Engine[S]) Removed() bool { return e.removed.Load() }
 
 // Send gives the engine a command, without waiting. It reports false when the queue is full.
 func (e *Engine[S]) Send(c sim.Command[S]) bool {
@@ -175,7 +196,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
 //  7. let go of the messages that their receivers acked, send the messages that the actions put
-//     in the outbox, and send again the ones whose ack is late;
+//     in the outbox, send again the ones whose ack is late, and hand the cluster the requests to
+//     remove an engine;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
 //  9. write the hash of the engine to the event log, when it is due or a checkpoint was due,
 //     and close the tick for the log.
@@ -233,6 +255,7 @@ func (e *Engine[S]) Step() error {
 	e.stable.Publish(published)
 	e.peer.releaseAckedMessages()
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
+	e.handEngineRemovalRequestsToClusterController()
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
 		e.offerCheckpoint(published)
@@ -243,6 +266,17 @@ func (e *Engine[S]) Step() error {
 	e.eventLog.EndTick(e.peer.me, e.tick)
 	e.peer.publishAcks(e.eventLog)
 	return nil
+}
+
+// handEngineRemovalRequestsToClusterController gives the cluster the requests of the actions of the
+// tick to remove an engine, in the order they were made. An engine with no controller (a replay)
+// drops them: the log says which engine was removed and when.
+func (e *Engine[S]) handEngineRemovalRequestsToClusterController() {
+	for _, id := range e.stateRegistry.TakeEngineRemovalRequests() {
+		if e.control != nil {
+			e.control.RequestEngineRemoval(id)
+		}
+	}
 }
 
 // dueAt reports whether a period of every ticks comes round at the tick, for this engine: the
@@ -318,12 +352,15 @@ func (e *Engine[S]) planCommands() {
 func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	for {
 		select {
-		case <-ctx.Done():
-			e.peer.retire()
+		case <-ctx.Done(): // a stop, not a removal: the engine goes on after a restart
+			e.peer.stopReceivingAndGiveBackWaitingMessages()
+			return nil
+		case <-e.removal: // ends the engine for good: its log ends with the record of it
+			e.Remove()
 			return nil
 		case <-ticks:
 			if err := e.Step(); err != nil {
-				e.peer.retire()
+				e.peer.stopReceivingAndGiveBackWaitingMessages()
 				return err
 			}
 		}

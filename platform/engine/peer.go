@@ -201,8 +201,11 @@ func (c *peer) publishAcks(rpl eventlog.Log) {
 	c.takenMessages = append(c.takenMessages[:0], c.takenMessages[n:]...)
 }
 
-// retire makes the engine unreachable and gives back what is waiting in its channels.
-func (c *peer) retire() {
+// stopReceivingAndGiveBackWaitingMessages makes the engine unreachable and gives back what is
+// waiting in its channels, each message once. It is what the end of an engine does, whether it is
+// stopped (the context of Run ended or a tick failed) or removed for good: whether anything else
+// is written, and whether what it published goes, is for the caller.
+func (c *peer) stopReceivingAndGiveBackWaitingMessages() {
 	c.router.Retire(c.me)
 	c.bounce.Stop()
 	// a message that its sender sent again while it waited is in the channel more than once: it

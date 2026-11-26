@@ -42,7 +42,8 @@ type Registry[S State] struct {
 	// Stable reads the states of the other engines.
 	Stable StableReader
 
-	self []Timed[S]
+	self           []Timed[S]
+	engineRemovals []StateID
 }
 
 // Config returns the configuration that the engine of the tick reads: the snapshot in the copy of
@@ -94,6 +95,22 @@ func (r *Registry[S]) ToSelf(a Action[S]) { r.ToSelfAt(r.Tick+1, a) }
 // in between. A tick that is not in the future is the next one.
 func (r *Registry[S]) ToSelfAt(tick uint64, a Action[S]) {
 	r.self = append(r.self, Timed[S]{At: tick, Action: a})
+}
+
+// RequestEngineRemoval asks the cluster to remove the engine with the ID. Nothing is done while the
+// actions run: the engine hands the requests to its cluster when the tick is done, and the cluster
+// removes the engine between two ticks of it. The state that holds the ID is changed by the action,
+// as for any other change of a state (R28): the request only ends the engine.
+func (r *Registry[S]) RequestEngineRemoval(id StateID) {
+	r.engineRemovals = append(r.engineRemovals, id)
+}
+
+// TakeEngineRemovalRequests returns the engines that were asked to be removed in this tick, in the
+// order they were asked, and forgets them.
+func (r *Registry[S]) TakeEngineRemovalRequests() []StateID {
+	out := r.engineRemovals
+	r.engineRemovals = nil
+	return out
 }
 
 // TakeSelf returns what the engine set for itself in this tick, in the order it was set.
