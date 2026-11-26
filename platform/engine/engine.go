@@ -97,6 +97,14 @@ func (e *Engine[S]) Remove() {
 	e.tick++
 	e.eventLog.Append(e.peer.me, e.tick, eventlog.Retired{})
 	e.eventLog.EndTick(e.peer.me, e.tick)
+	e.RemoveAlreadyRecorded()
+}
+
+// RemoveAlreadyRecorded ends the engine for good as Remove does, without writing the last frame to
+// its event log: the log already ends with it, as in an engine that was removed before a restart.
+// The engine does not run a tick, so the copy of its state that the other engines read goes, and
+// what they read after is nothing.
+func (e *Engine[S]) RemoveAlreadyRecorded() {
 	e.stable.Remove(e.peer.me)
 	e.peer.retire()
 }
@@ -166,7 +174,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
-//  7. send the messages that the actions put in the outbox;
+//  7. let go of the messages that their receivers acked, send the messages that the actions put
+//     in the outbox, and send again the ones whose ack is late;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
 //  9. write the hash of the engine to the event log, when it is due or a checkpoint was due,
 //     and close the tick for the log.
@@ -222,6 +231,7 @@ func (e *Engine[S]) Step() error {
 	}
 	published := e.st.Clone().(S)
 	e.stable.Publish(published)
+	e.peer.releaseAckedMessages()
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
@@ -274,6 +284,10 @@ func (e *Engine[S]) checkpointWith(st S) EngineCheckpoint[S] {
 // SentMessages are the messages the engine sent and has not had acked: the engine sends them again
 // until their receivers say they hold them safe. The messages are the engine's own.
 func (e *Engine[S]) SentMessages() []sim.Message { return e.peer.data.unsettledMessages.Sent() }
+
+// EncodeCheckpoint takes the checkpoint of the engine as it is and encodes it: what Checkpoint
+// gives, written, for a cluster that holds its engines without their state type.
+func (e *Engine[S]) EncodeCheckpoint() ([]byte, error) { return e.Checkpoint().Encode() }
 
 // PublishState publishes a copy of the state as it is. A tick does it at its end; an engine made
 // from a checkpoint calls it before its first tick, so that what the others read of it is there.

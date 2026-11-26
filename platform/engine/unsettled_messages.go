@@ -114,6 +114,19 @@ func (u *unsettledMessages) Due(tick uint64) []int {
 	return due
 }
 
+// ForgetSent forgets the message that went with the number, if it is still held: it came back
+// undelivered, so it is settled and no longer waits for an ack.
+func (u *unsettledMessages) ForgetSent(seq uint64) {
+	kept := u.sent[:0]
+	for _, s := range u.sent {
+		if s.message.Head().Seq != seq {
+			kept = append(kept, s)
+		}
+	}
+	clear(u.sent[len(kept):])
+	u.sent = kept
+}
+
 // Message is the message that went, by its index.
 func (u *unsettledMessages) Message(i int) sim.Message { return u.sent[i].message }
 

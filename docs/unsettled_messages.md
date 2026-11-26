@@ -1,17 +1,19 @@
 # Unsettled messages and acks
 
-`platform/engine/unsettled_messages.go`, `platform/engine/peer.go` (`flushUnsettledMessages`, `releaseAckedMessages`, `publishAcks`), `platform/eventlog/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
+`platform/engine/unsettled_messages.go`, `platform/engine/peer.go` (`releaseAckedMessages`, `flushUnsettledMessages`, `resendUnackedMessages`, `publishAcks`, `handleReturnedMessages`), `platform/eventlog/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
 
 ## What they hold
 
 | Part | What it is | When it goes |
 |---|---|---|
 | unsent | a message that its `OnFail` sends again (`Resend`), and that did not go yet | at the next flush, with a new number |
-| sent | a message that went into the channel of its receiver, with the number and the tick it was stamped with | when its receiver acks it |
+| sent | a message that went into the channel of its receiver, with the number and the tick it was stamped with | when its receiver acks it, or when it comes back undelivered (`handleReturnedMessages`, by its number), or when it is sent again and its receiver is gone |
 
 - Both are in the checkpoint, each message whole. What a sent message waits for (the tick at which it is sent again) is not: after a restore each is sent again at the next flush, with the number it has.
 - The hash of the engine covers the unsent messages and not the sent ones: when a message is acked depends on when the log of its receiver is synced, which a replay does not repeat.
-- An engine in an environment with no `AckBoard` (a replay) holds no sent message: nothing would ever let it go.
+- An engine in an environment with no `AckBoard` holds no sent message: nothing would ever let it go. A replay has an `AckBoard`, so the engines of a replay hold their sent messages as a live one does, a receiver acks one as it takes it from its log, and what is left at the limit of an engine is in its checkpoint, which a handover makes the live engine from ([replay](replay.md#handover)).
+- An engine that is removed gives back what waits in its channel, each message once: a message that its sender sent again while it waited is there more than once, and one that the engine took is still given back, since what it did is gone with the engine.
+- A message that came back undelivered is let go of at once, so its `OnFail` runs once: it would otherwise stay until it is sent again, come back a second time as `DeliveryFailureRetired` and run its `OnFail` again.
 
 ## Sending again
 
@@ -30,7 +32,7 @@
 |---|---|
 | `AckBoard` | a number for each pair (receiver, sender) that only goes up, in the memory of the process: `Raise(receiver, sender, seq)` says it and `Acked(receiver, sender)` reads it (0 when nothing was said); it is not a message, and is never written to a log or a checkpoint |
 | receiver | at the end of each tick asks its event log up to which tick it is safe (`Log.Safe`), and for the messages it took in those ticks raises the number of each sender to the largest it took (`publishAcks`) |
-| sender | at each flush (`releaseAckedMessages`) reads the number of each receiver it holds a message for, and lets go of the messages for it that have a number up to it |
+| sender | at each tick, before the flush (`releaseAckedMessages`), reads the number of each receiver it holds a message for, and lets go of the messages for it that have a number up to it |
 | a restore | what the checkpoint says an engine took (`lastRecvSeq`) is in a place that no crash takes back, so it is raised on the board at once |
 
 - A copy that a receiver drops is not acked by being dropped: it has to be safe like any other message.
