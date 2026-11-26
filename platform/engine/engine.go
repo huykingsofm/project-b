@@ -45,7 +45,7 @@ type Engine[S sim.State] struct {
 	tick        uint64
 	// control is where the engine hands the requests of its actions to remove an engine; nil when
 	// it ignores them (a replay)
-	control EngineControl
+	control ClusterController
 	// removal is a request that Run remove the engine, and removed says that it was
 	removal chan struct{}
 	removed atomic.Bool

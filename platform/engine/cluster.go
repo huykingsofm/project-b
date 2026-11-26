@@ -33,7 +33,7 @@ type Env struct {
 	Checkpoints CheckpointWriter
 	// Control is where the engines hand the requests of their actions to remove an engine. With
 	// none the requests are ignored: a replay has none.
-	Control EngineControl
+	Control ClusterController
 }
 
 // Remove ends the engine with the state ID for good, and forgets it: see Engine.Remove. It reports
@@ -58,10 +58,10 @@ func (c *Cluster) RemoveAlreadyRecorded(id sim.StateID) bool {
 }
 
 // RemoveEngine asks the cluster to remove the engine with the ID, as an action of another engine
-// asked it to (see EngineControl): it does not wait. A cluster that runs its engines on their own
-// goroutines asks the engine to end between two of its ticks; one that is run by Step removes it
-// when the step ends. A request for the configuration engine, or for an ID that no engine has, is
-// dropped.
+// asked it to (see ClusterController): it does not wait. A cluster that runs its engines on their
+// own goroutines asks the engine to end between two of its ticks; one that is run by Step removes
+// it when the step ends. A request for the configuration engine, or for an ID that no engine has,
+// is dropped.
 func (c *Cluster) RemoveEngine(id sim.StateID) {
 	if id == sim.ConfigStateID {
 		logging.Warn("the configuration engine cannot be removed")

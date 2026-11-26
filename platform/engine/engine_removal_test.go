@@ -23,7 +23,7 @@ func (a removeEngineAction) Apply(
 }
 func (a removeEngineAction) Clone() sim.Action[*toyState] { return a }
 
-// recordedControl is an EngineControl that remembers what it was asked.
+// recordedControl is a ClusterController that remembers what it was asked.
 type recordedControl struct {
 	mu  sync.Mutex
 	ids []sim.StateID
