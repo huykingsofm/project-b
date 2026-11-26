@@ -30,9 +30,9 @@ What is left of the recovery of a cluster: a cluster is recovered and goes on li
 
 | Piece | What it is |
 |---|---|
-| Unsettled messages that are full | a limit for each pair of a sender and a destination on the messages that went and were not acked, above which a new message bounces with a reason of its own and runs its `OnFail`; it bounds what a sender holds when acks stop, not how full a receiver is; counted in one pass at each flush, decided by a live engine and followed from the log by a replay ([design](proposed-designs.md#the-limit-of-the-messages-that-went-and-were-not-acked-pending-approval-deferred), `pending approval`, deferred) |
-| Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start (`agreed`) |
-| To measure | the size of the unsettled messages in a checkpoint, once the limit is built |
+| Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
+| Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
+| To measure | the size of the unsettled messages in a checkpoint |
 
 ## Later
 

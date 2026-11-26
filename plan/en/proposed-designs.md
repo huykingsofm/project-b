@@ -141,25 +141,6 @@ The order of the work, one commit for each step, all in one pull request, each s
 4. Periodic writing with offsets, each engine on its own.
 5. Loading from the checkpoints of the engines with the start rule, the recovery line, and sending again what was in flight; going live by making each engine again in the real environment from a checkpoint of the replayed engine; the acceptance test of the phase.
 
-### The limit of the messages that went and were not acked (pending approval; deferred)
-
-Deferred by the owner: no case is harmed by it today. What it bounds is the memory and the checkpoint of a sender when acks stop (the log of a receiver stops syncing and `Log.Safe` stands still), for each pair of a sender and a destination. It does not bound how full a receiver is: the queue of the receiver does that for all its senders, and refuses with `DeliveryFailureFull`, whose meaning is that the inbox of an engine is full. The sender holds a message that its receiver took and has not synced as it holds one that waits in the queue, since the board says nothing before the ack.
-
-| Part | Design |
-|---|---|
-| why | an ack comes when the log of the receiver has synced (`FileLogOptions.SyncEvery`); a receiver that syncs slowly, is stuck or is gone leaves its messages unacked, and the sender holds each, sends each again up to every 200 ticks and writes each to every checkpoint, with no bound |
-| the limit | a config variable `unsettled_messages.most_per_destination` in `platform/engine`, beside the other `unsettled_messages.*`, read from the snapshot of the tick as they are; its default and range are the owner's |
-| the count | at the start of a flush the engine counts the messages in `sent` for each destination in one pass (a pass that `resendUnackedMessages` makes anyway), and adds one to the count of a destination for each message it sends; nothing about it is kept between flushes or written to a checkpoint |
-| refused | a message (new or unsent) for a destination whose count is at the limit is refused on the path of a `Deliver` that fails, with a reason of its own (`DeliveryFailureUnacked`, proposed; not `Full`, which says the inbox is full), a `Returned` record at the tick of the send, and the `OnFail` of the message (`Retry` sends it again with a new number at the next flush, until an ack makes room or its attempts end) |
-| a message sent again | not counted again: it is already in `sent` |
-| the replay | when an ack comes depends on when a log synced, which a replay does not repeat (the log of a replay says every tick is safe, so its acks come at once), so an engine of a replay would count another number than the one that decided: it does not decide. `Env.RefusesWhenUnsettledIsFull` is true for a cluster that runs and false for a replay, whose router answers each message from the `Returned` records of its log (`refuse`), as it does for a full channel (a test of the replay of a message refused as full is in `server/game/replay_runner_test.go`) |
-| the handover | the cluster that goes live is made in an environment where it is true; the engine lets go of what its receivers acked before its first flush, so only what is still unacked counts |
-| the checkpoint | holds at most the limit for each destination, so its size is bounded |
-
-The other two pieces that the roadmap lists with it are separate: the logs of a cluster (an engine with no log is refused unless every engine has none, as agreed) and the measure of what a checkpoint holds.
-
-Docs that change when it is built: [unsettled messages](../../docs/unsettled_messages.md) (the limit and the refusal), [replay](../../docs/replay.md) (what the engines of a replay do not decide), and the roadmap.
-
 ## List of ideas
 
 | Idea | What it must achieve in project-b | Phase | Status |
