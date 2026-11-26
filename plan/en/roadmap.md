@@ -30,9 +30,9 @@ What is left of the recovery of a cluster: a cluster is recovered and goes on li
 
 | Piece | What it is |
 |---|---|
-| Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail` |
-| Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
-| To measure | the size of the unsettled messages in a checkpoint |
+| Unsettled messages that are full | a limit for each destination, above which a new message bounces as `DeliveryFailureFull` and runs its `OnFail`; counted in `unsettledMessages`, decided by a live engine and followed from the log by a replay (design A in [proposed designs](proposed-designs.md#the-limit-of-the-unsettled-messages-and-the-checks-of-a-cluster-pending-approval), `pending approval`) |
+| Logs of a cluster | all engines have a log or none has: `Cluster.Add` refuses an engine made in another environment, and a cluster does not start with files in its directory unless they are recovered (design B, `pending approval`) |
+| To measure | the size and the cost of a checkpoint that holds 0 to 10,000 unsettled messages, and at the limit (design C) |
 
 ## Later
 

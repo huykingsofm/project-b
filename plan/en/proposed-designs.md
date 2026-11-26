@@ -141,6 +141,44 @@ The order of the work, one commit for each step, all in one pull request, each s
 4. Periodic writing with offsets, each engine on its own.
 5. Loading from the checkpoints of the engines with the start rule, the recovery line, and sending again what was in flight; going live by making each engine again in the real environment from a checkpoint of the replayed engine; the acceptance test of the phase.
 
+### The limit of the unsettled messages and the checks of a cluster (pending approval)
+
+The three pieces that are left of the recovery of a cluster, in the order the roadmap lists them.
+
+**A. A limit for the messages that went and were not acked**
+
+| Part | Design |
+|---|---|
+| why | an ack comes when the log of the receiver has synced (`FileLogOptions.SyncEvery`); a receiver that syncs slowly, is stuck or is gone leaves its messages unacked, and the sender holds each, sends each again up to every 200 ticks and writes each to every checkpoint, with no bound |
+| the limit | a config variable `unsettled_messages.most_per_destination` (an integer, in `platform/engine` beside the other `unsettled_messages.*`, read from the snapshot of the tick as they are); its default and range are the owner's |
+| what counts | the messages in `sent` for the destination; the unsent ones have not gone, and a message that is sent again is not counted again |
+| refused | at the flush, a message (new or unsent) for a destination that holds the limit is refused as a full channel is: `DeliveryFailureFull`, a `Returned` record at the tick of the send, and the `OnFail` of the message runs (`Retry` sends it again with a new number at the next flush, until an ack makes room or its attempts end) |
+| count | `unsettledMessages` keeps a number for each destination, changed where it adds or lets go of a message (`MarkSent`, `Ack`, `Remove`, `ForgetSent`, `SetSent` and reading a checkpoint back), so a send looks at one number; it is not written to a checkpoint |
+| replay | when an ack comes depends on when a log synced, which a replay does not repeat, so an engine of a replay does not make the decision: `Env.RefusesWhenUnsettledIsFull` is true for a cluster that runs and false for a replay, whose router answers each message from the `Returned` records of its log, as for a full channel (`refuse`) |
+| handover | the cluster that goes live is made in an environment where it is true; the sent messages that the replay left are counted at once, and the engine lets go of the acked ones before its first flush, so only the ones still unacked count |
+| checkpoint | at most the limit for each destination, so its size is bounded; C measures it |
+
+**B. The logs of a cluster**
+
+A cluster is built with one `eventlog.Log` for all its engines (`ClusterBuilder.WithEventLog`), so the builder cannot make an engine with a log and one without. A mix comes from two other places:
+
+| Where | What goes wrong | Check |
+|---|---|---|
+| an engine put in a cluster with `Cluster.Add` that was made in another environment | an engine on `NopLog` says every tick is safe and one on a `FileLog` does not, so what the first took is acked at once and it has no log to recover from: the recovery line puts it at tick 0 and cuts every engine that depends on it | `Cluster.Add` refuses an engine whose event log is not the one of the cluster (`Env.EventLog`) |
+| a cluster that starts, not recovered, in a directory that holds logs | the log of an engine is refused when its first frame is not the one after the last of the log, and the engine goes on with no log while the files say something else | a start with files in the directory is refused until they are recovered: `replay.Recover` (and `Handover`) is the way to start from files, a new cluster starts in an empty directory |
+
+An engine that has no log among others that do (a crash before its first tick) is not a mix: the recovery gives it the limit 0, as it does today.
+
+**C. What a checkpoint holds of the unsettled messages**
+
+| Part | Design |
+|---|---|
+| what is measured | `Engine.Checkpoint`, `EngineCheckpoint.Encode`, the size of the bytes and `Restore` of an engine that holds 0, 100, 1,000 and 10,000 sent messages for one destination, and for 10 destinations at the limit |
+| where | beside the other benchmarks of the checkpoint (`server/game/checkpoint_test.go`), with a message of the game (a zone that sends a character to a zonelayer), and in `docs/benchmark/checkpoint.md` |
+| what it answers | the size at the limit that the owner chooses, and whether the cost of a checkpoint with a full table of unsettled messages is one that the engine can pay at the end of a tick |
+
+Docs that change when it is built: [unsettled messages](../../docs/unsettled_messages.md) (the limit and the refusal), [replay](../../docs/replay.md) (what the engines of a replay do not decide), [checkpoint](../../docs/checkpoint.md) and its benchmark (the size), and the roadmap.
+
 ## List of ideas
 
 | Idea | What it must achieve in project-b | Phase | Status |

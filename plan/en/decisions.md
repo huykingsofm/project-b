@@ -102,3 +102,14 @@ Today the checkpoint of a zone does not hold its map, and `zone.DecodeState` tak
 - **Where a reference is read:** the checkpoint is not a record of the log, so the format has to be under both: `binary.Writer.Ref(file, n)` and a `binary.Reader` that is given a function that resolves a reference. Then `DecodeState(r, version)` keeps one signature, and what loads the map is the reader, not the decoder of the zone.
 - **Not decided:** who writes the map once and gives its address (file and record) to the state at `Encode`; this needs a place where the cluster registers its assets when it starts.
 - **Decision:** not made. The size of the real maps decides between the first ways and the last two.
+
+### The limit of the unsettled messages and the logs of a cluster (before they are built)
+
+The design is in [proposed designs](proposed-designs.md#the-limit-of-the-unsettled-messages-and-the-checks-of-a-cluster-pending-approval); each choice below needs the owner's decision first.
+
+| Choice | Options | What it changes |
+|---|---|---|
+| The default and the range of `unsettled_messages.most_per_destination` | a number near the queue of an engine (256 by default) times a few, or the number that the benchmark of C gives for a checkpoint size and cost the engine can pay | how much a slow receiver can take before its senders refuse, and the largest checkpoint |
+| What counts against the limit | the sent messages only (proposed), or the sent and the unsent | the unsent ones are the failures that wait to go again: counting them stops that list growing too, and makes a destination that refuses look fuller than what is in its channel |
+| How an engine of a replay knows it must not decide | `Env.RefusesWhenUnsettledIsFull`, a value of `Env` like `Acks` and `Checkpoints` (proposed), or a method of `MessageRouter` that the replay router answers from the log | where the rule lives: in the engine, which the replay has to turn off, or in the router, which every router has to implement |
+| Which checks of a cluster | both (proposed), only `Cluster.Add` refusing an engine of another environment, or only the refusal to start with files in the directory | the first handles an engine made in another environment, which the second does not see; the second handles a restart that skipped the recovery, which the first does not see |
