@@ -196,7 +196,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
 //  7. let go of the messages that their receivers acked, send the messages that the actions put
-//     in the outbox, and send again the ones whose ack is late;
+//     in the outbox, send again the ones whose ack is late, and hand the cluster the requests to
+//     remove an engine;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
 //  9. write the hash of the engine to the event log, when it is due or a checkpoint was due,
 //     and close the tick for the log.
@@ -254,11 +255,7 @@ func (e *Engine[S]) Step() error {
 	e.stable.Publish(published)
 	e.peer.releaseAckedMessages()
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
-	for _, id := range e.stateRegistry.TakeEngineRemovalRequests() {
-		if e.control != nil {
-			e.control.RequestEngineRemoval(id)
-		}
-	}
+	e.handEngineRemovalRequestsToClusterController()
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
 		e.offerCheckpoint(published)
@@ -269,6 +266,17 @@ func (e *Engine[S]) Step() error {
 	e.eventLog.EndTick(e.peer.me, e.tick)
 	e.peer.publishAcks(e.eventLog)
 	return nil
+}
+
+// handEngineRemovalRequestsToClusterController gives the cluster the requests of the actions of the
+// tick to remove an engine, in the order they were made. An engine with no controller (a replay)
+// drops them: the log says which engine was removed and when.
+func (e *Engine[S]) handEngineRemovalRequestsToClusterController() {
+	for _, id := range e.stateRegistry.TakeEngineRemovalRequests() {
+		if e.control != nil {
+			e.control.RequestEngineRemoval(id)
+		}
+	}
 }
 
 // dueAt reports whether a period of every ticks comes round at the tick, for this engine: the
