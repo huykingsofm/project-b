@@ -256,7 +256,7 @@ func (e *Engine[S]) Step() error {
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
 	for _, id := range e.stateRegistry.TakeEngineRemovalRequests() {
 		if e.control != nil {
-			e.control.RemoveEngine(id)
+			e.control.RequestEngineRemoval(id)
 		}
 	}
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))

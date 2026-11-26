@@ -11,8 +11,8 @@ import (
 // with none ignores the requests: a replay has none, since the log says which engine was removed
 // and when.
 type ClusterController interface {
-	// RemoveEngine asks the cluster to remove the engine with the ID. It does not wait.
-	RemoveEngine(id sim.StateID)
+	// RequestEngineRemoval asks the cluster to remove the engine with the ID. It does not wait.
+	RequestEngineRemoval(id sim.StateID)
 }
 
 // ClusterControl is the ClusterController of a cluster that runs. It is made before the cluster,
@@ -26,9 +26,9 @@ func NewClusterControl() *ClusterControl { return &ClusterControl{} }
 
 var _ ClusterController = (*ClusterControl)(nil)
 
-// RemoveEngine passes the request to the cluster.
-func (c *ClusterControl) RemoveEngine(id sim.StateID) {
+// RequestEngineRemoval passes the request to the cluster.
+func (c *ClusterControl) RequestEngineRemoval(id sim.StateID) {
 	if cluster := c.cluster.Load(); cluster != nil {
-		cluster.RemoveEngine(id)
+		cluster.RequestEngineRemoval(id)
 	}
 }

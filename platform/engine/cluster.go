@@ -39,7 +39,7 @@ type Env struct {
 // Remove ends the engine with the state ID for good, and forgets it: see Engine.Remove. It reports
 // whether the cluster had one. The configuration engine is never removed: every engine reads its
 // configuration from it. While the cluster runs its engines on their own goroutines the engine
-// ends itself between two of its ticks, so Remove only asks it to (see RemoveEngine).
+// ends itself between two of its ticks, so Remove only asks it to (see RequestEngineRemoval).
 func (c *Cluster) Remove(id sim.StateID) bool {
 	if id == sim.ConfigStateID {
 		return false
@@ -57,12 +57,12 @@ func (c *Cluster) RemoveAlreadyRecorded(id sim.StateID) bool {
 	return c.removeWith(id, Stepper.RemoveAlreadyRecorded)
 }
 
-// RemoveEngine asks the cluster to remove the engine with the ID, as an action of another engine
-// asked it to (see ClusterController): it does not wait. A cluster that runs its engines on their
-// own goroutines asks the engine to end between two of its ticks; one that is run by Step removes
-// it when the step ends. A request for the configuration engine, or for an ID that no engine has,
-// is dropped.
-func (c *Cluster) RemoveEngine(id sim.StateID) {
+// RequestEngineRemoval asks the cluster to remove the engine with the ID, as an action of another
+// engine asked it to (see ClusterController): it does not wait, and may be called from the tick of
+// an engine, which Remove may not. A cluster that runs its engines on their own goroutines asks
+// the engine to end between two of its ticks; one that is run by Step removes it when the step
+// ends. A request for the configuration engine, or for an ID that no engine has, is dropped.
+func (c *Cluster) RequestEngineRemoval(id sim.StateID) {
 	if id == sim.ConfigStateID {
 		logging.Warn("the configuration engine cannot be removed")
 		return

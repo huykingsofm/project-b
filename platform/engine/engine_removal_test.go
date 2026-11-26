@@ -29,7 +29,7 @@ type recordedControl struct {
 	ids []sim.StateID
 }
 
-func (c *recordedControl) RemoveEngine(id sim.StateID) {
+func (c *recordedControl) RequestEngineRemoval(id sim.StateID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ids = append(c.ids, id)
@@ -151,7 +151,7 @@ func TestTheConfigurationEngineIsNeverRemoved(t *testing.T) {
 	if c.Remove(sim.ConfigStateID) {
 		t.Fatal("Remove took the configuration engine out")
 	}
-	c.RemoveEngine(sim.ConfigStateID)
+	c.RequestEngineRemoval(sim.ConfigStateID)
 	if err := c.Step(); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestTheConfigurationEngineIsNeverRemoved(t *testing.T) {
 
 func TestARequestForAnEngineThatTheClusterDoesNotHaveChangesNothing(t *testing.T) {
 	c, _, _ := toysThatCanRemoveOneAnother(t, 2)
-	c.RemoveEngine(99)
+	c.RequestEngineRemoval(99)
 	if err := c.Step(); err != nil {
 		t.Fatal(err)
 	}
@@ -225,8 +225,8 @@ func TestEnginesAskedToBeRemovedFromManyGoroutinesWhileOthersRunAreAllRemoved(t 
 	for id := sim.StateID(2); id <= n; id += 2 {
 		wg.Go(func() {
 			time.Sleep(time.Duration(id) * time.Millisecond)
-			c.RemoveEngine(id)
-			c.RemoveEngine(id) // a second request changes nothing
+			c.RequestEngineRemoval(id)
+			c.RequestEngineRemoval(id) // a second request changes nothing
 		})
 	}
 	reader := make(chan struct{})

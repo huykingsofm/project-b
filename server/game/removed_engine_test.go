@@ -187,7 +187,7 @@ func TestAnEngineThatAnActionAskedToRemoveIsRemovedAtTheEndOfTheStepAndTheWorldR
 ) {
 	dir := t.TempDir()
 	aWorldInWhichAnEngineWasRemovedBy(t, dir, testkit.Layer3, 20, 20,
-		func(c *engine.Cluster) { c.RemoveEngine(testkit.Layer3) })
+		func(c *engine.Cluster) { c.RequestEngineRemoval(testkit.Layer3) })
 	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10))
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +220,7 @@ func TestAClusterThatRunsOnItsOwnAndRemovesAnEngineWritesLogsThatRecover(
 	finished := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(finished) }()
 	time.Sleep(100 * time.Millisecond)
-	c.Cluster.RemoveEngine(testkit.Layer3)
+	c.Cluster.RequestEngineRemoval(testkit.Layer3)
 	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(time.Millisecond) {
 		if _, ok := c.Cluster.Find(testkit.Layer3); !ok {
 			break

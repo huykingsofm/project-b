@@ -7,10 +7,10 @@
 | Call | What it does |
 |---|---|
 | `Registry.RequestEngineRemoval(id)` | an action asks for the engine with the ID to be removed; nothing is done while the actions run |
-| `Env.Control` (`engine.ClusterController`) | where the engine hands the requests of the tick to, when the tick is done (`RemoveEngine(id)`); with none the requests are ignored, as in a replay |
+| `Env.Control` (`engine.ClusterController`) | where the engine hands the requests of the tick to, when the tick is done (`RequestEngineRemoval(id)`); with none the requests are ignored, as in a replay |
 | `engine.NewClusterControl()` | the control of a cluster that runs; `NewCluster` attaches the cluster to the one its environment holds; `ClusterBuilder.NewEnv` makes the environment with one |
-| `Cluster.RemoveEngine(id)` | asks the cluster to remove the engine, without waiting; a request for the configuration engine or for an ID that no engine has is dropped |
-| `Cluster.Remove(id)` | removes the engine and says whether the cluster had it; the configuration engine is never removed; while the cluster runs it only asks, as `RemoveEngine` does |
+| `Cluster.RequestEngineRemoval(id)` | asks the cluster to remove the engine, without waiting; a request for the configuration engine or for an ID that no engine has is dropped |
+| `Cluster.Remove(id)` | removes the engine at once and says whether the cluster had it, so it is called between two steps and not from the tick of an engine; the configuration engine is never removed; while the cluster runs it only asks, as `RequestEngineRemoval` does |
 
 - The state that lists the engine (the world, for a zonelayer) is changed by the action, as for any change of a state (R28); the request only ends the engine. What the game moves out of the engine first (its characters and items) is the game's.
 
