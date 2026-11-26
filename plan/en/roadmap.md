@@ -26,11 +26,10 @@ What has been built and what is to be built, in the order it is done. What is bu
 
 ## To build
 
-What is left of the recovery of a cluster: a cluster is recovered and goes on live from the recovery line; what is not there yet are the check and the measure below.
+What is left of the recovery of a cluster: a cluster is recovered and goes on live from the recovery line; what is not there yet is the measure below.
 
 | Piece | What it is |
 |---|---|
-| Logs of a cluster | all engines have a log or none has: a cluster that mixes them refuses to start |
 | To measure | the size of the unsettled messages in a checkpoint |
 
 ## Later
