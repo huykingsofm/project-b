@@ -1,9 +1,7 @@
 package replay
 
 import (
-	"cmp"
 	"maps"
-	"slices"
 
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
@@ -38,11 +36,7 @@ type replayRouter struct {
 	sent map[msgKey]sim.Message
 	// refuse is what the router answers at once, at the send.
 	refuse map[msgKey]sim.DeliveryFailure
-	// sentMessages is every message that the engines sent and that did not come back, which a
-	// replay hands over to the engines that go live: the engines of a replay hold none, since
-	// nothing acks them.
-	sentMessages map[msgKey]sim.Message
-	div          *divergences
+	div    *divergences
 }
 
 func (r *replayRouter) Deliver(m sim.Message) (sim.DeliveryFailure, bool) {
@@ -59,26 +53,7 @@ func (r *replayRouter) Deliver(m sim.Message) (sim.DeliveryFailure, bool) {
 		delete(r.refuse, key)
 		return reason, false
 	}
-	r.sentMessages[key] = m
 	return 0, true
-}
-
-// settle forgets a message that came back: its sender settled it, so it is not sent again.
-func (r *replayRouter) settle(key msgKey) { delete(r.sentMessages, key) }
-
-// sentMessagesOf is the messages that the engine sent and that did not come back, in the order of
-// their numbers.
-func (r *replayRouter) sentMessagesOf(engine sim.StateID) []sim.Message {
-	var out []sim.Message
-	for key, m := range r.sentMessages {
-		if key.from == engine {
-			out = append(out, m)
-		}
-	}
-	slices.SortFunc(out, func(a, b sim.Message) int {
-		return cmp.Compare(a.Head().Seq, b.Head().Seq)
-	})
-	return out
 }
 
 // inject puts a message in the channel of the engine it is for.

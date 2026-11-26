@@ -225,6 +225,42 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	}
 }
 
+func TestAMessageThatCameBackFromAReceiverRemovedWhileItWaitedIsLetGoOfAtOnceAndComesBackOnce(
+	t *testing.T,
+) {
+	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
+	held := &a.peer.data.unsettledMessages
+	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
+	if err := a.Step(); err != nil { // a sends the message, which b has not taken yet
+		t.Fatal(err)
+	}
+	if held.Len() != 1 {
+		t.Fatalf("a holds %d messages after it sent one, want 1", held.Len())
+	}
+	b.Remove() // what waits in the channel of b goes back to a
+	if err := a.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if held.Len() != 0 {
+		t.Fatalf("a holds %d messages after the one it sent came back, want none", held.Len())
+	}
+	for a.Tick() < first+3 { // the tick at which it would be sent again goes by
+		if err := a.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	returned := 0
+	for _, r := range c.Env.EventLog.(*aLogThatSaysWhatIsSafe).Records {
+		if r.Kind() == eventlog.KindReturned && r.Engine == 1 {
+			returned++
+		}
+	}
+	if returned != 1 {
+		t.Fatalf("%d messages came back to a, want 1", returned)
+	}
+}
+
 func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})

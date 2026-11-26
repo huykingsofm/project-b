@@ -116,11 +116,11 @@ func TestAMessageThatItsReceiverLostIsTakenOnceAfterTheHandoverAndOneItTookIsNot
 	); err != nil {
 		t.Fatal(err)
 	}
-	result, live, closeLog := handedOver(t, dir)
+	_, live, closeLog := handedOver(t, dir)
 	tookBefore := takenMessages(t, dir, testkit.Layer2)
 	var lost [][2]uint64
-	for _, sent := range result.SentMessages {
-		for _, m := range sent {
+	for _, e := range live.Engines() {
+		for _, m := range e.SentMessages() {
 			h := m.Head()
 			key := [2]uint64{uint64(h.From), h.Seq}
 			if m.Dest() == testkit.Layer2 && tookBefore[key] == 0 {

@@ -22,7 +22,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 |---|---|
 | the builder | a `replay.Builder` (`Seed`, `QueueSize`, `Codecs`, `BuildIn(env, checkpoints)`), which the game gives (`game.ClusterBuilder`): it describes the cluster that was recorded; what it sets for the event log and the emitter is not used |
 | the logs | `replay.Logs`: for each engine, its last tick (`Last`) and an `eventlog.Source` that gives its records in order, one at a time, from a tick (`Open(engine, from)`: the tick `from` and the ones after it); `eventlog.FileLogs` reads the files of an `eventlog.FileLog`, and `eventlog.MemoryLogs` and `eventlog.MemLog` hold records in memory |
-| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, the messages each engine sent (`SentMessages`), and the divergences |
+| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, and the divergences |
 | an error | the replay cannot run: a wrong builder, a record that cannot be given to its engine, a log of an engine that is not in the cluster, engines that wait for each other for ever, a file that cannot be read or cut, a checkpoint that cannot make its engine (or is of another tick than its file says) |
 | a divergence | the first difference of an engine between the run and its log; not an error of `Run`, a `*DivergenceError` of `Recover` |
 
@@ -63,7 +63,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `engine.MessageRouter`, `engine.StableStore` | the adapters on `Env` |
 | `engine.CopySource` and `engine.NewStableView` | a store that finds the copy a read names |
 | `Builder.BuildIn(env, checkpoints)` and `engine.CheckpointSource` | making the engines in the environment of the replay, each from its checkpoint or new |
-| `engine.Stepper` (`Step`, `StateID`, `TypeName`, `SendBaseCommand`, `EncodeCheckpoint`, `SetSentMessages`) and `Cluster.Engines()` | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
+| `engine.Stepper` (`Step`, `StateID`, `TypeName`, `SendBaseCommand`, `EncodeCheckpoint`) and `Cluster.Engines()` | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
 
 ## Adapters
 
@@ -152,7 +152,7 @@ Before the first tick, for each engine that starts above tick 0:
 | refused | a result with a divergence is not handed over |
 | checkpoint | each engine of the replayed cluster is checkpointed at its limit (`Stepper.EncodeCheckpoint`) |
 | engines | `Builder.BuildIn(env, checkpoints)` makes each engine from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env`; `ClusterBuilder.NewEnv` makes such an environment |
-| sent messages | each engine is given the messages it sent in the replay (`Result.SentMessages`, in the order of their numbers) as the sent messages that are not acked (`Stepper.SetSentMessages`) |
+| sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
 | copies | each engine publishes its state (`PublishState`), for the engines that read it |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 
@@ -161,11 +161,11 @@ Before the first tick, for each engine that starts above tick 0:
 | the first flush | each sent message is sent again, with its number ([unsettled messages](unsettled_messages.md#sending-again)) |
 | a receiver that took it | `restoreFrom` raised its ack on the board, so the sender lets go of the message; a copy that still arrives is dropped by its number |
 | a receiver that did not take it (its log was cut, or the message was lost) | takes it |
-| a message that came back in a tick that was kept | not in `SentMessages`: its sender settled it |
+| a message that came back in a tick that was kept | let go of by its sender when it came back: not in the checkpoint |
 | the queues | empty: what was not taken from them is not in any log |
 | the configuration | the engine has what its checkpoint holds; a later document of the store is sent by the cluster as a command |
 
-- `Result.SentMessages` holds what the replay router saw sent from the start of each engine (the messages its checkpoint holds as sent included) to its limit; the engines of a replay hold none, since nothing acks them.
+- A replayed engine sends its unacked messages again, as a live one does, into the router of the replay, which compares each with what its receiver recorded and carries nothing.
 - The hash of an engine that is made again is the hash of the replayed one: the test of `server/game/handover_test.go` checks it, and the run does not.
 
 ## Limits

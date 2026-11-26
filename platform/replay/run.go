@@ -56,7 +56,6 @@ func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
 		inboundMessageHash: idx.inboundMessageHash,
 		msgsToBeReturned:   idx.msgsToBeReturned,
 		sent:               map[msgKey]sim.Message{},
-		sentMessages:       map[msgKey]sim.Message{},
 		refuse:             map[msgKey]sim.DeliveryFailure{},
 		div:                div,
 	}
@@ -65,6 +64,7 @@ func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
 	env := &engine.Env{
 		Router: r.router, EventLog: r.verify, Stable: r.stable,
 		Codecs: b.Codecs(), QueueSize: idx.maxQueueSize, Emitter: engine.NopEmitter{},
+		Acks: engine.NewAckBoard(),
 	}
 	var checkpoints engine.CheckpointSource = engine.NoCheckpoints{}
 	if p.checkpoints != nil {
@@ -141,9 +141,7 @@ func (r *replayRun) begin(address sim.StateID, er *engineRun, idx *index) error 
 			"the log has %d", start, got, logged)
 	}
 	for _, m := range eng.SentMessages() {
-		key := keyOf(m.Head())
-		r.router.sentMessages[key] = m
-		if idx.msgsToBeReturned[key] {
+		if key := keyOf(m.Head()); idx.msgsToBeReturned[key] {
 			r.router.sent[key] = m
 		}
 	}
@@ -165,15 +163,6 @@ func (r *replayRun) ticks() map[sim.StateID]uint64 {
 	out := map[sim.StateID]uint64{}
 	for id, er := range r.engines.All() {
 		out[id] = er.lastRanTick
-	}
-	return out
-}
-
-// sentMessages is the messages that each engine sent and that did not come back.
-func (r *replayRun) sentMessages() map[sim.StateID][]sim.Message {
-	out := map[sim.StateID][]sim.Message{}
-	for id := range r.engines.All() {
-		out[id] = r.router.sentMessagesOf(id)
 	}
 	return out
 }
@@ -273,7 +262,6 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 			key := keyOf(body.Header)
 			if m, ok := r.router.sent[key]; ok { // sent in an earlier tick: it comes back now
 				delete(r.router.sent, key)
-				r.router.settle(key)
 				r.router.Return(m, body.Reason)
 			} else { // it is sent in this tick, and refused at once
 				r.router.refuse[key] = body.Reason

@@ -166,7 +166,8 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
-//  7. send the messages that the actions put in the outbox;
+//  7. let go of the messages that their receivers acked, send the messages that the actions put
+//     in the outbox, and send again the ones whose ack is late;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
 //  9. write the hash of the engine to the event log, when it is due or a checkpoint was due,
 //     and close the tick for the log.
@@ -222,6 +223,7 @@ func (e *Engine[S]) Step() error {
 	}
 	published := e.st.Clone().(S)
 	e.stable.Publish(published)
+	e.peer.releaseAckedMessages()
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
 	if checkpointDue {
@@ -274,15 +276,6 @@ func (e *Engine[S]) checkpointWith(st S) EngineCheckpoint[S] {
 // SentMessages are the messages the engine sent and has not had acked: the engine sends them again
 // until their receivers say they hold them safe. The messages are the engine's own.
 func (e *Engine[S]) SentMessages() []sim.Message { return e.peer.data.unsettledMessages.Sent() }
-
-// SetSentMessages sets the messages the engine sent and has not had acked, as SentMessages gives
-// them: each is sent again at the next flush with the number it has, and let go of when its
-// receiver says it holds it safe. It is for an engine that has not run since it was made, whose
-// messages were found out by a replay; the engine takes the messages and the caller does not use
-// them after.
-func (e *Engine[S]) SetSentMessages(messages []sim.Message) {
-	e.peer.data.unsettledMessages.SetSent(messages)
-}
 
 // EncodeCheckpoint takes the checkpoint of the engine as it is and encodes it: what Checkpoint
 // gives, written, for a cluster that holds its engines without their state type.

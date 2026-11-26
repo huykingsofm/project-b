@@ -11,11 +11,12 @@ Conventions and how to run: [index](index.md). Behavior: [replay](../replay.md).
 
 | Benchmark | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| RunScenarioLive | 742,848 | 722,083 | 9,355 |
-| ReplayCluster | 726,059 | 691,060 | 8,741 |
+| RunScenarioLive | 777,380 | 818,511 | 10,333 |
+| ReplayCluster | 1,001,325 | 844,111 | 11,470 |
 
-- A replay runs 477 engine ticks, so about 1.5 µs for each, the building of the cluster included.
-- A replay costs about what the run does (2 percent less). It reads each log twice, once to index it and once to run it, works out every hash it compares, and hashes each message that it keeps for comparing; and it does not run the scenario's own sends. The plan (`PlanFrom`) reads each log once more, to work out the line, which this benchmark does not include.
+- A replay runs 623 engine ticks, so about 1.6 µs for each, the building of the cluster included.
+- A replay costs about 1.3 times what the run does. It reads each log twice, once to index it and once to run it, works out every hash it compares, and hashes each message that it keeps for comparing; and it does not run the scenario's own sends. The plan (`PlanFrom`) reads each log once more, to work out the line, which this benchmark does not include.
+- A replay has an `AckBoard`, so its engines hold their sent messages and send the unacked ones again (`resendUnackedMessages`), as a live engine does. Before and after: ReplayCluster 990,000 and 1,001,325 ns/op, ReplayFromTheCheckpoints 7.96 and 7.85 ms/op, ReplayFromTickZero 59.5 and 59.4 ms/op: no change on these worlds, which hold few messages that wait for an ack. A world with many messages that wait has not been measured.
 - What it keeps no longer grows with the log: a copy of an engine goes as soon as its last read is made, and the logs are read a tick at a time. A scenario this short cannot show it; `TestACopyIsLetGoOfAsSoonAsItsLastReadIsMade` shows that no copy is kept when the run is over.
 - What still grows with the log is the index: about 40 bytes for each message that was taken, a count for each copy that was read, and the keys of the messages that came back. For a log of 10 million messages that is about 400 MB; keeping the index on disk, or only for the messages that a sender and a receiver of the same tick range share, would take it off, when a log that long has to be replayed whole.
 
@@ -35,9 +36,9 @@ All of them are in `server/game` and run on the files of a world that ran the sc
 |---|---|---|---|
 | RecoveryLineWithTheCacheAtTheEndOfTheLogs | 3,646,170 | 9,508,069 | 16,797 |
 | RecoveryLineWithNoCache | 9,518,047 | 23,881,065 | 112,193 |
-| ReplayFromTickZero | 38,349,624 | 56,270,583 | 520,637 |
-| ReplayFromTheCheckpoints | 5,173,183 | 9,411,369 | 49,942 |
-| Recover | 12,825,743 | 19,401,192 | 69,597 |
+| ReplayFromTickZero | 59,420,074 | 85,001,634 | 701,815 |
+| ReplayFromTheCheckpoints | 7,850,405 | 14,455,853 | 71,525 |
+| Recover | 17,035,329 | 28,663,894 | 101,103 |
 
 The line and the choice of the start of each engine are one call now (`MakePlan`), so the first two rows hold the starts too: they read the logs after each checkpoint to find the reads of copies, which the line alone did not (it cost 1,901,000 and 7,062,000 ns/op before).
 

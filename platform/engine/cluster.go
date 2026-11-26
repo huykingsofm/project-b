@@ -25,7 +25,7 @@ type Env struct {
 	QueueSize int
 	Emitter   Emitter
 	// Acks is where the engines say what they hold safe and read what their receivers hold. An
-	// engine with none holds no message for an ack: a replay has none.
+	// engine with none holds no message for an ack.
 	Acks *AckBoard
 	// Checkpoints writes the checkpoints that the engines take at the end of a tick. With none the
 	// engines take none: a replay has none.
@@ -65,9 +65,6 @@ type Stepper interface {
 	// SentMessages are the messages the engine sent and holds until their receivers say they hold
 	// them safe.
 	SentMessages() []sim.Message
-	// SetSentMessages sets the messages the engine sent and has not had acked, before it runs: see
-	// Engine.SetSentMessages.
-	SetSentMessages(messages []sim.Message)
 	// EncodeCheckpoint takes the checkpoint of the engine as it is and encodes it: see
 	// Engine.EncodeCheckpoint.
 	EncodeCheckpoint() ([]byte, error)

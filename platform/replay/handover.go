@@ -23,10 +23,11 @@ func (c encodedCheckpoints) Checkpoint(id sim.StateID) ([]byte, bool, error) {
 // that runs (its router, event log, published states, emitter, acks and checkpoint writer); the
 // event log in it writes on after the cut, so no log may be open for writing before.
 //
-// Each engine is given the messages that it sent in the replay as its sent messages that are not
-// acked, so at its first flush it sends them again: a receiver that took one has it in its log,
-// drops the second copy by its number and acks it, and one that did not take it takes it now.
-// Each engine publishes its state before its first tick, for the engines that read it.
+// The replay has an AckBoard, so each replayed engine holds, and its checkpoint carries, the
+// messages it sent that no receiver took in the part of its log that was kept. At its first flush
+// a live engine lets go of what its receivers acked from their checkpoints and sends the rest
+// again: a receiver whose log was cut takes one now, and one that took it drops the copy by its
+// number. Each engine publishes its state before its first tick, for the engines that read it.
 //
 // A replay in which an engine differs from its log is not handed over. A checkpoint that cannot
 // make its engine, or an engine that the builder makes and the replay does not have, is an error.
@@ -51,7 +52,6 @@ func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
 		if _, ok := checkpoints[id]; !ok {
 			return nil, fmt.Errorf("handover: the engine %v was not in the replay", id)
 		}
-		e.SetSentMessages(r.SentMessages[id])
 		e.PublishState()
 	}
 	return live, nil
