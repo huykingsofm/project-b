@@ -200,6 +200,40 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 		replayAndCompare(t, c, mem)
 	})
 
+	t.Run("refused as full", func(t *testing.T) {
+		c, mem := everyTickHashed(t)
+		testkit.WalkToTheEastExit(t, c, 1)
+		// the queue of zonelayer 3 is full, and it does not run to empty it
+		for seq := uint64(1); ; seq++ {
+			chat := action.ZoneLayerChatSendAction{FromID: 1, Text: "fill"}
+			fill := sim.NewActionMessage[*zonelayerstate.State](
+				testkit.Layer3, onfail.Drop{}, chat,
+			).Stamp(sim.Header{From: 99, Seq: seq})
+			reason, ok := c.Env.Router.Deliver(fill)
+			if ok {
+				continue
+			}
+			if reason != sim.DeliveryFailureFull {
+				t.Fatalf("the queue of zonelayer 3 refused with %v, want full", reason)
+			}
+			break
+		}
+		c.ZoneLayer(testkit.Layer1).Send(exitEast)
+		for range 10 {
+			c.ZoneLayer(testkit.Layer1).Step()
+		}
+		reasons := map[sim.DeliveryFailure]int{}
+		for _, r := range mem.ByEngine()[testkit.Layer1] {
+			if returned, isReturned := r.Body.(eventlog.Returned); isReturned {
+				reasons[returned.Reason]++
+			}
+		}
+		if reasons[sim.DeliveryFailureFull] != 1 || len(reasons) != 1 {
+			t.Fatalf("zonelayer 1 had messages come back for %v, want one as full", reasons)
+		}
+		replayAndCompare(t, c, mem)
+	})
+
 	t.Run("comes back later", func(t *testing.T) {
 		c, mem := everyTickHashed(t)
 		testkit.WalkToTheEastExit(t, c, 1)

@@ -103,7 +103,7 @@ Today the checkpoint of a zone does not hold its map, and `zone.DecodeState` tak
 - **Not decided:** who writes the map once and gives its address (file and record) to the state at `Encode`; this needs a place where the cluster registers its assets when it starts.
 - **Decision:** not made. The size of the real maps decides between the first ways and the last two.
 
-### The limit of the messages that went and were not acked (before it is built)
+### The limit of the messages that went and were not acked (deferred; before it is built)
 
 The design is in [proposed designs](proposed-designs.md#the-limit-of-the-messages-that-went-and-were-not-acked-pending-approval); each choice below needs the owner's decision first.
 
@@ -111,4 +111,5 @@ The design is in [proposed designs](proposed-designs.md#the-limit-of-the-message
 |---|---|---|
 | The default and the range of `unsettled_messages.most_per_destination` | a number near the queue of an engine (256 by default) times a few, or one chosen after the checkpoint is measured | how much a slow receiver can take before its senders refuse, and the largest checkpoint |
 | What counts against the limit | the sent messages only (proposed), or the sent and the unsent | the unsent ones are the failures that wait to go again: counting them stops that list growing too, and makes a destination that refuses look fuller than what is in its channel |
+| The reason of a refusal | `DeliveryFailureUnacked` (proposed), since `Full` says that the inbox of an engine is full and the queue of the receiver already refuses with it; or `Full` again, as decided at first | `Full` would mean two things to an `OnFail` and to a reader of a log |
 | How an engine of a replay knows it must not decide | `Env.RefusesWhenUnsettledIsFull`, a value of `Env` like `Acks` and `Checkpoints` (proposed), or a method of `MessageRouter` that the replay router answers from the log | where the rule lives: in the engine, which the replay has to turn off, or in the router, which every router has to implement |
