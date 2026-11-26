@@ -114,7 +114,7 @@ func (e *Engine[S]) Remove() {
 func (e *Engine[S]) RemoveAlreadyRecorded() {
 	e.removed.Store(true)
 	e.stable.Remove(e.peer.me)
-	e.peer.retire()
+	e.peer.stopReceivingAndGiveBackWaitingMessages()
 }
 
 // RequestRemoval asks the engine to remove itself, at the end of the tick it runs or before the
@@ -352,15 +352,15 @@ func (e *Engine[S]) planCommands() {
 func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	for {
 		select {
-		case <-ctx.Done():
-			e.peer.retire()
+		case <-ctx.Done(): // a stop, not a removal: the engine goes on after a restart
+			e.peer.stopReceivingAndGiveBackWaitingMessages()
 			return nil
-		case <-e.removal:
+		case <-e.removal: // ends the engine for good: its log ends with the record of it
 			e.Remove()
 			return nil
 		case <-ticks:
 			if err := e.Step(); err != nil {
-				e.peer.retire()
+				e.peer.stopReceivingAndGiveBackWaitingMessages()
 				return err
 			}
 		}
