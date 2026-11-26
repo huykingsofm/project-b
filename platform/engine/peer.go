@@ -205,7 +205,20 @@ func (c *peer) publishAcks(rpl eventlog.Log) {
 func (c *peer) retire() {
 	c.router.Retire(c.me)
 	c.bounce.Stop()
+	// a message that its sender sent again while it waited is in the channel more than once: it
+	// comes back once, as it is one message
+	type messageKey struct {
+		from sim.StateID
+		seq  uint64
+	}
+	returned := map[messageKey]bool{}
 	for _, m := range channels.Drain(c.in.In) {
+		header := m.Head()
+		key := messageKey{header.From, header.Seq}
+		if header.Seq != 0 && returned[key] {
+			continue
+		}
+		returned[key] = true
 		c.router.Return(m, sim.DeliveryFailureRetired)
 	}
 }

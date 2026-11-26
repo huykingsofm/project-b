@@ -192,3 +192,43 @@ func TestACheckpointTakenAfterAMessageCameBackHoldsNoMessageForItAndAnEarlierOne
 		t.Fatalf("the checkpoint after holds %d messages, want none", got)
 	}
 }
+
+func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRemoved(t *testing.T) {
+	c, a, b, d := threeToys(t)
+	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
+	// b takes nothing: the message is sent again, and two copies wait in its channel
+	stepAll(t, []*Engine[*toyState]{a}, int(first)+2)
+	if got := len(b.peer.in.In); got != 2 {
+		t.Fatalf("%d copies wait for b, want 2", got)
+	}
+	b.Remove()
+	stepAll(t, []*Engine[*toyState]{a, d}, int(first)+30)
+	if d.State().Total != -7 {
+		t.Fatalf("engine 3 has %d, want one compensation: -7", d.State().Total)
+	}
+	if got := returnedCount(c, 1); got != 1 {
+		t.Fatalf("%d messages came back to a, want 1: a copy is not another message", got)
+	}
+}
+
+func TestACopyOfAMessageThatWasTakenIsReturnedOnceWhenItsReceiverIsRemovedAndItsOnFailRunsOnce(
+	t *testing.T) {
+	c, a, b, d := threeToys(t)
+	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
+	stepAll(t, []*Engine[*toyState]{a, b}, 1) // b takes the message
+	if b.State().Total != 7 {
+		t.Fatalf("b has %d, want 7", b.State().Total)
+	}
+	stepAll(t, []*Engine[*toyState]{a}, int(first)+1) // no ack: a sends it again
+	b.Remove()                                        // the copy goes back to a
+	stepAll(t, []*Engine[*toyState]{a, d}, int(first)+30)
+	// the state of b is gone with it, so what the message did is gone: its sender undoes it, once
+	if d.State().Total != -7 {
+		t.Fatalf("engine 3 has %d, want one compensation: -7", d.State().Total)
+	}
+	if got := returnedCount(c, 1); got != 1 {
+		t.Fatalf("%d messages came back to a, want 1", got)
+	}
+}
