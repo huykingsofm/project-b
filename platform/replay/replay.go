@@ -43,6 +43,9 @@ type Result struct {
 	Cluster *engine.Cluster
 	// Ticks is the last tick of each engine that was replayed.
 	Ticks map[sim.StateID]uint64
+	// Retired is the engines that the replay removed, since their logs end with the record of their
+	// removal: the cluster does not hold them.
+	Retired []sim.StateID
 	// Divergences says, for each engine that did not do what its log says, the first thing that
 	// differed. A replay that matches has none.
 	Divergences []string
@@ -76,7 +79,8 @@ func Run(b Builder, p *Plan) (*Result, error) {
 		return nil, err
 	}
 	return &Result{
-		Plan: p, Cluster: run.cluster, Ticks: run.ticks(), Divergences: run.div.list(),
+		Plan: p, Cluster: run.cluster, Ticks: run.ticks(), Retired: run.retired,
+		Divergences: run.div.list(),
 	}, nil
 }
 

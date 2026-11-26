@@ -22,7 +22,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 |---|---|
 | the builder | a `replay.Builder` (`Seed`, `QueueSize`, `Codecs`, `BuildIn(env, checkpoints)`), which the game gives (`game.ClusterBuilder`): it describes the cluster that was recorded; what it sets for the event log and the emitter is not used |
 | the logs | `replay.Logs`: for each engine, its last tick (`Last`) and an `eventlog.Source` that gives its records in order, one at a time, from a tick (`Open(engine, from)`: the tick `from` and the ones after it); `eventlog.FileLogs` reads the files of an `eventlog.FileLog`, and `eventlog.MemoryLogs` and `eventlog.MemLog` hold records in memory |
-| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, and the divergences |
+| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, the engines it removed (`Retired`), and the divergences |
 | an error | the replay cannot run: a wrong builder, a record that cannot be given to its engine, a log of an engine that is not in the cluster, engines that wait for each other for ever, a file that cannot be read or cut, a checkpoint that cannot make its engine (or is of another tick than its file says) |
 | a divergence | the first difference of an engine between the run and its log; not an error of `Run`, a `*DivergenceError` of `Recover` |
 
@@ -83,6 +83,7 @@ Before an engine runs a tick, the records of that tick are given to it, in the o
 | `KindCommand` | `SendBaseCommand` of the engine |
 | `KindInbound` | the message is put in the queue of the engine; the queue is as large as the busiest tick needs |
 | `KindReturned` | a message sent in an earlier tick is given back at this one (`Router.Return`); one that is sent in this tick is refused at once, with the reason, when its sender sends it |
+| `KindRetired` | the engine is removed (`Cluster.Remove`) and runs no tick: the frame of the tick holds this record and no other, and it is the last of the log (the index refuses a log in which it is not); the cluster of the result does not hold the engine, and its ID is in `Result.Retired` |
 | `KindStableRead` | the read at this tick gets the copy of the tick in the record; the engine does not run before the source engine has run to that tick; the configuration is read so, from the copy of the configuration engine ([configengine](configengine.md)) |
 
 ## An engine that starts from a checkpoint
@@ -154,6 +155,7 @@ Before the first tick, for each engine that starts above tick 0:
 | engines | `Builder.BuildIn(env, checkpoints)` makes each engine from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env`; `ClusterBuilder.NewEnv` makes such an environment |
 | sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
 | copies | each engine publishes its state (`PublishState`), for the engines that read it |
+| removed engines | the engines in `Result.Retired` are made by the builder, new, and taken out of the cluster at once without writing to their logs (`Cluster.RemoveAlreadyRecorded`), so the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 
 | Part | What happens |
@@ -165,6 +167,7 @@ Before the first tick, for each engine that starts above tick 0:
 | the queues | empty: what was not taken from them is not in any log |
 | the configuration | the engine has what its checkpoint holds; a later document of the store is sent by the cluster as a command |
 
+- A read of an engine that was removed names a copy of a tick that it ran, or none: what it published goes when it is removed, and it publishes nothing at the tick of its removal (the index refuses a read of a copy at that tick or after).
 - A replayed engine sends its unacked messages again, as a live one does, into the router of the replay, which compares each with what its receiver recorded and carries nothing.
 - The hash of an engine that is made again is the hash of the replayed one: the test of `server/game/handover_test.go` checks it, and the run does not.
 

@@ -39,6 +39,8 @@ type replayRun struct {
 	stable  *replayStable
 	verify  *verifyLog
 	div     *divergences
+	// retired is the engines that the replay removed, in the order it did.
+	retired []sim.StateID
 }
 
 func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
@@ -248,6 +250,11 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 	if err := r.load(id, er); err != nil {
 		return err
 	}
+	if len(er.tickRecords) > 0 {
+		if _, removed := er.tickRecords[0].Body.(eventlog.Retired); removed {
+			return r.removeEngine(id, er, tick)
+		}
+	}
 	for _, rec := range er.tickRecords {
 		switch body := rec.Body.(type) {
 		case eventlog.Command:
@@ -273,5 +280,22 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 	}
 	er.lastRanTick = tick
 	er.loaded = false // the records of the next tick are loaded when it is asked for
+	return nil
+}
+
+// removeEngine removes the engine, as its log says it was at the tick: the frame of that tick holds
+// the record of the removal and no other (the index checks it), and the engine runs no tick.
+func (r *replayRun) removeEngine(id sim.StateID, er *engineRun, tick uint64) error {
+	if len(er.tickRecords) != 1 {
+		return fmt.Errorf("%v tick %d: the engine was removed and the tick has %d records",
+			id, tick, len(er.tickRecords))
+	}
+	if !r.cluster.Remove(id) {
+		return fmt.Errorf("%v tick %d: the engine was removed and the cluster does not have it",
+			id, tick)
+	}
+	r.retired = append(r.retired, id)
+	er.lastRanTick = tick
+	er.loaded = false
 	return nil
 }

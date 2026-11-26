@@ -28,6 +28,8 @@ type index struct {
 	// inboundMessageHash is the hash of each message as the log of its receiver took it (Inbound):
 	// the sender, replayed, has to send the same.
 	inboundMessageHash map[msgKey]uint64
+	// retiredAt is the tick at which each engine whose log ends with Retired was removed.
+	retiredAt map[sim.StateID]uint64
 }
 
 // buildIndex reads each log once. It returns an error when a log cannot be read and when a log
@@ -38,10 +40,21 @@ func buildIndex(
 	idx := &index{
 		maxQueueSize: queueSize, copyReads: map[copyKey]int{},
 		msgsToBeReturned: map[msgKey]bool{}, inboundMessageHash: map[msgKey]uint64{},
+		retiredAt: map[sim.StateID]uint64{},
 	}
 	for _, address := range logs.Engines() {
 		if err := idx.add(logs, address, seed, starts[address]); err != nil {
 			return nil, fmt.Errorf("the log of %v: %w", address, err)
+		}
+	}
+	// an engine that was removed published nothing at the tick it was removed at, and what it
+	// published is gone with it: a read finds the copy of a tick it ran, or nothing
+	for copy := range idx.copyReads {
+		if tick, removed := idx.retiredAt[copy.source]; removed && copy.tick >= tick {
+			return nil, fmt.Errorf(
+				"a read names the copy of the tick %d of %v, which was removed at the tick %d",
+				copy.tick, copy.source, tick,
+			)
 		}
 	}
 	return idx, nil
@@ -58,6 +71,7 @@ func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error 
 	var tick uint64
 	// what the engine takes in at the tick: commands, messages, messages that came back
 	takenMsgs := 0
+	recordsOfTheTick := 0
 	first := true
 	for src.Next() {
 		rec := src.Record()
@@ -73,9 +87,20 @@ func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error 
 			continue
 		}
 		if rec.Tick != tick {
-			tick, takenMsgs = rec.Tick, 0
+			tick, takenMsgs, recordsOfTheTick = rec.Tick, 0, 0
 		}
+		if _, removed := idx.retiredAt[address]; removed {
+			return fmt.Errorf("a record of the tick %d is after the engine was removed", rec.Tick)
+		}
+		recordsOfTheTick++
 		switch body := rec.Body.(type) {
+		case eventlog.Retired:
+			// the engine ran no tick: the frame of its removal holds this record and no other
+			if recordsOfTheTick > 1 {
+				return fmt.Errorf("the tick %d, at which the engine was removed, has other records",
+					rec.Tick)
+			}
+			idx.retiredAt[address] = rec.Tick
 		case eventlog.Inbound:
 			idx.inboundMessageHash[keyOf(body.Message.Head())] = eventlog.HashMessage(body.Message)
 			takenMsgs++

@@ -35,9 +35,20 @@ type Env struct {
 // Remove ends the engine with the state ID for good, and forgets it: see Engine.Remove. It reports
 // whether the cluster had one.
 func (c *Cluster) Remove(id sim.StateID) bool {
+	return c.removeWith(id, Stepper.Remove)
+}
+
+// RemoveAlreadyRecorded is Remove for an engine whose event log already ends with the frame that
+// says it was removed (see Engine.RemoveAlreadyRecorded): a cluster made again after a recovery
+// does not hold the engines that the log says were removed.
+func (c *Cluster) RemoveAlreadyRecorded(id sim.StateID) bool {
+	return c.removeWith(id, Stepper.RemoveAlreadyRecorded)
+}
+
+func (c *Cluster) removeWith(id sim.StateID, end func(Stepper)) bool {
 	for i, e := range c.engines {
 		if e.StateID() == id {
-			e.Remove()
+			end(e)
 			c.engines = slices.Delete(c.engines, i, i+1)
 			return true
 		}
@@ -52,6 +63,9 @@ type Stepper interface {
 	Run(ctx context.Context, ticks <-chan time.Time) error
 	// Remove ends the engine for good: see Engine.Remove.
 	Remove()
+	// RemoveAlreadyRecorded ends the engine for good, its log already ending with the frame that
+	// says so: see Engine.RemoveAlreadyRecorded.
+	RemoveAlreadyRecorded()
 	StateID() sim.StateID
 	Type() sim.StateType
 	// TypeName is the name of the type of the state of the engine, for a message to a person.

@@ -29,6 +29,9 @@ func (c encodedCheckpoints) Checkpoint(id sim.StateID) ([]byte, bool, error) {
 // again: a receiver whose log was cut takes one now, and one that took it drops the copy by its
 // number. Each engine publishes its state before its first tick, for the engines that read it.
 //
+// An engine that the replay removed (its log ends with the record of its removal) is not made
+// again: the builder makes it, new, and it is removed at once, without writing to its log.
+//
 // A replay in which an engine differs from its log is not handed over. A checkpoint that cannot
 // make its engine, or an engine that the builder makes and the replay does not have, is an error.
 func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
@@ -46,6 +49,13 @@ func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
 	live, err := b.BuildIn(env, checkpoints)
 	if err != nil {
 		return nil, fmt.Errorf("handover: %w", err)
+	}
+	// the builder makes the engines that were removed too, new: they are not the engines that were
+	// recorded, whose logs end with the record of their removal
+	for _, id := range r.Retired {
+		if !live.RemoveAlreadyRecorded(id) {
+			return nil, fmt.Errorf("handover: the engine %v was removed, the builder has none", id)
+		}
 	}
 	for _, e := range live.Engines() {
 		id := e.StateID()

@@ -97,6 +97,14 @@ func (e *Engine[S]) Remove() {
 	e.tick++
 	e.eventLog.Append(e.peer.me, e.tick, eventlog.Retired{})
 	e.eventLog.EndTick(e.peer.me, e.tick)
+	e.RemoveAlreadyRecorded()
+}
+
+// RemoveAlreadyRecorded ends the engine for good as Remove does, without writing the last frame to
+// its event log: the log already ends with it, as in an engine that was removed before a restart.
+// The engine does not run a tick, so the copy of its state that the other engines read goes, and
+// what they read after is nothing.
+func (e *Engine[S]) RemoveAlreadyRecorded() {
 	e.stable.Remove(e.peer.me)
 	e.peer.retire()
 }
