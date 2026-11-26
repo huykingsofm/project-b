@@ -154,7 +154,7 @@ Before the first tick, for each engine that starts above tick 0:
 | checkpoint | each engine of the replayed cluster is checkpointed at its limit (`Stepper.EncodeCheckpoint`) |
 | engines | `Builder.BuildIn(env, checkpoints)` makes each engine from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env`; `ClusterBuilder.NewEnv` makes such an environment |
 | sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
-| copies | each engine publishes its state (`PublishState`), for the engines that read it |
+| copies | each engine that ran a tick publishes its state (`PublishState`), for the engines that read it; one at the tick 0 publishes nothing, so a read that records the tick 0 means that it found no copy |
 | removed engines | the engines in `Result.Retired` are made by the builder, new, and taken out of the cluster at once without writing to their logs (`Cluster.RemoveAlreadyRecorded`), so the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 

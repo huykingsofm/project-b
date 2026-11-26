@@ -27,7 +27,8 @@ func (c encodedCheckpoints) Checkpoint(id sim.StateID) ([]byte, bool, error) {
 // messages it sent that no receiver took in the part of its log that was kept. At its first flush
 // a live engine lets go of what its receivers acked from their checkpoints and sends the rest
 // again: a receiver whose log was cut takes one now, and one that took it drops the copy by its
-// number. Each engine publishes its state before its first tick, for the engines that read it.
+// number. Each engine that ran a tick publishes its state before its next tick, for the engines
+// that read it.
 //
 // An engine that the replay removed (its log ends with the record of its removal) is not made
 // again: the builder makes it, new, and it is removed at once, without writing to its log.
@@ -62,7 +63,12 @@ func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
 		if _, ok := checkpoints[id]; !ok {
 			return nil, fmt.Errorf("handover: the engine %v was not in the replay", id)
 		}
-		e.PublishState()
+		// an engine that has run no tick publishes nothing, as one that was never stopped does: a
+		// read that finds no copy is recorded as the tick 0, and a copy at the tick 0 would be
+		// recorded the same
+		if e.Tick() > 0 {
+			e.PublishState()
+		}
 	}
 	return live, nil
 }

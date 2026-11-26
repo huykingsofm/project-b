@@ -186,6 +186,16 @@ func TestAHandoverOfAnEngineWhoseLogIsGoneStartsItNewAndCutsWhatDependsOnIt(t *t
 	if got := first.Ticks[testkit.Layer3]; got != 0 {
 		t.Fatalf("the engine with no log was replayed to %d, want 0", got)
 	}
+	published := live.Env.Stable.(*engine.StableStateStore)
+	for _, e := range live.Engines() {
+		copy := published.Copy(0, 0, e.StateID())
+		switch {
+		case e.Tick() == 0 && copy != nil:
+			t.Fatalf("%v ran no tick and has a copy at the tick %d", e.StateID(), copy.Tick())
+		case e.Tick() > 0 && (copy == nil || copy.Tick() != e.Tick()):
+			t.Fatalf("%v is at the tick %d and has the copy %v", e.StateID(), e.Tick(), copy)
+		}
+	}
 	lost := heldAndNotTaken(t, dir, live)
 	step(t, live, 30)
 	closeLog()
