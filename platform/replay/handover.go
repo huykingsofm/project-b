@@ -33,6 +33,9 @@ func (c encodedCheckpoints) Checkpoint(id sim.StateID) ([]byte, bool, error) {
 // An engine that the replay removed (its log ends with the record of its removal) is not made
 // again: the builder makes it, new, and it is removed at once, without writing to its log.
 //
+// An engine that its builder says nothing refers to any more (replay.OrphanFinder) is removed,
+// which writes the record of its removal to its log.
+//
 // A replay in which an engine differs from its log is not handed over. A checkpoint that cannot
 // make its engine, or an engine that the builder makes and the replay does not have, is an error.
 func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
@@ -56,6 +59,15 @@ func (r *Result) Handover(b Builder, env *engine.Env) (*engine.Cluster, error) {
 	for _, id := range r.Retired {
 		if !live.RemoveAlreadyRecorded(id) {
 			return nil, fmt.Errorf("handover: the engine %v was removed, the builder has none", id)
+		}
+	}
+	// the world forgot an engine in a tick that its log keeps, and the engine did not end before
+	// the cluster stopped: it is removed now, which writes the record of it to its log
+	if finder, ok := b.(OrphanFinder); ok {
+		for _, id := range finder.Orphans(live) {
+			if !live.Remove(id) {
+				return nil, fmt.Errorf("handover: the orphan %v cannot be removed", id)
+			}
 		}
 	}
 	for _, e := range live.Engines() {

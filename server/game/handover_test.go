@@ -8,6 +8,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
@@ -16,6 +17,15 @@ import (
 // log writes on after the cut. closeLog closes that log, so that the files can be recovered again.
 func handedOver(
 	t *testing.T, dir string,
+) (result *replay.Result, live *engine.Cluster, closeLog func()) {
+	t.Helper()
+	return handedOverAs(t, dir, func(b *game.ClusterBuilder) replay.Builder { return b })
+}
+
+// handedOverAs is handedOver with the builder that the handover is given made from the builder of
+// the world by as.
+func handedOverAs(
+	t *testing.T, dir string, as func(*game.ClusterBuilder) replay.Builder,
 ) (result *replay.Result, live *engine.Cluster, closeLog func()) {
 	t.Helper()
 	result = recoverTheWorld(t, dir, everySeventhTick)
@@ -27,7 +37,7 @@ func handedOver(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if live, err = result.Handover(builder, env); err != nil {
+	if live, err = result.Handover(as(builder), env); err != nil {
 		t.Fatal(err)
 	}
 	return result, live, func() {

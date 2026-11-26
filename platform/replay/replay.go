@@ -35,6 +35,14 @@ type Builder interface {
 	BuildIn(env *engine.Env, checkpoints engine.CheckpointSource) (*engine.Cluster, error)
 }
 
+// OrphanFinder is a Builder that can say which engines of a cluster that was made again nothing
+// refers to any more. The state that lists the engines (the world of a game) forgot them in a tick
+// that its log keeps, and the engine was not removed before the cluster stopped, so its log does
+// not end with the record of its removal. The handover removes them.
+type OrphanFinder interface {
+	Orphans(c *engine.Cluster) []sim.StateID
+}
+
 // Result is what a replay found.
 type Result struct {
 	// Plan is what the replay ran: the limits and the starts.

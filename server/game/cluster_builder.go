@@ -234,6 +234,7 @@ func (b *ClusterBuilder) newEnv(codecs *sim.Codecs) *engine.Env {
 		Router: engine.NewRouter(), EventLog: b.eventLog,
 		Stable: engine.NewStableStateStore(), Codecs: codecs, QueueSize: b.queueSize,
 		Emitter: b.emitter, Acks: engine.NewAckBoard(), Checkpoints: b.checkpoints,
+		Control: engine.NewClusterControl(),
 	}
 }
 
@@ -311,4 +312,30 @@ func (b *ClusterBuilder) assemble(
 	}
 	c.Add(c.World)
 	return c, nil
+}
+
+// Orphans returns the engines of a zone or a zonelayer that the cluster has and that the world no
+// longer lists: the world forgot them in a tick that the log of the world keeps, and the engine was
+// not removed before the cluster stopped, so nothing refers to it any more. A cluster that was made
+// again after a recovery has them (see replay.OrphanFinder).
+func (b *ClusterBuilder) Orphans(c *engine.Cluster) []sim.StateID {
+	world, ok := c.Get[*worldstate.State](b.world.ID)
+	if !ok {
+		return nil
+	}
+	listed := map[sim.StateID]bool{}
+	for _, id := range world.State().ZoneIDs() {
+		listed[id] = true
+	}
+	for _, id := range world.State().ZoneLayerIDs() {
+		listed[id] = true
+	}
+	var out []sim.StateID
+	for _, e := range c.Engines() {
+		id := e.StateID()
+		if (id.Type() == state.ZoneType || id.Type() == state.ZoneLayerType) && !listed[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }
