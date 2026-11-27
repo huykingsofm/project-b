@@ -37,20 +37,6 @@ func (s *toyState) Clone() sim.State  { c := *s; return &c }
 
 func (s *toyState) TakeEvents() []sim.Event { return nil }
 
-// HandleDirective counts the answers of the cluster: 100 times the number of the engine that was
-// made, or -1 when it was not made.
-func (s *toyState) HandleDirective(
-	_ *sim.Context, _ *sim.Registry[*toyState], d sim.DirectiveResponse,
-) {
-	if d.Failure != "" {
-		s.Total--
-		return
-	}
-	s.Total += int64(d.Engine.Local()) * 100
-}
-
-var _ sim.DirectiveHandler[*toyState] = (*toyState)(nil)
-
 func (s *toyState) Hash() uint64 {
 	h := sim.NewHasher()
 	h.U64(uint64(s.Total))
@@ -194,7 +180,7 @@ func addToys(t testing.TB, c *engine.Cluster, n int) []*engine.Engine[*toyState]
 
 func newCluster(t testing.TB, env *engine.Environment) *engine.Cluster {
 	t.Helper()
-	c, err := engine.NewCluster(env, config.NewStore(), nil)
+	c, err := engine.NewCluster(env, config.NewStore(), engine.Checkpoints{})
 	if err != nil {
 		t.Fatal(err)
 	}

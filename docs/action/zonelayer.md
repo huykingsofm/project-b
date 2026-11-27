@@ -175,5 +175,14 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Set by: [`WorldZoneLayerAddAction`](world.md#worldzonelayeraddaction), as an action that the zonelayer starts with, for its first tick
 - Steps:
   1. Sends [`ZoneZoneLayerAddAction`](zone.md#zonezonelayeraddaction) to the zone of the zonelayer with its own ID (`Context.Self`) and `Capacity`; dropped if not delivered.
-- Note: only the zonelayer knows its own ID, which the cluster gave it after the request.
+- Note: only the zonelayer knows its own ID, which the coordinator gave it.
+
+### ZoneLayerAnnounceToWorldAction
+
+- Kind: system
+- Priority: `PriorityResolve`
+- Fields: none
+- Set by: [`WorldZoneLayerAddAction`](world.md#worldzonelayeraddaction), as an action that the zonelayer starts with, for its first tick
+- Steps:
+  1. Sends [`WorldZoneLayerRegisterAction`](world.md#worldzonelayerregisteraction) to the world of the zonelayer with its own ID (`Context.Self`); retried if not delivered.
 

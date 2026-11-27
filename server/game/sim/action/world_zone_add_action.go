@@ -2,6 +2,7 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
@@ -9,9 +10,9 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// WorldZoneAddAction asks the cluster for a zone of the world, on a map. The world lists the zone
-// when the cluster answers (worldstate.State.HandleDirective), not here (R28): the request only
-// makes the engine.
+// WorldZoneAddAction asks the coordinator for a zone of the world, on a map. The world lists the
+// zone when the zone tells it that it is there (ZoneAnnounceToWorldAction), not here (R28): the
+// request only makes the engine.
 type WorldZoneAddAction struct {
 	Tiles *tilemap.TileMap
 }
@@ -30,7 +31,9 @@ func (a WorldZoneAddAction) Apply(
 	c *sim.Context, _ *worldstate.State, r *sim.Registry[*worldstate.State],
 	_ *sim.Plan[*worldstate.State],
 ) {
-	r.RequestCreateEngine([]byte{worldstate.TagZone}, zonestate.NewState(c.Self, a.Tiles))
+	r.RequestCreateEngine(
+		onfail.Retry{}, zonestate.NewState(c.Self, a.Tiles), ZoneAnnounceToWorldAction{},
+	)
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.

@@ -1,6 +1,9 @@
 package sim
 
-import "github.com/huykingsofm/project-b/platform/config"
+import (
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/shared/logging"
+)
 
 // StableReader is what a registry reads the states of the other engines with: the latest state
 // that each engine published. A state read from it is a copy that its engine will never change
@@ -44,7 +47,8 @@ type Registry[S State] struct {
 
 	scheduledActions []ScheduledAction[S]
 
-	directives []DirectiveRequest
+	engineCreations   []EngineCreation
+	engineRetirements []EngineRetirement
 }
 
 // Config returns the configuration that the engine of the tick reads: the snapshot in the copy of
@@ -98,41 +102,58 @@ func (r *Registry[S]) ToSelfAt(tick uint64, a Action[S]) {
 	r.scheduledActions = append(r.scheduledActions, ScheduledAction[S]{At: tick, Action: a})
 }
 
-// RequestCreateEngine asks the cluster to make an engine of a state of type T from the state and
-// the actions that it runs once at its first tick (an action that is to run again sets itself
-// again). The state has no ID: the cluster gives the engine one. Nothing is done while the actions
-// run: the engine hands the request to its cluster when the tick is done, before it sends the
-// messages of the tick, and the cluster answers it with a directive that the state of this
-// registry takes at the start of a tick (DirectiveHandler), with the tag. The state that is to
-// list the new engine is changed by that answer, as for any other change of a state (R28): the
-// request only makes the engine. The state is the engine's from now on: the caller does not
-// change it after.
-func (r *Registry[S]) RequestCreateEngine[T State](tag []byte, st T, start ...Action[T]) {
+// RequestCreateEngine asks the coordinator for an engine of a state of type T, which runs the
+// actions at its first tick (an action that is to run again sets itself again). The state has no
+// ID: the coordinator gives the engine one, and the state is the engine's from now on, so the
+// caller does not change it after. Nothing is done while the actions run: the message goes when the
+// tick is done, as any other. The state that is to list the new engine is not changed by this
+// (R28): an action that the new engine starts with tells it that it is there.
+func (r *Registry[S]) RequestCreateEngine[T State](onFail OnFail, st T, start ...Action[T]) {
 	actions := make([]BaseAction, len(start))
 	for i, a := range start {
 		actions[i] = a
 	}
-	r.directives = append(r.directives, DirectiveRequest{
-		Kind: DirectiveCreateEngine, Tag: tag, State: st, StartActions: actions,
-	})
+	a, err := NewCreateEngineAction(st, actions, 0)
+	if err != nil {
+		logging.Error("an engine was asked for and cannot be written: it is not made", "err", err)
+		return
+	}
+	r.Send[*CoordinatorState](CoordinatorStateID, onFail, a)
 }
 
-// RemoveEngine asks the cluster to remove the engine with the ID, and to answer with the tag.
-// Nothing is done while the actions run: the engine hands the request to its cluster when the tick
-// is done, and the cluster removes the engine between two ticks of it. The state that holds the ID
-// is changed by the action, as for any other change of a state (R28): the request only ends the
-// engine.
-func (r *Registry[S]) RemoveEngine(id StateID, tag []byte) {
-	r.directives = append(r.directives, DirectiveRequest{
-		Kind: DirectiveRemoveEngine, Tag: tag, Target: id,
-	})
+// RequestRetireEngine asks the coordinator to end the engine with the ID. Nothing is done while the
+// actions run: the message goes when the tick is done, as any other, and the engine retires between
+// two of its ticks. The state that holds the ID is changed by the action, as for any other change
+// of a state (R28): the request only ends the engine.
+func (r *Registry[S]) RequestRetireEngine(onFail OnFail, id StateID) {
+	r.Send[*CoordinatorState](CoordinatorStateID, onFail, RetireEngineAction{Target: id})
 }
 
-// TakeDirectiveRequests returns what the actions of this tick asked of the cluster, in the order
-// they asked, and forgets it.
-func (r *Registry[S]) TakeDirectiveRequests() []DirectiveRequest {
-	out := r.directives
-	r.directives = nil
+// CreateEngine puts an engine that the coordinator made the ID of in the registry: the engine of
+// the coordinator makes it when the tick is done. Only an action of the coordinator calls it.
+func (r *Registry[S]) CreateEngine(c EngineCreation) {
+	r.engineCreations = append(r.engineCreations, c)
+}
+
+// RetireEngine puts an engine that the coordinator ended in the registry: the engine of the
+// coordinator asks it to retire when the tick is done. Only an action of the coordinator calls it.
+func (r *Registry[S]) RetireEngine(e EngineRetirement) {
+	r.engineRetirements = append(r.engineRetirements, e)
+}
+
+// TakeEngineCreations returns the engines that the actions of this tick made the ID of, in the
+// order they did, and forgets them.
+func (r *Registry[S]) TakeEngineCreations() []EngineCreation {
+	out := r.engineCreations
+	r.engineCreations = nil
+	return out
+}
+
+// TakeEngineRetirements returns the engines that the actions of this tick asked to end, in the
+// order they did, and forgets them.
+func (r *Registry[S]) TakeEngineRetirements() []EngineRetirement {
+	out := r.engineRetirements
+	r.engineRetirements = nil
 	return out
 }
 

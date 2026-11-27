@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
@@ -38,17 +37,6 @@ func (p *Plan) Limits() map[sim.StateID]uint64 { return maps.Clone(p.limits) }
 
 // Starts is the tick each engine starts at: the tick of its checkpoint, or 0.
 func (p *Plan) Starts() map[sim.StateID]uint64 { return maps.Clone(p.starts) }
-
-// LastStateIDs is, for each type of state, the highest number among the engines that have a log,
-// the ones that were removed and the ones that were cut to nothing included: an ID is never given
-// again, so the cluster that goes on gives IDs above them (Cluster.RaiseStateIDs).
-func (p *Plan) LastStateIDs() map[sim.StateType]uint64 {
-	last := map[sim.StateType]uint64{}
-	for _, id := range p.logs.Engines() {
-		last[id.Type()] = max(last[id.Type()], id.Local())
-	}
-	return last
-}
 
 // MakePlan makes the plan of the files under dir. It reads the logs, and the checkpoints to choose
 // from; nothing is written. The cache of the line, when it holds, saves reading the logs whole. No
@@ -102,35 +90,6 @@ func PlanFrom(
 	return &Plan{
 		limits: limits, starts: maps.Clone(starts), logs: logs, checkpoints: checkpoints,
 	}, nil
-}
-
-// Served says which request of an engine each engine that its logs hold was made for: the record
-// that begins a log says the engine that asked and the number it gave the request (an engine that
-// no engine asked for is not in it). A cluster that goes on from the logs (Result.Handover) is
-// given these so that a request that is handed over again is not served twice.
-func (p *Plan) served() (map[engine.DirectiveKey]sim.StateID, error) {
-	out := map[engine.DirectiveKey]sim.StateID{}
-	for _, id := range p.logs.Engines() {
-		r, err := p.logs.Open(id, 1)
-		if err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", id, err)
-		}
-		for r.Next() {
-			rec := r.Record()
-			if rec.Tick > 1 {
-				break
-			}
-			if started, ok := rec.Body.(eventlog.Started); ok && started.Creator != 0 {
-				out[engine.DirectiveKey{Engine: started.Creator, ID: started.DirectiveID}] = id
-			}
-		}
-		err = r.Err()
-		r.Close()
-		if err != nil {
-			return nil, fmt.Errorf("the log of %v: %w", id, err)
-		}
-	}
-	return out, nil
 }
 
 // Cut brings the files under the directory of the plan to the plan: the log of each engine is cut

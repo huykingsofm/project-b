@@ -88,7 +88,8 @@ func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T
 	var deps []sim.StateDependency
 	for _, r := range mem.Records {
 		// every engine reads the configuration at every tick: that is not what is asked here
-		if dep, ok := r.Dependency(); ok && r.Engine == 2 && dep.Source != sim.ConfigStateID {
+		if dep, ok := r.Dependency(); ok && r.Engine == 2 && dep.Source != sim.ConfigStateID &&
+			dep.Source != sim.CoordinatorStateID {
 			deps = append(deps, dep)
 		}
 	}

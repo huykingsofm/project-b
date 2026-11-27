@@ -226,7 +226,7 @@ func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
 
 func TestAnExitToAZoneThatWasRemovedDoesNothing(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
-	c.Cluster.RemoveEngine(testkit.Zone2)
+	testkit.RemoveEngine(t, c.Cluster, testkit.Zone2)
 	testkit.WalkToTheEastExit(t, c, 1)
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},

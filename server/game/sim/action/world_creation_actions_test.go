@@ -29,27 +29,81 @@ func TestTheWorldAsksForAZoneOfItsOwnOnTheMapAndForAZoneLayerThatStartsByTelling
 	)
 	action.WorldZoneLayerAddAction{ZoneID: 7, Capacity: 20}.Apply(ctx, worldstate.NewState(), &reg,
 		nil)
-	requests := reg.TakeDirectiveRequests()
-	if len(requests) != 3 {
-		t.Fatalf("%d requests, want 3", len(requests))
+	messages := reg.Take()
+	if len(messages) != 3 {
+		t.Fatalf("%d messages, want 3", len(messages))
 	}
-	zone, ok := requests[0].State.(*zonestate.State)
-	if requests[0].Kind != sim.DirectiveCreateEngine || !ok || zone.WorldID() != worldEngineID ||
-		requests[0].Tag[0] != worldstate.TagZone {
-		t.Fatalf("the request for the zone is %+v", requests[0])
+	asked := make([]sim.CreateEngineAction, len(messages))
+	for i, m := range messages {
+		if m.Dest() != sim.CoordinatorStateID {
+			t.Fatalf("the message %d is for %v, want the coordinator", i, m.Dest())
+		}
+		asked[i] = m.(*sim.ActionMessage[*sim.CoordinatorState]).Actions[0].(sim.CreateEngineAction)
 	}
-	layer, ok := requests[1].State.(*zonelayerstate.State)
-	if !ok || layer.ZoneID() != 7 || layer.WorldID() != worldEngineID ||
-		requests[1].Tag[0] != worldstate.TagZoneLayer {
-		t.Fatalf("the request for the zonelayer is %+v", requests[1])
+	zone, ok := asked[0].State.(*zonestate.State)
+	if !ok || zone.WorldID() != worldEngineID {
+		t.Fatalf("the request for the zone is %+v", asked[0])
 	}
-	start := requests[1].StartActions
-	if len(start) != 2 || start[0] != (action.ZoneLayerAnnounceToZoneAction{Capacity: 20}) ||
-		start[1] != (action.ZoneLayerCharacterRegenAction{Every: 15}) {
-		t.Fatalf("the zonelayer starts with %+v, want to announce itself and heal", start)
+	if got := asked[0].Start; len(got) != 1 || got[0] != (action.ZoneAnnounceToWorldAction{}) {
+		t.Fatalf("the zone starts with %+v, want to announce itself to the world", got)
 	}
-	if got := requests[2].StartActions; len(got) != 1 {
-		t.Fatalf("a zonelayer that heals never starts with %+v, want only the announce", got)
+	layer, ok := asked[1].State.(*zonelayerstate.State)
+	if !ok || layer.ZoneID() != 7 || layer.WorldID() != worldEngineID {
+		t.Fatalf("the request for the zonelayer is %+v", asked[1])
+	}
+	start := asked[1].Start
+	if len(start) != 3 || start[0] != (action.ZoneLayerAnnounceToZoneAction{Capacity: 20}) ||
+		start[1] != (action.ZoneLayerAnnounceToWorldAction{}) ||
+		start[2] != (action.ZoneLayerCharacterRegenAction{Every: 15}) {
+		t.Fatalf("the zonelayer starts with %+v, want to announce itself twice and heal", start)
+	}
+	if got := asked[2].Start; len(got) != 2 {
+		t.Fatalf("a zonelayer that heals never starts with %+v, want only the announces", got)
+	}
+}
+
+func TestTheWorldListsTheZoneAndTheZoneLayerThatTellItTheyAreThere(t *testing.T) {
+	world := worldstate.NewState()
+	zoneID := sim.NewStateID(state.ZoneType, 3)
+	layerID := sim.NewStateID(state.ZoneLayerType, 8)
+	action.WorldZoneRegisterAction{ZoneID: zoneID}.Apply(&sim.Context{}, world, nil, nil)
+	action.WorldZoneLayerRegisterAction{ZoneLayerID: layerID}.Apply(&sim.Context{}, world, nil, nil)
+	if got := world.ZoneIDs(); len(got) != 1 || got[0] != zoneID {
+		t.Fatalf("the world lists the zones %v, want %v", got, zoneID)
+	}
+	if got := world.ZoneLayerIDs(); len(got) != 1 || got[0] != layerID {
+		t.Fatalf("the world lists the zonelayers %v, want %v", got, layerID)
+	}
+}
+
+func TestAZoneAndAZoneLayerThatStartTellTheirWorldWhoTheyAre(t *testing.T) {
+	zoneID := sim.NewStateID(state.ZoneType, 3)
+	layerID := sim.NewStateID(state.ZoneLayerType, 8)
+	tiles, err := tilemap.New(2, 2, tilemap.Tile{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var zoneReg sim.Registry[*zonestate.State]
+	action.ZoneAnnounceToWorldAction{}.Apply(
+		&sim.Context{Self: zoneID}, zonestate.NewState(worldEngineID, tiles), &zoneReg, nil,
+	)
+	var layerReg sim.Registry[*zonelayerstate.State]
+	action.ZoneLayerAnnounceToWorldAction{}.Apply(
+		&sim.Context{Self: layerID}, zonelayerstate.NewState(9, worldEngineID), &layerReg, nil,
+	)
+	zoneMessages, layerMessages := zoneReg.Take(), layerReg.Take()
+	if len(zoneMessages) != 1 || zoneMessages[0].Dest() != worldEngineID ||
+		len(layerMessages) != 1 || layerMessages[0].Dest() != worldEngineID {
+		t.Fatalf("the messages are %v and %v, want one each to the world", zoneMessages,
+			layerMessages)
+	}
+	listed := zoneMessages[0].(*sim.ActionMessage[*worldstate.State]).Actions[0]
+	if listed != (action.WorldZoneRegisterAction{ZoneID: zoneID}) {
+		t.Fatalf("the world is told %+v", listed)
+	}
+	listed = layerMessages[0].(*sim.ActionMessage[*worldstate.State]).Actions[0]
+	if listed != (action.WorldZoneLayerRegisterAction{ZoneLayerID: layerID}) {
+		t.Fatalf("the world is told %+v", listed)
 	}
 }
 

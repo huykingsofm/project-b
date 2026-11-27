@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -35,65 +34,66 @@ type Environment struct {
 	// CheckpointWriter writes the checkpoints that the engines take at the end of a tick. With
 	// none the engines take none: a replay has none.
 	CheckpointWriter CheckpointWriter
-	// Directives is where the engines hand the requests of their actions to make and to remove
-	// engines: NewCluster sets it to the cluster. A replay has none, and its engines ignore the
-	// requests.
-	Directives DirectiveSink
+	// Starter is where the coordinator hands the engines it makes and the ones it ends: NewCluster
+	// sets it to the cluster. A replay has none, and its coordinator makes no engine.
+	Starter EngineStarter
 }
 
 // EngineHandle is what the cluster needs of an engine, whatever the type of its state is: to run
-// it on its own, to end it, to give it a response of the cluster and to say which engine it is.
-// What the code that holds an engine from the cluster (Cluster.Engines, Cluster.Find,
-// Cluster.AddEngineByCheckpoint) needs besides, it asks of the handle itself: it defines its own
-// interface and converts the handle to it.
+// it on its own, to end it and to say which engine it is. What the code that holds an engine from
+// the cluster (Cluster.Engines, Cluster.Find, Cluster.AddEngineByCheckpoint) needs besides, it asks
+// of the handle itself: it defines its own interface and converts the handle to it.
 type EngineHandle interface {
 	StateID() sim.StateID
 	// Run runs the engine on its own until the context ends or its tick fails.
 	Run(ctx context.Context, ticks <-chan time.Time) error
 	// Retire ends the engine for good and writes the record of it to its log: see Engine.Retire.
 	Retire()
-	// HandleDirectiveResponse gives the engine the response of the cluster to a request of it: see
-	// Engine.HandleDirectiveResponse.
-	HandleDirectiveResponse(d sim.DirectiveResponse) error
-	// RequestRetirement asks the engine to retire between two of its ticks: Run does it, or the
-	// code that steps the engines itself (Engine.RetireIfRequested); it does not wait, and may be
-	// called from any goroutine.
-	RequestRetirement()
+	// RequestRetirement asks the engine to retire between two of its ticks, at the tick of the
+	// coordinator that asked: Run does it, or the code that steps the engines itself
+	// (Engine.RetireIfRequested); it does not wait, and may be called from any goroutine.
+	RequestRetirement(by sim.StateDependency)
 	// IsClosed says that the engine has been closed: it retired or was closed.
 	IsClosed() bool
 }
 
-// DirectiveKey names a request of an engine to its cluster: the engine and the number it gave it.
-type DirectiveKey struct {
-	Engine sim.StateID
-	ID     uint64
+// Checkpoints are the checkpoints that the two engines every cluster has are made from; a nil one
+// makes its engine new.
+type Checkpoints struct {
+	Config      []byte
+	Coordinator []byte
 }
 
 // Cluster is the engines of a game, wired. It knows only that they are engines: what each does is
-// the business of its state. The first of them is the configuration engine, which every cluster
-// has; the others are added by the code that runs the cluster (CreateEngine) and made by the
-// requests of the engines (see DirectiveSink).
+// the business of its state. The first of them are the configuration engine and the coordinator,
+// which every cluster has; the coordinator makes and ends the others, which the engines ask it for
+// with a message and the code that runs the cluster with a command (CreateEngine).
 type Cluster struct {
-	Env    *Environment
-	config *Engine[*sim.ConfigState]
+	Env         *Environment
+	config      *Engine[*sim.ConfigState]
+	coordinator *Engine[*sim.CoordinatorState]
 
-	// mu protects the list of engines, enginesToRun, running, the IDs and served: an engine that
-	// runs on its own goroutine can ask for another to be made or removed, and the cluster drops
-	// an engine from the list when it has ended.
+	// mu protects the list of engines, enginesToRun and running: the coordinator makes an engine on
+	// its own goroutine, and the cluster drops an engine from the list when it has ended.
 	mu      sync.RWMutex
 	engines []EngineHandle
 	// enginesToRun are the engines that Run has not taken yet, every engine that is added (before
 	// Run or while it runs), and wakeRun wakes Run when one is added.
 	enginesToRun []EngineHandle
 	wakeRun      chan struct{}
-	// running says that Run runs the engines on their own goroutines: a removal is then asked of
-	// the engine, which retires between two of its ticks.
-	running bool
-	// ids are the highest numbers that were given, for each type of state
-	ids map[sim.StateType]uint64
-	// served says which engine each request that made one was served with, so that a request
-	// that is handed over again gets the answer again and not another engine
-	served map[DirectiveKey]sim.StateID
+	// running says that Run runs the engines on their own goroutines, and runEnded is closed when
+	// it stops.
+	running  bool
+	runEnded <-chan struct{}
+	// stepMu is held while CreateEngine takes a tick of the coordinator itself, and while Run
+	// starts: a tick is never taken by both
+	stepMu sync.Mutex
+
+	// waiters are the callers of CreateEngine that wait for the ID of their engine, by the ticket
+	// that their command holds
+	waitersMu  sync.Mutex
+	waiters    map[uint64]chan madeEngine
+	lastTicket uint64
 
 	// store is the configuration of the world outside the game, which the cluster brings into the
 	// configuration engine; nil means none. syncedConfig is the configuration that the engine has,
@@ -103,56 +103,64 @@ type Cluster struct {
 	syncedConfigGeneration uint64
 }
 
-var _ DirectiveSink = (*Cluster)(nil)
+var _ EngineStarter = (*Cluster)(nil)
 
-// NewCluster makes a cluster that runs, in the environment: it has its configuration engine and no
-// other, made from the checkpoint given or, when it is nil, new with every variable at its default.
-// The cluster becomes where the engines hand their requests to (Environment.Directives). The
-// environment's codecs and engine registry must know the configuration engine (see NewCodecs and
-// NewEngineRegistry). The store is the configuration of the world outside the game, which the
-// cluster sends to the configuration engine when it changes; nil means none.
-func NewCluster(
-	env *Environment, store *config.Store, configCheckpoint []byte,
-) (*Cluster, error) {
-	c, err := buildCluster(env, store, configCheckpoint)
+// NewCluster makes a cluster that runs, in the environment: it has its configuration engine and its
+// coordinator and no other, made from the checkpoints given or, where one is nil, new. The cluster
+// becomes where the coordinator hands the engines it makes (Environment.Starter). The environment's
+// codecs and engine registry must know the two (see NewCodecs and NewEngineRegistry). The store is
+// the configuration of the world outside the game, which the cluster sends to the configuration
+// engine when it changes; nil means none.
+func NewCluster(env *Environment, store *config.Store, from Checkpoints) (*Cluster, error) {
+	c, err := buildCluster(env, store, from)
 	if err != nil {
 		return nil, err
 	}
-	env.Directives = c
+	env.Starter = c
 	return c, nil
 }
 
-// NewReplayCluster makes the cluster of a replay: as NewCluster does, but the engines hand their
-// requests to no one, since the log says which engines were made and removed and when, and what the
-// cluster answered.
-func NewReplayCluster(env *Environment, configCheckpoint []byte) (*Cluster, error) {
-	env.Directives = nil
-	return buildCluster(env, nil, configCheckpoint)
+// NewReplayCluster makes the cluster of a replay: as NewCluster does, but its coordinator makes
+// and ends no engine, since the logs say which engines were made and removed and when.
+func NewReplayCluster(env *Environment, from Checkpoints) (*Cluster, error) {
+	env.Starter = nil
+	return buildCluster(env, nil, from)
 }
 
-func buildCluster(
-	env *Environment, store *config.Store, configCheckpoint []byte,
-) (*Cluster, error) {
-	var configEngine *Engine[*sim.ConfigState]
-	if configCheckpoint == nil {
-		configEngine = NewEngine(sim.NewConfigState(), sim.ConfigStateID, env)
-	} else {
-		decoded, err := DecodeEngineCheckpoint[*sim.ConfigState](configCheckpoint, env.Codecs)
-		if err != nil {
-			return nil, fmt.Errorf("the configuration engine: %w", err)
-		}
-		if configEngine, err = decoded.Restore(env); err != nil {
-			return nil, fmt.Errorf("the configuration engine: %w", err)
-		}
+func buildCluster(env *Environment, store *config.Store, from Checkpoints) (*Cluster, error) {
+	configEngine, err := rootEngine(env, from.Config, sim.NewConfigState(), sim.ConfigStateID)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration engine: %w", err)
+	}
+	coordinator, err := rootEngine(
+		env, from.Coordinator, sim.NewCoordinatorState(), sim.CoordinatorStateID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("the coordinator: %w", err)
 	}
 	c := &Cluster{
-		Env: env, config: configEngine, wakeRun: make(chan struct{}, 1),
-		ids:    map[sim.StateType]uint64{},
-		served: map[DirectiveKey]sim.StateID{}, store: store,
+		Env: env, config: configEngine, coordinator: coordinator, wakeRun: make(chan struct{}, 1),
+		waiters: map[uint64]chan madeEngine{}, store: store,
 		syncedConfig: configEngine.State().Snapshot(),
 	}
 	c.addEngineLocked(configEngine)
+	c.addEngineLocked(coordinator)
 	return c, nil
+}
+
+// rootEngine makes one of the engines that every cluster has: from the checkpoint, or new from the
+// state when there is none.
+func rootEngine[S sim.State](
+	env *Environment, checkpoint []byte, fresh S, id sim.StateID,
+) (*Engine[S], error) {
+	if checkpoint == nil {
+		return NewEngine(fresh, id, env), nil
+	}
+	decoded, err := DecodeEngineCheckpoint[S](checkpoint, env.Codecs)
+	if err != nil {
+		return nil, err
+	}
+	return decoded.Restore(env)
 }
 
 // addEngineLocked puts an engine in the list of the cluster and among the ones that Run is to run.
@@ -166,47 +174,6 @@ func (c *Cluster) addEngineLocked(e EngineHandle) {
 	}
 }
 
-// RemoveEngine retires the engine with the state ID for good, and forgets it: see Engine.Retire. It
-// reports whether the cluster had one. The configuration engine is never removed: every engine
-// reads its configuration from it. While the cluster runs its engines on their own goroutines the
-// engine retires between two of its ticks, so RemoveEngine only asks it to.
-func (c *Cluster) RemoveEngine(id sim.StateID) bool {
-	if id == sim.ConfigStateID {
-		return false
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for i, e := range c.engines {
-		if e.StateID() != id {
-			continue
-		}
-		if c.running {
-			e.RequestRetirement()
-		} else {
-			e.Retire()
-			c.engines = slices.Delete(c.engines, i, i+1)
-		}
-		return true
-	}
-	return false
-}
-
-// requestEngineRemoval asks the engine to end itself, between two of its ticks: on its own
-// goroutine when Run runs it, and when the code that steps the engines retires it otherwise. It
-// does not wait, and may be called from the tick of an engine, which RemoveEngine may not. It
-// reports whether the cluster has the engine.
-func (c *Cluster) requestEngineRemoval(id sim.StateID) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	for _, e := range c.engines {
-		if e.StateID() == id {
-			e.RequestRetirement()
-			return true
-		}
-	}
-	return false
-}
-
 // Forget drops an engine from the list of the cluster. It is for an engine that has retired: it is
 // not retired by this, and the router still knows it. Run calls it for the engines it runs, and the
 // code that steps the engines itself calls it for the ones that retired between two steps.
@@ -216,53 +183,96 @@ func (c *Cluster) Forget(id sim.StateID) {
 	c.engines = slices.DeleteFunc(c.engines, func(e EngineHandle) bool { return e.StateID() == id })
 }
 
-// NewStateID gives the next ID of a type of state: the numbers of a type are counted up from 1 and
-// never given again, so an ID names one thing for good, in a log, in a checkpoint and in a message
-// that waits. The cluster gives the IDs of all the engines that it makes.
-func (c *Cluster) NewStateID(t sim.StateType) sim.StateID {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.nextStateIDLocked(t)
-}
-
-func (c *Cluster) nextStateIDLocked(t sim.StateType) sim.StateID {
-	c.ids[t]++
-	return sim.NewStateID(t, c.ids[t])
-}
-
-// RaiseStateIDs makes the next IDs of the types higher than the numbers given, which are the
-// highest that were given before the cluster stopped (the logs of the engines say them: replay.Plan
-// has them): an ID is never given again, whether the engine that had it left a trace or not.
-func (c *Cluster) RaiseStateIDs(last map[sim.StateType]uint64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for t, n := range last {
-		c.ids[t] = max(c.ids[t], n)
-	}
-}
-
-// RestoreServed tells the cluster which engine each request that made one was served with, as the
-// logs of the engines say (the record that begins each says which request it was made for): a
-// request that an engine hands over again after a recovery gets its answer again and is not served
-// twice.
-func (c *Cluster) RestoreServed(served map[DirectiveKey]sim.StateID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	maps.Copy(c.served, served)
-}
-
-// CreateEngine makes an engine of the state, with the actions it starts with, and adds it to the
-// cluster after the engines that are in it: it is for the code that runs the cluster, as the
-// requests of the engines are for the engines. The state has no ID: the cluster gives the engine
-// one, which it returns. The engine is new, at the tick of its state, and registered with the
-// router; its log begins with a record that holds it as it is. When `Run` runs the engines it runs
-// this one too, on a goroutine of its own.
+// CreateEngine has the coordinator make an engine of the state, with the actions it starts with,
+// and returns its ID: it is for the code that runs the cluster, as the messages of the engines are
+// for the engines. The state has no ID: the coordinator gives the engine one. The engine is new, at
+// the tick of the state, and registered with the router; its log begins with a record that holds it
+// as it is, which depends on the tick of the coordinator. When the cluster runs on its goroutines
+// the call waits for the next tick of the coordinator; otherwise it takes that tick itself, so the
+// engine is there when the call returns, and the first step of the cluster runs it.
 func (c *Cluster) CreateEngine(
 	st sim.State, start ...sim.BaseAction,
 ) (sim.StateID, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.makeEngineLocked(0, 0, 0, st, start)
+	c.waitersMu.Lock()
+	c.lastTicket++
+	ticket, made := c.lastTicket, make(chan madeEngine, 1)
+	c.waiters[ticket] = made
+	c.waitersMu.Unlock()
+	cmd, err := sim.NewCreateEngineCommand(st, start, ticket)
+	if err != nil {
+		c.dropWaiter(ticket)
+		return 0, err
+	}
+	if !c.coordinator.Send(cmd) {
+		c.dropWaiter(ticket)
+		return 0, ErrCommandQueueFull
+	}
+	if err := c.stepCoordinatorUnlessRunning(); err != nil {
+		c.dropWaiter(ticket)
+		return 0, err
+	}
+	c.mu.RLock()
+	ended := c.runEnded
+	c.mu.RUnlock()
+	select {
+	case m := <-made:
+		return m.id, m.err
+	case <-ended:
+		c.dropWaiter(ticket)
+		return 0, errors.New("the cluster stopped before it made the engine")
+	}
+}
+
+// stepCoordinatorUnlessRunning takes a tick of the coordinator when the cluster does not run its
+// engines on goroutines: there is no one else to take it.
+func (c *Cluster) stepCoordinatorUnlessRunning() error {
+	c.stepMu.Lock()
+	defer c.stepMu.Unlock()
+	c.mu.RLock()
+	running := c.running
+	c.mu.RUnlock()
+	if running {
+		return nil
+	}
+	return c.coordinator.Step()
+}
+
+// dropWaiter forgets a caller of CreateEngine that does not wait any more.
+func (c *Cluster) dropWaiter(ticket uint64) {
+	c.waitersMu.Lock()
+	defer c.waitersMu.Unlock()
+	delete(c.waiters, ticket)
+}
+
+// EngineMade takes an engine that the coordinator made and runs it from now on, and tells the
+// caller of CreateEngine that waits for it, if there is one: the engine that is made now is there
+// for a message of the tick to find it.
+func (c *Cluster) EngineMade(ticket uint64, e EngineHandle, err error) {
+	var id sim.StateID
+	if err == nil {
+		id = e.StateID()
+		c.mu.Lock()
+		c.addEngineLocked(e)
+		c.mu.Unlock()
+	}
+	c.waitersMu.Lock()
+	made, waited := c.waiters[ticket]
+	delete(c.waiters, ticket)
+	c.waitersMu.Unlock()
+	switch {
+	case waited:
+		made <- madeEngine{id: id, err: err}
+	case err != nil:
+		logging.Error("the coordinator could not make an engine", "err", err)
+	}
+}
+
+// RetireEngine asks the engine with the ID to retire between two of its ticks, at the tick of the
+// coordinator that asked. It does nothing for an ID that no engine has.
+func (c *Cluster) RetireEngine(id sim.StateID, by sim.StateDependency) {
+	if e, found := c.Find(id); found {
+		e.RequestRetirement(by)
+	}
 }
 
 // AddEngineByCheckpoint makes the engine of a checkpoint, at its tick, and adds it to the cluster:
@@ -277,98 +287,6 @@ func (c *Cluster) AddEngineByCheckpoint(checkpoint []byte) (EngineHandle, error)
 	defer c.mu.Unlock()
 	c.addEngineLocked(e)
 	return e, nil
-}
-
-// ServeDirectives serves the requests that an engine hands its cluster when the tick of its
-// actions is done: an engine is made now, so that a message of the tick to a new engine finds it,
-// and the engine that is to be removed ends between two of its ticks. Each request is answered to
-// the engine that asked.
-func (c *Cluster) ServeDirectives(
-	from sim.StateID, tick uint64, requests []sim.DirectiveRequest,
-) {
-	for _, request := range requests {
-		response := sim.DirectiveResponse{ID: request.ID, Kind: request.Kind, Tag: request.Tag}
-		switch request.Kind {
-		case sim.DirectiveCreateEngine:
-			c.mu.Lock()
-			id, err := c.createEngineLocked(from, tick, request)
-			c.mu.Unlock()
-			response.Engine = id
-			if err != nil {
-				logging.Error("the engine could not be made", "asker", from, "err", err)
-				response.Failure = err.Error()
-			}
-		case sim.DirectiveRemoveEngine:
-			response.Engine = request.Target
-			if request.Target == sim.ConfigStateID {
-				response.Failure = "the configuration engine cannot be removed"
-			} else {
-				c.requestEngineRemoval(request.Target)
-			}
-		default:
-			response.Failure = fmt.Sprintf(
-				"the kind %d of request is not one the cluster serves", request.Kind,
-			)
-		}
-		c.sendDirectiveResponse(from, response)
-	}
-}
-
-// sendDirectiveResponse gives the engine the response to its request. A response that cannot be
-// given now (the queue of the engine is full) comes again with the next hand-over of the request;
-// one for an engine that is gone is lost, and the log says so in a line that begins with
-// "datafix:", with what the engine did not get.
-func (c *Cluster) sendDirectiveResponse(to sim.StateID, response sim.DirectiveResponse) {
-	e, found := c.Find(to)
-	if !found {
-		logging.Error(
-			"datafix: the engine that asked is gone and did not get the response",
-			"engine", to, "directive", response.ID, "kind", response.Kind,
-			"made_or_removed", response.Engine, "failure", response.Failure, "tag", response.Tag,
-		)
-		return
-	}
-	if err := e.HandleDirectiveResponse(response); err != nil {
-		logging.Warn(
-			"the engine that asked did not take the response, which comes again",
-			"engine", to, "directive", response.ID, "err", err,
-		)
-	}
-}
-
-// createEngineLocked makes the engine that the request says, or finds the one that the request
-// made before. The state is copied: the request is the one that the engine that asked keeps.
-func (c *Cluster) createEngineLocked(
-	creator sim.StateID, creatorTick uint64, request sim.DirectiveRequest,
-) (sim.StateID, error) {
-	key := DirectiveKey{Engine: creator, ID: request.ID}
-	if id, done := c.served[key]; done {
-		return id, nil
-	}
-	id, err := c.makeEngineLocked(
-		creator, creatorTick, request.ID, request.State.Clone(), request.StartActions,
-	)
-	if err != nil {
-		return 0, err
-	}
-	c.served[key] = id
-	return id, nil
-}
-
-func (c *Cluster) makeEngineLocked(
-	creator sim.StateID, creatorTick, directiveID uint64, st sim.State,
-	start []sim.BaseAction,
-) (sim.StateID, error) {
-	if c.Env.EngineRegistry == nil {
-		return 0, errors.New("the cluster has no registry of engines")
-	}
-	id := c.nextStateIDLocked(st.Type())
-	e, err := c.Env.EngineRegistry.Make(c.Env, id, st, start, creator, creatorTick, directiveID)
-	if err != nil {
-		return 0, err
-	}
-	c.addEngineLocked(e)
-	return id, nil
 }
 
 // ConfigStore is the configuration of the world outside the game, or nil.
@@ -397,6 +315,10 @@ func (c *Cluster) SyncConfig() {
 // ConfigEngine returns the configuration engine of the cluster: the one to send an
 // UpdateConfigCommand to.
 func (c *Cluster) ConfigEngine() *Engine[*sim.ConfigState] { return c.config }
+
+// Coordinator returns the coordinator engine of the cluster: the one to send a CreateEngineCommand
+// or a RetireEngineCommand to.
+func (c *Cluster) Coordinator() *Engine[*sim.CoordinatorState] { return c.coordinator }
 
 // Engines returns the engines, in the order they were added.
 func (c *Cluster) Engines() []EngineHandle {
@@ -477,9 +399,11 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 			})
 		}
 	}
+	c.stepMu.Lock()
 	c.mu.Lock()
-	c.running = true
+	c.running, c.runEnded = true, ctx.Done()
 	c.mu.Unlock()
+	c.stepMu.Unlock()
 	runWaitingEngines()
 	wg.Go(func() {
 		t := time.NewTicker(period)
@@ -506,4 +430,10 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 	if failure != nil {
 		logging.Error("the cluster stopped", "err", failure)
 	}
+}
+
+// madeEngine is what a caller of CreateEngine waits for.
+type madeEngine struct {
+	id  sim.StateID
+	err error
 }

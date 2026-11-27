@@ -22,7 +22,6 @@ const (
 	KindReturned
 	KindRetired
 	KindStarted
-	KindDirective
 )
 
 // Body is what a record holds besides the engine that made it and the tick it was made at. Each
@@ -188,41 +187,50 @@ func decodeReturned(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, err
 
 // Retired says that the engine was removed for good: it is the only record of the last frame of
 // its log, which comes after the last tick it ran. A log that ends with it is of an engine that
-// does not go on. Its state ID is never given again.
-type Retired struct{}
+// does not go on. Its state ID is never given again. By is the tick of the coordinator that asked
+// the engine to end (the zero value for an engine that ended with no request): the engine depends
+// on it, so a recovery that loses that tick loses the end of the engine and it goes on.
+type Retired struct{ By sim.StateDependency }
 
 func (Retired) Kind() Kind { return KindRetired }
 
-func (Retired) Encode(*binary.Writer) error { return nil }
+func (b Retired) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(b.By.Source))
+	w.Uvarint(b.By.Tick)
+	return nil
+}
 
-func (Retired) Same(other Body) bool { _, ok := other.(Retired); return ok }
+// Dependency is the coordinator that asked the engine to end and the tick at which it asked; an
+// engine that ended with no request depends on none.
+func (b Retired) Dependency() (sim.StateDependency, bool) { return b.By, b.By.Tick > 0 }
+
+func (b Retired) Same(other Body) bool {
+	o, ok := other.(Retired)
+	return ok && b.By == o.By
+}
 
 func decodeRetired(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
-	return Retired{}, r.Err()
+	by := sim.StateDependency{Source: r.Uint[sim.StateID](), Tick: r.Uvarint()}
+	return Retired{By: by}, r.Err()
 }
 
 // Started is the first record of the log of an engine that was made after the cluster began (the
-// configuration engine is the one that was not): the engine whose action asked for it, the tick of
-// that engine at which it asked and the number of the request (0, 0 and 0 for an engine that was
-// added to the cluster by the code that runs it), and the engine as it was made, at tick 0, written
-// as a checkpoint: the state, what it waits for, its random numbers and what it knows of its peers.
-// A replay or a recovery makes the engine from it, as from a checkpoint at the tick 0. The engine
-// depends on the tick of the engine that asked, so a recovery that loses it cuts the log of the
-// engine too, and the ID of a state that was given in a tick that was lost is never left with a
+// configuration engine and the coordinator are the ones that were not): the coordinator that made
+// it and the tick of the coordinator at which it did, and the engine as it was made, at tick 0,
+// written as a checkpoint: the state, what it waits for, its random numbers and what it knows of
+// its peers. A replay or a recovery makes the engine from it, as from a checkpoint at the tick 0.
+// The engine depends on that tick of the coordinator, so a recovery that loses it cuts the log of
+// the engine too, and the ID of a state that was given in a tick that was lost is never left with a
 // log while it is given to another thing.
 type Started struct {
 	Creator     sim.StateID
 	CreatorTick uint64
-	// DirectiveID is the number that the engine that asked gave its request, so that the cluster
-	// that is made again knows the request was served and by which engine.
-	DirectiveID uint64
 	Snapshot    []byte
 }
 
 func (b Started) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(b.Creator))
 	w.Uvarint(b.CreatorTick)
-	w.Uvarint(b.DirectiveID)
 	w.Bytes(b.Snapshot)
 	return nil
 }
@@ -236,41 +244,17 @@ func (b Started) Dependency() (sim.StateDependency, bool) {
 func (b Started) Same(other Body) bool {
 	o, ok := other.(Started)
 	return ok && b.Creator == o.Creator && b.CreatorTick == o.CreatorTick &&
-		b.DirectiveID == o.DirectiveID && bytes.Equal(b.Snapshot, o.Snapshot)
+		bytes.Equal(b.Snapshot, o.Snapshot)
 }
 
 func (Started) Kind() Kind { return KindStarted }
 
 func decodeStarted(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
 	b := Started{
-		Creator: r.Uint[sim.StateID](), CreatorTick: r.Uvarint(), DirectiveID: r.Uvarint(),
+		Creator: r.Uint[sim.StateID](), CreatorTick: r.Uvarint(),
 		Snapshot: bytes.Clone(r.Bytes()), // not a view of the bytes of the frame
 	}
 	return b, r.Err()
-}
-
-// Directive is the answer of the cluster to a request of the engine, at the tick the engine took
-// it. It is not made again by a replay, so the log holds it, as it holds a command; it depends on
-// no engine.
-type Directive struct{ Response sim.DirectiveResponse }
-
-func (b Directive) Encode(w *binary.Writer) error {
-	sim.EncodeDirectiveResponse(w, b.Response)
-	return nil
-}
-
-func (b Directive) Same(other Body) bool {
-	o, ok := other.(Directive)
-	return ok && b.Response.ID == o.Response.ID && b.Response.Kind == o.Response.Kind &&
-		bytes.Equal(b.Response.Tag, o.Response.Tag) && b.Response.Engine == o.Response.Engine &&
-		b.Response.Failure == o.Response.Failure
-}
-
-func (Directive) Kind() Kind { return KindDirective }
-
-func decodeDirective(_ *sim.Codecs, r *binary.Reader, _ codec.Version) (Body, error) {
-	d, err := sim.DecodeDirectiveResponse(r)
-	return Directive{Response: d}, err
 }
 
 // SameMessage reports whether two messages are the same one, by what they are written as: that is
@@ -308,7 +292,6 @@ var decoders = map[Kind]func(
 	KindReturned:   decodeReturned,
 	KindRetired:    decodeRetired,
 	KindStarted:    decodeStarted,
-	KindDirective:  decodeDirective,
 }
 
 // encodeRecord writes a record: its kind and then its body. The tick is the one of the frame the

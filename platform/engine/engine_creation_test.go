@@ -1,25 +1,22 @@
 package engine_test
 
 import (
-	"strings"
+	"context"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/shared/logging"
 )
 
-// createEngineAction asks for an engine to be made, and sends the next number's engine a message in
-// the same tick when Send is set.
-type createEngineAction struct {
-	Total int64
-	Send  sim.StateID
-}
+// createEngineAction asks the coordinator for an engine of a toy state with the total given, which
+// starts by adding 10 to it.
+type createEngineAction struct{ Total int64 }
 
 func (createEngineAction) ID() sim.ActionID { return 60012 }
 func (createEngineAction) Priority() int16  { return 0 }
@@ -27,22 +24,33 @@ func (createEngineAction) Actor() any       { return nil }
 func (a createEngineAction) Apply(
 	_ *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
-	r.RequestCreateEngine([]byte("toy"), &toyState{Total: a.Total}, toyAction{N: 10})
-	if a.Send != 0 {
-		r.Send(a.Send, onfail.Retry{}, toyAction{N: 3})
-	}
+	r.RequestCreateEngine(onfail.Drop{}, &toyState{Total: a.Total}, toyAction{N: 10})
 }
 func (a createEngineAction) Clone() sim.Action[*toyState] { return a }
 
-// toysThatCanMakeOneAnother is a cluster of the toy engines 1 to n that has the registry of the toy
-// engines, and has given the numbers up to n.
-func toysThatCanMakeOneAnother(
+// createUnknownEngineAction asks the coordinator for an engine of a state that no registry knows.
+type createUnknownEngineAction struct{}
+
+func (createUnknownEngineAction) ID() sim.ActionID { return 60013 }
+func (createUnknownEngineAction) Priority() int16  { return 0 }
+func (createUnknownEngineAction) Actor() any       { return nil }
+func (createUnknownEngineAction) Apply(
+	_ *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
+) {
+	r.RequestCreateEngine[*otherToy](onfail.Drop{}, &otherToy{})
+}
+func (a createUnknownEngineAction) Clone() sim.Action[*toyState] { return a }
+
+// toysWithALog is a cluster of the toy engines 1 to n, and the log that it writes.
+func toysWithALog(
 	t testing.TB, n int,
 ) (*engine.Cluster, []*engine.Engine[*toyState], *eventlog.MemLog) {
 	t.Helper()
-	c, engines, log := toysThatCanRemoveOneAnother(t, n)
-	c.RaiseStateIDs(map[sim.StateType]uint64{toyType: uint64(n)})
-	return c, engines, log
+	env := newToyEnv(t)
+	log := &eventlog.MemLog{}
+	env.EventLog = log
+	c := newCluster(t, env)
+	return c, addToys(t, c, n), log
 }
 
 func steps(t *testing.T, c *engine.Cluster, n int) {
@@ -54,297 +62,182 @@ func steps(t *testing.T, c *engine.Cluster, n int) {
 	}
 }
 
-func aRequest(id uint64) sim.DirectiveRequest {
-	return sim.DirectiveRequest{
-		ID: id, Kind: sim.DirectiveCreateEngine, Tag: []byte("toy"), State: &toyState{},
-	}
-}
-
 func TestAnEngineThatAnActionAskedForGetsTheNextIDRunsFromTheNextStepAndBeginsItsLogWithItsStart(
 	t *testing.T,
 ) {
-	c, engines, log := toysThatCanMakeOneAnother(t, 2)
-	engines[0].ScheduleAt(3, createEngineAction{Total: 50})
-	steps(t, c, 3)
-	found, ok := c.Find(3) // the toy engines 1 and 2 are there: the next number is 3
-	if !ok {
-		t.Fatal("engine 3 is not in the cluster")
+	c, engines, log := toysWithALog(t, 2)
+	engines[0].ScheduleAt(1, createEngineAction{Total: 50})
+	steps(t, c, 1) // the engine asks: the message is in the queue of the coordinator
+	if _, found := c.Find(3); found {
+		t.Fatal("the engine was made before the coordinator took the request")
 	}
-	made := found.(*engine.Engine[*toyState])
-	if made.Tick() != 0 {
-		t.Fatalf("engine 3 is at the tick %d, want it made and not run", made.Tick())
+	steps(t, c, 1) // the coordinator takes it and makes the engine, which does not run in this step
+	made, found := c.Find(3)
+	if !found {
+		t.Fatal("the engine 3 is not in the cluster after the coordinator took the request")
+	}
+	three := made.(*engine.Engine[*toyState])
+	if three.Tick() != 0 || three.State().Total != 50 {
+		t.Fatalf("the engine is at the tick %d with %d, want it made and not run, with 50",
+			three.Tick(), three.State().Total)
+	}
+	madeAt := c.Coordinator().Tick()
+	steps(t, c, 1)
+	if three.Tick() != 1 || three.State().Total != 60 {
+		t.Fatalf("the engine ran to the tick %d with %d, want 1 with 60: the 50 it was made with "+
+			"and the 10 it starts with", three.Tick(), three.State().Total)
 	}
 	steps(t, c, 1)
-	if made.Tick() != 1 {
-		t.Fatalf("the engine ran to the tick %d in the step after, want 1", made.Tick())
+	if three.State().Total != 60 {
+		t.Fatalf("the engine has %d, want 60: what it starts with runs once", three.State().Total)
 	}
 	records := log.ByEngine()[3]
 	started, isStarted := records[0].Body.(eventlog.Started)
-	if !isStarted || records[0].Tick != 1 || started.Creator != 1 || started.CreatorTick != 3 ||
-		started.DirectiveID != 1 || len(started.Snapshot) == 0 {
-		t.Fatalf("the first record of its log is %+v, want the start by engine 1 at its tick 3, "+
-			"for the request 1", records[0])
+	if !isStarted || records[0].Tick != 1 || started.Creator != sim.CoordinatorStateID ||
+		started.CreatorTick != madeAt {
+		t.Fatalf("the log of the engine begins with %+v, want Started by the coordinator at its "+
+			"tick %d", records[0], madeAt)
 	}
-	for _, r := range records[1:] {
-		if _, again := r.Body.(eventlog.Started); again {
-			t.Fatal("the start is written more than once")
-		}
-	}
-	// the engine starts as the request made it: its state, and the action it starts with
-	steps(t, c, 1)
-	if got := made.State().Total; got != 60 {
-		t.Fatalf("the new engine has %d, want 60: the 50 it was made with and the 10 it starts"+
-			" with", got)
-	}
-	// the creator took the answer at the start of the tick after the one that asked
-	if got := engines[0].State().Total; got != 300 {
-		t.Fatalf("the creator has %d, want 300: the answer for the engine 3", got)
-	}
-	answers := 0
-	for _, r := range log.ByEngine()[1] {
-		if d, ok := r.Body.(eventlog.Directive); ok {
-			answers++
-			if d.Response.ID != 1 || d.Response.Engine != 3 || string(d.Response.Tag) != "toy" {
-				t.Fatalf("the answer in its log is %+v", d.Response)
-			}
-		}
-	}
-	if answers != 1 {
-		t.Fatalf("%d answers in the log of the creator, want 1", answers)
+	dep, _ := records[0].Dependency()
+	if dep.Source != sim.CoordinatorStateID || dep.Tick != madeAt {
+		t.Fatalf("the engine depends on %+v, want the tick %d of the coordinator", dep, madeAt)
 	}
 }
 
-func TestAMessageThatTheTickOfTheRequestSendsToTheNewEngineIsNotRefusedAsNotStarted(t *testing.T) {
-	c, engines, log := toysThatCanMakeOneAnother(t, 2)
-	engines[0].ScheduleAt(1, createEngineAction{Send: 3})
-	steps(t, c, 3)
-	for _, r := range log.ByEngine()[1] {
-		if _, returned := r.Body.(eventlog.Returned); returned {
-			t.Fatalf("a message came back to the creator: %+v", r)
-		}
+func TestAnEngineThatCannotBeMadeIsNotMadeAndTheNextOneIsMade(t *testing.T) {
+	c, engines, _ := toysWithALog(t, 1)
+	engines[0].ScheduleAt(1, createUnknownEngineAction{})
+	engines[0].ScheduleAt(2, createEngineAction{})
+	steps(t, c, 4)
+	if _, found := c.Find(2); !found {
+		t.Fatal("the engine that the registry knows was not made after one that it does not")
 	}
-	made, _ := c.Find(3)
-	// the message, and the action it starts with
-	if made.(*engine.Engine[*toyState]).State().Total != 13 {
-		t.Fatal("the new engine did not take the message of the tick that made it")
+	if got := len(c.Engines()); got != 4 { // the configuration engine, the coordinator, 1 and 2
+		t.Fatalf("the cluster has %d engines, want 4", got)
 	}
 }
 
-func TestACreatorIsToldWhenTheEngineCannotBeMade(t *testing.T) {
-	c, engines, _ := toysThatCanMakeOneAnother(t, 2)
-	creator := engines[0]
-	other := aRequest(1)
-	other.State = &otherToy{} // a state of a type that the registry does not know
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{other})
-	c.Env.EngineRegistry = nil
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{aRequest(2)}) // there is no registry
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{{ID: 3, Kind: 99}})
-	if got := len(c.Engines()); got != 3 {
-		t.Fatalf("the cluster has %d engines, want the 3 it had", got)
+func TestACreationThatCannotBeMadeIsAnErrorOfCreateEngine(t *testing.T) {
+	c, _, _ := toysWithALog(t, 1)
+	if _, err := c.CreateEngine(&otherToy{}); err == nil {
+		t.Fatal("an engine of a state that no registry knows was made")
 	}
-	steps(t, c, 1)
-	// the creator is not waiting for these answers, which it did not ask for: they are dropped
-	if got := creator.State().Total; got != 0 {
-		t.Fatalf("the creator has %d, want 0: it took answers to requests it did not make", got)
+	if id, err := c.CreateEngine(&toyState{}); err != nil || id != 2 {
+		t.Fatalf("the next engine is %v (%v), want 2", id, err)
 	}
 }
 
-func TestAnAnswerIsTakenOnlyForARequestThatIsWaiting(t *testing.T) {
-	c, engines, log := toysThatCanMakeOneAnother(t, 1)
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{aRequest(1)}) // 1 never asked
-	steps(t, c, 2)
-	if got := engines[0].State().Total; got != 0 {
-		t.Fatalf("the engine has %d, want 0: nothing was waiting for the answer", got)
-	}
-	for _, r := range log.ByEngine()[1] {
-		if _, ok := r.Body.(eventlog.Directive); ok {
-			t.Fatal("an answer that nothing waited for was written to the log")
-		}
-	}
-}
-
-func TestARequestThatIsHandedOverAgainIsServedOnceAndAnsweredOnce(t *testing.T) {
-	c, engines, _ := toysThatCanMakeOneAnother(t, 2)
-	engines[0].ScheduleAt(1, createEngineAction{})
-	steps(t, c, 2)
-	if got := engines[0].State().Total; got != 300 {
-		t.Fatalf("the creator has %d, want 300", got)
-	}
-	// the cluster is given the request again, as an engine that does not hold the answer does
-	again := sim.DirectiveRequest{
-		ID: 1, Kind: sim.DirectiveCreateEngine, Tag: []byte("toy"), State: &toyState{},
-	}
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{again, again})
-	steps(t, c, 2)
-	if got := len(c.Engines()); got != 4 { // the configuration engine, the two and the one made
-		t.Fatalf("the cluster has %d engines, want 4: the request was served again", got)
-	}
-	if got := engines[0].State().Total; got != 300 {
-		t.Fatalf("the creator has %d, want 300: it took the answer twice", got)
-	}
-}
-
-func TestARequestWithNoAnswerIsHandedOverAgainAndItsAnswerComesThen(t *testing.T) {
-	c, engines, _ := toysThatCanMakeOneAnother(t, 2)
-	setConfig(t, c, map[string]string{"directive.resend_every_ticks": "3"})
-	creator := engines[0]
-	for creator.HandleDirectiveResponse(sim.DirectiveResponse{ID: 99}) == nil {
-		// until the queue of answers is full: the answer cannot be taken now
-	}
-	creator.ScheduleAt(1, createEngineAction{})
-	steps(t, c, 1)
-	if _, ok := c.Find(3); !ok {
-		t.Fatal("the engine was not made")
-	}
-	// the queue is emptied at the start of a tick; the request goes again at the tick 3 or 6
-	steps(t, c, 7)
-	if got := creator.State().Total; got != 300 {
-		t.Fatalf("the creator has %d, want 300: the answer came with the second hand-over", got)
-	}
-	if got := len(c.Engines()); got != 4 {
-		t.Fatalf("the cluster has %d engines, want 4: one engine for the request", got)
-	}
-}
-
-func TestAnAnswerForAnEngineThatIsGoneIsLostAndTheLogHoldsItAsDataToFix(t *testing.T) {
-	logged := &loggedEntries{}
-	stopLogging, err := logging.Init(logged, logging.WithFlushEvery(time.Millisecond))
+func TestARequestThatIsDeliveredTwiceMakesOneEngine(t *testing.T) {
+	c, _, _ := toysWithALog(t, 2)
+	ask, err := sim.NewCreateEngineAction(&toyState{Total: 5}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, _, _ := toysThatCanMakeOneAnother(t, 2)
-	c.ServeDirectives(77, 1, []sim.DirectiveRequest{aRequest(1)}) // no engine 77
-	stopLogging()                                                 // gives the consumer what is left
-	logged.mu.Lock()
-	defer logged.mu.Unlock()
-	fixes := 0
-	for _, entry := range logged.entries {
-		if strings.HasPrefix(entry.Message, "datafix:") {
-			fixes++
+	request := sim.NewActionMessage[*sim.CoordinatorState](
+		sim.CoordinatorStateID, onfail.Drop{}, ask,
+	).Stamp(sim.Header{From: 1, Seq: 77, Tick: 1})
+	for range 2 { // the sender did not get an ack and sent it again
+		if _, ok := c.Env.Router.Deliver(request); !ok {
+			t.Fatal("the request was refused")
 		}
 	}
-	if fixes != 1 {
-		t.Fatalf("%d lines of data to fix, want 1", fixes)
+	steps(t, c, 2)
+	if _, found := c.Find(3); !found {
+		t.Fatal("the request made no engine")
+	}
+	if _, found := c.Find(4); found {
+		t.Fatal("the same request made two engines")
 	}
 }
 
-// loggedEntries collects the entries of the log, for a test that reads what was logged.
-type loggedEntries struct {
-	mu      sync.Mutex
-	entries []logging.Entry
-}
-
-func (l *loggedEntries) Consume(entries []logging.Entry) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.entries = append(l.entries, entries...)
-	return nil
-}
-
-func TestTheClusterGivesTheNumbersOfATypeInOrderAndNeverGivesOneAgain(t *testing.T) {
-	c, _, _ := toysThatCanMakeOneAnother(t, 2)
-	if got := c.NewStateID(toyType); got != sim.NewStateID(toyType, 3) {
-		t.Fatalf("the next ID is %v, want the number 3", got)
+func TestTheNumbersGoOnFromTheCheckpointOfTheCoordinator(t *testing.T) {
+	c, _, _ := toysWithALog(t, 2)
+	data, err := c.Coordinator().EncodeCheckpoint()
+	if err != nil {
+		t.Fatal(err)
 	}
-	c.RaiseStateIDs(map[sim.StateType]uint64{toyType: 10, toyType + 1: 4})
-	c.RaiseStateIDs(map[sim.StateType]uint64{toyType: 5}) // never goes down
-	if got := c.NewStateID(toyType); got != sim.NewStateID(toyType, 11) {
-		t.Fatalf("the next ID is %v, want the number 11", got)
+	again, err := engine.NewCluster(
+		newToyEnv(t), config.NewStore(), engine.Checkpoints{Coordinator: data},
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := c.NewStateID(toyType + 1); got != sim.NewStateID(toyType+1, 5) {
-		t.Fatalf("the next ID of the other type is %v, want the number 5", got)
+	if id, err := again.CreateEngine(&toyState{}); err != nil || id != 3 {
+		t.Fatalf("the engine made after the restore is %v (%v), want 3: 1 and 2 are given", id, err)
 	}
 }
 
-func TestAnEngineAddedToTheClusterGetsAnIDAndAStartThatHoldsNoCreator(t *testing.T) {
-	c, _, log := toysThatCanMakeOneAnother(t, 0)
-	id, err := c.CreateEngine(&toyState{Total: 7}, toyAction{N: 1})
-	if err != nil || id != sim.NewStateID(toyType, 1) {
-		t.Fatalf("the engine has the ID %v, error %v, want the number 1", id, err)
+func TestACoordinatorOfAReplayMakesNoEngine(t *testing.T) {
+	c, err := engine.NewReplayCluster(newToyEnv(t), engine.Checkpoints{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	steps(t, c, 1)
-	started, ok := log.ByEngine()[id][0].Body.(eventlog.Started)
-	if !ok || started.Creator != 0 || started.CreatorTick != 0 || started.DirectiveID != 0 {
-		t.Fatalf("the first record of the engine is %+v", log.ByEngine()[id][0])
+	cmd, err := sim.NewCreateEngineCommand(&toyState{}, nil, 0)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, dependent := (eventlog.Record{Body: started}).Dependency(); dependent {
-		t.Fatal("an engine that no engine asked for depends on another")
+	if !c.Coordinator().Send(cmd) {
+		t.Fatal("the command was refused")
 	}
-	e, _ := c.Find(id)
-	if got := e.(*engine.Engine[*toyState]).State().Total; got != 8 {
-		t.Fatalf("the engine has %d, want 8: its state and the action it starts with", got)
+	steps(t, c, 2)
+	if got := len(c.Engines()); got != 2 { // the configuration engine and the coordinator
+		t.Fatalf("the replay has %d engines, want 2: its engines are made from its logs", got)
 	}
 }
 
-func TestAnEngineThatIsMadeWhileTheClusterRunsStartsOnItsOwnGoroutine(t *testing.T) {
-	c, engines, log := toysThatCanMakeOneAnother(t, 2)
-	engines[0].ScheduleAt(5, createEngineAction{})
-	// the engine writes the record of its start at its first tick, on its goroutine
-	runUntil(t, c, func() bool { return len(log.ByEngine()[3]) > 0 })
-	if _, ok := log.ByEngine()[3][0].Body.(eventlog.Started); !ok {
-		t.Fatalf("the first record of the engine is %+v", log.ByEngine()[3][0])
-	}
-}
-
-func TestEnginesMadeAndRemovedFromManyGoroutinesWhileOthersRunLeaveACoherentCluster(t *testing.T) {
-	c, _, log := toysThatCanMakeOneAnother(t, 4)
-	const made = 20
+func TestEnginesMadeWhileTheClusterRunsGetDifferentNumbersAndStartOnTheirOwnGoroutines(
+	t *testing.T,
+) {
+	c, _, _ := toysWithALog(t, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
+	go func() { c.Run(ctx, time.Millisecond); close(finished) }()
+	const askers, each = 6, 5
+	ids := make(chan sim.StateID, askers*each)
 	var wg sync.WaitGroup
-	for i := range made {
+	for range askers {
 		wg.Go(func() {
-			c.ServeDirectives(1, 1, []sim.DirectiveRequest{aRequest(uint64(i + 1))})
+			for range each {
+				id, err := c.CreateEngine(&toyState{})
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				ids <- id
+			}
 		})
 	}
-	runUntil(t, c, func() bool { return len(c.Engines()) == 1+4+made })
 	wg.Wait()
-	// the numbers 5 to 24 were given, each once; the even ones are removed
-	var removing sync.WaitGroup
-	for n := uint64(5); n < 5+made; n += 2 {
-		removing.Go(func() { c.RemoveEngine(sim.NewStateID(toyType, n)) })
+	close(ids)
+	seen := map[sim.StateID]bool{}
+	for id := range ids {
+		if seen[id] {
+			t.Errorf("the number %v was given twice", id)
+		}
+		seen[id] = true
 	}
-	removing.Wait()
-	runUntil(t, c, func() bool {
-		for n := uint64(5); n < 5+made; n++ {
-			_, ok := c.Find(sim.NewStateID(toyType, n))
-			if ok != (n%2 == 0) {
-				return false
+	deadline := time.After(2 * time.Second)
+	published := c.Env.StableStore.(*engine.StableStateStore)
+	for id := range seen {
+		for {
+			// what an engine published is read from any goroutine; its tick is not
+			if copy := published.Copy(0, 0, id); copy != nil && copy.Tick() > 0 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("the engine %v did not run on its own goroutine", id)
+			case <-time.After(time.Millisecond):
 			}
 		}
-		return true
-	})
-	for n := uint64(5); n < 5+made; n += 2 {
-		if _, ok := lastBody(log, sim.NewStateID(toyType, n)).(eventlog.Retired); !ok {
-			t.Fatalf("the log of engine %d does not end with its removal", n)
-		}
 	}
-}
-
-func TestARequestThatWaitsInACheckpointIsHandedOverByTheEngineThatIsMadeFromIt(t *testing.T) {
-	// an engine whose cluster does not answer: the request waits in its data
-	env := newToyEnv(t)
-	a := engine.NewEngine(&toyState{}, 1, env)
-	a.ScheduleAt(1, createEngineAction{})
-	if err := a.Step(); err != nil {
-		t.Fatal(err)
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return")
 	}
-	data, err := a.EncodeCheckpoint()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// the cluster that is made again serves the request when the engine made from the checkpoint
-	// hands it over at its first tick
-	fresh := newToyEnv(t)
-	c := newCluster(t, fresh)
-	restored, err := c.AddEngineByCheckpoint(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.RaiseStateIDs(map[sim.StateType]uint64{toyType: 1})
-	steps(t, c, 2)
-	if _, ok := c.Find(2); !ok {
-		t.Fatal("the request that waited in the checkpoint was not served")
-	}
-	if got := restored.(*engine.Engine[*toyState]).State().Total; got != 200 {
-		t.Fatalf("the engine has %d, want 200: the answer for the engine 2", got)
+	if len(seen) != askers*each {
+		t.Fatalf("%d numbers were given, want %d", len(seen), askers*each)
 	}
 }

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
@@ -250,11 +249,6 @@ type peerData struct {
 	lastRecvSeq stablemap.Map[sim.StateID, uint64]
 	// unsettledMessages is what the engine has sent or is to send, until it is acked as safe
 	unsettledMessages unsettledMessages
-	// directiveSeq is the number of the last request that the engine gave its cluster; pending are
-	// the requests that have no answer yet, in the order they were made: the engine hands them to
-	// its cluster again until the answer is taken
-	directiveSeq      uint64
-	pendingDirectives []sim.DirectiveRequest
 }
 
 // Clone returns a copy that shares nothing with what the peer knows: each unsettled message is
@@ -264,15 +258,12 @@ func (d *peerData) Clone() peerData {
 		sentSeq:           d.sentSeq,
 		lastRecvSeq:       d.lastRecvSeq.Clone(),
 		unsettledMessages: d.unsettledMessages.Clone(),
-		directiveSeq:      d.directiveSeq,
-		pendingDirectives: slices.Clone(d.pendingDirectives),
 	}
 }
 
 // Encode writes what the peer knows: the number of the last message of its engine, the last that
 // it took from each sender in the order the peer keeps them, and its unsettled messages: the
-// messages that are to go and the ones that went and were not acked, and its requests to the
-// cluster that have no answer.
+// messages that are to go and the ones that went and were not acked.
 func (d *peerData) Encode(w *binary.Writer) error {
 	w.Uvarint(d.sentSeq)
 	w.Uvarint(uint64(d.lastRecvSeq.Len()))
@@ -282,13 +273,6 @@ func (d *peerData) Encode(w *binary.Writer) error {
 	}
 	if err := d.unsettledMessages.Encode(w); err != nil {
 		return err
-	}
-	w.Uvarint(d.directiveSeq)
-	w.Uvarint(uint64(len(d.pendingDirectives)))
-	for _, request := range d.pendingDirectives {
-		if err := sim.EncodeDirectiveRequest(w, request); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -332,21 +316,6 @@ func decodePeerData(
 	var err error
 	if d.unsettledMessages, err = decodeUnsettledMessages(c, r, version); err != nil {
 		return peerData{}, err
-	}
-	d.directiveSeq = r.Uvarint()
-	pending := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return peerData{}, err
-	}
-	if pending > uint64(r.Left()) { // a request takes at least one byte
-		return peerData{}, fmt.Errorf("%w: %d requests", binary.ErrShort, pending)
-	}
-	for range pending {
-		request, err := c.DecodeDirectiveRequest(r, version)
-		if err != nil {
-			return peerData{}, err
-		}
-		d.pendingDirectives = append(d.pendingDirectives, request)
 	}
 	return d, r.Err()
 }

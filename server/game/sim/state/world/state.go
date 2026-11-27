@@ -10,7 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
-	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
@@ -59,13 +58,6 @@ func (i Inventory) Clone() Inventory {
 
 // chatKeep is how many private messages the world keeps.
 const chatKeep = 1000
-
-// The tags that the world gives its requests for engines, which the cluster gives back with the
-// answer: what the engine that was made is.
-const (
-	TagZone      byte = iota + 1 // the engine is a zone of the world
-	TagZoneLayer                 // the engine is a zonelayer of a zone of the world
-)
 
 // State is the state of the world.
 type State struct {
@@ -266,27 +258,6 @@ func (s *State) Hash() uint64 {
 	return h.Sum()
 }
 
-// HandleDirective takes the answer of the cluster to a request of the world for an engine: the
-// zone or the zonelayer that was made is listed by the world, which is the one that knows which
-// zones and zonelayers there are (R28). An engine that could not be made is not listed.
-func (s *State) HandleDirective(
-	_ *sim.Context, _ *sim.Registry[*State], d sim.DirectiveResponse,
-) {
-	if d.Kind != sim.DirectiveCreateEngine || len(d.Tag) == 0 {
-		return
-	}
-	if d.Failure != "" {
-		logging.Warn("the world asked for an engine that was not made", "failure", d.Failure)
-		return
-	}
-	switch d.Tag[0] {
-	case TagZone:
-		s.AddZone(d.Engine)
-	case TagZoneLayer:
-		s.AddZoneLayer(d.Engine)
-	}
-}
-
 // ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
 // copy that another engine published, which it must never change (R26, R28).
 type ReadOnlyWorldState interface {
@@ -296,8 +267,6 @@ type ReadOnlyWorldState interface {
 }
 
 var _ ReadOnlyWorldState = (*State)(nil)
-
-var _ sim.DirectiveHandler[*State] = (*State)(nil)
 
 // topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
 // stackLimit in each, and returns how many are left.

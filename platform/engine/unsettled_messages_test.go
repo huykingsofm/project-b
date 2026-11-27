@@ -202,8 +202,11 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 		first.Send(toyCommand{N: 1})
 		stepping.Step(c)
 	}
-	// the configuration engine stays
-	if !c.RemoveEngine(1) || len(c.Engines()) != 1 {
+	// the coordinator takes the request at the start of the step, and the engine, which still runs
+	// its tick 4, ends when the step ends; the configuration engine and the coordinator stay
+	c.Coordinator().Send(sim.RetireEngineCommand{Target: 1})
+	stepping.Step(c)
+	if len(c.Engines()) != 2 {
 		t.Fatal("the engine was not removed")
 	}
 	reason, ok := env.Router.Deliver(toMessage(1, 1))
@@ -236,8 +239,8 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	if r.Err() != nil {
 		t.Fatal(r.Err())
 	}
-	if want := []uint64{1, 2, 3, 4}; !reflect.DeepEqual(ticks, want) || retiredAt != 4 {
-		t.Fatalf("the ticks are %v, the removal at %d; want %v and 4", ticks, retiredAt, want)
+	if want := []uint64{1, 2, 3, 5}; !reflect.DeepEqual(ticks, want) || retiredAt != 5 {
+		t.Fatalf("the ticks are %v, the removal at %d; want %v and 5", ticks, retiredAt, want)
 	}
 }
 

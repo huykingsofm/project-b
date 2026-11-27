@@ -30,4 +30,8 @@ const (
 	ZoneZoneLayerAddActionID
 	ZoneExitAddActionID
 	WorldZoneExitAddActionID
+	ZoneAnnounceToWorldActionID
+	WorldZoneRegisterActionID
+	ZoneLayerAnnounceToWorldActionID
+	WorldZoneLayerRegisterActionID
 )

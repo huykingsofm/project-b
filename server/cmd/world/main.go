@@ -57,6 +57,7 @@ func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
 func label(id sim.StateID) string {
 	names := map[sim.StateType]string{
 		state.WorldType: "world", state.ZoneType: "zone", state.ZoneLayerType: "zonelayer",
+		sim.CoordinatorStateType: "coordinator", sim.ConfigStateType: "config",
 	}
 	name, ok := names[id.Type()]
 	if !ok {
@@ -185,7 +186,7 @@ func main() {
 		step := func(title string, n int) { w.step(fail, title, n) }
 		step("the cluster goes on from the logs", 5)
 	} else {
-		cluster, err := engine.NewCluster(env, store, nil)
+		cluster, err := engine.NewCluster(env, store, engine.Checkpoints{})
 		if err != nil {
 			fail("the cluster could not be made", err)
 		}
@@ -383,10 +384,9 @@ func report(dir string, w world, fail func(string, error)) {
 		if err != nil {
 			fail("the checkpoints could not be listed", err)
 		}
-		fmt.Printf("  %s: %d inbound, %d commands, %d directives, %d hashes, %d stable reads, "+
+		fmt.Printf("  %s: %d inbound, %d commands, %d hashes, %d stable reads, "+
 			"up to tick %d; checkpoints at %v\n",
 			label(e), counts[eventlog.KindInbound], counts[eventlog.KindCommand],
-			counts[eventlog.KindDirective], counts[eventlog.KindHash],
-			counts[eventlog.KindStableRead], last, ticks)
+			counts[eventlog.KindHash], counts[eventlog.KindStableRead], last, ticks)
 	}
 }

@@ -1,7 +1,11 @@
 package testkit
 
 import (
+	"testing"
+
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -45,7 +49,7 @@ func (a RemoveLayerAction) Apply(
 	_ *sim.Plan[*worldstate.State],
 ) {
 	if s.RemoveZoneLayer(a.Layer) {
-		r.RemoveEngine(a.Layer, nil)
+		r.RequestRetireEngine(onfail.Retry{}, a.Layer)
 	}
 }
 func (a RemoveLayerAction) Clone() sim.Action[*worldstate.State] { return a }
@@ -53,4 +57,30 @@ func (a RemoveLayerAction) Encode(w *binary.Writer)              { w.Uvarint(uin
 
 func decodeRemoveLayerAction(r *binary.Reader, _ codec.Version) (RemoveLayerAction, error) {
 	return RemoveLayerAction{Layer: r.Uint[sim.StateID]()}, r.Err()
+}
+
+// RemoveEngine ends the engine with the ID now, between two steps: the coordinator takes a tick of
+// its own to take the request, and the engine retires and leaves the cluster. It reports whether
+// the cluster had the engine. The cluster must not run on its goroutines.
+func RemoveEngine(t testing.TB, c *engine.Cluster, id sim.StateID) bool {
+	t.Helper()
+	if _, found := c.Find(id); !found {
+		return false
+	}
+	if !c.Coordinator().Send(sim.RetireEngineCommand{Target: id}) {
+		t.Fatal("the queue of the coordinator is full")
+	}
+	if err := c.Coordinator().Step(); err != nil {
+		t.Fatal(err)
+	}
+	handle, found := c.Find(id)
+	if !found {
+		return false
+	}
+	if retiring, ok := handle.(interface{ RetireIfRequested() bool }); ok &&
+		retiring.RetireIfRequested() {
+		c.Forget(id)
+		return true
+	}
+	return false
 }

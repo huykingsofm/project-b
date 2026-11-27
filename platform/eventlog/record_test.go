@@ -12,6 +12,10 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 	move := toyMove{CharacterID: 1, Dir: 1, Ticks: 3}
 	other := sim.StateID(12)
 	same := [][2]eventlog.Body{
+		{
+			eventlog.Retired{By: sim.StateDependency{Source: 2, Tick: 5}},
+			eventlog.Retired{By: sim.StateDependency{Source: 2, Tick: 5}},
+		},
 		{eventlog.Inbound{Message: benchMessage(7)}, eventlog.Inbound{Message: benchMessage(7)}},
 		{eventlog.Command{Command: move}, eventlog.Command{Command: move}},
 		{eventlog.Hash{Value: 9}, eventlog.Hash{Value: 9}},
@@ -20,12 +24,8 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		{eventlog.Returned{Reason: sim.DeliveryFailureFull},
 			eventlog.Returned{Reason: sim.DeliveryFailureFull}},
 		{
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
-		},
-		{
-			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Tag: []byte("a"), Engine: 7}},
-			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Tag: []byte("a"), Engine: 7}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, Snapshot: []byte{9}},
 		},
 	}
 	for _, p := range same {
@@ -34,6 +34,10 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		}
 	}
 	different := [][2]eventlog.Body{
+		{
+			eventlog.Retired{By: sim.StateDependency{Source: 2, Tick: 5}},
+			eventlog.Retired{By: sim.StateDependency{Source: 2, Tick: 6}},
+		},
 		{eventlog.Inbound{Message: benchMessage(7)}, eventlog.Inbound{Message: benchMessage(8)}},
 		{eventlog.Command{Command: move}, eventlog.Command{Command: toyMove{Ticks: 4}}},
 		{eventlog.Hash{Value: 9}, eventlog.Hash{Value: 10}},
@@ -42,20 +46,12 @@ func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 		{eventlog.Returned{Reason: sim.DeliveryFailureFull},
 			eventlog.Returned{Reason: sim.DeliveryFailureRetired}},
 		{
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
-			eventlog.Started{Creator: 2, CreatorTick: 6, DirectiveID: 1, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 6, Snapshot: []byte{9}},
 		},
 		{
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 2, Snapshot: []byte{9}},
-		},
-		{
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
-			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{10}},
-		},
-		{
-			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Engine: 7}},
-			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Failure: "full"}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, Snapshot: []byte{10}},
 		},
 		{eventlog.Hash{Value: 9}, eventlog.StableRead{Source: 9,
 			CopyTick: 9}}, // the same number in another kind

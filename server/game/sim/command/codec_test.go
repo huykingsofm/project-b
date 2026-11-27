@@ -302,10 +302,14 @@ func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *tes
 			"the commands declared are\n%v\nand the ones in examples are\n%v", declared, listed,
 		)
 	}
-	// the command of the configuration engine is in every codecs and is not one of the game
+	// the commands of the configuration engine and of the coordinator are in every codecs and are
+	// not ones of the game
 	decoders := len(slices.DeleteFunc(
 		slices.Clone(codecs.Commands.Numbers()),
-		func(id sim.CommandID) bool { return id == sim.UpdateConfigCommandID },
+		func(id sim.CommandID) bool {
+			return id == sim.UpdateConfigCommandID || id == sim.CreateEngineCommandID ||
+				id == sim.RetireEngineCommandID
+		},
 	))
 	if n := registerSize(t); n != decoders || n != len(declared) {
 		t.Fatalf(

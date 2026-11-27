@@ -253,60 +253,58 @@ func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
 	}
 }
 
-func TestDirectivesComeBackAsTheyWereWrittenAndKeepNoViewOfTheBytes(t *testing.T) {
+func TestTheActionsAndCommandsOfTheCoordinatorComeBackAsTheyWereWrittenAndKeepNoViewOfTheBytes(
+	t *testing.T,
+) {
 	c := mustCodecs(t)
-	create := sim.DirectiveRequest{
-		ID: 3, Kind: sim.DirectiveCreateEngine, Tag: []byte("zone"),
-		State:        &toyState{id: 4, tick: 0, Total: -3},
-		StartActions: []sim.BaseAction{addAction{N: 2}},
+	state := &toyState{id: 4, tick: 0, Total: -3}
+	create, err := sim.NewCreateEngineAction(state, []sim.BaseAction{addAction{N: 2}}, 6)
+	if err != nil {
+		t.Fatal(err)
 	}
-	remove := sim.DirectiveRequest{ID: 4, Kind: sim.DirectiveRemoveEngine, Tag: nil, Target: 77}
-	for _, d := range []sim.DirectiveRequest{create, remove} {
+	createCommand, err := sim.NewCreateEngineCommand(state, []sim.BaseAction{addAction{N: 2}}, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []sim.BaseAction{create, sim.RetireEngineAction{Target: 77}} {
 		var w binary.Writer
-		if err := sim.EncodeDirectiveRequest(&w, d); err != nil {
+		if err := sim.EncodeAction(&w, a); err != nil {
 			t.Fatal(err)
 		}
 		r := binary.NewReader(w.B)
-		got, err := c.DecodeDirectiveRequest(r, 1)
-		if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, d) {
-			t.Fatalf("%+v came back as %+v, error %v, %d bytes left", d, got, err, r.Left())
+		got, err := c.DecodeAction(r, 1)
+		if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, a) {
+			t.Fatalf("%+v came back as %+v, error %v, %d bytes left", a, got, err, r.Left())
 		}
 		for n := range w.B { // every proper prefix is an error, never a panic
-			if _, err := c.DecodeDirectiveRequest(binary.NewReader(w.B[:n]), 1); err == nil {
+			if _, err := c.DecodeAction(binary.NewReader(w.B[:n]), 1); err == nil {
 				t.Fatalf("%d of %d bytes were read", n, len(w.B))
 			}
 		}
 		clear(w.B) // the bytes are reused by a reader: what was read must not look into them
-		if !reflect.DeepEqual(got, d) {
-			t.Fatalf("a request that was read holds a view of the bytes: %+v", got)
+		if !reflect.DeepEqual(got, a) {
+			t.Fatalf("an action that was read holds a view of the bytes: %+v", got)
 		}
 	}
-	response := sim.DirectiveResponse{
-		ID: 3, Kind: sim.DirectiveCreateEngine, Tag: []byte("zone"), Engine: 12, Failure: "full",
-	}
-	var w binary.Writer
-	sim.EncodeDirectiveResponse(&w, response)
-	got, err := sim.DecodeDirectiveResponse(binary.NewReader(w.B))
-	if err != nil || !reflect.DeepEqual(got, response) {
-		t.Fatalf("%+v came back as %+v, error %v", response, got, err)
-	}
-	clear(w.B)
-	if !reflect.DeepEqual(got, response) {
-		t.Fatal("an answer that was read holds a view of the bytes")
+	for _, cmd := range []sim.BaseCommand{createCommand, sim.RetireEngineCommand{Target: 77}} {
+		var w binary.Writer
+		if err := sim.EncodeCommand(&w, cmd); err != nil {
+			t.Fatal(err)
+		}
+		got, err := c.DecodeCommand(binary.NewReader(w.B), 1)
+		if err != nil || !reflect.DeepEqual(got, cmd) {
+			t.Fatalf("%+v came back as %+v, error %v", cmd, got, err)
+		}
 	}
 }
 
-func TestAnActionAsksTheClusterForAnEngineThroughItsRegistry(t *testing.T) {
+func TestAnActionAsksTheCoordinatorForAnEngineThroughItsRegistry(t *testing.T) {
 	var r sim.Registry[*toyState]
-	r.RequestCreateEngine([]byte("a"), &toyState{Total: 1}, addAction{N: 2})
-	r.RemoveEngine(9, []byte("b"))
-	got := r.TakeDirectiveRequests()
-	if len(got) != 2 || got[0].Kind != sim.DirectiveCreateEngine || string(got[0].Tag) != "a" ||
-		len(got[0].StartActions) != 1 || got[0].StartActions[0] != (addAction{N: 2}) ||
-		got[1].Kind != sim.DirectiveRemoveEngine || got[1].Target != 9 {
-		t.Fatalf("the requests are %+v", got)
-	}
-	if again := r.TakeDirectiveRequests(); len(again) != 0 {
-		t.Fatalf("the requests were not forgotten: %+v", again)
+	r.RequestCreateEngine(testDrop{}, &toyState{Total: 1}, addAction{N: 2})
+	r.RequestRetireEngine(testDrop{}, 9)
+	sent := r.Take()
+	if len(sent) != 2 || sent[0].Dest() != sim.CoordinatorStateID ||
+		sent[1].Dest() != sim.CoordinatorStateID {
+		t.Fatalf("the messages are %+v", sent)
 	}
 }

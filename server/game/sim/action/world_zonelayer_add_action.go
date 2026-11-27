@@ -2,6 +2,7 @@ package action
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -33,14 +34,12 @@ func (a WorldZoneLayerAddAction) Apply(
 	_ *sim.Plan[*worldstate.State],
 ) {
 	start := []sim.Action[*zonelayerstate.State]{
-		ZoneLayerAnnounceToZoneAction{Capacity: a.Capacity},
+		ZoneLayerAnnounceToZoneAction{Capacity: a.Capacity}, ZoneLayerAnnounceToWorldAction{},
 	}
 	if a.RegenEvery > 0 {
 		start = append(start, ZoneLayerCharacterRegenAction{Every: a.RegenEvery})
 	}
-	r.RequestCreateEngine(
-		[]byte{worldstate.TagZoneLayer}, zonelayerstate.NewState(a.ZoneID, c.Self), start...,
-	)
+	r.RequestCreateEngine(onfail.Retry{}, zonelayerstate.NewState(a.ZoneID, c.Self), start...)
 }
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.

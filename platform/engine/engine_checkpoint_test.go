@@ -28,6 +28,16 @@ func (w *recordingWriter) Offer(engine sim.StateID, tick uint64, encode func() (
 	w.offered = append(w.offered, offeredCheckpoint{engine: engine, tick: tick, encode: encode})
 }
 
+// firstOffered is the first checkpoint that the engine offered, or nil when it offered none.
+func firstOffered(w *recordingWriter, id sim.StateID) *offeredCheckpoint {
+	for i := range w.offered {
+		if w.offered[i].engine == id {
+			return &w.offered[i]
+		}
+	}
+	return nil
+}
+
 // toyClusterThatCheckpoints is a cluster of toy engines that take a checkpoint every 5 ticks and
 // hash every 1,000, with the writer given, which may be nil.
 func toyClusterThatCheckpoints(
@@ -116,7 +126,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	e.ScheduleAt(100, toyAction{N: 1000}) // waits in the scheduler
 	var want []byte
 	var hashAt uint64
-	for len(w.offered) == 0 {
+	for firstOffered(w, e.StateID()) == nil {
 		e.Send(toyCommand{N: 1})
 		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
@@ -127,7 +137,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 		}
 		hashAt = e.Hash(sim.NewHasher())
 	}
-	taken := w.offered[0]
+	taken := *firstOffered(w, e.StateID())
 	for range 12 { // the state, the scheduler and the random numbers all move on
 		e.Send(toyCommand{N: 7})
 		e.ScheduleAt(e.Tick()+50, toyAction{N: 3})

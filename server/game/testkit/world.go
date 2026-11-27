@@ -103,7 +103,7 @@ func Make(
 	if store == nil {
 		store = config.NewStore()
 	}
-	cluster, err := engine.NewCluster(engine.NewEnvironment(o), store, nil)
+	cluster, err := engine.NewCluster(engine.NewEnvironment(o), store, engine.Checkpoints{})
 	if err != nil {
 		t.Fatal(err)
 	}

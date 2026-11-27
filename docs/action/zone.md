@@ -36,6 +36,16 @@ Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAct
 - Steps:
   1. `AddZoneLayer`: the zone knows the zonelayer, with room for `Capacity` characters.
 
+## ZoneAnnounceToWorldAction
+
+- Kind: system
+- Priority: `PriorityResolve`
+- Fields: none
+- Set by: [`WorldZoneAddAction`](world.md#worldzoneaddaction), as an action that the zone starts with, for its first tick
+- Steps:
+  1. Sends [`WorldZoneRegisterAction`](world.md#worldzoneregisteraction) to the world of the zone with its own ID (`Context.Self`); retried if not delivered.
+- Note: only the zone knows its own ID, which the coordinator gave it.
+
 ## ZoneExitAddAction
 
 - Kind: message

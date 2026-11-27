@@ -28,6 +28,8 @@ var allActions = []any{
 	action.WorldZoneAddAction{}, action.WorldZoneLayerAddAction{},
 	action.ZoneLayerAnnounceToZoneAction{},
 	action.ZoneZoneLayerAddAction{}, action.ZoneExitAddAction{}, action.WorldZoneExitAddAction{},
+	action.ZoneAnnounceToWorldAction{}, action.WorldZoneRegisterAction{},
+	action.ZoneLayerAnnounceToWorldAction{}, action.WorldZoneLayerRegisterAction{},
 }
 
 func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {

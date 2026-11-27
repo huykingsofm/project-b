@@ -56,8 +56,8 @@ type Result struct {
 // that read it.
 //
 // An engine that the replay removed (its log ends with the record of its removal) is not made
-// again; messages to it are refused. The cluster goes on giving IDs above the ones its logs hold,
-// and does not serve again a request whose engine its logs hold.
+// again; messages to it are refused. The coordinator goes on giving IDs above the ones it gave: its
+// counters are in its state.
 //
 // A replay in which an engine differs from its log is not handed over. A checkpoint that cannot
 // make its engine is an error.
@@ -65,22 +65,29 @@ func (r *Result) Handover(env *engine.Environment, store *config.Store) (*engine
 	if len(r.Divergences) > 0 {
 		return nil, errors.New("handover: the replay differs from its logs")
 	}
-	var configCheckpoint []byte
+	var from engine.Checkpoints
 	if e := r.Cluster.ConfigEngine(); e.Tick() > 0 {
 		data, err := e.EncodeCheckpoint()
 		if err != nil {
 			return nil, fmt.Errorf("handover: the checkpoint of the configuration engine: %w", err)
 		}
-		configCheckpoint = data
+		from.Config = data
 	}
-	live, err := engine.NewCluster(env, store, configCheckpoint)
+	if e := r.Cluster.Coordinator(); e.Tick() > 0 {
+		data, err := e.EncodeCheckpoint()
+		if err != nil {
+			return nil, fmt.Errorf("handover: the checkpoint of the coordinator: %w", err)
+		}
+		from.Coordinator = data
+	}
+	live, err := engine.NewCluster(env, store, from)
 	if err != nil {
 		return nil, fmt.Errorf("handover: %w", err)
 	}
 	for _, handle := range r.Cluster.Engines() {
 		e := handle.(handoverEngineHandle)
 		id := e.StateID()
-		if id == sim.ConfigStateID {
+		if id == sim.ConfigStateID || id == sim.CoordinatorStateID {
 			continue
 		}
 		data, err := e.EncodeCheckpoint()
@@ -102,14 +109,11 @@ func (r *Result) Handover(env *engine.Environment, store *config.Store) (*engine
 	for _, id := range r.Retired {
 		env.Router.Retire(id)
 	}
-	live.RaiseStateIDs(r.Plan.LastStateIDs())
-	served, err := r.Plan.served()
-	if err != nil {
-		return nil, fmt.Errorf("handover: %w", err)
-	}
-	live.RestoreServed(served)
 	if cfg := live.ConfigEngine(); cfg.Tick() > 0 {
 		cfg.PublishState()
+	}
+	if coordinator := live.Coordinator(); coordinator.Tick() > 0 {
+		coordinator.PublishState()
 	}
 	return live, nil
 }

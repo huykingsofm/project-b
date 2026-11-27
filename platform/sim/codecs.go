@@ -56,6 +56,15 @@ func NewCodecs() *Codecs {
 		c.RegisterState(DecodeConfigState),
 		c.RegisterCommand(decodeUpdateConfigCommand),
 		c.RegisterAction(decodeUpdateConfigAction),
+		c.RegisterState(DecodeCoordinatorState),
+		c.RegisterCommand(func(r *binary.Reader, v codec.Version) (CreateEngineCommand, error) {
+			return decodeCreateEngineCommand(c, r, v)
+		}),
+		c.RegisterCommand(decodeRetireEngineCommand),
+		c.RegisterAction(func(r *binary.Reader, v codec.Version) (CreateEngineAction, error) {
+			return decodeCreateEngineAction(c, r, v)
+		}),
+		c.RegisterAction(decodeRetireEngineAction),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("the codecs of the configuration cannot be registered: %v", err))
@@ -339,65 +348,6 @@ func (c *Codecs) DecodeOnFail(
 	return c.decodeOnFail(r, version, nested)
 }
 
-// EncodeDirectiveRequest writes a request of an engine to its cluster: its number, its kind, its
-// tag and what the kind needs (the state and the start actions of an engine to make, or the ID of
-// the engine to remove). Nothing of a request that cannot be written is left in w.
-func EncodeDirectiveRequest(w *binary.Writer, d DirectiveRequest) error {
-	start := len(w.B)
-	w.Uvarint(d.ID)
-	w.Uvarint(uint64(d.Kind))
-	w.Bytes(d.Tag)
-	w.Uvarint(uint64(d.Target))
-	if d.Kind == DirectiveCreateEngine {
-		if err := EncodeState(w, d.State); err != nil {
-			w.B = w.B[:start]
-			return err
-		}
-		w.Uvarint(uint64(len(d.StartActions)))
-		for _, a := range d.StartActions {
-			if err := EncodeAction(w, a); err != nil {
-				w.B = w.B[:start]
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// DecodeDirectiveRequest reads what EncodeDirectiveRequest wrote, of the data version given.
-func (c *Codecs) DecodeDirectiveRequest(
-	r *binary.Reader, version codec.Version,
-) (DirectiveRequest, error) {
-	d := DirectiveRequest{
-		ID: r.Uvarint(), Kind: DirectiveKind(r.Uvarint()), Tag: copyOf(r.Bytes()),
-	}
-	d.Target = r.Uint[StateID]()
-	if err := r.Err(); err != nil {
-		return DirectiveRequest{}, err
-	}
-	if d.Kind == DirectiveCreateEngine {
-		var err error
-		if d.State, err = c.DecodeState(r, version); err != nil {
-			return DirectiveRequest{}, err
-		}
-		n := r.Uvarint()
-		if err := r.Err(); err != nil {
-			return DirectiveRequest{}, err
-		}
-		if n > uint64(r.Left()) { // an action takes at least one byte
-			return DirectiveRequest{}, fmt.Errorf("%w: %d start actions", binary.ErrShort, n)
-		}
-		for range n {
-			a, err := c.DecodeAction(r, version)
-			if err != nil {
-				return DirectiveRequest{}, err
-			}
-			d.StartActions = append(d.StartActions, a)
-		}
-	}
-	return d, r.Err()
-}
-
 // copyOf is a copy of the bytes that shares nothing with the reader they were read from, and nil
 // for none.
 func copyOf(b []byte) []byte {
@@ -405,25 +355,6 @@ func copyOf(b []byte) []byte {
 		return nil
 	}
 	return bytes.Clone(b)
-}
-
-// EncodeDirectiveResponse writes the answer of a cluster to an engine.
-func EncodeDirectiveResponse(w *binary.Writer, d DirectiveResponse) {
-	w.Uvarint(d.ID)
-	w.Uvarint(uint64(d.Kind))
-	w.Bytes(d.Tag)
-	w.Uvarint(uint64(d.Engine))
-	w.String(d.Failure)
-}
-
-// DecodeDirectiveResponse reads what EncodeDirectiveResponse wrote.
-func DecodeDirectiveResponse(r *binary.Reader) (DirectiveResponse, error) {
-	d := DirectiveResponse{
-		ID: r.Uvarint(), Kind: DirectiveKind(r.Uvarint()), Tag: copyOf(r.Bytes()),
-	}
-	d.Engine = r.Uint[StateID]()
-	d.Failure = r.String()
-	return d, r.Err()
 }
 
 // EncodeActions writes a list of actions: how many, and each. It returns an error, and the writer

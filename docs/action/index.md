@@ -55,8 +55,8 @@ What must happen outside a state goes in its `sim.Registry[S]` and happens after
 | `Get[T](id)` | the latest state that the engine with the ID published, as a `T` (see [Reading other states](#reading-other-states)) |
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick (a tick that is not in the future is the next one) |
-| `RequestCreateEngine(tag, state, startActions...)` | asks the cluster for an engine of a state without an ID, which runs the actions given once at its first tick; the state that is to list it takes the answer (`sim.DirectiveHandler`), not the action ([engines](../engine_lifecycle.md)) |
-| `RemoveEngine(id, tag)` | asks the cluster to remove the engine |
+| `RequestCreateEngine(onFail, state, startActions...)` | asks the coordinator for an engine of a state without an ID, which runs the actions given once at its first tick; the state that is to list it is told by an action that the new engine starts with, not by the action that asks ([engines](../engine_lifecycle.md)) |
+| `RequestRetireEngine(onFail, id)` | asks the coordinator to end the engine |
 
 ## Failed delivery
 
@@ -127,6 +127,9 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | world | [WorldZoneAddAction](world.md#worldzoneaddaction) | intent |
 | world | [WorldZoneLayerAddAction](world.md#worldzonelayeraddaction) | intent |
 | world | [WorldZoneExitAddAction](world.md#worldzoneexitaddaction) | intent |
+| world | [WorldZoneRegisterAction](world.md#worldzoneregisteraction) | message |
+| world | [WorldZoneLayerRegisterAction](world.md#worldzonelayerregisteraction) | message |
+| zone | [ZoneAnnounceToWorldAction](zone.md#zoneannouncetoworldaction) | system |
 | zone | [ZoneCharacterEnterAction](zone.md#zonecharacterenteraction) | intent |
 | zone | [ZoneChatSendAction](zone.md#zonechatsendaction) | intent |
 | zone | [ZoneZoneLayerAddAction](zone.md#zonezonelayeraddaction) | message |
@@ -143,3 +146,4 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | zonelayer | [ZoneLayerItemEntityRemoveAction](zonelayer.md#zonelayeritementityremoveaction) | made |
 | zonelayer | [ZoneLayerChatSendAction](zonelayer.md#zonelayerchatsendaction) | intent, message |
 | zonelayer | [ZoneLayerAnnounceToZoneAction](zonelayer.md#zonelayerannouncetozoneaction) | system |
+| zonelayer | [ZoneLayerAnnounceToWorldAction](zonelayer.md#zonelayerannouncetoworldaction) | system |

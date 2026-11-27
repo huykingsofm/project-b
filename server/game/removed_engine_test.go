@@ -25,7 +25,7 @@ func aWorldInWhichAnEngineWasRemoved(
 ) {
 	t.Helper()
 	aWorldInWhichAnEngineWasRemovedBy(t, dir, id, before, after, func(c *engine.Cluster) {
-		if !c.RemoveEngine(id) {
+		if !testkit.RemoveEngine(t, c, id) {
 			t.Fatalf("the world has no engine %v", id)
 		}
 	})
@@ -60,7 +60,7 @@ func TestAReplayRemovesTheEngineThatItsLogSaysWasRemovedAndRunsNoTickOfIt(t *tes
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 20)
 	ranBefore := c.ZoneLayer(testkit.Layer3).Tick()
-	c.Cluster.RemoveEngine(testkit.Layer3)
+	testkit.RemoveEngine(t, c.Cluster, testkit.Layer3)
 	testkit.Steps(t, c, 20)
 	result, err := runOn(testkit.Options(t, 7), mem.ByEngine())
 	if err != nil || len(result.Divergences) != 0 {
@@ -81,7 +81,7 @@ func TestAReplayRemovesTheEngineThatItsLogSaysWasRemovedAndRunsNoTickOfIt(t *tes
 func TestALogWhoseRemovalIsNotAloneInItsTickOrIsFollowedByAnotherIsRefused(t *testing.T) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 20)
-	c.Cluster.RemoveEngine(testkit.Layer3)
+	testkit.RemoveEngine(t, c.Cluster, testkit.Layer3)
 	testkit.Steps(t, c, 5)
 	for name, forge := range map[string]func(logs eventlog.MemoryLogs){
 		"another record in the tick of the removal": func(logs eventlog.MemoryLogs) {
@@ -173,7 +173,7 @@ func TestAMessageForAnEngineThatWasRemovedBeforeAHandoverComesBackAsRetired(t *t
 }
 
 // layerTicksOfTheBuild is how many ticks a zonelayer of testkit.NewCluster has run when it returns.
-const layerTicksOfTheBuild = 6
+const layerTicksOfTheBuild = 5
 
 func TestAnEngineThatAnActionAskedToRemoveIsRemovedAtTheEndOfTheStepAndTheWorldRecovers(
 	t *testing.T,
@@ -181,9 +181,7 @@ func TestAnEngineThatAnActionAskedToRemoveIsRemovedAtTheEndOfTheStepAndTheWorldR
 	dir := t.TempDir()
 	aWorldInWhichAnEngineWasRemovedBy(t, dir, testkit.Layer3, 20, 20,
 		func(c *engine.Cluster) {
-			c.ServeDirectives(testkit.World, 1, []sim.DirectiveRequest{
-				{ID: 1, Kind: sim.DirectiveRemoveEngine, Target: testkit.Layer3},
-			})
+			c.Coordinator().Send(sim.RetireEngineCommand{Target: testkit.Layer3})
 		})
 	result, err := replay.Recover(dir, testkit.Options(t, 7))
 	if err != nil {
@@ -217,7 +215,7 @@ func TestAClusterThatRunsOnItsOwnAndRemovesAnEngineWritesLogsThatRecover(
 	finished := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(finished) }()
 	time.Sleep(100 * time.Millisecond)
-	c.Cluster.RemoveEngine(testkit.Layer3)
+	c.Coordinator().Send(sim.RetireEngineCommand{Target: testkit.Layer3})
 	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(time.Millisecond) {
 		if _, ok := c.Cluster.Find(testkit.Layer3); !ok {
 			break

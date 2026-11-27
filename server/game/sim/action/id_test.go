@@ -27,6 +27,8 @@ func anActionOfEachKind() []sim.BaseAction {
 		action.WorldZoneAddAction{}, action.WorldZoneLayerAddAction{},
 		action.ZoneLayerAnnounceToZoneAction{}, action.ZoneZoneLayerAddAction{},
 		action.ZoneExitAddAction{}, action.WorldZoneExitAddAction{},
+		action.ZoneAnnounceToWorldAction{}, action.WorldZoneRegisterAction{},
+		action.ZoneLayerAnnounceToWorldAction{}, action.WorldZoneLayerRegisterAction{},
 	}
 }
 

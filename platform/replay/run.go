@@ -23,7 +23,8 @@ type runEngineHandle interface {
 	GetSentMessages() []sim.Message
 	PublishState()
 	SendBaseCommand(c sim.BaseCommand) error
-	HandleDirectiveResponse(d sim.DirectiveResponse) error
+	RequestRetirement(by sim.StateDependency)
+	RetireIfRequested() bool
 }
 
 var _ runEngineHandle = (*engine.Engine[*sim.ConfigState])(nil)
@@ -86,14 +87,18 @@ func newReplayRun(o engine.Options, p *Plan) (*replayRun, error) {
 		Codecs: o.Codecs, EngineRegistry: o.Engines, Seed: o.Seed, QueueSize: idx.maxQueueSize,
 		Emitter: engine.NopEmitter{}, AckBoard: engine.NewAckBoard(),
 	}
-	var configCheckpoint []byte
-	if p.starts[sim.ConfigStateID] > 0 {
-		var err error
-		if configCheckpoint, err = r.checkpointOf(p, sim.ConfigStateID); err != nil {
-			return nil, err
+	var from engine.Checkpoints
+	for id, data := range map[sim.StateID]*[]byte{
+		sim.ConfigStateID: &from.Config, sim.CoordinatorStateID: &from.Coordinator,
+	} {
+		if p.starts[id] > 0 {
+			var err error
+			if *data, err = r.checkpointOf(p, id); err != nil {
+				return nil, err
+			}
 		}
 	}
-	if r.cluster, err = engine.NewReplayCluster(env, configCheckpoint); err != nil {
+	if r.cluster, err = engine.NewReplayCluster(env, from); err != nil {
 		return nil, err
 	}
 	for _, handle := range r.cluster.Engines() {
@@ -291,10 +296,6 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 			if err := eng.SendBaseCommand(body.Command); err != nil {
 				return fmt.Errorf("%v tick %d: %w", id, tick, err)
 			}
-		case eventlog.Directive:
-			if err := eng.HandleDirectiveResponse(body.Response); err != nil {
-				return fmt.Errorf("%v tick %d: %w", id, tick, err)
-			}
 		case eventlog.Inbound:
 			if !r.router.inject(body.Message) {
 				return fmt.Errorf("%v tick %d: a message could not be put in its queue", id, tick)
@@ -324,10 +325,12 @@ func (r *replayRun) removeEngine(id sim.StateID, er *engineRun, tick uint64) err
 		return fmt.Errorf("%v tick %d: the engine was removed and the tick has %d records",
 			id, tick, len(er.tickRecords))
 	}
-	if !r.cluster.RemoveEngine(id) {
-		return fmt.Errorf("%v tick %d: the engine was removed and the cluster does not have it",
-			id, tick)
+	retired := er.tickRecords[0].Body.(eventlog.Retired)
+	er.engine.RequestRetirement(retired.By)
+	if !er.engine.RetireIfRequested() {
+		return fmt.Errorf("%v tick %d: the engine was removed and did not retire", id, tick)
 	}
+	r.cluster.Forget(id)
 	r.retired = append(r.retired, id)
 	er.lastRanTick = tick
 	er.loaded = false

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -37,19 +36,18 @@ type Engine[S sim.State] struct {
 	// takes none (a replay)
 	checkpointWriter CheckpointWriter
 	tick             uint64
-	// directiveSink is where the engine hands the requests of its actions to make and to remove
-	// engines; nil when it ignores them (a replay)
-	directiveSink DirectiveSink
-	// directives are the answers of the cluster to those requests, taken at the start of a tick,
-	// and directivesHandedOver says that the requests that wait were handed over once
-	directives           chan sim.DirectiveResponse
-	directivesHandedOver bool
+	// env is what the engine shares with the others: the coordinator reads from it how to make an
+	// engine and where to start it
+	env *Environment
 	// started is the record that begins the log of an engine that the cluster made, written at its
 	// first tick; nil for the configuration engine and for one that a checkpoint made again
 	started *eventlog.Started
 	// removalSignal is a request that Run remove the engine, and removed says that it was
 	removalSignal chan struct{}
 	removed       atomic.Bool
+	// retiredBy is the tick of the coordinator that asked for the removal, which the last frame of
+	// the log holds; nil for a removal that no coordinator asked for
+	retiredBy atomic.Pointer[sim.StateDependency]
 	// periodOffset is where the engine starts the count of a period (see dueAt): the hash of its
 	// ID, so that the engines of a cluster are spread over the ticks of a period
 	periodOffset uint64
@@ -75,18 +73,6 @@ var ErrCommandQueueFull = errors.New("the queue of commands is full")
 // at.
 var ErrTickMismatch = errors.New("the tick of the state is not the tick of the engine")
 
-// ErrDirectiveQueueFull is the error of an answer that an engine could not take now: its queue
-// holds as many as it can. The engine hands the request over again, so the answer comes again.
-var ErrDirectiveQueueFull = errors.New("the queue of directives is full")
-
-// directiveResendEvery is every how many ticks an engine hands its requests that have no answer to
-// its cluster again, besides at its first tick: the cluster answers each request once, so an answer
-// that did not arrive (it was not taken in time, or the cluster was made again) comes with the
-// next hand-over.
-var directiveResendEvery = config.NewVar(
-	"directive.resend_every_ticks", 100, config.Range(1, 100000000),
-)
-
 // NewEngine makes the engine with the ID of a state, at the tick the state is at. The ID is the
 // engine's: the state does not hold it. The tick is its own: the caller gives the ticks with Run or
 // calls Step. The log of the engine refuses a frame that does not follow its last, so a state that
@@ -101,9 +87,7 @@ func NewEngine[S sim.State](st S, me sim.StateID, env *Environment) *Engine[S] {
 		rng: rand.NewPCG(env.Seed, uint64(me)), eventLog: env.EventLog,
 		commands: make(chan sim.Command[S], env.QueueSize), stableStore: env.StableStore,
 		emitter: env.Emitter, checkpointWriter: env.CheckpointWriter, planPool: planPoolOf[S](),
-		periodOffset: periodOffsetOf(me), directiveSink: env.Directives,
-		directives:    make(chan sim.DirectiveResponse, env.QueueSize),
-		removalSignal: make(chan struct{}, 1),
+		periodOffset: periodOffsetOf(me), env: env, removalSignal: make(chan struct{}, 1),
 	}
 	e.stateRegistry.Me, e.stateRegistry.Stable = me, e.peer.view
 	e.peer.bounce.resend = e.peer.sendToUnsettled
@@ -115,7 +99,11 @@ func NewEngine[S sim.State](st S, me sim.StateID, env *Environment) *Engine[S] {
 // is closed (Close). The engine is not used after.
 func (e *Engine[S]) Retire() {
 	e.tick++
-	e.eventLog.Append(e.peer.me, e.tick, eventlog.Retired{})
+	retired := eventlog.Retired{}
+	if by := e.retiredBy.Load(); by != nil {
+		retired.By = *by
+	}
+	e.eventLog.Append(e.peer.me, e.tick, retired)
 	e.eventLog.EndTick(e.peer.me, e.tick)
 	e.Close()
 }
@@ -137,13 +125,13 @@ func (e *Engine[S]) Close() {
 // request (0 for an engine that the code that runs the cluster added), and the engine as it is, at
 // the tick it was made at, written as a checkpoint. It is for an engine that is new: a replay makes
 // it from this record.
-func (e *Engine[S]) markStarted(creator sim.StateID, creatorTick, directiveID uint64) error {
+func (e *Engine[S]) markStarted(creator sim.StateID, creatorTick uint64) error {
 	snapshot, err := e.EncodeCheckpoint()
 	if err != nil {
 		return fmt.Errorf("the engine %d cannot be written as it starts: %w", e.peer.me, err)
 	}
 	e.started = &eventlog.Started{
-		Creator: creator, CreatorTick: creatorTick, DirectiveID: directiveID, Snapshot: snapshot,
+		Creator: creator, CreatorTick: creatorTick, Snapshot: snapshot,
 	}
 	return nil
 }
@@ -162,9 +150,12 @@ func (e *Engine[S]) RetireIfRequested() bool {
 }
 
 // RequestRetirement asks the engine to retire, at the end of the tick it runs or before the next
-// one: Run does it. It does not wait and may be called from any goroutine; a second request, or one
-// to an engine that has no Run, does nothing.
-func (e *Engine[S]) RequestRetirement() {
+// one: Run does it. by is the tick of the coordinator that asked, which the last frame of the log
+// holds, so that a recovery that loses that tick does not end the engine. It does not wait and may
+// be called from any goroutine; a second request, or one to an engine that has no Run, does
+// nothing.
+func (e *Engine[S]) RequestRetirement(by sim.StateDependency) {
+	e.retiredBy.CompareAndSwap(nil, &by)
 	select {
 	case e.removalSignal <- struct{}{}:
 	default:
@@ -267,7 +258,6 @@ func (e *Engine[S]) Step() error {
 	e.peer.view.begin(e.tick)
 	cfg := e.stateRegistry.Config()
 	ctx := &sim.Context{Self: e.peer.me, Tick: e.tick, Rand: e.rng.Rand}
-	e.takeDirectives(ctx)
 	e.peer.handleReturnedMessages(e.tick, e.eventLog)
 
 	e.actionBuffer = e.actionBuffer[:0]
@@ -303,7 +293,7 @@ func (e *Engine[S]) Step() error {
 	}
 	published := e.st.Clone().(S)
 	e.stableStore.Publish(e.peer.me, published)
-	e.publishDirectives(cfg)
+	e.startAndRetireEngines()
 	e.peer.releaseAckedMessages()
 	e.peer.flushUnsettledMessages(e.tick, e.stateRegistry.Take(), e.eventLog)
 	checkpointDue := e.dueAt(e.tick, uint64(checkpointEvery.Get(cfg)))
@@ -442,66 +432,26 @@ func (e *Engine[S]) encodeOwnData(w *binary.Writer) error {
 	return nil
 }
 
-// HandleDirectiveResponse gives the engine the response of its cluster to a request, without
-// waiting. The engine takes it at the start of its next tick; a response to a request that is not
-// waiting any more (a second response) is dropped there.
-func (e *Engine[S]) HandleDirectiveResponse(d sim.DirectiveResponse) error {
-	select {
-	case e.directives <- d:
-		return nil
-	default:
-		return ErrDirectiveQueueFull
-	}
-}
-
-// takeDirectives takes the answers of the cluster, at the start of the tick, before everything
-// else: each is written to the event log, since a replay cannot make it again, and handed to the
-// state, which changes as an action does. The answer to a request that has none waiting is not an
-// answer: it is dropped without a trace.
-func (e *Engine[S]) takeDirectives(ctx *sim.Context) {
-	for _, d := range channels.Drain(e.directives) {
-		i := slices.IndexFunc(e.peer.data.pendingDirectives, func(r sim.DirectiveRequest) bool {
-			return r.ID == d.ID
-		})
-		if i < 0 {
-			continue
-		}
-		e.peer.data.pendingDirectives = slices.Delete(e.peer.data.pendingDirectives, i, i+1)
-		e.eventLog.Append(e.peer.me, e.tick, eventlog.Directive{Response: d})
-		handler, ok := any(e.st).(sim.DirectiveHandler[S])
-		if !ok {
-			logging.Warn(
-				"datafix: the state does not take the answer of the cluster",
-				"engine", e.peer.me, "directive", d.ID, "kind", d.Kind, "failure", d.Failure,
-			)
-			continue
-		}
-		handler.HandleDirective(ctx, &e.stateRegistry, d)
-	}
-}
-
-// publishDirectives numbers the requests that the actions of the tick made, keeps them until the
-// cluster answers, and hands them to the cluster, with the ones that wait, at the first tick of the
-// engine and every directive.resend_every_ticks ticks after it. It runs when the tick is done,
-// before the messages of the tick are sent: a message to an engine that the tick makes finds it,
-// and one to an engine that it removes is delivered before the engine ends.
-func (e *Engine[S]) publishDirectives(cfg config.ReadOnlySnapshot) {
-	var fresh []sim.DirectiveRequest
-	for _, request := range e.stateRegistry.TakeDirectiveRequests() {
-		e.peer.data.directiveSeq++
-		request.ID = e.peer.data.directiveSeq
-		e.peer.data.pendingDirectives = append(e.peer.data.pendingDirectives, request)
-		fresh = append(fresh, request)
-	}
-	if e.directiveSink == nil {
+// startAndRetireEngines makes the engines that the actions of this tick made the IDs of and asks
+// the ones that they ended to retire, when the tick is done and before the messages of the tick are
+// sent: a message to an engine that the tick makes finds it. Only the coordinator has any. A replay
+// has no starter, so it makes none: its engines are made from their logs.
+func (e *Engine[S]) startAndRetireEngines() {
+	creations := e.stateRegistry.TakeEngineCreations()
+	retirements := e.stateRegistry.TakeEngineRetirements()
+	starter := e.env.Starter
+	if starter == nil {
 		return
 	}
-	requests := fresh
-	if !e.directivesHandedOver || e.tick%uint64(directiveResendEvery.Get(cfg)) == 0 {
-		requests, e.directivesHandedOver = e.peer.data.pendingDirectives, true
+	for _, c := range creations {
+		made, err := e.env.EngineRegistry.Make(
+			e.env, c.ID, c.State, c.Start, e.peer.me, e.tick,
+		)
+		starter.EngineMade(c.Ticket, made, err)
 	}
-	if len(requests) > 0 {
-		e.directiveSink.ServeDirectives(e.peer.me, e.tick, slices.Clone(requests))
+	by := sim.StateDependency{Source: e.peer.me, Tick: e.tick}
+	for _, r := range retirements {
+		starter.RetireEngine(r.Target, by)
 	}
 }
 
@@ -514,12 +464,13 @@ func periodOffsetOf(id sim.StateID) uint64 {
 	return h.Sum()
 }
 
-// DirectiveSink is where an engine hands its requests to the cluster: the cluster that runs it,
-// which makes and removes engines. A replay has none, since its log says which engines were made
-// and removed and when, and what the cluster answered.
-type DirectiveSink interface {
-	// ServeDirectives serves the requests that the engine from asked, at its tick tick, in the
-	// order it asked. A request that was served already, which the engine hands over again until
-	// it takes the answer, is not served twice: the answer is given again. It does not wait.
-	ServeDirectives(from sim.StateID, tick uint64, requests []sim.DirectiveRequest)
+// EngineStarter is where the engine of the coordinator hands the engines it makes and the ones it
+// ends: the cluster that runs it. A replay has none, since its engines are made from their logs.
+type EngineStarter interface {
+	// EngineMade takes the engine that the coordinator made for the request with the ticket, or the
+	// error of the engine that could not be made, and runs it from now on. It does not wait.
+	EngineMade(ticket uint64, e EngineHandle, err error)
+	// RetireEngine asks the engine with the ID to retire between two of its ticks, at the tick of
+	// the coordinator that asked. It does not wait.
+	RetireEngine(id sim.StateID, by sim.StateDependency)
 }

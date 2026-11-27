@@ -26,7 +26,7 @@ func (otherAction) Encode(*binary.Writer)          {}
 func TestTheRegistryMakesTheEngineOfAStateOfAKnownTypeAndRefusesTheOthers(t *testing.T) {
 	env := newToyEnv(t)
 	handle, err := env.EngineRegistry.Make(
-		env, 5, &toyState{Total: 4}, []sim.BaseAction{toyAction{N: 1}}, 0, 0, 0,
+		env, 5, &toyState{Total: 4}, []sim.BaseAction{toyAction{N: 1}}, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -35,12 +35,12 @@ func TestTheRegistryMakesTheEngineOfAStateOfAKnownTypeAndRefusesTheOthers(t *tes
 	if made.StateID() != 5 || made.Tick() != 0 || made.State().Total != 4 {
 		t.Fatalf("the engine is %v at the tick %d", made.StateID(), made.Tick())
 	}
-	if _, err := env.EngineRegistry.Make(env, 6, &otherToy{}, nil, 0, 0, 0); err == nil {
+	if _, err := env.EngineRegistry.Make(env, 6, &otherToy{}, nil, 0, 0); err == nil {
 		t.Fatal("an engine of a type that is not registered was made")
 	}
 	// an action of another state makes no engine, and registers none: a message to it bounces
 	wrong := []sim.BaseAction{otherAction{}}
-	_, err = env.EngineRegistry.Make(env, 7, &toyState{}, wrong, 0, 0, 0)
+	_, err = env.EngineRegistry.Make(env, 7, &toyState{}, wrong, 0, 0)
 	if err == nil {
 		t.Fatal("an action of another state was taken as an action of the state")
 	}
@@ -54,7 +54,7 @@ func TestAnEngineMadeAgainFromTheRecordOfItsStartIsARestoreAndWritesNoStart(t *t
 	env := newToyEnv(t)
 	log := &eventlog.MemLog{}
 	env.EventLog = log
-	handle, err := env.EngineRegistry.Make(env, 5, &toyState{Total: 4}, nil, 3, 9, 2)
+	handle, err := env.EngineRegistry.Make(env, 5, &toyState{Total: 4}, nil, 3, 9)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestAnEngineMadeAgainFromTheRecordOfItsStartIsARestoreAndWritesNoStart(t *t
 		t.Fatal(err)
 	}
 	started, ok := log.ByEngine()[5][0].Body.(eventlog.Started)
-	if !ok || started.Creator != 3 || started.CreatorTick != 9 || started.DirectiveID != 2 {
+	if !ok || started.Creator != 3 || started.CreatorTick != 9 {
 		t.Fatalf("the first record is %+v", log.ByEngine()[5][0])
 	}
 	again := newToyEnv(t)

@@ -16,6 +16,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
+	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 )
 
@@ -61,7 +62,7 @@ func TestAZonelayerThatTheWorldAsksForGetsTheNextIDAndTheWorldLearnsItFromTheAns
 	c.World.Send(command.WorldZoneLayerAddCommand{
 		ZoneID: testkit.Zone1, Capacity: 2, RegenEvery: 10,
 	})
-	testkit.Steps(t, c, 1) // the world asks, and the cluster makes the engine and answers
+	testkit.Steps(t, c, 2) // the world asks, and the coordinator makes the engine
 	found, ok := c.Cluster.Find(layer4)
 	if !ok {
 		t.Fatalf("the engine of %v is not in the cluster", layer4)
@@ -71,21 +72,22 @@ func TestAZonelayerThatTheWorldAsksForGetsTheNextIDAndTheWorldLearnsItFromTheAns
 		t.Fatalf("the engine of %v is at the tick %d, want it made and not run",
 			layer4, made.Tick())
 	}
+	testkit.Steps(t, c, 1) // the zonelayer runs its first tick and tells the world that it is there
 	if slices.Contains(c.World.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world lists the zonelayer before it took the answer that says its ID")
+		t.Fatal("the world lists the zonelayer before it took the message that says its ID")
 	}
 	testkit.Steps(t, c, 1)
 	if !slices.Contains(c.World.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world does not list the zonelayer after it took the answer")
+		t.Fatal("the world does not list the zonelayer after it took the message")
 	}
 	testkit.Steps(t, c, 4)
-	if made.Tick() != 5 {
-		t.Fatalf("the new engine is at the tick %d after 5 steps, want 5", made.Tick())
+	if made.Tick() != 6 {
+		t.Fatalf("the new engine is at the tick %d after 6 steps, want 6", made.Tick())
 	}
 	first := mem.ByEngine()[layer4][0]
 	started, isStarted := first.Body.(eventlog.Started)
-	if !isStarted || first.Tick != 1 || started.Creator != testkit.World ||
-		started.CreatorTick == 0 || started.DirectiveID == 0 || len(started.Snapshot) == 0 {
+	if !isStarted || first.Tick != 1 || started.Creator != sim.CoordinatorStateID ||
+		started.CreatorTick == 0 || len(started.Snapshot) == 0 {
 		t.Fatalf("the first record of its log is %+v, want its start by the world", first)
 	}
 }
@@ -205,8 +207,8 @@ func TestAZonelayerWhoseCreatorLostTheTickThatMadeItIsCutToNothingAndTheWorldFor
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) { aLayerWasMade(c, t) })
 	started := recordsOnDisk(t, dir, layer4)[0].Body.(eventlog.Started)
-	// the world lost the tick at which it asked for the zonelayer and everything after it
-	crash(t, dir, testkit.World, started.CreatorTick-1)
+	// the coordinator lost the tick at which it made the zonelayer and everything after it
+	crash(t, dir, sim.CoordinatorStateID, started.CreatorTick-1)
 	first, live, closeLog := handedOver(t, dir)
 	if first.Plan.Limits()[layer4] != 0 {
 		t.Fatalf("the zonelayer has the limit %d, want it cut to nothing",
@@ -217,11 +219,12 @@ func TestAZonelayerWhoseCreatorLostTheTickThatMadeItIsCutToNothingAndTheWorldFor
 	}
 	world, _ := live.Get[*worldstate.State](testkit.World)
 	if slices.Contains(world.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world lists a zonelayer that it asked for in a tick that it lost")
+		t.Fatal("the world lists a zonelayer that the coordinator made in a tick that it lost")
 	}
-	// its ID is not given again, though the log of the engine was cut to nothing
-	if got := live.NewStateID(state.ZoneLayerType); got != sim.NewStateID(state.ZoneLayerType, 5) {
-		t.Fatalf("the next zonelayer is %v, want the number 5", got)
+	// the number was given in a tick of the coordinator that was lost, with the engine that had
+	// it: nothing of either is left, so the coordinator gives it again
+	if got := nextZoneLayerID(t, live); got != layer4 {
+		t.Fatalf("the next zonelayer is %v, want the number %v again", got, layer4)
 	}
 	closeLog()
 }
@@ -291,7 +294,7 @@ func TestAHandoverAfterAnyEngineLostItsLogWhileAZonelayerWasMadeGoesOnAndRecover
 	})
 }
 
-func TestTheWorldBeginsItsLogWithItsStartAskedForByNoEngineAndTheOthersWithOneAskedForByTheWorld(
+func TestEveryEngineBeginsItsLogWithItsStartMadeByTheCoordinatorAndDependsOnItsTick(
 	t *testing.T,
 ) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
@@ -302,22 +305,21 @@ func TestTheWorldBeginsItsLogWithItsStartAskedForByNoEngineAndTheOthersWithOneAs
 		if !ok || first.Tick != 1 || len(started.Snapshot) == 0 {
 			t.Fatalf("the first record of %v is %+v, want its start", id, first)
 		}
-		_, depends := first.Dependency()
-		if id == testkit.World && (started.Creator != 0 || depends) {
-			t.Fatalf("the start of the world is %+v, which no engine asked for", started)
-		}
-		if id != testkit.World && (started.Creator != testkit.World || !depends) {
-			t.Fatalf("the start of %v is %+v, want it asked for by the world", id, started)
+		dep, depends := first.Dependency()
+		if started.Creator != sim.CoordinatorStateID || !depends || dep.Source != started.Creator {
+			t.Fatalf("the start of %v is %+v, want it made by the coordinator", id, started)
 		}
 	}
 }
 
 func TestAnEngineThatCannotBeMadeLeavesTheWorldWithoutItAndItsIDIsNotGivenAgain(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 7, 10)
+	known := c.Env.EngineRegistry
 	c.Env.EngineRegistry = engine.NewEngineRegistry() // knows no state of the game
 	testkit.Steps(t, c, 10)
 	c.World.Send(command.WorldZoneLayerAddCommand{ZoneID: testkit.Zone1, Capacity: 2})
-	testkit.Steps(t, c, 3)
+	testkit.Steps(t, c, 4)
+	c.Env.EngineRegistry = known
 	if _, ok := c.Cluster.Find(layer4); ok {
 		t.Fatal("an engine was made that the registry cannot make")
 	}
@@ -325,7 +327,7 @@ func TestAnEngineThatCannotBeMadeLeavesTheWorldWithoutItAndItsIDIsNotGivenAgain(
 		t.Fatal("the world lists a zonelayer that was not made")
 	}
 	// the number 4 went to an engine that could not be made, and is not given again
-	next := c.Cluster.NewStateID(state.ZoneLayerType)
+	next := nextZoneLayerID(t, c.Cluster)
 	if next != sim.NewStateID(state.ZoneLayerType, 5) {
 		t.Fatalf("the next zonelayer is %v, want the number 5", next)
 	}
@@ -356,8 +358,18 @@ func TestARequestWhoseAnswerWasLostToACrashIsNotServedAgainAfterAHandoverAndItsA
 	if got := len(live.Engines()); got != engines {
 		t.Fatalf("the cluster has %d engines, had %d: the request was served again", got, engines)
 	}
-	next := live.NewStateID(state.ZoneLayerType)
+	next := nextZoneLayerID(t, live)
 	if next != sim.NewStateID(state.ZoneLayerType, 5) {
 		t.Fatalf("the next zonelayer is %v, want the number 5", next)
 	}
+}
+
+// nextZoneLayerID is the number that the coordinator gives the next zonelayer: it makes one.
+func nextZoneLayerID(t *testing.T, c *engine.Cluster) sim.StateID {
+	t.Helper()
+	id, err := c.CreateEngine(zonelayerstate.NewState(testkit.Zone1, testkit.World))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

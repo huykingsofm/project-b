@@ -107,7 +107,7 @@ func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error 
 		case eventlog.Inbound:
 			idx.inboundMessageHash[keyOf(body.Message.Head())] = eventlog.HashMessage(body.Message)
 			takenMsgs++
-		case eventlog.Command, eventlog.Directive:
+		case eventlog.Command:
 			takenMsgs++
 		case eventlog.Started:
 			idx.started[address] = body

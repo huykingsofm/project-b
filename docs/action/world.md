@@ -31,8 +31,8 @@ State: [`state/world`](../../server/game/sim/state/world): private messages betw
 - Command: `WorldZoneAddCommand{Tiles}`
 - Fields: `Tiles` (the map; copied with `Clone`)
 - Steps:
-  1. `CreateEngine` with the tag `TagZone` and a zone state of this world (`Context.Self`) on the map. The world lists the zone when the cluster answers, not here (R28): `State.HandleDirective` takes the answer.
-- Example: tick 1 the command; the cluster makes the zone and answers; at tick 2 the world lists it.
+  1. `RequestCreateEngine` with a zone state of this world (`Context.Self`) on the map, which starts with `ZoneAnnounceToWorldAction`. The world lists the zone when the zone tells it, not here (R28): `WorldZoneRegisterAction` lists it.
+- Example: tick 1 the command; the coordinator makes the zone; at its first tick the zone tells the world, which lists it at its next tick.
 
 ## WorldZoneLayerAddAction
 
@@ -41,7 +41,25 @@ State: [`state/world`](../../server/game/sim/state/world): private messages betw
 - Command: `WorldZoneLayerAddCommand{ZoneID, Capacity, RegenEvery}`
 - Fields: `ZoneID`, `Capacity`, `RegenEvery` (0: never heals)
 - Steps:
-  1. `CreateEngine` with the tag `TagZoneLayer`, an empty zonelayer state of the zone and this world, and the actions it runs once at its first tick: [`ZoneLayerAnnounceToZoneAction`](zonelayer.md#zonelayerannouncetozoneaction) and, when `RegenEvery` is more than 0, [`ZoneLayerCharacterRegenAction`](zonelayer.md#zonelayercharacterregenaction), which heals at once and sets itself again every `RegenEvery` ticks. The world lists the zonelayer when the cluster answers.
+  1. `RequestCreateEngine` with an empty zonelayer state of the zone and this world, and the actions it runs once at its first tick: [`ZoneLayerAnnounceToZoneAction`](zonelayer.md#zonelayerannouncetozoneaction), [`ZoneLayerAnnounceToWorldAction`](zonelayer.md#zonelayerannouncetoworldaction) and, when `RegenEvery` is more than 0, [`ZoneLayerCharacterRegenAction`](zonelayer.md#zonelayercharacterregenaction), which heals at once and sets itself again every `RegenEvery` ticks. The world lists the zonelayer when the zonelayer tells it.
+
+## WorldZoneRegisterAction
+
+- Kind: message
+- Priority: `PriorityResolve`
+- Fields: `ZoneID`
+- Sent by: [`ZoneAnnounceToWorldAction`](zone.md#zoneannouncetoworldaction); retried if not delivered
+- Steps:
+  1. `AddZone`: the world lists the zone.
+
+## WorldZoneLayerRegisterAction
+
+- Kind: message
+- Priority: `PriorityResolve`
+- Fields: `ZoneLayerID`
+- Sent by: [`ZoneLayerAnnounceToWorldAction`](zonelayer.md#zonelayerannouncetoworldaction); retried if not delivered
+- Steps:
+  1. `AddZoneLayer`: the world lists the zonelayer.
 
 ## WorldZoneExitAddAction
 

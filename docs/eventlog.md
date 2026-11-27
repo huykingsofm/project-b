@@ -83,12 +83,11 @@ What an engine writes in a tick is one frame, which is one record of the segment
 | `KindReturned` | 5 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
 | `KindRetired` | 6 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
 | `KindStarted` | 7 | the engine that asked for this one to be made (state ID; 0 for an engine that the code that runs the cluster added), its tick (`uvarint`), the number of its request (`uvarint`; 0 for none), and the engine as it was made, at the tick 0, written as a checkpoint (length and bytes): the first record of the log of every engine but the configuration engine |
-| `KindDirective` | 8 | the answer of the cluster to a request of the engine: the number of the request, its kind, its tag, the ID of the engine that was made or removed, and why not (a string; empty for success) |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.
 - A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
-- A `Started` record makes the engine depend on that tick of the creator, as a message does of its sender (`Record.Dependency()`); an engine that no engine asked for depends on none. A `Directive` record depends on nothing: it is an answer that the engine takes, as it takes a command.
+- A `Started` record makes the engine depend on the tick of the coordinator that made it, as a message does of its sender (`Record.Dependency()`); the configuration engine and the coordinator have none. A `Retired` record holds the tick of the coordinator that asked for the end of the engine (`By`), and the engine depends on it the same way.
 - A message carries the tick of its sender when it was sent (`Header.Tick`, set when the engine sends it). An `Inbound` record makes the engine depend on that tick of the sender, and a `StableRead` record, which has the tick of the copy it read, makes it depend on that tick of the source: `Record.Dependency()` says which as a `sim.StateDependency{Source, Tick}`, or false when a record depends on nothing (a message with no tick, a read that found no copy, any other kind).
 - A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
 

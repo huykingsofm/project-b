@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 )
 
-// removeEngineAction asks the cluster to remove an engine.
+// removeEngineAction asks the coordinator to end an engine.
 type removeEngineAction struct{ Engine sim.StateID }
 
 func (removeEngineAction) ID() sim.ActionID { return 60011 }
@@ -21,40 +21,9 @@ func (removeEngineAction) Actor() any       { return nil }
 func (a removeEngineAction) Apply(
 	_ *sim.Context, _ *toyState, r *sim.Registry[*toyState], _ *sim.Plan[*toyState],
 ) {
-	r.RemoveEngine(a.Engine, nil)
+	r.RequestRetireEngine(onfail.Drop{}, a.Engine)
 }
 func (a removeEngineAction) Clone() sim.Action[*toyState] { return a }
-
-// recordedSink is a DirectiveSink that remembers what it was asked to remove.
-type recordedSink struct {
-	mu  sync.Mutex
-	ids []sim.StateID
-}
-
-func (c *recordedSink) ServeDirectives(
-	_ sim.StateID, _ uint64, requests []sim.DirectiveRequest,
-) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, request := range requests {
-		if request.Kind == sim.DirectiveRemoveEngine {
-			c.ids = append(c.ids, request.Target)
-		}
-	}
-}
-
-// toysThatCanRemoveOneAnother is a cluster of the toy engines 1 to n, which hand their requests to
-// the cluster, and the log that it writes.
-func toysThatCanRemoveOneAnother(
-	t testing.TB, n int,
-) (*engine.Cluster, []*engine.Engine[*toyState], *eventlog.MemLog) {
-	t.Helper()
-	env := newToyEnv(t)
-	log := &eventlog.MemLog{}
-	env.EventLog = log
-	c := newCluster(t, env)
-	return c, addToys(t, c, n), log
-}
 
 // lastRecordOf is the last record that the engine wrote, and how many it wrote at its tick.
 func lastRecordOf(log *eventlog.MemLog, id sim.StateID) (eventlog.Record, int) {
@@ -72,115 +41,78 @@ func lastRecordOf(log *eventlog.MemLog, id sim.StateID) (eventlog.Record, int) {
 	return last, n
 }
 
-func TestARequestToRemoveAnEngineIsHandedToTheSinkWhenTheTickIsDone(t *testing.T) {
-	env := newToyEnv(t)
-	control := &recordedSink{}
-	env.Directives = control
-	a := engine.NewEngine(&toyState{}, 1, env)
-	a.ScheduleAt(2, removeEngineAction{Engine: 7})
-	if err := a.Step(); err != nil {
-		t.Fatal(err)
-	}
-	if len(control.ids) != 0 {
-		t.Fatalf("%v was asked before the tick that asks", control.ids)
-	}
-	if err := a.Step(); err != nil {
-		t.Fatal(err)
-	}
-	if len(control.ids) != 1 || control.ids[0] != 7 {
-		t.Fatalf("the sink was asked %v, want engine 7 once", control.ids)
-	}
-	if err := a.Step(); err != nil {
-		t.Fatal(err)
-	}
-	if len(control.ids) != 1 {
-		t.Fatalf("the sink was asked %v: a request is handed over once until it is answered",
-			control.ids)
-	}
-}
-
-func TestAnEngineWithNoSinkIgnoresARequestToRemoveAnEngine(t *testing.T) {
-	c, err := engine.NewReplayCluster(newToyEnv(t), nil) // a replay has no sink
-	if err != nil {
-		t.Fatal(err)
-	}
-	engines := addToys(t, c, 2)
-	engines[0].ScheduleAt(1, removeEngineAction{Engine: 2})
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := c.Find(2); !ok {
-		t.Fatal("an engine was removed in an environment that has no sink")
-	}
-}
-
-func TestAStepRemovesTheEngineThatAnActionAskedForWhenTheStepEnds(t *testing.T) {
-	c, engines, log := toysThatCanRemoveOneAnother(t, 3)
+func TestAStepRemovesTheEngineThatAnActionAskedForWhenTheStepEndsAndItsLogDependsOnTheCoordinator(
+	t *testing.T,
+) {
+	c, engines, log := toysWithALog(t, 3)
 	a, b := engines[0], engines[1]
 	a.ScheduleAt(1, removeEngineAction{Engine: 2})
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
+	steps(t, c, 1) // the engine asks
+	if _, ok := c.Find(2); !ok || b.IsClosed() {
+		t.Fatal("engine 2 was removed before the coordinator took the request")
 	}
+	steps(t, c, 1) // the coordinator takes it, and the engine ends when the step ends
 	if _, ok := c.Find(2); ok || !b.IsClosed() {
 		t.Fatalf("engine 2 is in the cluster (%v) or not removed (%v)", ok, b.IsClosed())
 	}
 	last, alone := lastRecordOf(log, 2)
-	if _, isRetired := last.Body.(eventlog.Retired); !isRetired || alone != 1 || last.Tick != 2 {
-		t.Fatalf("the last of its log is %+v (%d at its tick), want Retired alone at the tick 2",
+	retired, isRetired := last.Body.(eventlog.Retired)
+	if !isRetired || alone != 1 || last.Tick != 3 {
+		t.Fatalf("the last of its log is %+v (%d at its tick), want Retired alone at the tick 3",
 			last, alone)
 	}
-	before := len(log.ByEngine()[2])
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
+	if retired.By.Source != sim.CoordinatorStateID || retired.By.Tick != c.Coordinator().Tick() {
+		t.Fatalf("it was removed by %+v, want the tick %d of the coordinator",
+			retired.By, c.Coordinator().Tick())
 	}
+	before := len(log.ByEngine()[2])
+	steps(t, c, 1)
 	if got := len(log.ByEngine()[2]); got != before {
 		t.Fatalf("a removed engine wrote %d records after its removal", got-before)
 	}
 }
 
 func TestAMessageForAnEngineThatWasRemovedComesBackAsRetired(t *testing.T) {
-	c, engines, _ := toysThatCanRemoveOneAnother(t, 3)
+	c, engines, _ := toysWithALog(t, 3)
 	engines[0].ScheduleAt(1, removeEngineAction{Engine: 2})
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
-	}
+	steps(t, c, 2)
 	reason, ok := c.Env.Router.Deliver(toMessage(2, 1))
 	if ok || reason != sim.DeliveryFailureRetired {
 		t.Fatalf("a message for the engine that was removed: %v, %v", reason, ok)
 	}
 }
 
-func TestTheConfigurationEngineIsNeverRemoved(t *testing.T) {
-	c, _, _ := toysThatCanRemoveOneAnother(t, 1)
-	if c.RemoveEngine(sim.ConfigStateID) {
-		t.Fatal("Remove took the configuration engine out")
+func TestTheConfigurationEngineAndTheCoordinatorAreNeverRemoved(t *testing.T) {
+	c, _, _ := toysWithALog(t, 1)
+	for _, id := range []sim.StateID{sim.ConfigStateID, sim.CoordinatorStateID} {
+		if !c.Coordinator().Send(sim.RetireEngineCommand{Target: id}) {
+			t.Fatal("the command was refused")
+		}
 	}
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{
-		{ID: 1, Kind: sim.DirectiveRemoveEngine, Target: sim.ConfigStateID},
-	})
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
+	steps(t, c, 2)
+	for _, id := range []sim.StateID{sim.ConfigStateID, sim.CoordinatorStateID} {
+		if _, ok := c.Find(id); !ok {
+			t.Fatalf("a request removed the engine %v", id)
+		}
 	}
-	if _, ok := c.Find(sim.ConfigStateID); !ok || c.ConfigEngine().IsClosed() {
-		t.Fatal("a request removed the configuration engine")
+	if c.ConfigEngine().IsClosed() || c.Coordinator().IsClosed() {
+		t.Fatal("a request closed an engine that every cluster has")
 	}
 }
 
 func TestARequestForAnEngineThatTheClusterDoesNotHaveChangesNothing(t *testing.T) {
-	c, _, _ := toysThatCanRemoveOneAnother(t, 2)
-	c.ServeDirectives(1, 1, []sim.DirectiveRequest{
-		{ID: 1, Kind: sim.DirectiveRemoveEngine, Target: 99},
-	})
-	if err := stepping.Step(c); err != nil {
-		t.Fatal(err)
+	c, _, _ := toysWithALog(t, 2)
+	if !c.Coordinator().Send(sim.RetireEngineCommand{Target: 99}) {
+		t.Fatal("the command was refused")
 	}
-	if got := len(c.Engines()); got != 3 { // the configuration engine and the two
-		t.Fatalf("the cluster has %d engines, want 3", got)
+	steps(t, c, 2)
+	if got := len(c.Engines()); got != 4 { // the configuration engine, the coordinator, 1 and 2
+		t.Fatalf("the cluster has %d engines, want 4", got)
 	}
 }
 
-// runFor runs the cluster on its own goroutines until the condition holds or a second has gone, and
-// returns after Run has returned.
+// runUntil runs the cluster on its own goroutines until the condition holds or two seconds have
+// gone, and returns after Run has returned.
 func runUntil(t *testing.T, c *engine.Cluster, done func() bool) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -205,7 +137,7 @@ func runUntil(t *testing.T, c *engine.Cluster, done func() bool) {
 }
 
 func TestAnEngineThatRunsOnItsOwnEndsBetweenTwoTicksWhenAnActionAsksForItsRemoval(t *testing.T) {
-	c, engines, log := toysThatCanRemoveOneAnother(t, 3)
+	c, engines, log := toysWithALog(t, 3)
 	engines[0].ScheduleAt(5, removeEngineAction{Engine: 2})
 	runUntil(t, c, func() bool { _, ok := c.Find(2); return !ok })
 	last, alone := lastRecordOf(log, 2)
@@ -228,13 +160,13 @@ func TestAnEngineThatRunsOnItsOwnEndsBetweenTwoTicksWhenAnActionAsksForItsRemova
 
 func TestEnginesAskedToBeRemovedFromManyGoroutinesWhileOthersRunAreAllRemoved(t *testing.T) {
 	const n = 12
-	c, _, log := toysThatCanRemoveOneAnother(t, n)
+	c, _, log := toysWithALog(t, n)
 	var wg sync.WaitGroup
 	for id := sim.StateID(2); id <= n; id += 2 {
 		wg.Go(func() {
 			time.Sleep(time.Duration(id) * time.Millisecond)
-			c.RemoveEngine(id)
-			c.RemoveEngine(id) // a second request changes nothing
+			c.Coordinator().Send(sim.RetireEngineCommand{Target: id})
+			c.Coordinator().Send(sim.RetireEngineCommand{Target: id}) // a second changes nothing
 		})
 	}
 	reader := make(chan struct{})

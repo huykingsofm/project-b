@@ -34,7 +34,7 @@ func readLog(t *testing.T, dir string, engine sim.StateID, from uint64) ([]event
 }
 
 // recordsOfEveryKindInATick is how many records recordsOfEveryKind writes for a tick.
-const recordsOfEveryKindInATick = 10
+const recordsOfEveryKindInATick = 9
 
 // recordsOfEveryKind writes a record of every kind for an engine at a tick, and returns what it
 // wrote.
@@ -61,13 +61,9 @@ func recordsOfEveryKind(log eventlog.Log, engine sim.StateID, tick uint64) []eve
 	log.Append(engine, tick, eventlog.Command{Command: move})
 	log.Append(engine, tick, eventlog.StableRead{Source: sim.StateID(12), CopyTick: tick - 1})
 	started := eventlog.Started{
-		Creator: from, CreatorTick: tick, DirectiveID: tick, Snapshot: []byte{byte(tick)},
+		Creator: from, CreatorTick: tick, Snapshot: []byte{byte(tick)},
 	}
-	directive := eventlog.Directive{Response: sim.DirectiveResponse{
-		ID: tick, Tag: []byte("zone"), Engine: 40 + sim.StateID(tick),
-	}}
 	log.Append(engine, tick, started)
-	log.Append(engine, tick, directive)
 	log.Append(engine, tick, eventlog.Hash{Value: 0xdeadbeefcafef00d + tick})
 	log.EndTick(engine, tick)
 	return []eventlog.Record{
@@ -89,7 +85,6 @@ func recordsOfEveryKind(log eventlog.Log, engine sim.StateID, tick uint64) []eve
 			Body:   eventlog.StableRead{Source: sim.StateID(12), CopyTick: tick - 1},
 		},
 		{Engine: engine, Tick: tick, Body: started},
-		{Engine: engine, Tick: tick, Body: directive},
 		{Engine: engine, Tick: tick, Body: eventlog.Hash{Value: 0xdeadbeefcafef00d + tick}},
 	}
 }
@@ -368,7 +363,7 @@ func TestTheFirstTickOfAnEngineThatWasMadeIsNotSafeUntilTheTickOfItsCreatorIs(t 
 	defer log.Close()
 	// the engine that was made writes its start first, which depends on the tick 3 of its creator
 	log.Append(made, 1, eventlog.Started{
-		Creator: creator, CreatorTick: 3, DirectiveID: 1, Snapshot: []byte{1},
+		Creator: creator, CreatorTick: 3, Snapshot: []byte{1},
 	})
 	log.EndTick(made, 1)
 	log.EndTick(made, 2)

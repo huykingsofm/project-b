@@ -61,7 +61,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 | `engine.MessageRouter`, `engine.StableStore` | the adapters on `Environment` |
 | `engine.CopySource` and `engine.NewStableView` | a store that finds the copy a read names |
 | `engine.NewReplayCluster`, `Cluster.AddEngineByCheckpoint` and `engine.EngineRegistry` | making the engines in the environment of the replay, each from its checkpoint or from the record that begins its log |
-| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `HandleDirectiveResponse`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
+| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `RequestRetirement`, `RetireIfRequested`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
 
 ## Adapters
 
@@ -82,7 +82,6 @@ Before an engine runs a tick, the records of that tick are given to it, in the o
 | `KindInbound` | the message is put in the queue of the engine; the queue is as large as the busiest tick needs |
 | `KindReturned` | a message sent in an earlier tick is given back at this one (`Router.Return`); one that is sent in this tick is refused at once, with the reason, when its sender sends it |
 | `KindStarted` | the first record of the log of an engine: the replay makes the engine from the checkpoint inside it (the engine as it was made) when it starts from no checkpoint; the record is then left out of the records that the engine is compared with, since it was made from it ([engines](engine_lifecycle.md)) |
-| `KindDirective` | an answer of the cluster to a request of the engine: given to the engine at its tick like a command (`HandleDirectiveResponse`); the requests are kept in its data and not handed over, since a replay has no cluster |
 | `KindRetired` | the engine is removed (`Cluster.Remove`) and runs no tick: the frame of the tick holds this record and no other, and it is the last of the log (the index refuses a log in which it is not); the cluster of the result does not hold the engine, and its ID is in `Result.Retired` |
 | `KindStableRead` | the read at this tick gets the copy of the tick in the record; the engine does not run before the source engine has run to that tick; the configuration is read so, from the copy of the configuration engine ([configengine](configengine.md)) |
 
@@ -155,7 +154,7 @@ Before the first tick, for each engine that starts above tick 0:
 | engines | `engine.NewCluster(env, store, configCheckpoint)` makes the cluster and `Cluster.AddEngineByCheckpoint` each of the other engines from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env` (`engine.NewEnvironment` makes such an environment) |
 | sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
 | copies | each engine that ran a tick publishes its state (`PublishState`), for the engines that read it; one at the tick 0 publishes nothing, so a read that records the tick 0 means that it found no copy |
-| IDs and requests | the cluster raises its next IDs above the ones its logs hold (`RaiseStateIDs`), and knows which request made which engine (`RestoreServed`, from the `Started` records), so a request that waits in a checkpoint is not served twice |
+| IDs and requests | the coordinator comes with its checkpoint: its state holds the numbers it gave, and it drops a request that it took already by the number of its sender |
 | removed engines | the engines in `Result.Retired` are not made again: the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 

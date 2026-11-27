@@ -73,7 +73,13 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 		action.WorldZoneLayerAddActionID: action.WorldZoneLayerAddAction{
 			ZoneID: 3, Capacity: 40, RegenEvery: 10,
 		},
-		action.ZoneLayerAnnounceToZoneActionID: action.ZoneLayerAnnounceToZoneAction{Capacity: 40},
+		action.ZoneLayerAnnounceToZoneActionID:  action.ZoneLayerAnnounceToZoneAction{Capacity: 40},
+		action.ZoneAnnounceToWorldActionID:      action.ZoneAnnounceToWorldAction{},
+		action.WorldZoneRegisterActionID:        action.WorldZoneRegisterAction{ZoneID: 3},
+		action.ZoneLayerAnnounceToWorldActionID: action.ZoneLayerAnnounceToWorldAction{},
+		action.WorldZoneLayerRegisterActionID: action.WorldZoneLayerRegisterAction{
+			ZoneLayerID: 8,
+		},
 		action.ZoneZoneLayerAddActionID: action.ZoneZoneLayerAddAction{ZoneLayerID: 8,
 			Capacity: 40},
 		action.ZoneExitAddActionID: action.ZoneExitAddAction{

@@ -17,11 +17,12 @@ type EngineRegistry struct {
 	types map[sim.StateType]engineType
 }
 
-// NewEngineRegistry makes a registry that knows the configuration engine, which every cluster has,
-// and nothing else.
+// NewEngineRegistry makes a registry that knows the configuration engine and the coordinator, which
+// every cluster has, and nothing else.
 func NewEngineRegistry() *EngineRegistry {
 	r := &EngineRegistry{types: map[sim.StateType]engineType{}}
 	r.add[*sim.ConfigState]()
+	r.add[*sim.CoordinatorState]()
 	return r
 }
 
@@ -43,7 +44,7 @@ func (r *EngineRegistry) add[S sim.State]() {
 	r.types[sim.StateTypeOf[S]()] = engineType{
 		make: func(
 			env *Environment, id sim.StateID, st sim.State, start []sim.BaseAction,
-			creator sim.StateID, creatorTick, directiveID uint64,
+			creator sim.StateID, creatorTick uint64,
 		) (EngineHandle, error) {
 			typed, ok := st.(S)
 			if !ok {
@@ -61,7 +62,7 @@ func (r *EngineRegistry) add[S sim.State]() {
 			for _, a := range actions {
 				e.ScheduleAt(e.Tick()+1, a)
 			}
-			if err := e.markStarted(creator, creatorTick, directiveID); err != nil {
+			if err := e.markStarted(creator, creatorTick); err != nil {
 				e.Close()
 				return nil, err
 			}
@@ -79,17 +80,17 @@ func (r *EngineRegistry) add[S sim.State]() {
 
 // Make makes the engine with the ID from a state and the actions it starts with, in the
 // environment, new: at the tick of the state, registered with the router, with the record that
-// begins its log ready. creator, creatorTick and directiveID say which engine asked for it, at
-// which tick and with which request: 0, 0 and 0 for an engine that no engine asked for.
+// begins its log ready. creator and creatorTick say which engine made it and at which tick of it
+// (the coordinator).
 func (r *EngineRegistry) Make(
 	env *Environment, id sim.StateID, st sim.State, start []sim.BaseAction,
-	creator sim.StateID, creatorTick, directiveID uint64,
+	creator sim.StateID, creatorTick uint64,
 ) (EngineHandle, error) {
 	t, ok := r.types[st.Type()]
 	if !ok {
 		return nil, fmt.Errorf("the engines of the state type %d are not registered", st.Type())
 	}
-	return t.make(env, id, st, start, creator, creatorTick, directiveID)
+	return t.make(env, id, st, start, creator, creatorTick)
 }
 
 // Restore makes the engine of a checkpoint, at its tick, in the environment; its state type is read
@@ -115,7 +116,7 @@ type engineType struct {
 	// with, and the record that begins its log
 	make func(
 		env *Environment, id sim.StateID, st sim.State, start []sim.BaseAction,
-		creator sim.StateID, creatorTick, directiveID uint64,
+		creator sim.StateID, creatorTick uint64,
 	) (EngineHandle, error)
 	// restore makes the engine of a checkpoint (EngineCheckpoint.Encode)
 	restore func(env *Environment, checkpoint []byte) (EngineHandle, error)
