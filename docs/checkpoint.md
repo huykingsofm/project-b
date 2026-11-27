@@ -8,16 +8,17 @@
 |---|---|
 | `e.Checkpoint()` | takes the checkpoint of an engine as it is: a clone of its state, its scheduler, its random numbers and what its peer knows; called between two ticks, by the goroutine of the engine or while it does not run |
 | `c.Encode()` | writes a checkpoint as bytes (below) |
-| `engine.DecodeEngineCheckpoint[S](data, codecs)` | reads a checkpoint of an engine whose state is of type `S`; the state is read with the codecs, which for a zone know the map of the zone (`game.NewCodecs(tilesOf)`); a checkpoint of an engine whose state is of another type is an error |
-| `c.Restore(env, seed)` | makes the engine of a checkpoint, at its tick; the engine takes what the checkpoint holds |
+| `engine.DecodeEngineCheckpoint[S](data, codecs)` | reads a checkpoint of an engine whose state is of type `S`; the state is read with the codecs (the state of a zone holds its map); a checkpoint of an engine whose state is of another type is an error |
+| `c.Restore(env)` | makes the engine of a checkpoint, at its tick; the engine takes what the checkpoint holds; its ID is the one in the header, and the seed comes from `env` |
 | `checkpoint.LatestAtOrBelow(dir, id, tick)` | the tick of the latest checkpoint file of an engine at or below `tick`, and false when there is none |
 | `checkpoint.Archive(dir, id, tick, archiveDir)` | moves the checkpoint file of an engine at a tick to `archiveDir`: it is no longer a checkpoint, and is not deleted; the file is named `ckpt-<tick>.<now>.snap` there (`atomicfile.Stamped`), so that two moves never meet |
-| `engine.CheckpointSource` | what a builder asks for the checkpoint of each engine it makes (`Checkpoint(id)`); `engine.NoCheckpoints` has none; `replay.CheckpointFiles` gives the files |
+| `replay.CheckpointSource` | which checkpoint each engine of a replay starts from (`Checkpoint(id)`); the files under the directory of the logs are the one of a recovery |
+| `engine.EngineRegistry.Restore(env, data)` | makes the engine of a checkpoint without knowing its type: the type is in the ID of the header |
 | `checkpoint.NewFileWriter(dir, queue)` | the `engine.CheckpointWriter` of a cluster: one goroutine that writes the checkpoints of every engine to files under `dir`, with a queue of `queue`; `Close` writes what waits and stops it |
 | `checkpoint.Ticks(dir, id)` | the ticks at which an engine has a checkpoint file, in rising order |
 | `checkpoint.Read(dir, id, tick)` | the bytes of the checkpoint of an engine at a tick |
 
-- `Restore` registers the engine in the router of `env`, as `engine.New` does; a checkpoint whose state is not of its engine or not at its tick is an error, and registers nothing.
+- `Restore` registers the engine in the router of `env`, as `engine.New` does; a checkpoint whose state is not at its tick is an error, and registers nothing.
 - What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
 - A checkpoint that is cut, has a byte too many, is of another data version or of another type of state is an error, never a panic.
 
@@ -94,7 +95,7 @@ Each engine takes its own checkpoints, with no set for the cluster: no checkpoin
 | on the goroutine of the engine | an `EngineCheckpoint` whose state is the clone that was just published, which no one changes; the scheduler, the random numbers and what the peer knows are cloned |
 | on the goroutine of the writer | the checkpoint is encoded (`Encode`), and the file is written |
 | the hash | the event log has the hash of the engine at every tick a checkpoint is taken at, whether the hash is due or not; a replay, whose engines take no checkpoint, hashes at the same ticks, since it depends on the configuration and the tick alone |
-| no writer in `Env` | no checkpoint is taken (a replay) |
+| no writer in `Environment` | no checkpoint is taken (a replay) |
 
 ## Files
 
@@ -112,6 +113,6 @@ Each engine takes its own checkpoints, with no set for the cluster: no checkpoin
 
 - A replay or a recovery makes each engine from its latest checkpoint at or below its limit, and runs it on its log: [replay](replay.md#an-engine-that-starts-from-a-checkpoint).
 - The engine made from a checkpoint has the hash that the log recorded at the tick of the checkpoint, which the replay checks.
-- The same builder makes the engines that go on live after it; that is not built yet.
+- `Result.Handover` makes the engines that go on live after it, each from the checkpoint of its replayed engine at its limit ([replay](replay.md#handover)).
 
 Benchmarks: [checkpoint](benchmark/checkpoint.md).

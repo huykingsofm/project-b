@@ -1,4 +1,4 @@
-package action
+package action_test
 
 import (
 	"go/ast"
@@ -8,20 +8,25 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 )
 
 // anActionOfEachKind has an action of every kind of the package.
 func anActionOfEachKind() []sim.BaseAction {
 	return []sim.BaseAction{
-		WorldChatPrivateSendAction{}, WorldCharacterItemAddAction{},
-		ZoneChatSendAction{}, ZoneCharacterEnterAction{},
-		ZoneLayerChatSendAction{}, ZoneLayerCharacterEnterAction{},
-		ZoneLayerCharacterMoveAction{},
-		ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{},
-		ZoneLayerCharacterShieldGrantAction{},
-		ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{},
-		ZoneLayerCharacterItemPickupAction{},
-		ZoneLayerItemEntityAddAction{}, ZoneLayerItemEntityRemoveAction{},
+		action.WorldChatPrivateSendAction{}, action.WorldCharacterItemAddAction{},
+		action.ZoneChatSendAction{}, action.ZoneCharacterEnterAction{},
+		action.ZoneLayerChatSendAction{}, action.ZoneLayerCharacterEnterAction{},
+		action.ZoneLayerCharacterMoveAction{},
+		action.ZoneLayerCharacterNormalAttackTriggerAction{},
+		action.ZoneLayerCharacterDamageAction{},
+		action.ZoneLayerCharacterShieldGrantAction{},
+		action.ZoneLayerCharacterRegenAction{}, action.ZoneLayerCharacterExitToAction{},
+		action.ZoneLayerCharacterItemPickupAction{},
+		action.ZoneLayerItemEntityAddAction{}, action.ZoneLayerItemEntityRemoveAction{},
+		action.WorldZoneAddAction{}, action.WorldZoneLayerAddAction{},
+		action.ZoneLayerAnnounceToZoneAction{}, action.ZoneZoneLayerAddAction{},
+		action.ZoneExitAddAction{}, action.WorldZoneExitAddAction{},
 	}
 }
 
@@ -67,12 +72,13 @@ func TestEveryActionReturnsItsOwnIDFromTheRegisterAndEveryNumberOfItIsUsed(t *te
 
 func TestTheNumbersOfTheIDsAndTheCooldownKeysAreFixedForTheFormatOfTheLog(t *testing.T) {
 	// A number that changes breaks every log that was written: add at the end, never renumber.
-	if WorldChatPrivateSendActionID != 1 || ZoneLayerCharacterMoveActionID != 7 ||
-		ZoneLayerItemEntityRemoveActionID != 15 {
+	if action.WorldChatPrivateSendActionID != 1 || action.ZoneLayerCharacterMoveActionID != 7 ||
+		action.ZoneLayerItemEntityRemoveActionID != 15 || action.WorldZoneAddActionID != 16 ||
+		action.ZoneZoneLayerAddActionID != 19 || action.WorldZoneExitAddActionID != 21 {
 		t.Fatal("the number of an action ID changed")
 	}
-	if ZoneLayerCharacterMoveActionCooldownKey != 1 ||
-		ZoneLayerCharacterNormalAttackTriggerActionCooldownKey != 2 {
+	if action.ZoneLayerCharacterMoveActionCooldownKey != 1 ||
+		action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey != 2 {
 		t.Fatal("the number of a cooldown key changed")
 	}
 	if registerSize(t, "cooldown_key.go") != 2 {

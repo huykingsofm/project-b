@@ -1,4 +1,4 @@
-package engine
+package engine_test
 
 import (
 	"reflect"
@@ -6,115 +6,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
+
+// resendFirstTicks is the default of unsettled_messages.resend_first_ticks: how many ticks a
+// message that went waits for its ack before it is sent again the first time.
+const resendFirstTicks = 20
 
 func toMessage(to sim.StateID, seq uint64) sim.Message {
 	return sim.NewActionMessage(to, onfail.Drop{}, toyAction{N: 1}).
 		Stamp(sim.Header{From: 1, Seq: seq, Tick: seq})
 }
 
-func TestAMessageThatWentWaitsForItsAckAndIsLetGoOfByTheNumberOfItsReceiver(t *testing.T) {
-	var o unsettledMessages
-	cfg := config.Defaults()
-	o.MarkSent(toMessage(2, 1), 5, cfg)
-	o.MarkSent(toMessage(3, 2), 5, cfg)
-	o.MarkSent(toMessage(2, 3), 5, cfg)
-	o.MarkSent(toMessage(2, 4), 5, cfg)
-	if got := o.Receivers(); len(got) != 2 || got[0] != 2 || got[1] != 3 {
-		t.Fatalf("Receivers = %v, want 2 and 3 once each, in order", got)
-	}
-	o.Ack(2, 3)
-	if got := o.Sent(); len(got) != 2 || got[0].Head().Seq != 2 || got[1].Head().Seq != 4 {
-		t.Fatalf("after an ack of 2 up to 3 the messages are %v: want numbers 2 and 4", got)
-	}
-	o.Ack(3, 1)  // not up to its message
-	o.Ack(9, 99) // a receiver it has no message for
-	if o.Len() != 2 {
-		t.Fatalf("Len = %d, want 2", o.Len())
-	}
-}
-
-func TestAMessageThatWentIsSentAgainAfterAWaitThatGrowsByTheStepUpToTheMost(t *testing.T) {
-	var o unsettledMessages
-	cfg := config.Defaults()
-	first := uint64(unsettledResendFirst.Get(cfg))
-	step := uint64(unsettledResendStep.Get(cfg))
-	most := uint64(unsettledResendMost.Get(cfg))
-	o.MarkSent(toMessage(2, 1), 100, cfg)
-	if len(o.Due(100+first-1)) != 0 || len(o.Due(100+first)) != 1 {
-		t.Fatalf("it is not due at %d and due at %d", 100+first-1, 100+first)
-	}
-	now := 100 + first
-	want := first
-	for range 40 { // far more than it takes to reach the most
-		o.Reschedule(0, now, cfg)
-		want = min(want+step, most)
-		if len(o.Due(now+want-1)) != 0 || len(o.Due(now+want)) != 1 {
-			t.Fatalf("the next wait is not %d ticks", want)
-		}
-		now += want
-	}
-	if want != most {
-		t.Fatalf("the wait stopped at %d, want the most, %d", want, most)
-	}
-}
-
-func TestRemoveLetsGoOfTheMessagesAtTheIndexesAndKeepsTheOrderOfTheRest(t *testing.T) {
-	var o unsettledMessages
-	cfg := config.Defaults()
-	for seq := uint64(1); seq <= 5; seq++ {
-		o.MarkSent(toMessage(2, seq), 0, cfg)
-	}
-	o.Remove([]int{1, 3})
-	got := o.Sent()
-	if len(got) != 3 || got[0].Head().Seq != 1 || got[1].Head().Seq != 3 || got[2].Head().Seq != 5 {
-		t.Fatalf("the messages are %v", got)
-	}
-}
-
-func TestUnsettledMessagesComeBackFromTheirBytesAndTheOnesThatWentAreSentAgain(t *testing.T) {
-	codecs, err := toyCodecs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var o unsettledMessages
-	o.AddUnsent(sim.NewActionMessage(2, onfail.Retry{}, toyAction{N: 3}))
-	o.MarkSent(toMessage(2, 7), 40, config.Defaults())
-	var w binary.Writer
-	if err := o.Encode(&w); err != nil {
-		t.Fatal(err)
-	}
-	r := binary.NewReader(w.B)
-	got, err := decodeUnsettledMessages(codecs, r, 1)
-	if err != nil || r.Left() != 0 {
-		t.Fatalf("error %v, %d bytes left", err, r.Left())
-	}
-	if len(got.Unsent()) != 1 || len(got.Sent()) != 1 || got.Sent()[0].Head().Seq != 7 {
-		t.Fatalf("it came back as %v and %v", got.Unsent(), got.Sent())
-	}
-	if len(got.Due(0)) != 1 {
-		t.Fatal("a message that went is not sent again at once after a restore")
-	}
-	for n := range w.B { // every proper prefix
-		if _, err := decodeUnsettledMessages(codecs, binary.NewReader(w.B[:n]), 1); err == nil {
-			t.Fatalf("%d of %d bytes were read", n, len(w.B))
-		}
-	}
-	var withoutSent binary.Writer
-	held := o.withoutSent()
-	if err := held.Encode(&withoutSent); err != nil || len(withoutSent.B) >= len(w.B) {
-		t.Fatalf("what the hash is given is not smaller: %d and %d, %v",
-			len(withoutSent.B), len(w.B), err)
-	}
-}
-
 func TestTheBoardOnlyGoesUp(t *testing.T) {
-	b := NewAckBoard()
+	b := engine.NewAckBoard()
 	b.Raise(2, 1, 5)
 	b.Raise(2, 1, 3)
 	if got := b.Acked(2, 1); got != 5 {
@@ -134,85 +43,81 @@ type aLogThatSaysWhatIsSafe struct {
 
 func (l *aLogThatSaysWhatIsSafe) Safe(engine sim.StateID) uint64 { return l.safe[engine] }
 
-func twoToysThatAckWhatIsSafe(t *testing.T) (*Cluster, *Engine[*toyState], *Engine[*toyState],
+func twoToysThatAckWhatIsSafe(t *testing.T) (*engine.Cluster, *engine.Engine[*toyState],
+	*engine.Engine[*toyState],
 	*aLogThatSaysWhatIsSafe) {
 	t.Helper()
 	env := newToyEnv(t)
 	log := &aLogThatSaysWhatIsSafe{safe: map[sim.StateID]uint64{}}
 	env.EventLog = log
 	c := newCluster(t, env)
-	a, b := New(&toyState{id: 1}, env, 1), New(&toyState{id: 2}, env, 1)
-	c.Add(a)
-	c.Add(b)
-	return c, a, b, log
+	engines := addToys(t, c, 2)
+	return c, engines[0], engines[1], log
 }
 
 func TestAMessageIsHeldAndSentAgainUntilItsReceiverSaysItIsSafeAndThenLetGoOf(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
-	held := &a.peer.data.unsettledMessages
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
-	c.Step()
-	if b.State().Total != 7 || held.Len() != 1 {
+	stepping.Step(c)
+	if b.State().Total != 7 || len(a.GetSentMessages()) != 1 {
 		t.Fatalf("b has %d and a holds %d, want 7 and 1",
-			b.State().Total, held.Len())
+			b.State().Total, len(a.GetSentMessages()))
 	}
-	sent := held.Sent()[0].Head()
+	sent := a.GetSentMessages()[0].Head()
 	if sent.From != 1 || sent.Tick != 1 {
 		t.Fatalf("the message went with the header %+v", sent)
 	}
 	for a.Tick() < first+2 { // b has not said it is safe: a sends the message again
-		c.Step()
+		stepping.Step(c)
 	}
 	if b.State().Total != 7 {
 		t.Fatalf("b took a second copy: it has %d", b.State().Total)
 	}
-	if held.Len() != 1 || held.Sent()[0].Head() != sent {
+	if len(a.GetSentMessages()) != 1 || a.GetSentMessages()[0].Head() != sent {
 		t.Fatalf("a holds %d messages, and the first has the header %+v, want it unchanged",
-			held.Len(), held.Sent()[0].Head())
+			len(a.GetSentMessages()), a.GetSentMessages()[0].Head())
 	}
 	log.safe[2] = b.Tick() // the tick at which b took it is safe
-	c.Step()               // b says it
-	c.Step()               // a reads it
-	if held.Len() != 0 {
-		t.Fatalf("a holds %d messages after the ack, want none", held.Len())
+	stepping.Step(c)       // b says it
+	stepping.Step(c)       // a reads it
+	if len(a.GetSentMessages()) != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", len(a.GetSentMessages()))
 	}
 }
 
 func TestAnAckOnlyCoversTheTicksThatAreSafe(t *testing.T) {
 	c, a, b, log := twoToysThatAckWhatIsSafe(t)
-	held := &a.peer.data.unsettledMessages
 	for _, tick := range []uint64{1, 4, 7} {
 		a.ScheduleAt(tick, forwardAction{To: 2, N: 1})
 	}
 	for range 8 {
-		c.Step()
+		stepping.Step(c)
 	}
-	if held.Len() != 3 || b.State().Total != 3 {
+	if len(a.GetSentMessages()) != 3 || b.State().Total != 3 {
 		t.Fatalf("a holds %d and b has %d, want 3 and 3",
-			held.Len(), b.State().Total)
+			len(a.GetSentMessages()), b.State().Total)
 	}
 	log.safe[2] = 5 // b took the messages at the ticks 1 and 4, which are safe, not the one at 7
-	c.Step()
-	c.Step()
-	if held.Len() != 1 || held.Sent()[0].Head().Tick != 7 {
+	stepping.Step(c)
+	stepping.Step(c)
+	if len(a.GetSentMessages()) != 1 || a.GetSentMessages()[0].Head().Tick != 7 {
 		t.Fatalf("a holds %d messages: want only the one that b took at tick 7",
-			held.Len())
+			len(a.GetSentMessages()))
 	}
 }
 
 func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
-	held := &a.peer.data.unsettledMessages
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
-	c.Step()
+	stepping.Step(c)
 	c.Env.Router.Retire(b.StateID())
 	for a.Tick() < first+3 {
-		c.Step()
+		stepping.Step(c)
 	}
-	if held.Len() != 0 {
-		t.Fatalf("a still holds %d messages for a receiver that is gone", held.Len())
+	if len(a.GetSentMessages()) != 0 {
+		t.Fatalf("a still holds %d messages for a receiver that is gone", len(a.GetSentMessages()))
 	}
 	returned := 0
 	for _, r := range c.Env.EventLog.(*aLogThatSaysWhatIsSafe).Records {
@@ -229,21 +134,21 @@ func TestAMessageThatCameBackFromAReceiverRemovedWhileItWaitedIsLetGoOfAtOnceAnd
 	t *testing.T,
 ) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
-	held := &a.peer.data.unsettledMessages
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
 	if err := a.Step(); err != nil { // a sends the message, which b has not taken yet
 		t.Fatal(err)
 	}
-	if held.Len() != 1 {
-		t.Fatalf("a holds %d messages after it sent one, want 1", held.Len())
+	if len(a.GetSentMessages()) != 1 {
+		t.Fatalf("a holds %d messages after it sent one, want 1", len(a.GetSentMessages()))
 	}
-	b.Remove() // what waits in the channel of b goes back to a
+	b.Retire() // what waits in the channel of b goes back to a
 	if err := a.Step(); err != nil {
 		t.Fatal(err)
 	}
-	if held.Len() != 0 {
-		t.Fatalf("a holds %d messages after the one it sent came back, want none", held.Len())
+	if len(a.GetSentMessages()) != 0 {
+		t.Fatalf("a holds %d messages after the one it sent came back, want none",
+			len(a.GetSentMessages()))
 	}
 	for a.Tick() < first+3 { // the tick at which it would be sent again goes by
 		if err := a.Step(); err != nil {
@@ -264,19 +169,19 @@ func TestAMessageThatCameBackFromAReceiverRemovedWhileItWaitedIsLetGoOfAtOnceAnd
 func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
-	c.Step()
+	stepping.Step(c)
 	data, err := b.Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := newToyEnv(t)
-	restored, err := restoreEngine[*toyState](data, env, 1)
+	restored, err := restoreEngine[*toyState](data, env)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// the state of b was restored from the checkpoint: what it took is in a place that no crash
 	// takes back, so a sender is told of it without waiting
-	if got := env.Acks.Acked(2, 1); got != a.peer.data.unsettledMessages.Sent()[0].Head().Seq {
+	if got := env.AckBoard.Acked(2, 1); got != a.GetSentMessages()[0].Head().Seq {
 		t.Fatalf("a restored b acks %d to a, want the number of the message it took", got)
 	}
 	if restored.State().Total != 7 {
@@ -292,14 +197,13 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	})
 	env.EventLog = log
 	c := newCluster(t, env)
-	first := New(&toyState{id: 1}, env, 1)
-	c.Add(first)
+	first := addToys(t, c, 1)[0]
 	for range 3 {
 		first.Send(toyCommand{N: 1})
-		c.Step()
+		stepping.Step(c)
 	}
 	// the configuration engine stays
-	if !c.Remove(1) || len(c.Engines()) != 1 {
+	if !c.RemoveEngine(1) || len(c.Engines()) != 1 {
 		t.Fatal("the engine was not removed")
 	}
 	reason, ok := env.Router.Deliver(toMessage(1, 1))
@@ -309,7 +213,7 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
-	codecs, err := toyCodecs()
+	codecs, _, err := toyCodecs()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +242,7 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 }
 
 func TestManyGoroutinesRaiseTheBoardAndItEndsAtTheGreatestNumber(t *testing.T) {
-	b := NewAckBoard()
+	b := engine.NewAckBoard()
 	var wg sync.WaitGroup
 	for g := range 8 {
 		wg.Go(func() {
@@ -357,7 +261,7 @@ func TestManyGoroutinesRaiseTheBoardAndItEndsAtTheGreatestNumber(t *testing.T) {
 // BenchmarkAckBoard is what every engine pays each tick to say what it holds and to read what its
 // receivers hold, on a board that all of them share.
 func BenchmarkAckBoard(b *testing.B) {
-	board := NewAckBoard()
+	board := engine.NewAckBoard()
 	b.RunParallel(func(pb *testing.PB) {
 		var seq uint64
 		for pb.Next() {

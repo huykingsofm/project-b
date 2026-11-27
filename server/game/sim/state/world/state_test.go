@@ -12,7 +12,7 @@ import (
 )
 
 func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *testing.T) {
-	st := world.NewState(1)
+	st := world.NewState()
 	add := func(char state.CharacterID, item state.ItemID, count uint32) uint32 {
 		return st.AddItemToCharacter(char, item, count, 3, 10)
 	}
@@ -58,7 +58,7 @@ func TestItemsFillTheCellsOfACharacterInOrderAndWhatDoesNotFitIsReturned(t *test
 }
 
 func TestOnlyWhatWasAddedIsTold(t *testing.T) {
-	st := world.NewState(1)
+	st := world.NewState()
 	st.AddItemToCharacter(1, 7, 15, 1, 10) // 10 fit, 5 do not
 	events := st.TakeEvents()
 	added, ok := events[0].(event.CharacterItemAdded)
@@ -73,7 +73,7 @@ func TestOnlyWhatWasAddedIsTold(t *testing.T) {
 
 // R29: nothing in a state is shared with its clone.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
-	st := world.NewState(1)
+	st := world.NewState()
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	before := st.Hash()
 	copied := st.Clone().(*world.State)
@@ -89,7 +89,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 }
 
 func TestAClonedWorldStateSharesNoMemoryWithTheState(t *testing.T) {
-	st := world.NewState(1)
+	st := world.NewState()
 	st.AddItemToCharacter(1, 7, 1, 3, 10)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "hi", 0))
 	if err := aliasing.Disjoint(st, st.Clone()); err != nil {
@@ -105,38 +105,44 @@ func TestTheTypesOfTheWorldStateObeyTheRuleOfData(t *testing.T) {
 	}
 }
 
-func TestAZoneLayerGetsAnIDOfItsTypeAndTheWorldKnowsIt(t *testing.T) {
-	st := world.NewState(1)
-	first, second := st.AddZoneLayer(), st.AddZoneLayer()
-	if first != sim.NewStateID(state.ZoneLayerType, 1) ||
-		second != sim.NewStateID(state.ZoneLayerType, 2) {
-		t.Fatalf("the IDs are %d and %d", first, second)
+func TestAZoneLayerThatTheClusterGaveAnIDIsKnownByTheWorldOnceAndOnlyIfOfItsType(t *testing.T) {
+	st := world.NewState()
+	first, second := sim.NewStateID(state.ZoneLayerType, 1), sim.NewStateID(state.ZoneLayerType, 2)
+	if !st.AddZoneLayer(first) || !st.AddZoneLayer(second) {
+		t.Fatal("a zonelayer was refused")
 	}
 	if got := st.ZoneLayerIDs(); len(got) != 2 || got[0] != first || got[1] != second {
 		t.Fatalf("the world knows %v", got)
 	}
+	for name, id := range map[string]sim.StateID{
+		"a zonelayer it knows": first,
+		"a zone":               sim.NewStateID(state.ZoneType, 1),
+		"the number 0":         sim.NewStateID(state.ZoneLayerType, 0),
+	} {
+		if st.AddZoneLayer(id) {
+			t.Errorf("%s was added", name)
+		}
+	}
+	if got := st.ZoneLayerIDs(); len(got) != 2 {
+		t.Fatalf("the world knows %v", got)
+	}
 }
 
-func TestAZoneLayerThatWasRemovedIsForgottenAndItsIDIsNeverGivenAgain(t *testing.T) {
-	st := world.NewState(1)
-	first := st.AddZoneLayer()
+func TestAZoneLayerThatWasRemovedIsForgotten(t *testing.T) {
+	st := world.NewState()
+	first := sim.NewStateID(state.ZoneLayerType, 1)
+	st.AddZoneLayer(first)
 	if !st.RemoveZoneLayer(first) {
 		t.Fatal("a zonelayer of the world was not removed")
 	}
 	if got := st.ZoneLayerIDs(); len(got) != 0 {
 		t.Fatalf("the world still knows %v", got)
 	}
-	for tick := uint64(1); tick <= 5; tick++ {
-		st.NextTick()
-		if got := st.AddZoneLayer(); got == first {
-			t.Fatalf("the ID of a zonelayer that was removed was given again at tick %d", tick)
-		}
-	}
 }
 
 func TestOnlyAZoneLayerOfTheWorldCanBeRemoved(t *testing.T) {
-	st := world.NewState(1)
-	st.AddZoneLayer()
+	st := world.NewState()
+	st.AddZoneLayer(sim.NewStateID(state.ZoneLayerType, 1))
 	for name, id := range map[string]sim.StateID{
 		"a zonelayer it never gave": sim.NewStateID(state.ZoneLayerType, 9),
 		"a zone":                    sim.NewStateID(state.ZoneType, 1),

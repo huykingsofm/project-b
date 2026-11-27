@@ -11,12 +11,12 @@ Conventions and how to run: [index](index.md). Behavior: [replay](../replay.md).
 
 | Benchmark | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| RunScenarioLive | 791,455 | 829,871 | 10,431 |
-| ReplayCluster | 1,000,028 | 845,355 | 11,476 |
+| RunScenarioLive | 826,387 | 841,917 | 10,565 |
+| ReplayCluster | 1,015,874 | 849,115 | 11,585 |
 
 - A replay runs 623 engine ticks, so about 1.6 µs for each, the building of the cluster included.
 - A replay costs about 1.3 times what the run does. It reads each log twice, once to index it and once to run it, works out every hash it compares, and hashes each message that it keeps for comparing; and it does not run the scenario's own sends. The plan (`PlanFrom`) reads each log once more, to work out the line, which this benchmark does not include.
-- `Cluster.Step` takes a copy of the list of engines under a lock, since an engine can be removed while it runs: about 100 allocations and 1.8 percent more for the scenario (777,380 to 791,455 ns/op).
+- `stepping.Step` (once `Cluster.Step`) takes a copy of the list of engines under a lock, since an engine can be removed while it runs: about 100 allocations and 1.8 percent more for the scenario (777,380 to 791,455 ns/op). The numbers above were taken before engines were made by the world, before a state held no ID, and before the map of a zone was written with its state; they are not taken again.
 - A replay has an `AckBoard`, so its engines hold their sent messages and send the unacked ones again (`resendUnackedMessages`), as a live engine does. Before and after: ReplayCluster 990,000 and 1,001,325 ns/op, ReplayFromTheCheckpoints 7.96 and 7.85 ms/op, ReplayFromTickZero 59.5 and 59.4 ms/op: no change on these worlds, which hold few messages that wait for an ack. A world with many messages that wait has not been measured.
 - What it keeps no longer grows with the log: a copy of an engine goes as soon as its last read is made, and the logs are read a tick at a time. A scenario this short cannot show it; `TestACopyIsLetGoOfAsSoonAsItsLastReadIsMade` shows that no copy is kept when the run is over.
 - What still grows with the log is the index: about 40 bytes for each message that was taken, a count for each copy that was read, and the keys of the messages that came back. For a log of 10 million messages that is about 400 MB; keeping the index on disk, or only for the messages that a sender and a receiver of the same tick range share, would take it off, when a log that long has to be replayed whole.

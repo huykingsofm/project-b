@@ -1,14 +1,15 @@
-package engine
+package engine_test
 
 import (
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 )
 
 func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuses(t *testing.T) {
-	in, out := NewChannel(1, 1)
+	in, out := engine.NewChannel(1, 1)
 	if out.StateID() != 1 {
 		t.Fatalf("id = %v", out.StateID())
 	}
@@ -23,7 +24,7 @@ func TestWhatTheOutgoingChannelSendsTheIncomingChannelReadsAndAFullChannelRefuse
 		t.Fatal("the incoming channel did not give what was sent")
 	}
 
-	r := ReturnedMessage{Message: m, Reason: sim.DeliveryFailureFull}
+	r := engine.ReturnedMessage{Message: m, Reason: sim.DeliveryFailureFull}
 	if !out.SendBack(r) {
 		t.Fatal("the returned message was refused")
 	}
@@ -39,8 +40,8 @@ func TestARouterSaysAnIDWithNoEngineIsNotStartedUntilItsEngineIsRetired(t *testi
 	message := func(to sim.StateID) sim.Message {
 		return sim.NewActionMessage(to, onfail.Drop{}, toyAction{N: 1})
 	}
-	_, out := NewChannel(5, 4)
-	rt := NewRouter()
+	_, out := engine.NewChannel(5, 4)
+	rt := engine.NewRouter()
 	if reason, ok := rt.Deliver(message(5)); ok || reason != sim.DeliveryFailureNotStarted {
 		t.Fatalf("an ID with no engine bounced as %v, %v", reason, ok)
 	}

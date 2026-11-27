@@ -41,7 +41,7 @@ platform/                           what any game that runs in ticks is made of;
   replay/                           plays a cluster again from the event logs and the checkpoints: the recovery line (the plan), the cut, the run
 server/
   cmd/world/                        a script that runs the whole flow
-  game/                             this game: the states, actions and commands, and the builder of the cluster
+  game/                             this game: the states, actions and commands
     sim/
       state/                        IDs of what lives in the states, Entity and the kinds, Vec (units), Rect, Dir, Audience
         world/ zone/ zonelayer/     the state of each scope, and below each an entity/ and an event/ package of its own

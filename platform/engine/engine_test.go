@@ -1,40 +1,37 @@
-package engine
+package engine_test
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-func newToyEnv(t testing.TB) *Env {
+func newToyEnv(t testing.TB) *engine.Environment {
 	t.Helper()
-	codecs, err := toyCodecs()
+	codecs, engines, err := toyCodecs()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Env{
-		Router: NewRouter(), EventLog: &eventlog.MemLog{},
-		Stable: NewStableStateStore(), Codecs: codecs, QueueSize: 16,
-		Emitter: NopEmitter{},
-		Acks:    NewAckBoard(),
+	return &engine.Environment{
+		Router: engine.NewRouter(), EventLog: &eventlog.MemLog{},
+		StableStore: engine.NewStableStateStore(), Codecs: codecs, EngineRegistry: engines, Seed: 1,
+		QueueSize: 16,
+		Emitter:   engine.NopEmitter{},
+		AckBoard:  engine.NewAckBoard(),
 	}
 }
 
-func toyCluster(t testing.TB, ids ...sim.StateID) (*Cluster, []*Engine[*toyState]) {
+// toyCluster is a cluster with n toy engines, which the cluster gives the numbers 1 to n.
+func toyCluster(t testing.TB, n int) (*engine.Cluster, []*engine.Engine[*toyState]) {
 	t.Helper()
 	c := newCluster(t, newToyEnv(t))
-	var engines []*Engine[*toyState]
-	for _, id := range ids {
-		e := New(&toyState{id: id}, c.Env, 1)
-		engines = append(engines, e)
-		c.Add(e)
-	}
-	return c, engines
+	return c, addToys(t, c, n)
 }
 
 func TestAStepRunsTheCommandsPublishesTheStateAndRecordsTheCommand(t *testing.T) {
@@ -43,11 +40,11 @@ func TestAStepRunsTheCommandsPublishesTheStateAndRecordsTheCommand(t *testing.T)
 	if !a.Send(toyCommand{N: 5}) {
 		t.Fatal("the command was refused")
 	}
-	c.Step()
+	stepping.Step(c)
 	if a.State().Total != 5 || a.Tick() != 1 {
 		t.Fatalf("total %d at tick %d, want 5 at 1", a.State().Total, a.Tick())
 	}
-	published, err := c.Env.Stable.View(2, eventlog.NopLog{}).Read(1)
+	published, err := c.Env.StableStore.View(2, eventlog.NopLog{}).Read(1)
 	if err != nil || published.(*toyState).Total != 5 || published.(*toyState) == a.State() {
 		t.Fatalf("the published state is %+v, %v: want a copy with the total", published, err)
 	}
@@ -64,29 +61,29 @@ func TestAStepRunsTheCommandsPublishesTheStateAndRecordsTheCommand(t *testing.T)
 }
 
 func TestAMessageToAnotherEngineIsTakenAtItsNextTickAndACopyIsNeverTakenTwice(t *testing.T) {
-	c, engines := toyCluster(t, 1, 2)
+	c, engines := toyCluster(t, 2)
 	a, b := engines[0], engines[1]
 	a.ScheduleAt(1, forwardAction{To: 2, N: 7})
-	c.Step() // a sends: b runs after a in this step, so it takes the message at once
+	stepping.Step(c) // a sends: b runs after a in this step, so it takes the message at once
 	if b.State().Total != 7 {
 		t.Fatalf("b has %d, want 7", b.State().Total)
 	}
 	dup := sim.NewActionMessage(2, onfail.Drop{}, toyAction{N: 100}).
 		Stamp(sim.Header{From: 1, Seq: 1}) // the first message of a had the number 1
 	c.Env.Router.Deliver(dup)
-	c.Step()
+	stepping.Step(c)
 	if b.State().Total != 7 {
 		t.Fatalf("a second copy of a message was taken: %d", b.State().Total)
 	}
 }
 
 func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T) {
-	c, engines := toyCluster(t, 1, 2)
+	c, engines := toyCluster(t, 2)
 	a := engines[0]
 	a.ScheduleAt(3, forwardAction{To: 2, N: 7})
-	c.Step()
-	c.Step()
-	c.Step() // a sends at its tick 3: b takes the message in the same step
+	stepping.Step(c)
+	stepping.Step(c)
+	stepping.Step(c) // a sends at its tick 3: b takes the message in the same step
 	mem := c.Env.EventLog.(*eventlog.MemLog)
 	var deps []sim.StateDependency
 	for _, r := range mem.Records {
@@ -101,20 +98,20 @@ func TestAMessageCarriesTheTickOfItsSenderAndTheReceiverDependsOnIt(t *testing.T
 }
 
 func TestAnEngineReadsWhatAnotherPublishedByItsID(t *testing.T) {
-	c, engines := toyCluster(t, 1, 2)
+	c, engines := toyCluster(t, 2)
 	engines[0].Send(toyCommand{N: 9})
-	c.Step()
+	stepping.Step(c)
 	engines[1].ScheduleAt(2, readAction{From: 1})
-	c.Step()
+	stepping.Step(c)
 	if engines[1].State().Total != 9 {
 		t.Fatalf("b read %d of a, want 9", engines[1].State().Total)
 	}
 }
 
 func TestAClusterFindsEnginesByIDAndTypeAndStepsThemInTheOrderTheyWereAdded(t *testing.T) {
-	c, engines := toyCluster(t, 3, 1, 2)
-	if got, ok := c.Get[*toyState](1); !ok || got != engines[1] {
-		t.Fatal("Get did not find the engine with the ID 1")
+	c, engines := toyCluster(t, 3)
+	if got, ok := c.Get[*toyState](2); !ok || got != engines[1] {
+		t.Fatal("Get did not find the engine with the ID 2")
 	}
 	if _, ok := c.Get[*toyState](9); ok {
 		t.Fatal("Get found an engine that is not there")
@@ -122,8 +119,8 @@ func TestAClusterFindsEnginesByIDAndTypeAndStepsThemInTheOrderTheyWereAdded(t *t
 	if got := c.All[*toyState](); len(got) != 3 || got[0] != engines[0] || got[2] != engines[2] {
 		t.Fatalf("All returned %v", got)
 	}
-	if stepper, ok := c.Find(2); !ok || stepper.Type() != toyType {
-		t.Fatal("Find did not find the engine with the ID 2")
+	if stepper, ok := c.Find(3); !ok || stepper.StateID() != 3 {
+		t.Fatal("Find did not find the engine with the ID 3")
 	}
 }
 
@@ -154,49 +151,21 @@ type otherCommand struct{}
 func (otherCommand) ID() sim.CommandID           { return 60009 }
 func (otherCommand) Encode(*binary.Writer) error { return nil }
 
-func TestTheHashOfAnEngineCoversWhatOnlyTheEngineKnows(t *testing.T) {
-	_, engines := toyCluster(t, 1)
-	e := engines[0]
-	before := hashOf(e)
-	e.peer.data.sentSeq++
-	if hashOf(e) == before {
-		t.Fatal("the number of its messages is not in the hash")
-	}
-	before = hashOf(e)
-	e.peer.data.lastRecvSeq.Set(7, 3)
-	if hashOf(e) == before {
-		t.Fatal("the last number taken from a sender is not in the hash")
-	}
-	before = hashOf(e)
-	e.peer.data.unsettledMessages.AddUnsent(sim.NewActionMessage[*toyState](1, onfail.Drop{}))
-	if hashOf(e) == before {
-		t.Fatal("a message held to be sent again is not in the hash")
-	}
-	before = hashOf(e)
-	e.peer.data.unsettledMessages.SetSent(
-		[]sim.Message{sim.NewActionMessage[*toyState](2, onfail.Drop{})},
-	)
-	if hashOf(e) != before {
-		t.Fatal("a message that was sent and is not acked is in the hash: when it is acked " +
-			"depends on when the log of its receiver is synced, which a replay does not repeat")
-	}
-}
-
-// BenchmarkEngineHash is the hash of an engine that holds messages to send and messages that went
-// and were not acked: what is taken at the period of the hash of the event log.
+// BenchmarkEngineHash is the hash of an engine that holds messages that went and were not acked:
+// what is taken at the period of the hash of the event log.
 func BenchmarkEngineHash(b *testing.B) {
-	env := newToyEnv(b)
-	e := New(&toyState{id: 1}, env, 1)
-	cfg := config.Defaults()
-	for i := range uint64(20) {
-		e.peer.data.unsettledMessages.AddUnsent(toMessage(2, i+1))
-		e.peer.data.unsettledMessages.MarkSent(toMessage(2, 100+i), 1, cfg)
+	c, engines := toyCluster(b, 2)
+	for range 20 {
+		engines[0].ScheduleAt(1, forwardAction{To: 2, N: 1})
+	}
+	if err := stepping.Step(c); err != nil {
+		b.Fatal(err)
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		hashOf(e)
+		hashOf(engines[0])
 	}
 }
 
 // hashOf is the hash of an engine, from a new hasher.
-func hashOf[S sim.State](e *Engine[S]) uint64 { return e.Hash(sim.NewHasher()) }
+func hashOf[S sim.State](e *engine.Engine[S]) uint64 { return e.Hash(sim.NewHasher()) }

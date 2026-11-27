@@ -1,11 +1,13 @@
-package engine
+package engine_test
 
 import (
 	"testing"
+
+	"github.com/huykingsofm/project-b/platform/engine"
 )
 
 func TestAPlanFromThePoolIsEmpty(t *testing.T) {
-	var pool PlanPool[*toyState]
+	var pool engine.PlanPool[*toyState]
 	p := pool.Get()
 	p.Append(toyAction{})
 	p.Next(4)
@@ -36,7 +38,7 @@ func TestAPlanFromThePoolIsEmpty(t *testing.T) {
 }
 
 func TestAPlanThatWasPutBackHoldsNoAction(t *testing.T) {
-	var pool PlanPool[*toyState]
+	var pool engine.PlanPool[*toyState]
 	p := pool.Get()
 	p.Append(toyAction{})
 	p.Append(toyAction{})

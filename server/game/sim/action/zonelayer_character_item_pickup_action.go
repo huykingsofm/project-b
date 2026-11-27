@@ -66,7 +66,7 @@ func (a ZoneLayerCharacterItemPickupAction) Apply(
 	s.RemoveItemEntity(item.ID())
 	// If the message cannot be delivered the item goes back to the ground as it was, by the same
 	// action that puts an item on the ground anywhere.
-	selfID := s.ID()
+	selfID := c.Self
 	undo := sim.NewActionMessage(
 		selfID,
 		onfail.Drop{},

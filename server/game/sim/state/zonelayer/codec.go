@@ -25,16 +25,15 @@ func count(r *binary.Reader) (uint64, error) {
 
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
-	id, zoneID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
-	worldID := r.Uint[sim.StateID]()
-	s := NewState(id, zoneID, worldID)
+	zoneID, worldID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
+	s := NewState(zoneID, worldID)
 	s.tick = r.Uvarint()
 	n, err := count(r)
 	if err != nil {
 		return nil, err
 	}
 	for range n {
-		e, err := entity.Decode(r, version, id)
+		e, err := entity.Decode(r, version)
 		if err != nil {
 			return nil, err
 		}
@@ -68,17 +67,9 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	}
 	for range n {
 		characterID := r.Uint[state.CharacterID]()
-		entityID := state.NewEntityID(id, r.Uvarint())
+		entityID := state.EntityID(r.Uvarint())
 		s.bodies.Link(characterID, entityID)
 	}
 	s.lastEntityID = r.Uvarint()
-	if err = r.Err(); err != nil {
-		return nil, err
-	}
-	for _, entityID := range s.entities.Keys() {
-		if entityID.Owner != id || entityID.Local == 0 || entityID.Local > s.lastEntityID {
-			return nil, fmt.Errorf("the entity %v was never given by the state %d", entityID, id)
-		}
-	}
-	return s, nil
+	return s, r.Err()
 }

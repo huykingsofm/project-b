@@ -1,9 +1,10 @@
-package engine
+package engine_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
@@ -28,7 +29,7 @@ func (a compensatedForwardAction) Apply(
 func (a compensatedForwardAction) Clone() sim.Action[*toyState] { return a }
 
 // returnedCount is how many messages came back to the engine, as its event log says.
-func returnedCount(c *Cluster, engine sim.StateID) int {
+func returnedCount(c *engine.Cluster, engine sim.StateID) int {
 	n := 0
 	for _, r := range c.Env.EventLog.(*aLogThatSaysWhatIsSafe).Records {
 		if r.Kind() == eventlog.KindReturned && r.Engine == engine {
@@ -38,7 +39,23 @@ func returnedCount(c *Cluster, engine sim.StateID) int {
 	return n
 }
 
-func stepAll(t *testing.T, engines []*Engine[*toyState], ticks int) {
+// waitingFor is how many messages wait in the channel of the engine, which takes none: it is found
+// by sending messages that cost nothing until the channel refuses one, and it is full after it.
+func waitingFor(t *testing.T, c *engine.Cluster, id sim.StateID) int {
+	t.Helper()
+	size := c.Env.QueueSize
+	for accepted := range size + 1 {
+		probe := sim.NewActionMessage[*toyState](id, onfail.Drop{}, toyAction{}).
+			Stamp(sim.Header{From: 98, Seq: uint64(accepted) + 1})
+		if _, ok := c.Env.Router.Deliver(probe); !ok {
+			return size - accepted
+		}
+	}
+	t.Fatal("the channel of the engine took more messages than it holds")
+	return 0
+}
+
+func stepAll(t *testing.T, engines []*engine.Engine[*toyState], ticks int) {
 	t.Helper()
 	for range ticks {
 		for _, e := range engines {
@@ -51,44 +68,42 @@ func stepAll(t *testing.T, engines []*Engine[*toyState], ticks int) {
 
 func threeToys(
 	t *testing.T,
-) (*Cluster, *Engine[*toyState], *Engine[*toyState], *Engine[*toyState]) {
+) (
+	*engine.Cluster, *engine.Engine[*toyState], *engine.Engine[*toyState],
+	*engine.Engine[*toyState],
+) {
 	t.Helper()
 	env := newToyEnv(t)
 	env.EventLog = &aLogThatSaysWhatIsSafe{safe: map[sim.StateID]uint64{}}
 	c := newCluster(t, env)
-	a, b, d := New(&toyState{id: 1}, env, 1), New(&toyState{id: 2}, env, 1),
-		New(&toyState{id: 3}, env, 1)
-	c.Add(a)
-	c.Add(b)
-	c.Add(d)
-	return c, a, b, d
+	engines := addToys(t, c, 3)
+	return c, engines[0], engines[1], engines[2]
 }
 
 func TestOnlyTheMessagesThatCameBackAreLetGoOfAndTheOnesForAnotherReceiverStay(t *testing.T) {
 	_, a, b, _ := threeToys(t)
-	held := &a.peer.data.unsettledMessages
 	a.ScheduleAt(1, forwardAction{To: 2, N: 1})
 	a.ScheduleAt(2, forwardAction{To: 2, N: 1})
 	a.ScheduleAt(3, forwardAction{To: 3, N: 1})
-	stepAll(t, []*Engine[*toyState]{a}, 3)
-	if held.Len() != 3 {
-		t.Fatalf("a holds %d messages, want 3", held.Len())
+	stepAll(t, []*engine.Engine[*toyState]{a}, 3)
+	if len(a.GetSentMessages()) != 3 {
+		t.Fatalf("a holds %d messages, want 3", len(a.GetSentMessages()))
 	}
-	b.Remove()
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	if held.Len() != 1 || held.Sent()[0].Dest() != 3 {
-		t.Fatalf("a holds %v: want only the message for engine 3", held.Sent())
+	b.Retire()
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	if len(a.GetSentMessages()) != 1 || a.GetSentMessages()[0].Dest() != 3 {
+		t.Fatalf("a holds %v: want only the message for engine 3", a.GetSentMessages())
 	}
 }
 
 func TestACompensationRunsOnceWhenTheReceiverIsRemovedWhileTheMessageWaits(t *testing.T) {
 	c, a, b, d := threeToys(t)
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	b.Remove()
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	b.Retire()
 	// far past the tick at which it would be sent again
-	stepAll(t, []*Engine[*toyState]{a, d}, int(first)+30)
+	stepAll(t, []*engine.Engine[*toyState]{a, d}, int(first)+30)
 	if d.State().Total != -7 {
 		t.Fatalf("engine 3 has %d, want one compensation: -7", d.State().Total)
 	}
@@ -99,19 +114,19 @@ func TestACompensationRunsOnceWhenTheReceiverIsRemovedWhileTheMessageWaits(t *te
 
 func TestAFullReceiverRefusesAtTheSendAndTheMessageGoesOnceWithANewNumber(t *testing.T) {
 	c, a, b, _ := threeToys(t)
-	held := &a.peer.data.unsettledMessages
 	size := c.Env.QueueSize
 	for range size + 1 { // one more than b's channel holds
 		a.ScheduleAt(1, forwardAction{To: 2, N: 1})
 	}
-	stepAll(t, []*Engine[*toyState]{a}, 1)
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
 	if got := returnedCount(c, 1); got != 1 {
 		t.Fatalf("%d messages came back at the send, want the 1 that did not fit", got)
 	}
-	if got := len(held.Sent()); got != size {
+	if got := len(a.GetSentMessages()); got != size {
 		t.Fatalf("a holds %d sent messages, want %d: the refused one never went", got, size)
 	}
-	stepAll(t, []*Engine[*toyState]{b, a, b}, 1) // b makes room, a sends the refused one again
+	stepAll(t, []*engine.Engine[*toyState]{b, a, b},
+		1) // b makes room, a sends the refused one again
 	if b.State().Total != int64(size)+1 {
 		t.Fatalf("b has %d, want %d: every message once", b.State().Total, size+1)
 	}
@@ -119,33 +134,31 @@ func TestAFullReceiverRefusesAtTheSendAndTheMessageGoesOnceWithANewNumber(t *tes
 
 func TestAMessageForAnEngineThatHasNotStartedIsSentAgainTheMostTimesAndThenDropped(t *testing.T) {
 	c, a, _, _ := threeToys(t)
-	held := &a.peer.data.unsettledMessages
 	most := sim.MaxAttempts.Get(config.Defaults())
 	a.ScheduleAt(1, forwardAction{To: 99, N: 1})
-	stepAll(t, []*Engine[*toyState]{a}, most+10)
+	stepAll(t, []*engine.Engine[*toyState]{a}, most+10)
 	// it is sent again `most` times, so it is tried once more than that
 	if got := returnedCount(c, 1); got != most+1 {
 		t.Fatalf("it came back %d times, want %d: the first try and %d tries again",
 			got, most+1, most)
 	}
-	if held.Len() != 0 || len(held.Unsent()) != 0 {
-		t.Fatalf("a still holds %d messages", held.Len())
+	if len(a.GetSentMessages()) != 0 {
+		t.Fatalf("a still holds %d messages", len(a.GetSentMessages()))
 	}
 }
 
 func TestAnAckThatComesBeforeAMessageIsDueStopsItFromBeingSentAgain(t *testing.T) {
-	c, a, b, _ := threeToys(t)
-	held := &a.peer.data.unsettledMessages
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	c, a, _, _ := threeToys(t)
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 1})
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	c.Env.Acks.Raise(2, 1, held.Sent()[0].Head().Seq)
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	if held.Len() != 0 {
-		t.Fatalf("a holds %d messages after the ack, want none", held.Len())
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	c.Env.AckBoard.Raise(2, 1, a.GetSentMessages()[0].Head().Seq)
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	if len(a.GetSentMessages()) != 0 {
+		t.Fatalf("a holds %d messages after the ack, want none", len(a.GetSentMessages()))
 	}
-	stepAll(t, []*Engine[*toyState]{a}, int(first)+5)
-	if got := len(b.peer.in.In); got != 1 {
+	stepAll(t, []*engine.Engine[*toyState]{a}, int(first)+5)
+	if got := waitingFor(t, c, 2); got != 1 {
 		t.Fatalf("%d messages wait for b, want the first only: an acked message is not sent again",
 			got)
 	}
@@ -153,25 +166,25 @@ func TestAnAckThatComesBeforeAMessageIsDueStopsItFromBeingSentAgain(t *testing.T
 
 func TestAMessageThatFindsTheChannelFullWhenItIsSentAgainWaitsAndIsNotReturned(t *testing.T) {
 	c, a, b, _ := threeToys(t)
-	held := &a.peer.data.unsettledMessages
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	size := c.Env.QueueSize
 	a.ScheduleAt(1, forwardAction{To: 2, N: 1})
 	for range size - 1 { // the channel of b is full, with the first message among them
 		a.ScheduleAt(2, forwardAction{To: 2, N: 1})
 	}
-	stepAll(t, []*Engine[*toyState]{a}, int(first)+3)
+	stepAll(t, []*engine.Engine[*toyState]{a}, int(first)+3)
 	if got := returnedCount(c, 1); got != 0 {
 		t.Fatalf("%d messages came back, want none: a full channel makes a copy wait", got)
 	}
-	if held.Len() != size {
-		t.Fatalf("a holds %d messages, want %d", held.Len(), size)
+	if len(a.GetSentMessages()) != size {
+		t.Fatalf("a holds %d messages, want %d", len(a.GetSentMessages()), size)
 	}
-	stepAll(t, []*Engine[*toyState]{b}, 1)
+	stepAll(t, []*engine.Engine[*toyState]{b}, 1)
 	if b.State().Total != int64(size) {
 		t.Fatalf("b has %d, want %d", b.State().Total, size)
 	}
-	stepAll(t, []*Engine[*toyState]{a, b}, 250) // every copy that is sent again is dropped by b
+	stepAll(t, []*engine.Engine[*toyState]{a, b},
+		250) // every copy that is sent again is dropped by b
 	if b.State().Total != int64(size) {
 		t.Fatalf("b has %d after copies came, want %d: a copy is taken once", b.State().Total, size)
 	}
@@ -180,30 +193,39 @@ func TestAMessageThatFindsTheChannelFullWhenItIsSentAgainWaitsAndIsNotReturned(t
 func TestACheckpointTakenAfterAMessageCameBackHoldsNoMessageForItAndAnEarlierOneDoes(t *testing.T) {
 	_, a, b, _ := threeToys(t)
 	a.ScheduleAt(1, forwardAction{To: 2, N: 1})
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	before := a.Checkpoint()
-	b.Remove()
-	stepAll(t, []*Engine[*toyState]{a}, 1)
-	after := a.Checkpoint()
-	if got := before.Peer.unsettledMessages.Len(); got != 1 {
-		t.Fatalf("the checkpoint before holds %d messages, want 1", got)
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	before, err := a.Checkpoint().Encode()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := after.Peer.unsettledMessages.Len(); got != 0 {
-		t.Fatalf("the checkpoint after holds %d messages, want none", got)
+	b.Retire()
+	stepAll(t, []*engine.Engine[*toyState]{a}, 1)
+	after, err := a.Checkpoint().Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for data, want := range map[string]int{string(before): 1, string(after): 0} {
+		r, err := restoreEngine[*toyState]([]byte(data), newToyEnv(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(r.GetSentMessages()); got != want {
+			t.Fatalf("a checkpoint holds %d messages, want %d", got, want)
+		}
 	}
 }
 
 func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRemoved(t *testing.T) {
 	c, a, b, d := threeToys(t)
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
 	// b takes nothing: the message is sent again, and two copies wait in its channel
-	stepAll(t, []*Engine[*toyState]{a}, int(first)+2)
-	if got := len(b.peer.in.In); got != 2 {
+	stepAll(t, []*engine.Engine[*toyState]{a}, int(first)+2)
+	if got := waitingFor(t, c, 2); got != 2 {
 		t.Fatalf("%d copies wait for b, want 2", got)
 	}
-	b.Remove()
-	stepAll(t, []*Engine[*toyState]{a, d}, int(first)+30)
+	b.Retire()
+	stepAll(t, []*engine.Engine[*toyState]{a, d}, int(first)+30)
 	if d.State().Total != -7 {
 		t.Fatalf("engine 3 has %d, want one compensation: -7", d.State().Total)
 	}
@@ -215,15 +237,15 @@ func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRemo
 func TestACopyOfAMessageThatWasTakenIsReturnedOnceWhenItsReceiverIsRemovedAndItsOnFailRunsOnce(
 	t *testing.T) {
 	c, a, b, d := threeToys(t)
-	first := uint64(unsettledResendFirst.Get(config.Defaults()))
+	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
-	stepAll(t, []*Engine[*toyState]{a, b}, 1) // b takes the message
+	stepAll(t, []*engine.Engine[*toyState]{a, b}, 1) // b takes the message
 	if b.State().Total != 7 {
 		t.Fatalf("b has %d, want 7", b.State().Total)
 	}
-	stepAll(t, []*Engine[*toyState]{a}, int(first)+1) // no ack: a sends it again
-	b.Remove()                                        // the copy goes back to a
-	stepAll(t, []*Engine[*toyState]{a, d}, int(first)+30)
+	stepAll(t, []*engine.Engine[*toyState]{a}, int(first)+1) // no ack: a sends it again
+	b.Retire()                                               // the copy goes back to a
+	stepAll(t, []*engine.Engine[*toyState]{a, d}, int(first)+30)
 	// the state of b is gone with it, so what the message did is gone: its sender undoes it, once
 	if d.State().Total != -7 {
 		t.Fatalf("engine 3 has %d, want one compensation: -7", d.State().Total)

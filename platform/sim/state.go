@@ -12,8 +12,9 @@ import (
 // of a message. Its 8 high bits are the StateType and its 56 low bits a number that is local to the
 // type, so the type of a state is known from its ID and two states of different types never have
 // the same ID. A StateID is never given again: the number of a type is counted up and not taken
-// back. A thing that lives inside a state, such as an entity, takes an ID of its own that has the
-// ID of its state in it, so that it is unique as well (see EntityID in the game).
+// back. The ID belongs to the engine, not to the state: a state does not hold its own ID, and what
+// it needs of it an action is given (Context.Self). A thing that lives inside a state, such as an
+// entity, is named by a number that is local to its state.
 type StateID uint64
 
 // MaxLocalStateID is the greatest number that is local to a type: 2^56 - 1.
@@ -83,11 +84,10 @@ type Event any
 // The engine runs the actions of its state, publishes a Snapshot of it at the end of every tick for
 // the other engines to read, and writes it to a checkpoint.
 //
-// A state is data and nothing else: it holds no function, channel or connection, and it never
-// reaches another engine. A state of another engine is found by its StateID in a StableView.
+// A state is data and nothing else: it holds no function, channel or connection, no ID of its own,
+// and it never reaches another engine. A state of another engine is found by its StateID in a
+// StableView.
 type State interface {
-	// ID is the ID of the state.
-	ID() StateID
 	// Type is the type of the state. It must return the same number for every value, including a
 	// nil pointer, because the type of a state is asked of its Go type alone (see StateTypeOf).
 	Type() StateType

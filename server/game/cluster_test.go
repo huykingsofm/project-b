@@ -2,7 +2,6 @@ package game_test
 
 import (
 	"context"
-	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	"slices"
 	"testing"
 	"time"
@@ -11,16 +10,14 @@ import (
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldevent "github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	zoneevent "github.com/huykingsofm/project-b/server/game/sim/state/zone/event"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 	zonelayerevent "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
-	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 )
 
@@ -227,35 +224,9 @@ func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
 	}
 }
 
-func TestAnExitToAZoneThatIsNotBuiltDoesNothing(t *testing.T) {
-	exit := tilemap.ExitDefinition{
-		Min:      tilemap.Tile{X: 9, Y: 0},
-		Max:      tilemap.Tile{X: 9, Y: 4},
-		ToZoneID: 77,
-		Arrival:  tilemap.Tile{X: 1, Y: 1},
-	}
-	c, err := game.NewBuilder().
-		WithSeed(1).
-		WithWorld(game.WorldParams{ID: testkit.World}).
-		WithZone(
-			game.ZoneParams{
-				ID: testkit.Zone1,
-				Tiles: tilemaptest.New(
-					t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, []tilemap.ExitDefinition{exit},
-				),
-			},
-		).
-		WithZone(
-			game.ZoneParams{
-				ID:    testkit.Zone2,
-				Tiles: tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil),
-			},
-		).
-		WithZoneLayers(game.ZoneLayerParams{ZoneID: testkit.Zone1, Count: 1, Capacity: 4}).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestAnExitToAZoneThatWasRemovedDoesNothing(t *testing.T) {
+	c, _, _ := testkit.NewWorld(t, 1, 0)
+	c.Cluster.RemoveEngine(testkit.Zone2)
 	testkit.WalkToTheEastExit(t, c, 1)
 	c.ZoneLayer(testkit.Layer1).Send(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
@@ -437,7 +408,7 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		// a new view each time: it keeps what it reads
-		view := c.Env.Stable.View(testkit.Zone1, eventlog.NopLog{})
+		view := c.Env.StableStore.View(testkit.Zone1, eventlog.NopLog{})
 		if layerCount(view, testkit.Layer1) == 1 && layerCount(view, testkit.Layer3) == 1 {
 			break
 		}

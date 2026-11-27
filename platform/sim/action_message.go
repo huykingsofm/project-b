@@ -10,7 +10,6 @@ type ActionMessage[S State] struct {
 	Actions  []Action[S]
 	onFail   OnFail
 	attempts int
-	subject  any
 }
 
 // NewActionMessage makes a message for the engine with the ID, which has a state of type S.
@@ -21,22 +20,14 @@ func NewActionMessage[S State](to StateID, onFail OnFail, actions ...Action[S]) 
 func newActionMessage[S State](
 	to StateID, onFail OnFail, actions []Action[S],
 ) *ActionMessage[S] {
-	m := &ActionMessage[S]{To: to, Actions: actions, onFail: onFail}
-	for _, a := range actions {
-		if actor := a.Actor(); actor != nil {
-			m.subject = actor
-			break
-		}
-	}
-	return m
+	return &ActionMessage[S]{To: to, Actions: actions, onFail: onFail}
 }
 
 var _ Message = (*ActionMessage[State])(nil)
 
-// Dest, Head, Subject, OnFail and Attempts make an ActionMessage a Message.
+// Dest, Head, OnFail and Attempts make an ActionMessage a Message.
 func (m *ActionMessage[S]) Dest() StateID  { return m.To }
 func (m *ActionMessage[S]) Head() Header   { return m.Header }
-func (m *ActionMessage[S]) Subject() any   { return m.subject }
 func (m *ActionMessage[S]) OnFail() OnFail { return m.onFail }
 func (m *ActionMessage[S]) Attempts() int  { return m.attempts }
 

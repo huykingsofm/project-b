@@ -1,19 +1,20 @@
-package event
+package event_test
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zone/event"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
 // allEvents has an event of every kind of the package, for the tests that look at all of them.
-var allEvents = []Event{ChatMessageSent{}}
+var allEvents = []event.Event{event.ChatMessageSent{}, event.ExitAdded{}}
 
 func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 	all := allEvents
-	seen := map[ID]Event{}
+	seen := map[event.ID]event.Event{}
 	for _, e := range all {
 		if e.ID() == 0 {
 			t.Fatalf("%T has the ID 0", e)
@@ -25,9 +26,11 @@ func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 	}
 }
 
-func TestAZoneMessageGoesToEveryoneInTheZone(t *testing.T) {
-	if got := (ChatMessageSent{}).Audience(); got.Kind != state.EveryoneKind {
-		t.Fatalf("the audience is %+v, want everyone", got)
+func TestAZoneMessageAndAnExitGoToEveryoneInTheZone(t *testing.T) {
+	for _, e := range allEvents {
+		if got := e.Audience(); got.Kind != state.EveryoneKind {
+			t.Fatalf("%T: the audience is %+v, want everyone", e, got)
+		}
 	}
 }
 

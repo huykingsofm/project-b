@@ -40,7 +40,7 @@ func (a ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State
 
 // Apply takes the character out and sends it to the zonelayer that has room.
 func (a ZoneLayerCharacterExitToAction) Apply(
-	_ *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
@@ -71,7 +71,7 @@ func (a ZoneLayerCharacterExitToAction) Apply(
 		character, _ := s.RemoveCharacterEntity(a.CharacterID)
 		// If the message cannot be delivered the character is put back where it was, by the same
 		// action that puts it anywhere.
-		selfID, back := s.ID(), body.Position()
+		selfID, back := c.Self, body.Position()
 		undo := sim.NewActionMessage(
 			selfID, onfail.Drop{}, ZoneLayerCharacterEnterAction{Character: character, At: back},
 		)

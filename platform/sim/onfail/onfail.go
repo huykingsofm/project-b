@@ -17,7 +17,6 @@ const (
 	RetryID sim.OnFailID = iota + 1
 	RedirectID
 	CompensateID
-	NotifyID
 	EscalateID
 	DropID
 )
@@ -48,7 +47,6 @@ func Register(c *sim.Codecs) error {
 		c.RegisterOnFail(Retry{}, decodeRetry),
 		c.RegisterOnFail(Redirect{}, decodeRedirect),
 		c.RegisterOnFail(Compensate{}, decodeCompensate),
-		c.RegisterOnFail(Notify{}, decodeNotify),
 		c.RegisterOnFail(Escalate{}, decodeEscalate),
 		c.RegisterOnFail(Drop{}, decodeDrop),
 	)

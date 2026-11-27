@@ -7,7 +7,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | Layer | Holds | Code |
 |---|---|---|
 | platform | the interfaces `State`, `Action[S]`, `Command[S]`, `Message`; the plan, the scheduler, the registry an action is given, the codecs; the engine `Engine[S]` that runs any state; the router, the store of published states, the event log and the replay runner | `platform/sim`, `platform/engine`, `platform/eventlog` |
-| game | the three states below, their events, the actions and commands that change them, the tile map, the builder of the cluster | `server/game` |
+| game | the three states below, their events, the actions and commands that change them, the tile map, and the commands and actions that make the zones and zonelayers (`WorldZoneAdd`, `WorldZoneLayerAdd`) | `server/game` |
 | shared | libraries that import nothing of the project | `shared` |
 
 - The platform imports nothing of the game (R1, R2). The game imports the platform, and `server/cmd` wires them.
@@ -28,7 +28,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 ## State and events
 
 - A state is data. Every field of a state, and of every value it holds (a character, an entity, a message, an inventory slot), is private: it is read with a method and changed only by a method that the state offers, and the methods that change it write the events. A value is made by a constructor (`NewCharacter`, `NewChatMessage`, `NewPrivateChatMessage`) and its setters are for what is not yet in a state.
-- A state implements `sim.State`: `ID()`, `Type()`, `Tick()`, `NextTick()`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`.
+- A state implements `sim.State`: `Type()`, `Tick()`, `NextTick()`, `Clone()` (a copy for the other engines to read, behind the interface), `Hash()`, `Encode` and `TakeEvents()`. It holds no ID of its own: the ID is the engine's (`Context.Self` for an action, the header of a checkpoint). A state that takes the answers of its cluster (the world) also implements `sim.DirectiveHandler`.
 - The events are the list of what a client should hear (`sim.Events[E]` holds a `[]E`). They are not cloned or published.
 - Every event has `Audience()`:
 
@@ -59,7 +59,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 | When a tick fails | What happens |
 |---|---|
-| `Cluster.Step` | the router stops (every message bounces as `DeliveryFailureStopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
+| `stepping.Step` | the router stops (every message bounces as `DeliveryFailureStopping`), the engines after the one that failed do not run, and the error is returned, wrapped |
 | `Cluster.Run` | the engine that failed retires and returns its error; every other engine stops as if the context had ended; the error is logged once, by `Run` |
 | an engine is made | it starts at the tick of its state; `DecodeEngineCheckpoint` and `EngineCheckpoint.Restore` refuse a checkpoint whose state is not at the tick in its header |
 
@@ -100,13 +100,14 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Engine
 
-`platform/engine`; the cluster of this game is built in `server/game`.
+`platform/engine`; the cluster of this game is made by the code that runs it (`cmd/world`, `server/game/testkit`): it adds the world, and the world asks for the rest ([engine lifecycle](engine_lifecycle.md)).
 
 | Part | What it is |
 |---|---|
 | `Engine[S]` | one per state, each on its own goroutine; the same code for every type of state |
-| `Cluster`, `Env` | the engines, in the order they were added (the order of `Step`), and what they share |
-| `game.ClusterBuilder` | `NewBuilder`, `With...`, `Build`: builds the cluster of this game; gives every state its ID |
+| `Cluster`, `Environment` | the engines, in the order they were added, and what they share (the router, the published states, the log, the codecs, the registry of engines, the seed) |
+| `engine.EngineRegistry` | how an engine is made from a state, or from a checkpoint, of each type; the game registers its types in `game.NewCodecsAndEngines` |
+| `stepping.Step` | runs one tick of every engine, one after the other, for a script or a test that needs the same run every time |
 | `Router` | carries messages between engines through `OutgoingChannel` |
 | `peer` | what an engine has to talk to the other engines: the `IncomingChannel`, the router, the `StableView`, the bouncer, the numbers of the messages, the unsettled messages and the acks; the engine itself holds its random numbers, its configuration and its event log |
 | `StableStateStore` | the latest published state of every engine, whatever its type |
@@ -115,7 +116,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | `eventlog.Log` | records the input from outside and the state hash (sparse, offset per engine, and at each checkpoint); `EndTick` says an engine is done with a tick; `eventlog.MemLog` keeps the records in memory, `eventlog.FileLog` writes them to files ([eventlog](eventlog.md)) |
 | `CheckpointWriter` | writes the checkpoints that the engines take at the end of a tick, out of their goroutines; `checkpoint.FileWriter` writes them to files ([checkpoint](checkpoint.md)) |
 | `PlanPool[S]` | one per type of state |
-| `sim.Codecs` | the registers that read back states, actions, commands and kinds of `OnFail`; the game fills them (`game.NewCodecs`) and puts them in `Env` |
+| `sim.Codecs` | the registers that read back states, actions, commands and kinds of `OnFail`; the game fills them (`game.NewCodecsAndEngines`) and puts them in `Environment` |
 
 ## Plan
 

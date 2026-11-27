@@ -129,3 +129,37 @@ func TestAnyInRangeAtTheEdgesOfWords(t *testing.T) {
 		}
 	}
 }
+
+func TestWordsComeBackAsTheSameBitsAndACloneSharesNothing(t *testing.T) {
+	for _, k := range []int{0, 1, 63, 64, 65, 200} {
+		a := mustNew(t, k)
+		for i := 0; i < k; i += 3 {
+			a.Set(i)
+		}
+		back, err := bitset.FromWords(k, a.Words())
+		if err != nil || back.Len() != k || back.Count() != a.Count() {
+			t.Fatalf("k=%d: got %v, error %v", k, back, err)
+		}
+		for i := range k {
+			if back.Get(i) != a.Get(i) {
+				t.Fatalf("k=%d: bit %d differs", k, i)
+			}
+		}
+		clone := a.Clone()
+		clone.Set(1)
+		clone.Clear(0)
+		if k > 1 && (a.Get(1) || !a.Get(0)) {
+			t.Fatalf("k=%d: a change of the clone changed the array", k)
+		}
+	}
+}
+
+func TestWordsThatTheLengthDoesNotTakeAreRefusedAndBitsPastTheEndAreCleared(t *testing.T) {
+	if _, err := bitset.FromWords(65, []uint64{1}); !errors.Is(err, bitset.ErrWords) {
+		t.Fatalf("one word for 65 bits: %v", err)
+	}
+	a, err := bitset.FromWords(3, []uint64{^uint64(0)})
+	if err != nil || a.Count() != 3 {
+		t.Fatalf("got %v, error %v: the bits past the end must not count", a, err)
+	}
+}

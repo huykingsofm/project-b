@@ -1,7 +1,6 @@
 package zone
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -26,28 +25,25 @@ func count(r *binary.Reader) (uint64, error) {
 	return n, nil
 }
 
-// DecodeState reads what State.Encode wrote, of the data version given. The map of the zone is the
-// one that tilesOf gives for its ID.
-func DecodeState(
-	r *binary.Reader, version codec.Version,
-	tilesOf func(zoneID sim.StateID) *tilemap.TileMap,
-) (*State, error) {
+// DecodeState reads what State.Encode wrote, of the data version given.
+func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	s := &State{
-		id: r.Uint[sim.StateID](), worldID: r.Uint[sim.StateID](), tick: r.Uvarint(),
+		worldID: r.Uint[sim.StateID](), tick: r.Uvarint(),
 		chat: ring.New[ChatMessage](chatKeep),
 	}
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	if s.tiles = tilesOf(s.id); s.tiles == nil {
-		return nil, errors.New("zone: there is no map for the zone")
+	var err error
+	if s.tiles, err = tilemap.Decode(r, version); err != nil {
+		return nil, err
 	}
 	n, err := count(r)
 	if err != nil {
 		return nil, err
 	}
 	for range n {
-		e, err := entity.Decode(r, version, s.id)
+		e, err := entity.Decode(r, version)
 		if err != nil {
 			return nil, err
 		}
@@ -73,13 +69,5 @@ func DecodeState(
 		s.chat.Add(row)
 	}
 	s.lastEntityID = r.Uvarint()
-	if err = r.Err(); err != nil {
-		return nil, err
-	}
-	for _, entityID := range s.entities.Keys() {
-		if entityID.Owner != s.id || entityID.Local == 0 || entityID.Local > s.lastEntityID {
-			return nil, fmt.Errorf("the entity %v was never given by the state %d", entityID, s.id)
-		}
-	}
-	return s, nil
+	return s, r.Err()
 }

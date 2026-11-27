@@ -70,11 +70,6 @@ func DecodeEngineCheckpoint[S sim.State](
 			"%d: the state is a %T, not the one asked for", id, decoded,
 		)
 	}
-	if state.ID() != id {
-		return EngineCheckpoint[S]{}, fmt.Errorf(
-			"%d: the state is of the engine %d", id, state.ID(),
-		)
-	}
 	if state.Tick() != tick {
 		return EngineCheckpoint[S]{}, fmt.Errorf(
 			"%d: %w: the state is at tick %d, and the checkpoint at %d",
@@ -124,22 +119,16 @@ func (c EngineCheckpoint[S]) Encode() ([]byte, error) {
 
 // Restore makes the engine of the checkpoint, in the environment given, at the tick of the
 // checkpoint, and registers it in the router of the environment as New does. The engine takes what
-// the checkpoint holds: the checkpoint is not used after. One whose state is not of its engine or
-// not at its tick is an error, and registers nothing.
-func (c EngineCheckpoint[S]) Restore(env *Env, seed uint64) (*Engine[S], error) {
-	if c.State.ID() != c.ID {
-		return nil, fmt.Errorf("%d: the state is of the engine %d", c.ID, c.State.ID())
-	}
+// the checkpoint holds: the checkpoint is not used after. One whose state is not at its tick is an
+// error, and registers nothing.
+func (c EngineCheckpoint[S]) Restore(env *Environment) (*Engine[S], error) {
 	if c.State.Tick() != c.Tick {
 		return nil, fmt.Errorf(
 			"%d: %w: the state is at tick %d, and the checkpoint at %d",
 			c.ID, ErrTickMismatch, c.State.Tick(), c.Tick,
 		)
 	}
-	if c.Rand == nil {
-		return nil, fmt.Errorf("%d: the checkpoint has no random numbers", c.ID)
-	}
-	e := New(c.State, env, seed)
+	e := NewEngine(c.State, c.ID, env)
 	e.tick = c.Tick
 	e.actionScheduler = c.ActionScheduler
 	e.rng = c.Rand

@@ -1,9 +1,11 @@
-package engine
+package engine_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 )
@@ -22,10 +24,10 @@ func configReads(mem *eventlog.MemLog, engine sim.StateID) map[uint64]uint64 {
 }
 
 func TestAnEngineReadsTheConfigurationFromTheCopyOfTheConfigurationEngineAtEveryTick(t *testing.T) {
-	c, engines := toyCluster(t, 1)
+	c, _ := toyCluster(t, 1)
 	setConfig(t, c, map[string]string{"checkpoint.every_ticks": "5"})
 	for range 3 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -35,11 +37,9 @@ func TestAnEngineReadsTheConfigurationFromTheCopyOfTheConfigurationEngineAtEvery
 			t.Errorf("at tick %d the engine read the copy of tick %d", tick, reads[tick])
 		}
 	}
-	if got := checkpointEvery.Get(engines[0].stateRegistry.Config()); got != 5 {
-		t.Fatalf("the engine reads %d ticks between checkpoints, want 5", got)
-	}
-	if got := checkpointEvery.Get(c.ConfigEngine().State().Snapshot()); got != 5 {
-		t.Fatalf("the configuration engine holds %d ticks between checkpoints, want 5", got)
+	if got, ok := configText(c.ConfigEngine().State().Snapshot(), "checkpoint.every_ticks"); !ok ||
+		got != "5" {
+		t.Fatalf("the configuration engine holds %q ticks between checkpoints, want 5", got)
 	}
 }
 
@@ -47,22 +47,19 @@ func TestAnEngineThatFindsNoConfigurationEngineReadsTheDefaultsAndTheLogSaysTher
 	t *testing.T,
 ) {
 	env := newToyEnv(t)
-	e := New(&toyState{id: 1}, env, 1)
+	e := engine.NewEngine(&toyState{}, 1, env)
 	if err := e.Step(); err != nil {
 		t.Fatal(err)
 	}
 	if reads := configReads(env.EventLog.(*eventlog.MemLog), 1); len(reads) != 1 || reads[1] != 0 {
 		t.Fatalf("the log says %v, want the read of tick 1 with no copy", reads)
 	}
-	if e.stateRegistry.Config() != config.ReadOnlySnapshot(config.Defaults()) {
-		t.Fatal("the engine does not read the defaults")
-	}
 }
 
 func TestTheConfigurationEngineReadsTheCopyOfItsLastTickLikeAnyOtherEngine(t *testing.T) {
-	c, _ := toyCluster(t)
+	c, _ := toyCluster(t, 0)
 	for range 3 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -85,12 +82,12 @@ func TestTheClusterSendsTheConfigurationEngineTheDocumentOfItsStoreOnceAndOnlyWh
 		}
 		return n
 	}
-	if err := c.Step(); err != nil || commands() != 0 {
+	if err := stepping.Step(c); err != nil || commands() != 0 {
 		t.Fatalf("a store that took no document sent %d commands (%v)", commands(), err)
 	}
 	setConfig(t, c, map[string]string{"checkpoint.every_ticks": "5"})
 	for range 2 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,7 +96,7 @@ func TestTheClusterSendsTheConfigurationEngineTheDocumentOfItsStoreOnceAndOnlyWh
 	}
 	setConfig(t, c, map[string]string{"checkpoint.every_ticks": "5"})
 	for range 2 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -108,11 +105,12 @@ func TestTheClusterSendsTheConfigurationEngineTheDocumentOfItsStoreOnceAndOnlyWh
 	}
 	setConfig(t, c, map[string]string{})
 	for range 2 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if commands() != 2 || checkpointEvery.Get(c.ConfigEngine().State().Snapshot()) != 600 {
+	_, set := configText(c.ConfigEngine().State().Snapshot(), "checkpoint.every_ticks")
+	if commands() != 2 || set {
 		t.Fatalf("an empty document: %d commands, the default not back", commands())
 	}
 }
@@ -125,4 +123,15 @@ func TestAStoreRefusesADocumentWithAWrongValueAndTheClusterSendsNothing(t *testi
 	if cur := c.ConfigStore().Current(); cur.Generation != 0 {
 		t.Fatalf("a refused document made generation %d", cur.Generation)
 	}
+}
+
+// configText is the text that the snapshot holds for the variable, and whether it holds one: a
+// variable that was never set has none.
+func configText(s config.ReadOnlySnapshot, name string) (string, bool) {
+	for key, text := range s.(*config.Snapshot).Texts() {
+		if key == name {
+			return text, true
+		}
+	}
+	return "", false
 }

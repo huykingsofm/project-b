@@ -1,4 +1,4 @@
-package action
+package action_test
 
 import (
 	"go/ast"
@@ -10,19 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
 // allActions has a value of every action of the package, for the tests that look at all of them.
 var allActions = []any{
-	WorldChatPrivateSendAction{}, WorldCharacterItemAddAction{},
-	ZoneChatSendAction{}, ZoneCharacterEnterAction{},
-	ZoneLayerChatSendAction{}, ZoneLayerCharacterEnterAction{}, ZoneLayerCharacterMoveAction{},
-	ZoneLayerCharacterNormalAttackTriggerAction{}, ZoneLayerCharacterDamageAction{},
-	ZoneLayerCharacterShieldGrantAction{},
-	ZoneLayerCharacterRegenAction{}, ZoneLayerCharacterExitToAction{},
-	ZoneLayerCharacterItemPickupAction{},
-	ZoneLayerItemEntityAddAction{}, ZoneLayerItemEntityRemoveAction{},
+	action.WorldChatPrivateSendAction{}, action.WorldCharacterItemAddAction{},
+	action.ZoneChatSendAction{}, action.ZoneCharacterEnterAction{},
+	action.ZoneLayerChatSendAction{}, action.ZoneLayerCharacterEnterAction{},
+	action.ZoneLayerCharacterMoveAction{},
+	action.ZoneLayerCharacterNormalAttackTriggerAction{}, action.ZoneLayerCharacterDamageAction{},
+	action.ZoneLayerCharacterShieldGrantAction{},
+	action.ZoneLayerCharacterRegenAction{}, action.ZoneLayerCharacterExitToAction{},
+	action.ZoneLayerCharacterItemPickupAction{},
+	action.ZoneLayerItemEntityAddAction{}, action.ZoneLayerItemEntityRemoveAction{},
+	action.WorldZoneAddAction{}, action.WorldZoneLayerAddAction{},
+	action.ZoneLayerAnnounceToZoneAction{},
+	action.ZoneZoneLayerAddAction{}, action.ZoneExitAddAction{}, action.WorldZoneExitAddAction{},
 }
 
 func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {

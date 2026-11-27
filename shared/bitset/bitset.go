@@ -94,3 +94,32 @@ func (a *Array) AnyInRange(lo, n int) bool {
 	}
 	return false
 }
+
+// Words returns the bits as the words they are kept in, bit 0 the lowest bit of the first word: a
+// copy, which the caller may keep. FromWords reads it back.
+func (a *Array) Words() []uint64 { return append([]uint64(nil), a.words...) }
+
+// ErrWords is returned by FromWords for a number of words that k bits do not take.
+var ErrWords = errors.New("bitset: the number of words is not the one the length takes")
+
+// FromWords makes an Array of k bits from the words that Words gave; it keeps its own copy. The
+// bits past k in the last word are cleared.
+func FromWords(k int, words []uint64) (*Array, error) {
+	a, err := New(k)
+	if err != nil {
+		return nil, err
+	}
+	if len(words) != len(a.words) {
+		return nil, ErrWords
+	}
+	copy(a.words, words)
+	if rest := uint(k) & 63; rest != 0 && len(a.words) > 0 {
+		a.words[len(a.words)-1] &= 1<<rest - 1
+	}
+	return a, nil
+}
+
+// Clone returns a copy that shares nothing with the Array.
+func (a *Array) Clone() *Array {
+	return &Array{words: append([]uint64(nil), a.words...), k: a.k}
+}

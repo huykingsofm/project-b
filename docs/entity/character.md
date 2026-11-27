@@ -8,7 +8,7 @@ The fields are private; the body is a value, and a method that changes it return
 
 | Method | Returns | Meaning |
 |---|---|---|
-| `ID()` | `EntityID` | made of the ID of the zonelayer and the number it counted |
+| `ID()` | `EntityID` | the number the zonelayer counted |
 | `KindID()` | `KindID` | `CharacterKindID` |
 | `Position()` | `Vec` | position, in units |
 | `Radius()` | `int32` | radius, in units; the body is a square that reaches `Radius` units from `Position` on every side, of any size (a boss may cover many tiles) |
@@ -18,7 +18,7 @@ The fields are private; the body is a value, and a method that changes it return
 | `MovedTo(pos)` | `Entity` | the same body at another position |
 
 - Hash: common part, then health, most health.
-- Written as the number the zonelayer counted (not the whole ID: the zonelayer that holds it is the owner), the position, the radius, the health and the most health.
+- Written as the number the zonelayer counted, the position, the radius, the health and the most health.
 
 ## Character (the data beside the body)
 

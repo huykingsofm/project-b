@@ -1,8 +1,7 @@
-package eventlog
+package eventlog_test
 
 import (
 	"bufio"
-	"github.com/huykingsofm/project-b/platform/sim"
 	"math/rand/v2"
 	"os"
 	"os/exec"
@@ -11,6 +10,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/sim"
 )
 
 var killEngines = []sim.StateID{
@@ -20,7 +22,7 @@ var killEngines = []sim.StateID{
 // lastTick is the tick of the last record of an engine's log, or 0 when it has none.
 func lastTick(t testing.TB, dir string, engine sim.StateID) uint64 {
 	t.Helper()
-	r, err := ReadFileLog(dir, engine, 0, toyCodecs())
+	r, err := eventlog.ReadFileLog(dir, engine, 0, toyCodecs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +50,9 @@ func TestKillChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log := NewFileLog(
+	log := eventlog.NewFileLog(
 		dir,
-		FileLogOptions{
+		eventlog.FileLogOptions{
 			Seed: 1, SegmentBytes: 8 << 20, SyncEvery: 10 * time.Millisecond, Backlog: 8,
 		},
 	)
@@ -115,7 +117,7 @@ func killRounds(t *testing.T, records int) {
 		cmd.Wait() // "signal: killed"
 
 		for i, e := range killEngines {
-			r, err := ReadFileLog(dir, e, 0, toyCodecs())
+			r, err := eventlog.ReadFileLog(dir, e, 0, toyCodecs())
 			if err != nil {
 				t.Fatalf("round %d, %v: %v", round, e, err)
 			}
@@ -164,8 +166,9 @@ func killRounds(t *testing.T, records int) {
 	}
 
 	// the log can be written to again by this process too, and reads as one log
-	log := NewFileLog(
-		dir, FileLogOptions{Seed: 1, SegmentBytes: 8 << 20, SyncEvery: time.Second, Backlog: 8},
+	log := eventlog.NewFileLog(
+		dir, eventlog.FileLogOptions{Seed: 1, SegmentBytes: 8 << 20, SyncEvery: time.Second,
+			Backlog: 8},
 	)
 	engine := killEngines[0]
 	r := newTickRecorder(log, engine, records)

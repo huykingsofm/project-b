@@ -12,9 +12,6 @@ type Vec struct{ X, Y int32 }
 // Add returns the sum of the two vectors.
 func (v Vec) Add(o Vec) Vec { return Vec{v.X + o.X, v.Y + o.Y} }
 
-// Scaled returns the vector multiplied by n.
-func (v Vec) Scaled(n int32) Vec { return Vec{v.X * n, v.Y * n} }
-
 // Encode writes a vector: its two coordinates.
 func (v Vec) Encode(w *binary.Writer) {
 	w.Varint(int64(v.X))

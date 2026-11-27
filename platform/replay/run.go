@@ -3,6 +3,7 @@ package replay
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
@@ -10,10 +11,27 @@ import (
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
+// runEngineHandle is what the run needs of an engine of the replay cluster: to run a tick and give
+// it its inputs, to compare what it did with its log, and to publish its state. A handle of the
+// cluster is converted to it once, when the run holds the engine.
+type runEngineHandle interface {
+	StateID() sim.StateID
+	TypeName() string
+	Tick() uint64
+	Step() error
+	Hash(h sim.Hasher) uint64
+	GetSentMessages() []sim.Message
+	PublishState()
+	SendBaseCommand(c sim.BaseCommand) error
+	HandleDirectiveResponse(d sim.DirectiveResponse) error
+}
+
+var _ runEngineHandle = (*engine.Engine[*sim.ConfigState])(nil)
+
 // engineRun is what a replay holds of one engine: the engine, how far it has to run and has run,
 // and where its log is.
 type engineRun struct {
-	engine engine.Stepper
+	engine runEngineHandle
 	// limitTick is the last tick to run: the limit of the engine in the plan.
 	limitTick uint64
 	// lastRanTick is the last tick that has run.
@@ -43,9 +61,9 @@ type replayRun struct {
 	retired []sim.StateID
 }
 
-func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
+func newReplayRun(o engine.Options, p *Plan) (*replayRun, error) {
 	logs := p.logs
-	idx, err := buildIndex(logs, b.Seed(), b.QueueSize(), p.starts)
+	idx, err := buildIndex(logs, o.Seed, o.QueueSize, p.starts)
 	if err != nil {
 		return nil, err
 	}
@@ -63,27 +81,38 @@ func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
 	}
 	r.stable = newReplayStable(idx.copyReads)
 	r.verify = &verifyLog{engines: &r.engines, div: div}
-	env := &engine.Env{
-		Router: r.router, EventLog: r.verify, Stable: r.stable,
-		Codecs: b.Codecs(), QueueSize: idx.maxQueueSize, Emitter: engine.NopEmitter{},
-		Acks: engine.NewAckBoard(),
+	env := &engine.Environment{
+		Router: r.router, EventLog: r.verify, StableStore: r.stable,
+		Codecs: o.Codecs, EngineRegistry: o.Engines, Seed: o.Seed, QueueSize: idx.maxQueueSize,
+		Emitter: engine.NopEmitter{}, AckBoard: engine.NewAckBoard(),
 	}
-	var checkpoints engine.CheckpointSource = engine.NoCheckpoints{}
-	if p.checkpoints != nil {
-		checkpoints = p.checkpoints
+	var configCheckpoint []byte
+	if p.starts[sim.ConfigStateID] > 0 {
+		var err error
+		if configCheckpoint, err = r.checkpointOf(p, sim.ConfigStateID); err != nil {
+			return nil, err
+		}
 	}
-	if r.cluster, err = b.BuildIn(env, checkpoints); err != nil {
+	if r.cluster, err = engine.NewReplayCluster(env, configCheckpoint); err != nil {
 		return nil, err
 	}
-	for _, e := range r.cluster.Engines() {
-		id := e.StateID()
-		if start := p.starts[id]; e.Tick() != start {
-			return nil, fmt.Errorf(
-				"the engine %v is made at the tick %d and the replay starts it at %d",
-				id, e.Tick(), start,
-			)
+	for _, handle := range r.cluster.Engines() {
+		e := handle.(runEngineHandle)
+		r.engines.Set(e.StateID(), &engineRun{
+			engine: e, limitTick: p.limits[e.StateID()], lastRanTick: e.Tick(),
+		})
+	}
+	for _, address := range logs.Engines() {
+		if _, ok := r.engines.Get(address); ok || p.limits[address] == 0 {
+			continue
 		}
-		r.engines.Set(id, &engineRun{engine: e, limitTick: p.limits[id], lastRanTick: e.Tick()})
+		e, err := r.makeEngine(p, idx, address)
+		if err != nil {
+			return nil, err
+		}
+		r.engines.Set(address, &engineRun{
+			engine: e, limitTick: p.limits[address], lastRanTick: e.Tick(),
+		})
 	}
 	div.name = func(id sim.StateID) string {
 		if er, ok := r.engines.Get(id); ok {
@@ -93,11 +122,8 @@ func newReplayRun(b Builder, p *Plan) (*replayRun, error) {
 	}
 	for _, address := range logs.Engines() {
 		er, ok := r.engines.Get(address)
-		if !ok {
-			r.close()
-			return nil, fmt.Errorf(
-				"the log of %v is not the log of an engine of the cluster", address,
-			)
+		if !ok { // a log with no tick that is kept: nothing to run
+			continue
 		}
 		src, err := logs.Open(address, p.starts[address])
 		if err != nil {
@@ -142,7 +168,7 @@ func (r *replayRun) begin(address sim.StateID, er *engineRun, idx *index) error 
 		r.div.add(address, "the engine made from the checkpoint of the tick %d has the hash %d, "+
 			"the log has %d", start, got, logged)
 	}
-	for _, m := range eng.SentMessages() {
+	for _, m := range eng.GetSentMessages() {
 		if key := keyOf(m.Head()); idx.msgsToBeReturned[key] {
 			r.router.sent[key] = m
 		}
@@ -182,7 +208,11 @@ func (r *replayRun) load(id sim.StateID, er *engineRun) error {
 		if err != nil {
 			return fmt.Errorf("the log of %v: %w", id, err)
 		}
-		er.tickRecords = records
+		// the engine was made from the record that begins its log: it does not make it again
+		er.tickRecords = slices.DeleteFunc(records, func(rec eventlog.Record) bool {
+			_, started := rec.Body.(eventlog.Started)
+			return started
+		})
 	}
 	for _, rec := range er.tickRecords {
 		if read, ok := rec.Body.(eventlog.StableRead); ok {
@@ -261,6 +291,10 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 			if err := eng.SendBaseCommand(body.Command); err != nil {
 				return fmt.Errorf("%v tick %d: %w", id, tick, err)
 			}
+		case eventlog.Directive:
+			if err := eng.HandleDirectiveResponse(body.Response); err != nil {
+				return fmt.Errorf("%v tick %d: %w", id, tick, err)
+			}
 		case eventlog.Inbound:
 			if !r.router.inject(body.Message) {
 				return fmt.Errorf("%v tick %d: a message could not be put in its queue", id, tick)
@@ -290,7 +324,7 @@ func (r *replayRun) removeEngine(id sim.StateID, er *engineRun, tick uint64) err
 		return fmt.Errorf("%v tick %d: the engine was removed and the tick has %d records",
 			id, tick, len(er.tickRecords))
 	}
-	if !r.cluster.Remove(id) {
+	if !r.cluster.RemoveEngine(id) {
 		return fmt.Errorf("%v tick %d: the engine was removed and the cluster does not have it",
 			id, tick)
 	}
@@ -298,4 +332,46 @@ func (r *replayRun) removeEngine(id sim.StateID, er *engineRun, tick uint64) err
 	er.lastRanTick = tick
 	er.loaded = false
 	return nil
+}
+
+// checkpointOf is the bytes of the checkpoint that the engine starts from.
+func (r *replayRun) checkpointOf(p *Plan, id sim.StateID) ([]byte, error) {
+	data, ok, err := p.checkpoints.Checkpoint(id)
+	if err != nil || !ok {
+		return nil, fmt.Errorf(
+			"the checkpoint of %v at the tick %d: %v (found %v)", id, p.starts[id], err, ok,
+		)
+	}
+	return data, nil
+}
+
+// makeEngine makes the engine whose log is at the address: from the checkpoint it starts from, or,
+// when it starts at the tick 0, from the record that begins its log, which holds the engine as it
+// was made. A log that does not begin with that record and has no checkpoint to start from is an
+// error.
+func (r *replayRun) makeEngine(
+	p *Plan, idx *index, address sim.StateID,
+) (runEngineHandle, error) {
+	var data []byte
+	if p.starts[address] > 0 {
+		checkpointData, err := r.checkpointOf(p, address)
+		if err != nil {
+			return nil, err
+		}
+		data = checkpointData
+	} else {
+		started, ok := idx.started[address]
+		if !ok {
+			return nil, fmt.Errorf(
+				"the log of %v does not begin with the record of how the engine was made, and no "+
+					"checkpoint starts it", address,
+			)
+		}
+		data = started.Snapshot
+	}
+	handle, err := r.cluster.AddEngineByCheckpoint(data)
+	if err != nil {
+		return nil, err
+	}
+	return handle.(runEngineHandle), nil
 }

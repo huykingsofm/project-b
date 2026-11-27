@@ -29,4 +29,5 @@ type Event interface {
 // The IDs of the events.
 const (
 	ChatMessageSentID ID = iota + 1
+	ExitAddedID
 )

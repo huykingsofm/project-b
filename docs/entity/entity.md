@@ -18,7 +18,7 @@ What stands in a zone or a zonelayer. The interface `Entity` and the list of kin
 
 | Method | Returns |
 |---|---|
-| `ID()` | `state.EntityID`, unique among all entities: the ID of the state that holds the entity and the number that state counted (`state.NewEntityID(owner, local)`) |
+| `ID()` | `state.EntityID`, a number that the state that holds the entity counted, unique among the entities of that state ([IDs](../ids.md)) |
 | `KindID()` | the kind |
 | `Position()` | where it stands, in units |
 | `Radius()` | how far it reaches from its position, in units; 0 is a point |

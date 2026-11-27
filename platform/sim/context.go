@@ -6,10 +6,12 @@ import (
 	"github.com/huykingsofm/project-b/platform/config"
 )
 
-// Context is what an action sees of the world outside its state while it runs: the tick of its
-// engine and the random numbers of its engine. The configuration is read from the registry
+// Context is what an action sees of the world outside its state while it runs: the ID of its
+// engine (a state does not know its own ID: it belongs to the engine), the tick of its engine and
+// the random numbers of its engine. The configuration is read from the registry
 // (Registry.Config). There is no system clock: time is the tick count, so a run can be repeated.
 type Context struct {
+	Self StateID
 	Tick uint64
 	Rand *rand.Rand
 }

@@ -1,4 +1,4 @@
-package eventlog
+package eventlog_test
 
 import (
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -16,18 +16,17 @@ const toyType sim.StateType = 0
 
 func init() { sim.MapStateTypeToName(toyType, "toy") }
 
-type toyState struct{ id sim.StateID }
+type toyState struct{}
 
-func (s *toyState) ID() sim.StateID               { return s.id }
-func (*toyState) Type() sim.StateType             { return toyType }
-func (*toyState) Tick() uint64                    { return 0 }
-func (*toyState) NextTick()                       {}
-func (s *toyState) Clone() sim.State              { return s }
-func (*toyState) Hash() uint64                    { return 0 }
-func (*toyState) TakeEvents() []sim.Event         { return nil }
-func (s *toyState) Encode(w *binary.Writer) error { w.Uvarint(uint64(s.id)); return nil }
+func (*toyState) Type() sim.StateType           { return toyType }
+func (*toyState) Tick() uint64                  { return 0 }
+func (*toyState) NextTick()                     {}
+func (s *toyState) Clone() sim.State            { return s }
+func (*toyState) Hash() uint64                  { return 0 }
+func (*toyState) TakeEvents() []sim.Event       { return nil }
+func (s *toyState) Encode(*binary.Writer) error { return nil }
 func decodeToyState(r *binary.Reader, _ codec.Version) (*toyState, error) {
-	return &toyState{id: sim.StateID(r.Uvarint())}, r.Err()
+	return &toyState{}, r.Err()
 }
 
 type toyMoveAction struct {

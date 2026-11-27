@@ -48,9 +48,6 @@ var _ State = (*ConfigState)(nil)
 // NewConfigState makes the state of a configuration that has every variable at its default.
 func NewConfigState() *ConfigState { return &ConfigState{snap: config.Defaults()} }
 
-// ID is the ID of the state: the configuration engine of a cluster is one.
-func (*ConfigState) ID() StateID { return ConfigStateID }
-
 // Type is the type of the state.
 func (*ConfigState) Type() StateType { return ConfigStateType }
 

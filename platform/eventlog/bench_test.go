@@ -1,15 +1,15 @@
-package eventlog
+package eventlog_test
 
 import (
 	"fmt"
-	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 )
 
 // benchMessage is a message for a zonelayer with two actions, as the engines send them.
@@ -21,11 +21,11 @@ func benchMessage(seq uint64) sim.Message {
 	).Stamp(sim.Header{From: sim.StateID(11), Seq: seq})
 }
 
-var benchRecords = map[string]Record{
-	"inbound, 2 actions": {Tick: 123456, Body: Inbound{Message: benchMessage(98765)}},
+var benchRecords = map[string]eventlog.Record{
+	"inbound, 2 actions": {Tick: 123456, Body: eventlog.Inbound{Message: benchMessage(98765)}},
 	"command, move": {
 		Tick: 123456,
-		Body: Command{
+		Body: eventlog.Command{
 			Command: toyMove{
 				CharacterID: 7, Dir: 1, Ticks: 3,
 			},
@@ -33,58 +33,22 @@ var benchRecords = map[string]Record{
 	},
 	"command, chat": {
 		Tick: 123456,
-		Body: Command{
+		Body: eventlog.Command{
 			Command: toyChat{
 				FromID: 7, Text: "xin chào mọi người, hôm nay thế nào",
 			},
 		},
 	},
-	"hash": {Tick: 123456, Body: Hash{Value: 0xdeadbeefcafef00d}},
+	"hash": {Tick: 123456, Body: eventlog.Hash{Value: 0xdeadbeefcafef00d}},
 	"stable read": {
-		Tick: 123456, Body: StableRead{Source: sim.StateID(12), CopyTick: 123455},
+		Tick: 123456, Body: eventlog.StableRead{Source: sim.StateID(12), CopyTick: 123455},
 	},
-}
-
-// BenchmarkEncodeRecord is the part of recording that the goroutine of an engine does: building the
-// bytes of a record. There is no file and no writer.
-func BenchmarkEncodeRecord(b *testing.B) {
-	for name, rec := range benchRecords {
-		b.Run(name, func(b *testing.B) {
-			var w binary.Writer
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				w.B = w.B[:0]
-				if err := encodeRecord(&w, rec.Body); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkDecodeRecord(b *testing.B) {
-	engine, codecs := sim.StateID(1), toyCodecs()
-	for name, rec := range benchRecords {
-		var w binary.Writer
-		if err := encodeRecord(&w, rec.Body); err != nil {
-			b.Fatal(err)
-		}
-		b.Run(name, func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				_, err := decodeRecord(codecs, engine, formatVersion, rec.Tick, w.B)
-				if err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
 }
 
 // tickRecorder records the ticks of one engine: two stable reads, a hash, 5 commands
 // and the rest inbound messages, as a busy zonelayer does.
 type tickRecorder struct {
-	log     *FileLog
+	log     *eventlog.FileLog
 	engine  sim.StateID
 	records int
 	// already an interface value, as a command is when an engine records it
@@ -93,7 +57,7 @@ type tickRecorder struct {
 	message sim.Message
 }
 
-func newTickRecorder(log *FileLog, engine sim.StateID, records int) *tickRecorder {
+func newTickRecorder(log *eventlog.FileLog, engine sim.StateID, records int) *tickRecorder {
 	return &tickRecorder{
 		log: log, engine: engine, records: records,
 		move:    toyMove{CharacterID: 7, Dir: 1, Ticks: 3},
@@ -102,33 +66,24 @@ func newTickRecorder(log *FileLog, engine sim.StateID, records int) *tickRecorde
 }
 
 func (r *tickRecorder) tick(tick uint64) {
-	r.log.Append(r.engine, tick, StableRead{Source: sim.ConfigStateID, CopyTick: tick})
+	r.log.Append(r.engine, tick, eventlog.StableRead{Source: sim.ConfigStateID, CopyTick: tick})
 	for range r.records - 8 {
-		r.log.Append(r.engine, tick, Inbound{Message: r.message})
+		r.log.Append(r.engine, tick, eventlog.Inbound{Message: r.message})
 	}
 	for range 5 {
-		r.log.Append(r.engine, tick, Command{Command: r.move})
+		r.log.Append(r.engine, tick, eventlog.Command{Command: r.move})
 	}
-	r.log.Append(r.engine, tick, StableRead{Source: sim.StateID(11), CopyTick: tick - 1})
-	r.log.Append(r.engine, tick, Hash{Value: 42})
+	r.log.Append(r.engine, tick, eventlog.StableRead{Source: sim.StateID(11), CopyTick: tick - 1})
+	r.log.Append(r.engine, tick, eventlog.Hash{Value: 42})
 	r.log.EndTick(r.engine, tick)
 }
 
-func benchFile(b *testing.B) *FileLog {
-	return NewFileLog(
+func benchFile(b *testing.B) *eventlog.FileLog {
+	return eventlog.NewFileLog(
 		b.TempDir(),
-		FileLogOptions{Seed: 1, SegmentBytes: 64 << 20, SyncEvery: time.Second, Backlog: 64},
+		eventlog.FileLogOptions{Seed: 1, SegmentBytes: 64 << 20, SyncEvery: time.Second,
+			Backlog: 64},
 	)
-}
-
-// stalls is how many times a Commit of the log of an engine had to wait for the goroutine that
-// writes.
-func stalls(log *FileLog, engine sim.StateID) uint64 {
-	v, ok := log.engines.Load(engine)
-	if !ok {
-		return 0
-	}
-	return v.(*engineLog).w.Stalled()
 }
 
 // percentiles reports the time of the ticks as seen by the engine: the median, the 99th percentile
@@ -189,7 +144,6 @@ func BenchmarkFileTickPaced(b *testing.B) {
 			}
 			b.ReportMetric(float64(total.Nanoseconds())/pacedTicks, "mean-ns/tick")
 			percentiles(b, durs)
-			b.ReportMetric(float64(stalls(log, engine)), "stalls")
 			if err := log.Close(); err != nil {
 				b.Fatal(err)
 			}
@@ -214,7 +168,6 @@ func BenchmarkFileTickSaturated(b *testing.B) {
 	}
 	b.StopTimer()
 	percentiles(b, durs)
-	b.ReportMetric(float64(stalls(log, engine)), "stalls")
 	closing := time.Now()
 	if err := log.Close(); err != nil {
 		b.Fatal(err)
@@ -236,11 +189,6 @@ func BenchmarkFileTickManyEngines(b *testing.B) {
 		}
 	})
 	b.StopTimer()
-	var total uint64
-	for id := uint32(1); id <= next.Load(); id++ {
-		total += stalls(log, sim.StateID(id))
-	}
-	b.ReportMetric(float64(total), "stalls")
 	if err := log.Close(); err != nil {
 		b.Fatal(err)
 	}

@@ -1,51 +1,64 @@
-package eventlog
+package eventlog_test
 
 import (
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-func TestEveryKindOfTheRegisterHasADecoderAndABodyThatReturnsIt(t *testing.T) {
-	bodies := []Body{
-		Inbound{Message: benchMessage(1)}, Command{Command: toyChat{}},
-		Hash{}, StableRead{}, Returned{}, Retired{},
-	}
-	for kind := KindInbound; kind <= KindRetired; kind++ { // the last kind of the register
-		if _, ok := decoders[kind]; !ok {
-			t.Errorf("the kind %d has no decoder", kind)
-		}
-	}
-	for _, b := range bodies {
-		if _, ok := decoders[b.Kind()]; !ok {
-			t.Errorf("%T returns the kind %d, which has no decoder", b, b.Kind())
-		}
-	}
-}
-
 func TestTwoBodiesAreTheSameWhenTheyAreOfOneKindAndSayTheSame(t *testing.T) {
 	move := toyMove{CharacterID: 1, Dir: 1, Ticks: 3}
 	other := sim.StateID(12)
-	same := [][2]Body{
-		{Inbound{Message: benchMessage(7)}, Inbound{Message: benchMessage(7)}},
-		{Command{Command: move}, Command{Command: move}},
-		{Hash{Value: 9}, Hash{Value: 9}},
-		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 4}},
-		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureFull}},
+	same := [][2]eventlog.Body{
+		{eventlog.Inbound{Message: benchMessage(7)}, eventlog.Inbound{Message: benchMessage(7)}},
+		{eventlog.Command{Command: move}, eventlog.Command{Command: move}},
+		{eventlog.Hash{Value: 9}, eventlog.Hash{Value: 9}},
+		{eventlog.StableRead{Source: other, CopyTick: 4}, eventlog.StableRead{Source: other,
+			CopyTick: 4}},
+		{eventlog.Returned{Reason: sim.DeliveryFailureFull},
+			eventlog.Returned{Reason: sim.DeliveryFailureFull}},
+		{
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
+		},
+		{
+			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Tag: []byte("a"), Engine: 7}},
+			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Tag: []byte("a"), Engine: 7}},
+		},
 	}
 	for _, p := range same {
 		if !p[0].Same(p[1]) {
 			t.Errorf("%T: two bodies that say the same are not the same", p[0])
 		}
 	}
-	different := [][2]Body{
-		{Inbound{Message: benchMessage(7)}, Inbound{Message: benchMessage(8)}},
-		{Command{Command: move}, Command{Command: toyMove{Ticks: 4}}},
-		{Hash{Value: 9}, Hash{Value: 10}},
-		{StableRead{Source: other, CopyTick: 4}, StableRead{Source: other, CopyTick: 5}},
-		{Returned{Reason: sim.DeliveryFailureFull}, Returned{Reason: sim.DeliveryFailureRetired}},
-		{Hash{Value: 9}, StableRead{Source: 9, CopyTick: 9}}, // the same number in another kind
+	different := [][2]eventlog.Body{
+		{eventlog.Inbound{Message: benchMessage(7)}, eventlog.Inbound{Message: benchMessage(8)}},
+		{eventlog.Command{Command: move}, eventlog.Command{Command: toyMove{Ticks: 4}}},
+		{eventlog.Hash{Value: 9}, eventlog.Hash{Value: 10}},
+		{eventlog.StableRead{Source: other, CopyTick: 4}, eventlog.StableRead{Source: other,
+			CopyTick: 5}},
+		{eventlog.Returned{Reason: sim.DeliveryFailureFull},
+			eventlog.Returned{Reason: sim.DeliveryFailureRetired}},
+		{
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 6, DirectiveID: 1, Snapshot: []byte{9}},
+		},
+		{
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 2, Snapshot: []byte{9}},
+		},
+		{
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{9}},
+			eventlog.Started{Creator: 2, CreatorTick: 5, DirectiveID: 1, Snapshot: []byte{10}},
+		},
+		{
+			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Engine: 7}},
+			eventlog.Directive{Response: sim.DirectiveResponse{ID: 1, Failure: "full"}},
+		},
+		{eventlog.Hash{Value: 9}, eventlog.StableRead{Source: 9,
+			CopyTick: 9}}, // the same number in another kind
 	}
 	for _, p := range different {
 		if p[0].Same(p[1]) {
@@ -61,19 +74,20 @@ func TestOnlyAMessageAndAReadOfACopyMakeAnEngineDependOnAnother(t *testing.T) {
 	}
 	none := sim.StateDependency{}
 	for name, tc := range map[string]struct {
-		body Body
+		body eventlog.Body
 		want sim.StateDependency
 		ok   bool
 	}{
-		"a message":             {Inbound{Message: stamped}, dep(4, 30), true},
-		"a message not stamped": {Inbound{Message: benchMessage(1)}, none, false},
-		"a read of a copy":      {StableRead{Source: 5, CopyTick: 12}, dep(5, 12), true},
-		"a read with no copy":   {StableRead{Source: 5}, none, false},
-		"a hash":                {Hash{Value: 1}, none, false},
-		"a command":             {Command{Command: toyChat{}}, none, false},
-		"a message back":        {Returned{Header: sim.Header{From: 1, Tick: 5}}, none, false},
+		"a message":             {eventlog.Inbound{Message: stamped}, dep(4, 30), true},
+		"a message not stamped": {eventlog.Inbound{Message: benchMessage(1)}, none, false},
+		"a read of a copy":      {eventlog.StableRead{Source: 5, CopyTick: 12}, dep(5, 12), true},
+		"a read with no copy":   {eventlog.StableRead{Source: 5}, none, false},
+		"a hash":                {eventlog.Hash{Value: 1}, none, false},
+		"a command":             {eventlog.Command{Command: toyChat{}}, none, false},
+		"a message back": {eventlog.Returned{Header: sim.Header{From: 1, Tick: 5}}, none,
+			false},
 	} {
-		got, ok := Record{Body: tc.body}.Dependency()
+		got, ok := eventlog.Record{Body: tc.body}.Dependency()
 		if ok != tc.ok || (ok && got != tc.want) {
 			t.Errorf("%s: Dependency = %v, %v; want %v, %v", name, got, ok, tc.want, tc.ok)
 		}

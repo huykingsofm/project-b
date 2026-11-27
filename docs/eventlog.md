@@ -23,7 +23,7 @@
 
 - The engine writes the hash as the last record of the tick, in `EndTick`, every `eventlog.hash_every_ticks` ticks and at every tick it takes a checkpoint at ([checkpoint](checkpoint.md)). Each engine counts a period from an offset of its own, the hash of its ID, so the engines do not all hash at the same tick. A tick is whole when its frame is: a frame is one record of the segment log, written whole or not at all.
 - The tick of a frame is the one after the last of the log, and the first of a log is the tick 1 (the state of a new engine is at the tick 0): a log has no gap, and a frame that does not follow is refused and the log marked as failed.
-- `Engine.Remove` (`Cluster.Remove`; [removal](engine_removal.md)) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
+- `Engine.Retire` (`Cluster.Remove`; [engines](engine_lifecycle.md)) ends an engine for good: its log gets a last frame, of the tick after the last it ran, that holds `Retired`; what it published is forgotten, its queue goes back to its senders, and a message to it bounces as `DeliveryFailureRetired`. Stopping an engine with the context of `Run` is not removing it: nothing is written, and it goes on after a restart.
 
 ## Which tick is on the disk
 
@@ -82,10 +82,13 @@ What an engine writes in a tick is one frame, which is one record of the segment
 | `KindStableRead` | 4 | state ID of the engine read, the tick of the copy |
 | `KindReturned` | 5 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
 | `KindRetired` | 6 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
+| `KindStarted` | 7 | the engine that asked for this one to be made (state ID; 0 for an engine that the code that runs the cluster added), its tick (`uvarint`), the number of its request (`uvarint`; 0 for none), and the engine as it was made, at the tick 0, written as a checkpoint (length and bytes): the first record of the log of every engine but the configuration engine |
+| `KindDirective` | 8 | the answer of the cluster to a request of the engine: the number of the request, its kind, its tag, the ID of the engine that was made or removed, and why not (a string; empty for success) |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.
 - A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
+- A `Started` record makes the engine depend on that tick of the creator, as a message does of its sender (`Record.Dependency()`); an engine that no engine asked for depends on none. A `Directive` record depends on nothing: it is an answer that the engine takes, as it takes a command.
 - A message carries the tick of its sender when it was sent (`Header.Tick`, set when the engine sends it). An `Inbound` record makes the engine depend on that tick of the sender, and a `StableRead` record, which has the tick of the copy it read, makes it depend on that tick of the source: `Record.Dependency()` says which as a `sim.StateDependency{Source, Tick}`, or false when a record depends on nothing (a message with no tick, a read that found no copy, any other kind).
 - A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
 
@@ -110,7 +113,6 @@ An action is its ID, then its fields written by its `Encode`; its decoder is reg
 | `onfail.Retry`, `onfail.Drop` | nothing |
 | `onfail.Redirect`, `onfail.Escalate` | a state ID |
 | `onfail.Compensate` | a message, written as above, at most 8 deep |
-| `onfail.Notify` | key string, count, each argument string |
 
 - A codec refuses a number or a Go type that two kinds register, and a test fails when an action ID, a command ID or an `OnFail` ID of a register has no decoder. Writing needs no register: an action, a command or an `OnFail` writes its own ID.
 - `EncodeMessage` returns `ErrNoCodec`, and writes nothing, for a message that holds an action with no `Encode`, or a nil `OnFail`; and `ErrBadValue`, and writes nothing, for messages nested more than 8 deep, which is the most that can be read back.

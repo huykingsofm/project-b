@@ -30,7 +30,6 @@ type Event interface {
 const (
 	CharacterEnteredID ID = iota + 1
 	CharacterLeftID
-	CharacterNoticedID
 	ChatMessageSentID
 	EntityDiedID
 	EntityHealthChangedID

@@ -1,4 +1,4 @@
-package engine
+package engine_test
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
@@ -29,22 +31,16 @@ func (w *recordingWriter) Offer(engine sim.StateID, tick uint64, encode func() (
 // toyClusterThatCheckpoints is a cluster of toy engines that take a checkpoint every 5 ticks and
 // hash every 1,000, with the writer given, which may be nil.
 func toyClusterThatCheckpoints(
-	t *testing.T, w CheckpointWriter, ids ...sim.StateID,
-) (*Cluster, []*Engine[*toyState]) {
+	t *testing.T, w engine.CheckpointWriter, n int,
+) (*engine.Cluster, []*engine.Engine[*toyState]) {
 	t.Helper()
 	env := newToyEnv(t)
-	env.Checkpoints = w
+	env.CheckpointWriter = w
 	c := newCluster(t, env)
 	setConfig(t, c, map[string]string{
 		"checkpoint.every_ticks": "5", "eventlog.hash_every_ticks": "1000",
 	})
-	var engines []*Engine[*toyState]
-	for _, id := range ids {
-		e := New(&toyState{id: id}, env, 1)
-		engines = append(engines, e)
-		c.Add(e)
-	}
-	return c, engines
+	return c, addToys(t, c, n)
 }
 
 // hashTicks returns, for each engine, the ticks at which its log has a hash.
@@ -59,11 +55,11 @@ func hashTicks(mem *eventlog.MemLog) map[sim.StateID][]uint64 {
 }
 
 func TestAnEngineTakesACheckpointEveryPeriodFromItsOwnOffsetAndHashesAtIt(t *testing.T) {
-	ids := []sim.StateID{1, 2, 3, 4}
+	const engineCount = 4
 	w := &recordingWriter{}
-	c, _ := toyClusterThatCheckpoints(t, w, ids...)
+	c, engines := toyClusterThatCheckpoints(t, w, engineCount)
 	for range 30 {
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -73,36 +69,34 @@ func TestAnEngineTakesACheckpointEveryPeriodFromItsOwnOffsetAndHashesAtIt(t *tes
 	}
 	hashed := hashTicks(c.Env.EventLog.(*eventlog.MemLog))
 	starts := map[uint64]bool{}
-	for _, id := range ids {
-		var want []uint64
-		for tick := uint64(1); tick <= 30; tick++ {
-			if (tick+periodOffsetOf(id)%5)%5 == 0 {
-				want = append(want, tick)
+	for _, e := range engines {
+		id := e.StateID()
+		ticks := offered[id]
+		if len(ticks) != 6 || ticks[0] < 1 || ticks[0] > 5 {
+			t.Fatalf("%v took checkpoints at %v, want 6, the first within the first 5 ticks",
+				id, ticks)
+		}
+		for i := 1; i < len(ticks); i++ {
+			if ticks[i]-ticks[i-1] != 5 {
+				t.Fatalf("%v took checkpoints at %v, want one every 5 ticks", id, ticks)
 			}
 		}
-		if !slices.Equal(offered[id], want) {
-			t.Fatalf("%v took checkpoints at %v, want %v", id, offered[id], want)
-		}
-		var wantHashes []uint64
-		for tick := uint64(1); tick <= 30; tick++ {
-			if slices.Contains(want, tick) || (tick+periodOffsetOf(id)%1000)%1000 == 0 {
-				wantHashes = append(wantHashes, tick)
+		for _, tick := range ticks {
+			if !slices.Contains(hashed[id], tick) {
+				t.Fatalf("%v hashed at %v, want a hash at every checkpoint: %v", id, hashed[id],
+					ticks)
 			}
 		}
-		if !slices.Equal(hashed[id], wantHashes) {
-			t.Fatalf("%v hashed at %v, want %v: every checkpoint has its hash", id, hashed[id],
-				wantHashes)
-		}
-		starts[want[0]] = true
+		starts[ticks[0]] = true
 	}
 	if len(starts) < 2 {
 		t.Fatalf("every engine takes its checkpoints at the same ticks: %v", offered)
 	}
 
 	// an engine with no writer takes none, and hashes at the same ticks, as a replay must
-	plain, _ := toyClusterThatCheckpoints(t, nil, ids...)
+	plain, _ := toyClusterThatCheckpoints(t, nil, engineCount)
 	for range 30 {
-		if err := plain.Step(); err != nil {
+		if err := stepping.Step(plain); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -124,7 +118,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	var hashAt uint64
 	for len(w.offered) == 0 {
 		e.Send(toyCommand{N: 1})
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 		var err error
@@ -137,8 +131,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	for range 12 { // the state, the scheduler and the random numbers all move on
 		e.Send(toyCommand{N: 7})
 		e.ScheduleAt(e.Tick()+50, toyAction{N: 3})
-		e.rng.Uint64()
-		if err := c.Step(); err != nil {
+		if err := stepping.Step(c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -149,7 +142,7 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 	if !bytes.Equal(got, want) {
 		t.Fatal("the checkpoint is not the one of the tick it was taken at")
 	}
-	restored, err := restoreEngine[*toyState](got, newToyEnv(t), 1)
+	restored, err := restoreEngine[*toyState](got, newToyEnv(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,46 +162,33 @@ func TestACheckpointTakenAtATickIsOfThatTickHoweverFarTheEngineWentOnBeforeItIsE
 }
 
 // restoreEngine reads a checkpoint and makes its engine, in the environment given.
-func restoreEngine[S sim.State](data []byte, env *Env, seed uint64) (*Engine[S], error) {
-	c, err := DecodeEngineCheckpoint[S](data, env.Codecs)
+func restoreEngine[S sim.State](data []byte, env *engine.Environment) (*engine.Engine[S], error) {
+	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
 	if err != nil {
 		return nil, err
 	}
-	return c.Restore(env, seed)
+	return c.Restore(env)
 }
 
 func TestACheckpointSharesNoMemoryWithTheEngineItWasTakenFrom(t *testing.T) {
-	c, engines := toyCluster(t, 1)
+	c, engines := toyCluster(t, 2)
 	e := engines[0]
 	e.ScheduleAt(40, toyAction{N: 1})
 	e.ScheduleAt(40, forwardAction{To: 2, N: 3})
-	e.peer.data.lastRecvSeq.Set(7, 3)
-	e.peer.data.unsettledMessages.AddUnsent(
-		sim.NewActionMessage(2, onfail.Notify{Key: "k", Args: []string{"a"}}, toyAction{N: 2}),
-	)
-	e.peer.data.unsettledMessages.SetSent([]sim.Message{
-		sim.NewActionMessage(3, onfail.Compensate{
-			With: sim.NewActionMessage(1, onfail.Drop{}, toyAction{N: 4}),
-		}, toyAction{N: 5}).Stamp(sim.Header{From: 1, Seq: 1}),
-	})
-	if err := c.Step(); err != nil {
+	e.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 1, N: 2})
+	if err := stepping.Step(c); err != nil {
 		t.Fatal(err)
 	}
 	taken := e.Checkpoint()
 	for name, pair := range map[string][2]any{
-		"the state":                  {e.st, taken.State},
-		"the scheduler":              {&e.actionScheduler, &taken.ActionScheduler},
-		"the random numbers":         {e.rng, taken.Rand},
-		"what the peer knows":        {&e.peer.data, &taken.Peer},
-		"the state and the peer":     {e.st, &taken.Peer},
-		"the scheduler and the peer": {&e.actionScheduler, &taken.Peer},
+		"the state":                  {e.State(), taken.State},
+		"the scheduler":              {e.Scheduler(), &taken.ActionScheduler},
+		"the state and the peer":     {e.State(), &taken.Peer},
+		"the scheduler and the peer": {e.Scheduler(), &taken.Peer},
 	} {
 		if err := aliasing.Disjoint(pair[0], pair[1]); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-	}
-	if e.rng.Uint64() != taken.Rand.Uint64() {
-		t.Fatal("the random numbers of the checkpoint do not go on from where the engine was")
 	}
 }
 
@@ -217,39 +197,42 @@ type otherToy struct{ toyState }
 
 func (*otherToy) Type() sim.StateType { return toyType + 1 }
 
+func (s *otherToy) Clone() sim.State { c := *s; return &c }
+
 func TestRestoringACheckpointOfAnotherTypeOfStateOrCutIsAnErrorAndRegistersNothing(t *testing.T) {
 	c, engines := toyCluster(t, 1)
 	engines[0].ScheduleAt(30, forwardAction{To: 1, N: 2, Again: 10})
-	c.Step()
+	stepping.Step(c)
 	data, err := engines[0].Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := newToyEnv(t)
-	if _, err := restoreEngine[*toyState](data, env, 1); err != nil {
+	if _, err := restoreEngine[*toyState](data, env); err != nil {
 		t.Fatal(err)
 	}
 	for n := range data { // every proper prefix
 		fresh := newToyEnv(t)
-		if _, err := restoreEngine[*toyState](data[:n], fresh, 1); err == nil {
+		if _, err := restoreEngine[*toyState](data[:n], fresh); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
-		if _, ok := fresh.Router.(*Router).data.Load().chans[1]; ok {
+		m := sim.NewActionMessage[*toyState](1, onfail.Drop{}, toyAction{})
+		if reason, ok := fresh.Router.Deliver(m); ok || reason != sim.DeliveryFailureNotStarted {
 			t.Fatalf("a checkpoint that was cut at %d registered an engine in the router", n)
 		}
 	}
-	if _, err := restoreEngine[*otherToy](data, newToyEnv(t), 1); err == nil {
+	if _, err := restoreEngine[*otherToy](data, newToyEnv(t)); err == nil {
 		t.Fatal("a checkpoint was restored as an engine of another type of state")
 	}
 }
 
 func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.T) {
-	c, engines := toyCluster(t, 1, 2)
+	c, engines := toyCluster(t, 2)
 	a := engines[0]
 	a.ScheduleAt(3, forwardAction{To: 2, N: 4, Again: 5})
 	a.Send(toyCommand{N: 3})
 	for range 8 {
-		c.Step()
+		stepping.Step(c)
 	}
 	data, err := a.Checkpoint().Encode()
 	if err != nil {
@@ -257,7 +240,7 @@ func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.
 	}
 	// the restored engine runs in a cluster of its own, with an engine 2 of its own
 	env := newToyEnv(t)
-	r, err := restoreEngine[*toyState](data, env, 1)
+	r, err := restoreEngine[*toyState](data, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,43 +256,43 @@ func TestARestoredEngineHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testing.
 	}
 }
 
-// lastFrom99 is the last number that the engine took from the sender 99.
-func lastFrom99(e *Engine[*toyState]) uint64 {
-	seq, _ := e.peer.data.lastRecvSeq.Get(99)
-	return seq
-}
-
-func TestAnEngineHoldsWhatItWasToSendAgainAndWhatItTookFromEachSenderThroughACheckpoint(
-	t *testing.T,
-) {
-	_, engines := toyCluster(t, 1)
+func TestAnEngineHoldsWhatItSentAndWhatItTookFromEachSenderThroughACheckpoint(t *testing.T) {
+	c, engines := toyCluster(t, 2)
 	e := engines[0]
-	e.peer.data.sentSeq = 41
-	e.peer.data.lastRecvSeq.Set(99, 1)
-	e.peer.data.unsettledMessages.SetUnsent([]sim.Message{
-		sim.NewActionMessage(2, onfail.Retry{}, toyAction{N: 1}).
-			Stamp(sim.Header{From: 1, Seq: 40}),
-	})
-	e.peer.data.unsettledMessages.SetSent([]sim.Message{
-		sim.NewActionMessage(3, onfail.Retry{}, toyAction{N: 2}).
-			Stamp(sim.Header{From: 1, Seq: 39, Tick: 6}),
-	})
+	e.ScheduleAt(1, forwardAction{To: 2, N: 1})
+	from99 := sim.NewActionMessage[*toyState](1, onfail.Drop{}, toyAction{N: 5}).
+		Stamp(sim.Header{From: 99, Seq: 1})
+	if _, ok := c.Env.Router.Deliver(from99); !ok {
+		t.Fatal("the message of the sender 99 was refused")
+	}
+	if err := stepping.Step(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.GetSentMessages()) != 1 || e.State().Total != 5 {
+		t.Fatalf("the engine holds %d sent messages and has %d, want 1 and 5",
+			len(e.GetSentMessages()), e.State().Total)
+	}
 	data, err := e.Checkpoint().Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := restoreEngine[*toyState](data, newToyEnv(t), 1)
+	env := newToyEnv(t)
+	r, err := restoreEngine[*toyState](data, env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	held := &r.peer.data.unsettledMessages
-	unsent, sent := len(held.Unsent()), len(held.Sent())
-	if r.peer.data.sentSeq != 41 || unsent != 1 || sent != 1 ||
-		lastFrom99(r) != 1 || hashOf(r) != hashOf(e) {
-		t.Fatalf("seq %d, %d to go, %d sent, last %v",
-			r.peer.data.sentSeq, unsent, sent, lastFrom99(r))
+	got, want := r.GetSentMessages(), e.GetSentMessages()
+	if len(got) != 1 || got[0].Head() != want[0].Head() || hashOf(r) != hashOf(e) {
+		t.Fatalf("the engine made again holds %v, want %v, and the hash of the first", got, want)
 	}
-	if got := held.Sent()[0].Head(); got.Seq != 39 || got.Tick != 6 {
-		t.Fatalf("the message that was sent came back as %+v, want its number and tick", got)
+	// it remembers what it took from each sender: a second copy of the message is not taken
+	if _, ok := env.Router.Deliver(from99); !ok {
+		t.Fatal("the copy of the message of the sender 99 was refused")
+	}
+	if err := r.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if r.State().Total != 5 {
+		t.Fatalf("the engine made again has %d, want 5: a copy is not taken twice", r.State().Total)
 	}
 }

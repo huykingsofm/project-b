@@ -1,12 +1,13 @@
-package engine
+package engine_test
 
 import (
-	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
@@ -28,7 +29,7 @@ func TestReturnLogsAWarningWhenTheSenderIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt := NewRouter()
+	rt := engine.NewRouter()
 	m := sim.NewActionMessage[*toyState](1, onfail.Drop{}).Stamp(sim.Header{From: 9})
 	rt.Return(m, sim.DeliveryFailureRetired)
 	closeLogs()

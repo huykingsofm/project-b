@@ -60,7 +60,7 @@ func (e ExitEntity) MovedTo(pos state.Vec) state.Entity {
 
 // Encode writes the exit.
 func (e ExitEntity) Encode(w *binary.Writer) {
-	w.Uvarint(e.entityID.Local)
+	w.Uvarint(uint64(e.entityID))
 	e.area.Min.Encode(w)
 	e.area.Max.Encode(w)
 	w.Uvarint(uint64(e.toZoneID))
@@ -68,10 +68,8 @@ func (e ExitEntity) Encode(w *binary.Writer) {
 }
 
 // decodeExitEntity reads what Encode wrote, of the data version given.
-func decodeExitEntity(
-	r *binary.Reader, version codec.Version, owner sim.StateID,
-) (state.Entity, error) {
-	e := ExitEntity{entityID: state.NewEntityID(owner, r.Uvarint())}
+func decodeExitEntity(r *binary.Reader, version codec.Version) (state.Entity, error) {
+	e := ExitEntity{entityID: state.EntityID(r.Uvarint())}
 	e.area.Min = state.DecodeVec(r, version)
 	e.area.Max = state.DecodeVec(r, version)
 	e.toZoneID = r.Uint[sim.StateID]()

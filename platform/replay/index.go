@@ -30,6 +30,9 @@ type index struct {
 	inboundMessageHash map[msgKey]uint64
 	// retiredAt is the tick at which each engine whose log ends with Retired was removed.
 	retiredAt map[sim.StateID]uint64
+	// started is the record that begins the log of each engine that starts at the tick 0: the
+	// engine as it was made.
+	started map[sim.StateID]eventlog.Started
 }
 
 // buildIndex reads each log once. It returns an error when a log cannot be read and when a log
@@ -40,7 +43,7 @@ func buildIndex(
 	idx := &index{
 		maxQueueSize: queueSize, copyReads: map[copyKey]int{},
 		msgsToBeReturned: map[msgKey]bool{}, inboundMessageHash: map[msgKey]uint64{},
-		retiredAt: map[sim.StateID]uint64{},
+		retiredAt: map[sim.StateID]uint64{}, started: map[sim.StateID]eventlog.Started{},
 	}
 	for _, address := range logs.Engines() {
 		if err := idx.add(logs, address, seed, starts[address]); err != nil {
@@ -104,8 +107,10 @@ func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error 
 		case eventlog.Inbound:
 			idx.inboundMessageHash[keyOf(body.Message.Head())] = eventlog.HashMessage(body.Message)
 			takenMsgs++
-		case eventlog.Command:
+		case eventlog.Command, eventlog.Directive:
 			takenMsgs++
+		case eventlog.Started:
+			idx.started[address] = body
 		case eventlog.Returned:
 			idx.msgsToBeReturned[keyOf(body.Header)] = true
 			takenMsgs++

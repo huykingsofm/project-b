@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/engine/stepping"
 	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/testkit"
@@ -44,7 +48,7 @@ func crash(t *testing.T, dir string, id sim.StateID, kept uint64) {
 // recordsOnDisk is the records of the log of the engine under dir, in order.
 func recordsOnDisk(t *testing.T, dir string, id sim.StateID) []eventlog.Record {
 	t.Helper()
-	r, err := eventlog.ReadFileLog(dir, id, 0, testkit.WorldBuilder(t, 7, 10).Codecs())
+	r, err := eventlog.ReadFileLog(dir, id, 0, testkit.Options(t, 7).Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +68,8 @@ func heldAndNotTaken(t *testing.T, dir string, live *engine.Cluster) [][3]uint64
 	t.Helper()
 	taken := map[sim.StateID]map[[2]uint64]int{}
 	var out [][3]uint64
-	for _, e := range live.Engines() {
-		for _, m := range e.SentMessages() {
+	for _, handle := range live.Engines() {
+		for _, m := range handle.(engineReading).GetSentMessages() {
 			h := m.Head()
 			if taken[m.Dest()] == nil {
 				taken[m.Dest()] = takenMessages(t, dir, m.Dest())
@@ -98,10 +102,8 @@ func everyMessageIsTakenOnce(t *testing.T, dir string, lost [][3]uint64) {
 
 func step(t *testing.T, c *engine.Cluster, n int) {
 	t.Helper()
-	for range n {
-		if err := c.Step(); err != nil {
-			t.Fatal(err)
-		}
+	if err := stepping.Steps(c, n); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -176,7 +178,7 @@ func TestAHandoverAfterSeveralEnginesLostTheirLogsAtOnce(t *testing.T) {
 	}
 }
 
-func TestAHandoverOfAnEngineWhoseLogIsGoneStartsItNewAndCutsWhatDependsOnIt(t *testing.T) {
+func TestAHandoverOfAnEngineWhoseLogIsGoneDoesNotMakeItAgainAndCutsWhatDependsOnIt(t *testing.T) {
 	dir := t.TempDir()
 	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
 	if err := os.RemoveAll(eventlog.EngineDir(dir, testkit.Layer3)); err != nil {
@@ -186,13 +188,14 @@ func TestAHandoverOfAnEngineWhoseLogIsGoneStartsItNewAndCutsWhatDependsOnIt(t *t
 	if got := first.Ticks[testkit.Layer3]; got != 0 {
 		t.Fatalf("the engine with no log was replayed to %d, want 0", got)
 	}
-	published := live.Env.Stable.(*engine.StableStateStore)
-	for _, e := range live.Engines() {
+	if _, ok := live.Find(testkit.Layer3); ok {
+		t.Fatal("an engine that has no log was made: nothing says what it was")
+	}
+	published := live.Env.StableStore.(*engine.StableStateStore)
+	for _, handle := range live.Engines() {
+		e := handle.(engineReading)
 		copy := published.Copy(0, 0, e.StateID())
-		switch {
-		case e.Tick() == 0 && copy != nil:
-			t.Fatalf("%v ran no tick and has a copy at the tick %d", e.StateID(), copy.Tick())
-		case e.Tick() > 0 && (copy == nil || copy.Tick() != e.Tick()):
+		if e.Tick() > 0 && (copy == nil || copy.Tick() != e.Tick()) {
 			t.Fatalf("%v is at the tick %d and has the copy %v", e.StateID(), e.Tick(), copy)
 		}
 	}
@@ -295,22 +298,22 @@ func TestANewDocumentOfTheConfigurationAfterAHandoverReachesTheEnginesAndRecover
 }
 
 func TestAReplayThatDiffersFromItsLogIsNotHandedOver(t *testing.T) {
-	dir := t.TempDir()
-	aWorldThatWroteItsFilesAndStopped(t, dir, never, 0)
-	// a world whose zonelayers heal at another period is not the one that was recorded
-	other := testkit.WorldBuilder(t, 7, 3)
-	result, err := replay.Recover(dir, other)
-	if err == nil {
-		t.Skip("the other world did the same as the log: nothing differs to refuse")
+	c, _, mem := testkit.NewWorld(t, 7, 10)
+	testkit.Steps(t, c, 30)
+	logs := mem.ByEngine()
+	i := slices.IndexFunc(logs[testkit.Layer1], func(r eventlog.Record) bool {
+		return r.Kind() == eventlog.KindHash
+	})
+	logs[testkit.Layer1] = slices.Clone(logs[testkit.Layer1])
+	hash := logs[testkit.Layer1][i].Body.(eventlog.Hash)
+	logs[testkit.Layer1][i].Body = eventlog.Hash{Value: hash.Value ^ 1} // not the hash of the state
+	result, err := runOn(testkit.Options(t, 7), logs)
+	if err != nil || len(result.Divergences) == 0 {
+		t.Fatalf("a wrong hash was not found: %v, %v", result, err)
 	}
-	if result == nil || len(result.Divergences) == 0 {
-		t.Fatalf("recover failed with no divergence: %v", err)
-	}
-	env, envErr := other.NewEnv()
-	if envErr != nil {
-		t.Fatal(envErr)
-	}
-	if _, err := result.Handover(other, env); err == nil {
+	if _, err := result.Handover(
+		engine.NewEnvironment(testkit.Options(t, 7)), config.NewStore(),
+	); err == nil {
 		t.Fatal("a replay with a divergence was handed over")
 	}
 }
@@ -328,4 +331,16 @@ func TestAWorldThatRanLongAfterItsLastCheckpointIsHandedOver(t *testing.T) {
 	if second.Ticks[testkit.Layer2] != first.Ticks[testkit.Layer2]+100 {
 		t.Fatalf("the cut zonelayer was recovered to %d", second.Ticks[testkit.Layer2])
 	}
+}
+
+// removeLog takes the log of the engine out of the files.
+func removeLog(dir string, id sim.StateID) error {
+	return os.RemoveAll(eventlog.EngineDir(dir, id))
+}
+
+// testkitMessageFor is a message for the zonelayer with the ID.
+func testkitMessageFor(id sim.StateID) sim.Message {
+	return sim.NewActionMessage[*zonelayerstate.State](
+		id, onfail.Drop{}, action.ZoneLayerChatSendAction{FromID: 1, Text: "x"},
+	)
 }

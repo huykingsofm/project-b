@@ -1,17 +1,16 @@
 package game_test
 
 import (
-	"github.com/huykingsofm/project-b/platform/config"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
@@ -21,7 +20,7 @@ import (
 // both.
 func aWorldThatWroteItsFilesAndStopped(
 	t testing.TB, dir string, every map[string]string, idleTicks int,
-) *game.Cluster {
+) *testkit.Cluster {
 	t.Helper()
 	store := config.NewStore()
 	cache := replay.NewLineCacheWriter(dir, store)
@@ -30,14 +29,9 @@ func aWorldThatWroteItsFilesAndStopped(
 		OnSafe: cache,
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
-	c, err := testkit.WorldBuilder(t, 7, 10).
-		WithConfigStore(store).
-		WithEventLog(file).
-		WithCheckpointWriter(files).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	o := testkit.Options(t, 7)
+	o.EventLog, o.CheckpointWriter = file, files
+	c := testkit.NewClusterIn(t, o, store, 10)
 	testkit.SetConfig(t, c, every)
 	testkit.RunScenarioKeeping(t, c, testkit.Sender{T: t}, every)
 	testkit.Steps(t, c, idleTicks)
@@ -52,7 +46,7 @@ func aWorldThatWroteItsFilesAndStopped(
 // test when an engine differs from its log.
 func recoverTheWorld(t testing.TB, dir string, every map[string]string) *replay.Result {
 	t.Helper()
-	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10))
+	result, err := replay.Recover(dir, testkit.Options(t, 7))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +128,7 @@ func TestARecoveryWhoseCheckpointIsOfAnotherTickIsAnErrorAndNotADivergence(t *te
 	if err := os.WriteFile(last, older, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10)); err == nil {
+	if _, err := replay.Recover(dir, testkit.Options(t, 7)); err == nil {
 		t.Fatal("a checkpoint of another tick was taken")
 	}
 }
@@ -154,7 +148,7 @@ func aLongWorld(b *testing.B) string {
 
 func BenchmarkRecoveryLineWithTheCacheAtTheEndOfTheLogs(b *testing.B) {
 	dir := aLongWorld(b)
-	codecs := testkit.WorldBuilder(b, 7, 10).Codecs()
+	codecs := testkit.Options(b, 7).Codecs
 	b.ResetTimer()
 	for b.Loop() {
 		if _, err := replay.MakePlan(dir, codecs); err != nil {
@@ -168,7 +162,7 @@ func BenchmarkRecoveryLineWithNoCache(b *testing.B) {
 	if err := os.Remove(filepath.Join(dir, "recovery-line")); err != nil {
 		b.Fatal(err)
 	}
-	codecs := testkit.WorldBuilder(b, 7, 10).Codecs()
+	codecs := testkit.Options(b, 7).Codecs
 	b.ResetTimer()
 	for b.Loop() {
 		if _, err := replay.MakePlan(dir, codecs); err != nil {
@@ -180,8 +174,8 @@ func BenchmarkRecoveryLineWithNoCache(b *testing.B) {
 func benchmarkReplay(b *testing.B, planOf func(dir string, c *sim.Codecs) (*replay.Plan, error)) {
 	dir := aLongWorld(b)
 	recoverTheWorld(b, dir, everyFiveHundredTicks)
-	builder := testkit.WorldBuilder(b, 7, 10)
-	plan, err := planOf(dir, builder.Codecs())
+	builder := testkit.Options(b, 7)
+	plan, err := planOf(dir, builder.Codecs)
 	if err != nil {
 		b.Fatal(err)
 	}

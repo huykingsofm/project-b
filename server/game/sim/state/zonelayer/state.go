@@ -9,9 +9,6 @@
 package zonelayer
 
 import (
-	"fmt"
-	"slices"
-
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
@@ -28,7 +25,6 @@ import (
 // State is the state of a zonelayer.
 type State struct {
 	// Data.
-	id         sim.StateID
 	zoneID     sim.StateID
 	worldID    sim.StateID
 	tick       uint64
@@ -47,9 +43,9 @@ type State struct {
 }
 
 // NewState makes the state of an empty zonelayer.
-func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
+func NewState(zoneID, worldID sim.StateID) *State {
 	s := &State{
-		id: zoneLayerID, zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
+		zoneID: zoneID, worldID: worldID, chat: ring.New[ChatMessage](chatKeep),
 	}
 	// the column of kinds finds the entities of a kind
 	if err := s.entities.Index(func(e state.Entity) (state.KindID, bool) {
@@ -63,7 +59,7 @@ func NewState(zoneLayerID, zoneID, worldID sim.StateID) *State {
 // clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
 func (s *State) clone() *State {
 	return &State{
-		id: s.id, zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
+		zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
 		entities:     s.entities.Clone(),
 		characters:   s.characters.Clone(),
 		chat:         s.chat.Clone(),
@@ -74,9 +70,6 @@ func (s *State) clone() *State {
 
 // NextTick takes the state to the next tick.
 func (s *State) NextTick() { s.tick++ }
-
-// ID is the ID of the state.
-func (s *State) ID() sim.StateID { return s.id }
 
 // Type is the type of the state of a zonelayer.
 func (s *State) Type() sim.StateType { return state.ZoneLayerType }
@@ -90,14 +83,6 @@ func (s *State) Clone() sim.State { return s.clone() }
 
 // TakeEvents returns the events of the tick and empties them.
 func (s *State) TakeEvents() []sim.Event { return s.events.Take() }
-
-// Notice tells a character something, when the actor is one: it is what an engine calls when a
-// message that is about a character could not be delivered.
-func (s *State) Notice(actor any, key string, args ...any) {
-	if characterID, ok := actor.(state.CharacterID); ok {
-		s.NoticeToCharacter(characterID, key, args...)
-	}
-}
 
 // CharacterCount returns how many characters have a body in the zonelayer.
 func (s *State) CharacterCount() int { return s.characters.Len() }
@@ -167,7 +152,7 @@ func (s *State) SetCooldown(characterID state.CharacterID, key CooldownKey, unti
 // AddCharacterEntity gives a character a body at a position, and returns the entity.
 func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	s.lastEntityID++
-	id := state.NewEntityID(s.id, s.lastEntityID)
+	id := state.EntityID(s.lastEntityID)
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
@@ -208,7 +193,7 @@ func (s *State) AddItemEntity(
 	itemID state.ItemID, count uint32, at state.Vec, expiry uint64,
 ) state.EntityID {
 	s.lastEntityID++
-	id := state.NewEntityID(s.id, s.lastEntityID)
+	id := state.EntityID(s.lastEntityID)
 	e := entity.NewItemEntity(id, at, itemID, count, expiry)
 	s.entities.Set(e.ID(), e)
 	s.events.Add(event.ItemAppeared{EntityID: e.ID(), ItemID: itemID, Count: count, Pos: at})
@@ -307,14 +292,6 @@ func (s *State) SendMessage(m ChatMessage) {
 	s.events.Add(event.ChatMessageSent{FromID: m.fromID, Text: m.text, Tick: m.tick})
 }
 
-// NoticeToCharacter tells a character something.
-func (s *State) NoticeToCharacter(characterID state.CharacterID, key string, args ...any) {
-	// the event goes to another goroutine: it owns its arguments
-	s.events.Add(
-		event.CharacterNoticed{CharacterID: characterID, Key: key, Args: slices.Clone(args)},
-	)
-}
-
 // ZoneID is the ID of the zone that the zonelayer is a copy of.
 func (s *State) ZoneID() sim.StateID { return s.zoneID }
 
@@ -341,20 +318,17 @@ func (s *State) EntityIDsOfKind(kind state.KindID) []state.EntityID {
 // ChatMessageCount is how many chat messages the zonelayer keeps.
 func (s *State) ChatMessageCount() int { return s.chat.Len() }
 
-// Encode writes the data of the state: its IDs and tick, its entities, its characters, what was
-// said, which character has which body, and the ID the next entity gets. The events are not data
+// Encode writes the data of the state: the IDs of its zone and world and its tick, its entities,
+// its characters, what was said, which character has which body, and the number the next entity
+// gets. The events are not data
 // (R18) and are not written. It returns an error, and the writer holds a partial state, when an
 // entity cannot be written.
 func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.zoneID))
 	w.Uvarint(uint64(s.worldID))
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(s.entities.Len()))
-	for id, e := range s.entities.All() {
-		if id.Owner != s.id {
-			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
-		}
+	for _, e := range s.entities.All() {
 		if err := entity.Encode(w, e); err != nil {
 			return err
 		}
@@ -374,7 +348,7 @@ func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.bodies.Len()))
 	for characterID, entityID := range s.bodies.AllV1() {
 		w.Uvarint(uint64(characterID))
-		w.Uvarint(entityID.Local)
+		w.Uvarint(uint64(entityID))
 	}
 	w.Uvarint(s.lastEntityID)
 	return nil
@@ -385,7 +359,6 @@ func (s *State) Encode(w *binary.Writer) error {
 // time. It walks the containers in their own order, which is fixed.
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.id))
 	h.U64(uint64(s.zoneID))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)

@@ -10,8 +10,9 @@ import (
 // StableStateStore of a cluster that runs, or the one a replay gives them, which serves the copy
 // that the log says each read found.
 type StableStore interface {
-	// Publish makes a state the latest copy of its engine. The state must not be changed after.
-	Publish(s sim.State)
+	// Publish makes a state the latest copy of the engine with the ID. The state must not be
+	// changed after.
+	Publish(id sim.StateID, s sim.State)
 	// Remove forgets what an engine published, as the engine is removed.
 	Remove(id sim.StateID)
 	// View returns what the engine with the ID reads of the store.
@@ -43,7 +44,7 @@ type StableStateStore struct {
 func NewStableStateStore() *StableStateStore { return &StableStateStore{} }
 
 // Publish makes a copy the latest of its engine.
-func (s *StableStateStore) Publish(st sim.State) { s.states.Publish(st.ID(), st) }
+func (s *StableStateStore) Publish(id sim.StateID, st sim.State) { s.states.Publish(id, st) }
 
 // Remove forgets what an engine published.
 func (s *StableStateStore) Remove(id sim.StateID) { s.states.Remove(id) }

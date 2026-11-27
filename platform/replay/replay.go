@@ -19,29 +19,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 )
-
-// Builder is what a replay needs of the game that was recorded: the settings of its cluster, and
-// how to build the cluster in the environment that the replay provides, with the codecs that read
-// back what was written.
-type Builder interface {
-	Seed() uint64
-	QueueSize() int
-	Codecs() *sim.Codecs
-	// BuildIn makes each engine from the checkpoint that the source has for it, and new when it has
-	// none.
-	BuildIn(env *engine.Env, checkpoints engine.CheckpointSource) (*engine.Cluster, error)
-}
-
-// OrphanFinder is a Builder that can say which engines of a cluster that was made again nothing
-// refers to any more. The state that lists the engines (the world of a game) forgot them in a tick
-// that its log keeps, and the engine was not removed before the cluster stopped, so its log does
-// not end with the record of its removal. The handover removes them.
-type OrphanFinder interface {
-	Orphans(c *engine.Cluster) []sim.StateID
-}
 
 // Result is what a replay found.
 type Result struct {
@@ -59,6 +40,91 @@ type Result struct {
 	Divergences []string
 }
 
+// Handover makes the engines of the cluster again in the environment given, each from a checkpoint
+// of its replayed engine at its limit, and returns the cluster, which has not run yet: the caller
+// runs it, and the engines go on from their own ticks. The environment is the one of a cluster
+// that runs (engine.NewEnvironment: its router, event log, published states, emitter, acks and
+// checkpoint writer, and the codecs, the registry and the seed of the replay); the event log in it
+// writes on after the cut, so no log may be open for writing before. The store is the
+// configuration of the world outside the game, which the cluster sends to the configuration engine.
+//
+// The replay has an AckBoard, so each replayed engine holds, and its checkpoint carries, the
+// messages it sent that no receiver took in the part of its log that was kept. At its first flush
+// a live engine lets go of what its receivers acked from their checkpoints and sends the rest
+// again: a receiver whose log was cut takes one now, and one that took it drops the copy by its
+// number. Each engine that ran a tick publishes its state before its next tick, for the engines
+// that read it.
+//
+// An engine that the replay removed (its log ends with the record of its removal) is not made
+// again; messages to it are refused. The cluster goes on giving IDs above the ones its logs hold,
+// and does not serve again a request whose engine its logs hold.
+//
+// A replay in which an engine differs from its log is not handed over. A checkpoint that cannot
+// make its engine is an error.
+func (r *Result) Handover(env *engine.Environment, store *config.Store) (*engine.Cluster, error) {
+	if len(r.Divergences) > 0 {
+		return nil, errors.New("handover: the replay differs from its logs")
+	}
+	var configCheckpoint []byte
+	if e := r.Cluster.ConfigEngine(); e.Tick() > 0 {
+		data, err := e.EncodeCheckpoint()
+		if err != nil {
+			return nil, fmt.Errorf("handover: the checkpoint of the configuration engine: %w", err)
+		}
+		configCheckpoint = data
+	}
+	live, err := engine.NewCluster(env, store, configCheckpoint)
+	if err != nil {
+		return nil, fmt.Errorf("handover: %w", err)
+	}
+	for _, handle := range r.Cluster.Engines() {
+		e := handle.(handoverEngineHandle)
+		id := e.StateID()
+		if id == sim.ConfigStateID {
+			continue
+		}
+		data, err := e.EncodeCheckpoint()
+		if err != nil {
+			return nil, fmt.Errorf("handover: the checkpoint of %v: %w", id, err)
+		}
+		madeAgain, err := live.AddEngineByCheckpoint(data)
+		if err != nil {
+			return nil, fmt.Errorf("handover: the engine %v: %w", id, err)
+		}
+		again := madeAgain.(handoverEngineHandle)
+		// an engine that has run no tick publishes nothing, as one that was never stopped does: a
+		// read that finds no copy is recorded as the tick 0, and a copy at the tick 0 would be
+		// recorded the same
+		if again.Tick() > 0 {
+			again.PublishState()
+		}
+	}
+	for _, id := range r.Retired {
+		env.Router.Retire(id)
+	}
+	live.RaiseStateIDs(r.Plan.LastStateIDs())
+	served, err := r.Plan.served()
+	if err != nil {
+		return nil, fmt.Errorf("handover: %w", err)
+	}
+	live.RestoreServed(served)
+	if cfg := live.ConfigEngine(); cfg.Tick() > 0 {
+		cfg.PublishState()
+	}
+	return live, nil
+}
+
+// handoverEngineHandle is what Handover needs of an engine of a cluster: to say which engine it
+// is and where it is, to take its checkpoint and, once made again, to publish its state.
+type handoverEngineHandle interface {
+	StateID() sim.StateID
+	Tick() uint64
+	EncodeCheckpoint() ([]byte, error)
+	PublishState()
+}
+
+var _ handoverEngineHandle = (*engine.Engine[*sim.ConfigState])(nil)
+
 // DivergenceError is the error of a recovery in which an engine did not do what its log says.
 type DivergenceError struct {
 	Divergences []string
@@ -69,16 +135,17 @@ func (e *DivergenceError) Error() string {
 		len(e.Divergences), strings.Join(e.Divergences, "\n"))
 }
 
-// Run runs the cluster that b describes again, on the logs of the plan, each engine from its start
-// to its limit, and reports whether each engine did what its log says. The builder must describe
-// the cluster that was recorded (the same engines, states and seed); what it sets for the event
-// log and the emitter is not used. It changes nothing on the disk.
+// Run runs the cluster that was recorded again, on the logs of the plan, each engine from its start
+// to its limit, and reports whether each engine did what its log says. The options must be the ones
+// the cluster was made with (the same seed and queue size, and the codecs and the registry of the
+// same game); what they set for the event log, the emitter and the checkpoints is not used. It
+// changes nothing on the disk.
 //
-// It returns an error when the replay cannot run: the builder is wrong, an engine has a record it
+// It returns an error when the replay cannot run: the options are wrong, an engine has a record it
 // cannot be given, or the engines wait for each other for ever. A difference between the run and
 // the log is not an error but a divergence in the result.
-func Run(b Builder, p *Plan) (*Result, error) {
-	run, err := newReplayRun(b, p)
+func Run(o engine.Options, p *Plan) (*Result, error) {
+	run, err := newReplayRun(o, p)
 	if err != nil {
 		return nil, err
 	}
@@ -92,25 +159,24 @@ func Run(b Builder, p *Plan) (*Result, error) {
 	}, nil
 }
 
-// Recover cuts the logs and the checkpoints under dir to the recovery line, then makes the cluster
-// that b describes from the latest checkpoint of each engine that is at or below the line, and
-// runs each engine on its log to the line, comparing what it does with what it recorded. No log
+// Recover cuts the logs and the checkpoints under dir to the recovery line, then makes each engine
+// of the cluster from its latest checkpoint at or below the line, or from the record that begins
+// its log, and runs it on its log to the line, comparing what it does with what it recorded. No log
 // may be open for writing. It returns an error when the files cannot be read or cut, or the replay
 // cannot run. An engine that did not do what its log says is a *DivergenceError, returned with the
 // result, which holds the cluster as it is.
-func Recover(dir string, b Builder) (*Result, error) {
-	codecs := b.Codecs()
-	if codecs == nil {
-		return nil, errors.New("recover: the builder cannot make its codecs")
+func Recover(dir string, o engine.Options) (*Result, error) {
+	if o.Codecs == nil {
+		return nil, errors.New("recover: no codecs to read the logs with")
 	}
-	plan, err := MakePlan(dir, codecs)
+	plan, err := MakePlan(dir, o.Codecs)
 	if err != nil {
 		return nil, fmt.Errorf("recover: %w", err)
 	}
 	if err := plan.Cut(); err != nil {
 		return nil, fmt.Errorf("recover: %w", err)
 	}
-	result, err := Run(b, plan)
+	result, err := Run(o, plan)
 	if err != nil {
 		return nil, fmt.Errorf("recover: %w", err)
 	}

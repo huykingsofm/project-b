@@ -1,4 +1,4 @@
-package checkpoint
+package checkpoint_test
 
 import (
 	"bytes"
@@ -8,8 +8,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/atomicfile"
 )
 
 const engineA, engineB sim.StateID = 1<<56 | 1, 1<<56 | 2
@@ -19,7 +21,7 @@ func bytesOf(b []byte) func() ([]byte, error) { return func() ([]byte, error) { 
 
 func TestTheCheckpointsOfferedAreWrittenToTheFilesOfTheirEnginesAndReadBack(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 8)
+	w := checkpoint.NewFileWriter(dir, 8)
 	w.Offer(engineA, 20, bytesOf([]byte("a20")))
 	w.Offer(engineB, 3, bytesOf([]byte("b3")))
 	w.Offer(engineA, 5, bytesOf([]byte("a5")))
@@ -27,11 +29,11 @@ func TestTheCheckpointsOfferedAreWrittenToTheFilesOfTheirEnginesAndReadBack(t *t
 	if w.Written() != 3 || w.Dropped() != 0 || w.Failed() != 0 {
 		t.Fatalf("written %d, dropped %d, failed %d", w.Written(), w.Dropped(), w.Failed())
 	}
-	ticks, err := Ticks(dir, engineA)
+	ticks, err := checkpoint.Ticks(dir, engineA)
 	if err != nil || !slices.Equal(ticks, []uint64{5, 20}) {
 		t.Fatalf("the ticks of A are %v, %v: want them in rising order", ticks, err)
 	}
-	if ticks, _ := Ticks(dir, engineB); !slices.Equal(ticks, []uint64{3}) {
+	if ticks, _ := checkpoint.Ticks(dir, engineB); !slices.Equal(ticks, []uint64{3}) {
 		t.Fatalf("the ticks of B are %v", ticks)
 	}
 	for _, c := range []struct {
@@ -39,7 +41,7 @@ func TestTheCheckpointsOfferedAreWrittenToTheFilesOfTheirEnginesAndReadBack(t *t
 		tick   uint64
 		want   string
 	}{{engineA, 20, "a20"}, {engineA, 5, "a5"}, {engineB, 3, "b3"}} {
-		got, err := Read(dir, c.engine, c.tick)
+		got, err := checkpoint.Read(dir, c.engine, c.tick)
 		if err != nil || !bytes.Equal(got, []byte(c.want)) {
 			t.Fatalf("%v at %d: %q, %v", c.engine, c.tick, got, err)
 		}
@@ -47,7 +49,7 @@ func TestTheCheckpointsOfferedAreWrittenToTheFilesOfTheirEnginesAndReadBack(t *t
 }
 
 func TestAnEngineWithNoDirectoryHasNoCheckpoint(t *testing.T) {
-	ticks, err := Ticks(t.TempDir(), engineA)
+	ticks, err := checkpoint.Ticks(t.TempDir(), engineA)
 	if err != nil || len(ticks) != 0 {
 		t.Fatalf("%v, %v", ticks, err)
 	}
@@ -59,7 +61,7 @@ func TestATemporaryFileThatACrashLeftIsNotACheckpointAndIsWrittenOver(t *testing
 	if err := os.MkdirAll(engineDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	half := Path(dir, engineA, 9) + ".tmp"
+	half := checkpoint.Path(dir, engineA, 9) + ".tmp"
 	if err := os.WriteFile(half, []byte("half a checkpoint that is longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -67,13 +69,13 @@ func TestATemporaryFileThatACrashLeftIsNotACheckpointAndIsWrittenOver(t *testing
 	if err := os.WriteFile(other, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ticks, _ := Ticks(dir, engineA); len(ticks) != 0 {
+	if ticks, _ := checkpoint.Ticks(dir, engineA); len(ticks) != 0 {
 		t.Fatalf("a temporary file or another file is read as a checkpoint: %v", ticks)
 	}
-	w := NewFileWriter(dir, 1)
+	w := checkpoint.NewFileWriter(dir, 1)
 	w.Offer(engineA, 9, bytesOf([]byte("whole")))
 	w.Close()
-	if got, err := Read(dir, engineA, 9); err != nil || string(got) != "whole" {
+	if got, err := checkpoint.Read(dir, engineA, 9); err != nil || string(got) != "whole" {
 		t.Fatalf("%q, %v", got, err)
 	}
 	if _, err := os.Stat(half); !errors.Is(err, os.ErrNotExist) {
@@ -83,7 +85,7 @@ func TestATemporaryFileThatACrashLeftIsNotACheckpointAndIsWrittenOver(t *testing
 
 func TestACheckpointThatFindsTheQueueFullIsDroppedAndTheOthersAreWritten(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 1)
+	w := checkpoint.NewFileWriter(dir, 1)
 	started, release := make(chan struct{}), make(chan struct{})
 	w.Offer(engineA, 1, func() ([]byte, error) {
 		close(started)
@@ -98,27 +100,27 @@ func TestACheckpointThatFindsTheQueueFullIsDroppedAndTheOthersAreWritten(t *test
 	if w.Written() != 2 || w.Dropped() != 1 {
 		t.Fatalf("written %d, dropped %d: want 2 and 1", w.Written(), w.Dropped())
 	}
-	if ticks, _ := Ticks(dir, engineA); !slices.Equal(ticks, []uint64{1, 2}) {
+	if ticks, _ := checkpoint.Ticks(dir, engineA); !slices.Equal(ticks, []uint64{1, 2}) {
 		t.Fatalf("the ticks are %v, want 1 and 2", ticks)
 	}
 }
 
 func TestACheckpointThatCannotBeEncodedIsCountedAndLeavesNoFile(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 1)
+	w := checkpoint.NewFileWriter(dir, 1)
 	w.Offer(engineA, 4, func() ([]byte, error) { return nil, errors.New("cannot") })
 	w.Close()
 	if w.Failed() != 1 || w.Written() != 0 {
 		t.Fatalf("failed %d, written %d", w.Failed(), w.Written())
 	}
-	if ticks, _ := Ticks(dir, engineA); len(ticks) != 0 {
+	if ticks, _ := checkpoint.Ticks(dir, engineA); len(ticks) != 0 {
 		t.Fatalf("a checkpoint that failed has a file: %v", ticks)
 	}
 }
 
 func TestACheckpointOfferedAfterCloseIsDroppedAndCloseCanBeCalledAgain(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 1)
+	w := checkpoint.NewFileWriter(dir, 1)
 	w.Close()
 	w.Offer(engineA, 1, bytesOf([]byte("late")))
 	w.Close()
@@ -136,7 +138,7 @@ func benchmarkWriteFile(b *testing.B, size int) {
 	tick := uint64(0)
 	for b.Loop() {
 		tick++
-		if err := writeFile(dir, engineA, tick, data); err != nil {
+		if err := atomicfile.Write(checkpoint.Path(dir, engineA, tick), data); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -149,7 +151,7 @@ func BenchmarkWriteFileWorld(b *testing.B)     { benchmarkWriteFile(b, 122_000) 
 
 func TestTheLatestCheckpointAtOrBelowATickIsTheOneOnOrBeforeIt(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 8)
+	w := checkpoint.NewFileWriter(dir, 8)
 	for _, tick := range []uint64{7, 14, 21} {
 		w.Offer(engineA, tick, bytesOf([]byte("a")))
 	}
@@ -159,37 +161,38 @@ func TestTheLatestCheckpointAtOrBelowATickIsTheOneOnOrBeforeIt(t *testing.T) {
 		want uint64
 		ok   bool
 	}{{6, 0, false}, {7, 7, true}, {13, 7, true}, {14, 14, true}, {1000, 21, true}} {
-		got, ok, err := LatestAtOrBelow(dir, engineA, c.tick)
+		got, ok, err := checkpoint.LatestAtOrBelow(dir, engineA, c.tick)
 		if err != nil || ok != c.ok || got != c.want {
 			t.Fatalf("at or below %d: %d, %v (%v), want %d, %v", c.tick, got, ok, err, c.want, c.ok)
 		}
 	}
-	if _, ok, err := LatestAtOrBelow(dir, engineB, 100); ok || err != nil {
+	if _, ok, err := checkpoint.LatestAtOrBelow(dir, engineB, 100); ok || err != nil {
 		t.Fatalf("an engine with no checkpoint: %v, %v", ok, err)
 	}
 }
 
 func TestAnArchivedCheckpointIsNotOneAnyMoreAndIsKeptInTheArchive(t *testing.T) {
 	dir := t.TempDir()
-	w := NewFileWriter(dir, 8)
+	w := checkpoint.NewFileWriter(dir, 8)
 	w.Offer(engineA, 7, bytesOf([]byte("seven")))
 	w.Offer(engineA, 14, bytesOf([]byte("fourteen")))
 	w.Close()
 	archive := filepath.Join(dir, ".archive", "cut-1", "a")
-	if err := Archive(dir, engineA, 14, archive); err != nil {
+	if err := checkpoint.Archive(dir, engineA, 14, archive); err != nil {
 		t.Fatal(err)
 	}
-	if ticks, _ := Ticks(dir, engineA); !slices.Equal(ticks, []uint64{7}) {
+	if ticks, _ := checkpoint.Ticks(dir, engineA); !slices.Equal(ticks, []uint64{7}) {
 		t.Fatalf("the ticks are %v, want only 7", ticks)
 	}
 	kept, _ := filepath.Glob(filepath.Join(archive, "ckpt-*.snap"))
-	if len(kept) != 1 || filepath.Base(kept[0]) == fileName(14) {
+	if len(kept) != 1 || filepath.Base(kept[0]) == filepath.Base(checkpoint.Path(dir, engineA,
+		14)) {
 		t.Fatalf("the archive holds %v, want one file with a time in its name", kept)
 	}
 	if got, err := os.ReadFile(kept[0]); err != nil || string(got) != "fourteen" {
 		t.Fatalf("the archived file holds %q (%v)", got, err)
 	}
-	if err := Archive(dir, engineA, 14, archive); err == nil {
+	if err := checkpoint.Archive(dir, engineA, 14, archive); err == nil {
 		t.Fatal("a checkpoint that is not there was archived")
 	}
 }

@@ -1,9 +1,7 @@
-package eventlog
+package eventlog_test
 
 import (
 	"fmt"
-	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,35 +9,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
-// engineDir is the directory of the log of an engine that did not describe itself to the log.
-func engineDir(dir string, engine sim.StateID) string {
-	return filepath.Join(dir, engineDirName(engine))
-}
-
-var testFileLogOptions = FileLogOptions{
+var testFileLogOptions = eventlog.FileLogOptions{
 	Seed: 42, SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
 }
 
-func readLog(t *testing.T, dir string, engine sim.StateID, from uint64) ([]Record, error) {
+func readLog(t *testing.T, dir string, engine sim.StateID, from uint64) ([]eventlog.Record, error) {
 	t.Helper()
-	r, err := ReadFileLog(dir, engine, from, toyCodecs())
+	r, err := eventlog.ReadFileLog(dir, engine, from, toyCodecs())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	var out []Record
+	var out []eventlog.Record
 	for r.Next() {
 		out = append(out, r.Record())
 	}
 	return out, r.Err()
 }
 
+// recordsOfEveryKindInATick is how many records recordsOfEveryKind writes for a tick.
+const recordsOfEveryKindInATick = 10
+
 // recordsOfEveryKind writes a record of every kind for an engine at a tick, and returns what it
 // wrote.
-func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
+func recordsOfEveryKind(log eventlog.Log, engine sim.StateID, tick uint64) []eventlog.Record {
 	from := sim.StateID(3)
 	inbound := sim.NewActionMessage[*toyState](
 		3, onfail.Compensate{With: sim.NewActionMessage[*toyState](
@@ -52,44 +51,54 @@ func recordsOfEveryKind(log Log, engine sim.StateID, tick uint64) []Record {
 	move := toyMove{CharacterID: 7, Dir: 1, Ticks: 3}
 	chat := toyChat{FromID: 1, Text: "psst"}
 
-	log.Append(engine, tick, Hash{Value: 5})
-	log.Append(engine, tick, Inbound{Message: inbound})
-	log.Append(engine, tick, Returned{
+	log.Append(engine, tick, eventlog.Hash{Value: 5})
+	log.Append(engine, tick, eventlog.Inbound{Message: inbound})
+	log.Append(engine, tick, eventlog.Returned{
 		Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.DeliveryFailureFull,
 	})
-	log.Append(engine, tick, Command{Command: chat})
-	log.Append(engine, tick, Command{Command: enter})
-	log.Append(engine, tick, Command{Command: move})
-	log.Append(engine, tick, StableRead{Source: sim.StateID(12), CopyTick: tick - 1})
-	log.Append(engine, tick, Hash{Value: 0xdeadbeefcafef00d + tick})
+	log.Append(engine, tick, eventlog.Command{Command: chat})
+	log.Append(engine, tick, eventlog.Command{Command: enter})
+	log.Append(engine, tick, eventlog.Command{Command: move})
+	log.Append(engine, tick, eventlog.StableRead{Source: sim.StateID(12), CopyTick: tick - 1})
+	started := eventlog.Started{
+		Creator: from, CreatorTick: tick, DirectiveID: tick, Snapshot: []byte{byte(tick)},
+	}
+	directive := eventlog.Directive{Response: sim.DirectiveResponse{
+		ID: tick, Tag: []byte("zone"), Engine: 40 + sim.StateID(tick),
+	}}
+	log.Append(engine, tick, started)
+	log.Append(engine, tick, directive)
+	log.Append(engine, tick, eventlog.Hash{Value: 0xdeadbeefcafef00d + tick})
 	log.EndTick(engine, tick)
-	return []Record{
-		{Engine: engine, Tick: tick, Body: Hash{Value: 5}},
-		{Engine: engine, Tick: tick, Body: Inbound{Message: inbound}},
+	return []eventlog.Record{
+		{Engine: engine, Tick: tick, Body: eventlog.Hash{Value: 5}},
+		{Engine: engine, Tick: tick, Body: eventlog.Inbound{Message: inbound}},
 		{
 			Engine: engine,
 			Tick:   tick,
-			Body: Returned{
+			Body: eventlog.Returned{
 				Header: sim.Header{From: from, Seq: tick*10 + 1}, Reason: sim.DeliveryFailureFull,
 			},
 		},
-		{Engine: engine, Tick: tick, Body: Command{Command: chat}},
-		{Engine: engine, Tick: tick, Body: Command{Command: enter}},
-		{Engine: engine, Tick: tick, Body: Command{Command: move}},
+		{Engine: engine, Tick: tick, Body: eventlog.Command{Command: chat}},
+		{Engine: engine, Tick: tick, Body: eventlog.Command{Command: enter}},
+		{Engine: engine, Tick: tick, Body: eventlog.Command{Command: move}},
 		{
 			Engine: engine,
 			Tick:   tick,
-			Body:   StableRead{Source: sim.StateID(12), CopyTick: tick - 1},
+			Body:   eventlog.StableRead{Source: sim.StateID(12), CopyTick: tick - 1},
 		},
-		{Engine: engine, Tick: tick, Body: Hash{Value: 0xdeadbeefcafef00d + tick}},
+		{Engine: engine, Tick: tick, Body: started},
+		{Engine: engine, Tick: tick, Body: directive},
+		{Engine: engine, Tick: tick, Body: eventlog.Hash{Value: 0xdeadbeefcafef00d + tick}},
 	}
 }
 
 func TestEveryKindOfRecordComesBackAsItWasWritten(t *testing.T) {
 	dir := t.TempDir()
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	engine := sim.StateID(1)
-	var want []Record
+	var want []eventlog.Record
 	for tick := uint64(1); tick <= 5; tick++ {
 		want = append(want, recordsOfEveryKind(log, engine, tick)...)
 	}
@@ -110,7 +119,7 @@ func TestEveryKindOfRecordComesBackAsItWasWritten(t *testing.T) {
 	}
 }
 
-func firstDifference(got, want []Record) string {
+func firstDifference(got, want []eventlog.Record) string {
 	for i := range min(len(got), len(want)) {
 		if !reflect.DeepEqual(got[i], want[i]) {
 			return fmt.Sprintf("got  %+v\nwant %+v", got[i], want[i])
@@ -121,14 +130,14 @@ func firstDifference(got, want []Record) string {
 
 func TestAnEngineWritesOnlyToItsOwnLogAndTheMetaSaysWhichAndTheSeed(t *testing.T) {
 	dir := t.TempDir()
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	a, b := sim.StateID(1), sim.StateID(21)
 	recordsOfEveryKind(log, a, 1)
 	recordsOfEveryKind(log, b, 1)
 	log.Close()
 	for _, e := range []sim.StateID{a, b} {
 		got, err := readLog(t, dir, e, 0)
-		if err != nil || len(got) != 8 {
+		if err != nil || len(got) != recordsOfEveryKindInATick {
 			t.Fatalf("%v: %d records, error %v", e, len(got), err)
 		}
 		for _, r := range got {
@@ -142,7 +151,7 @@ func TestAnEngineWritesOnlyToItsOwnLogAndTheMetaSaysWhichAndTheSeed(t *testing.T
 			t.Fatalf("no directory %s: %v", name, err)
 		}
 	}
-	r, _ := ReadFileLog(dir, a, 0, toyCodecs())
+	r, _ := eventlog.ReadFileLog(dir, a, 0, toyCodecs())
 	defer r.Close()
 	if !r.Next() || r.Seed() != 42 {
 		t.Fatalf("seed %d", r.Seed())
@@ -153,13 +162,13 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 	dir := t.TempDir()
 	o := testFileLogOptions
 	o.SegmentBytes = 1 // a segment for each tick
-	log := NewFileLog(dir, o)
+	log := eventlog.NewFileLog(dir, o)
 	engine := sim.StateID(11)
 	for tick := uint64(1); tick <= 20; tick++ {
 		recordsOfEveryKind(log, engine, tick)
 	}
 	log.Close()
-	segs, _ := segmentlog.Segments(engineDir(dir, engine))
+	segs, _ := segmentlog.Segments(eventlog.EngineDir(dir, engine))
 	if len(segs) < 10 {
 		t.Fatalf("%d segments, want one for each tick or nearly", len(segs))
 	}
@@ -167,9 +176,9 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 9*8 || got[0].Tick != 12 || got[len(got)-1].Tick != 20 {
+	if len(got) != 9*recordsOfEveryKindInATick || got[0].Tick != 12 || got[len(got)-1].Tick != 20 {
 		t.Fatalf(
-			"%d records from %d to %d, want 72 from 12 to 20",
+			"%d records from %d to %d, want 90 from 12 to 20",
 			len(got),
 			got[0].Tick,
 			got[len(got)-1].Tick,
@@ -179,31 +188,31 @@ func TestReadingFromATickGivesThatTickAndLaterAndUsesTheMetaToStartInTheRightSeg
 
 func TestACrashThatCutsTheEndOfTheFileLeavesTheRecordsBeforeIt(t *testing.T) {
 	dir := t.TempDir()
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	engine := sim.StateID(1)
 	for tick := uint64(1); tick <= 3; tick++ {
 		recordsOfEveryKind(log, engine, tick)
 	}
 	log.Close()
-	segs, _ := segmentlog.Segments(engineDir(dir, engine))
+	segs, _ := segmentlog.Segments(eventlog.EngineDir(dir, engine))
 	st, _ := os.Stat(segs[0].Path)
 	os.Truncate(segs[0].Path, st.Size()-3)
 	got, err := readLog(t, dir, engine, 0)
 	if err != nil {
 		t.Fatalf("a torn end is not an error: %v", err)
 	}
-	if len(got) != 2*8 {
+	if len(got) != 2*recordsOfEveryKindInATick {
 		t.Fatalf("%d records, want the two whole ticks and nothing of the cut one", len(got))
 	}
 }
 
 func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritten(t *testing.T) {
 	dir := t.TempDir()
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	engine := sim.StateID(1)
-	log.Append(engine, 1, Hash{Value: 1})
-	log.Append(engine, 1, Command{}) // no command: it cannot be written
-	log.Append(engine, 1, Hash{Value: 2})
+	log.Append(engine, 1, eventlog.Hash{Value: 1})
+	log.Append(engine, 1, eventlog.Command{}) // no command: it cannot be written
+	log.Append(engine, 1, eventlog.Hash{Value: 2})
 	log.EndTick(engine, 1)
 	if log.Err() == nil {
 		t.Fatal("the log was not marked as failed")
@@ -212,8 +221,8 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 		t.Fatal("Close did not return the error")
 	}
 	got, err := readLog(t, dir, engine, 0)
-	if err != nil || len(got) != 2 || got[0].Body != (Hash{Value: 1}) ||
-		got[1].Body != (Hash{Value: 2}) {
+	if err != nil || len(got) != 2 || got[0].Body != (eventlog.Hash{Value: 1}) ||
+		got[1].Body != (eventlog.Hash{Value: 2}) {
 		t.Fatalf("%d records, error %v; want the two that could be written", len(got), err)
 	}
 }
@@ -221,19 +230,19 @@ func TestARecordThatCannotBeWrittenMarksTheLogAsFailedAndTheOthersAreStillWritte
 func TestATickWithNoRecordIsAFrameWithOnlyItsTick(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	log.EndTick(engine, 1)
-	log.Append(engine, 2, Hash{Value: 3})
+	log.Append(engine, 2, eventlog.Hash{Value: 3})
 	log.EndTick(engine, 2)
 	log.EndTick(engine, 3)
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
 	got, err := readLog(t, dir, engine, 0)
-	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (Hash{Value: 3}) {
+	if err != nil || len(got) != 1 || got[0].Tick != 2 || got[0].Body != (eventlog.Hash{Value: 3}) {
 		t.Fatalf("records %v, error %v; want the one of tick 2", got, err)
 	}
-	r, err := segmentlog.OpenReader(engineDir(dir, engine), 0)
+	r, err := segmentlog.OpenReader(eventlog.EngineDir(dir, engine), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,9 +259,9 @@ func TestATickWithNoRecordIsAFrameWithOnlyItsTick(t *testing.T) {
 func TestRecordsOfAnotherTickAreAnErrorAndAreNotWritten(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
-	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, Hash{Value: 1})
-	log.Append(engine, 2, Hash{Value: 2}) // not the tick of the frame
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 1, eventlog.Hash{Value: 1})
+	log.Append(engine, 2, eventlog.Hash{Value: 2}) // not the tick of the frame
 	if log.Err() == nil {
 		t.Fatal("a record of another tick was not refused")
 	}
@@ -266,49 +275,30 @@ func TestRecordsOfAnotherTickAreAnErrorAndAreNotWritten(t *testing.T) {
 
 func TestTheLogOfAnotherEngineIsRefused(t *testing.T) {
 	dir := t.TempDir()
-	log := NewFileLog(dir, testFileLogOptions)
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
 	recordsOfEveryKind(log, sim.StateID(11), 1)
 	log.Close()
-	os.Rename(engineDir(dir, sim.StateID(11)), engineDir(dir, sim.StateID(12)))
+	os.Rename(eventlog.EngineDir(dir, sim.StateID(11)), eventlog.EngineDir(dir, sim.StateID(12)))
 	if _, err := readLog(t, dir, sim.StateID(12), 0); err == nil {
 		t.Fatal("the log of engine 11 was read as the log of engine 12")
 	}
 }
-
-func TestACorruptRecordPayloadIsAnErrorAndNeverAPanic(t *testing.T) {
-	engine := sim.StateID(1)
-	for _, p := range [][]byte{
-		nil,
-		{},
-		{99},
-		{byte(KindInbound)},
-		{byte(KindInbound), 3, 1, 1, 2, 5},
-		{byte(KindReturned), 1},
-		{byte(KindHash), 1, 2},
-		{byte(KindCommand), 0xff, 0xff, 0x7f},
-		{byte(KindStableRead), 1},
-	} {
-		if _, err := decodeRecord(toyCodecs(), engine, formatVersion, 1, p); err == nil {
-			t.Errorf("%v was read", p)
-		}
-	}
-}
-
 func TestALogThatCouldNotBeOpenedFailsOnceAndTheEngineDoesNotTryAgainForEachRecord(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
 	os.WriteFile(
-		engineDir(dir, engine), []byte("a file where the directory of the log should be"), 0o644,
+		eventlog.EngineDir(dir,
+			engine), []byte("a file where the directory of the log should be"), 0o644,
 	)
-	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, Hash{Value: 1})
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 1, eventlog.Hash{Value: 1})
 	if log.Err() == nil {
 		t.Fatal("a log that could not be opened is not marked as failed")
 	}
 	// the obstacle goes away: an engine that tried again for each record would now open its log
-	os.Remove(engineDir(dir, engine))
+	os.Remove(eventlog.EngineDir(dir, engine))
 	for tick := uint64(2); tick < 10; tick++ {
-		log.Append(engine, tick, Hash{Value: 1})
+		log.Append(engine, tick, eventlog.Hash{Value: 1})
 		log.EndTick(engine, tick)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
@@ -324,12 +314,12 @@ func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
 	engine := sim.StateID(21)
 	o := testFileLogOptions
 	o.SyncEvery = 5 * time.Millisecond
-	log := NewFileLog(dir, o)
+	log := eventlog.NewFileLog(dir, o)
 	if got := log.Durable(engine); got != 0 {
 		t.Fatalf("Durable of an engine with no log = %d", got)
 	}
 	for tick := uint64(1); tick <= 7; tick++ {
-		log.Append(engine, tick, Hash{Value: tick})
+		log.Append(engine, tick, eventlog.Hash{Value: tick})
 		log.EndTick(engine, tick)
 		if got := log.Durable(engine); got > tick {
 			t.Fatalf("Durable = %d at the tick %d", got, tick)
@@ -346,7 +336,7 @@ func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	// another process opens the log: what is there is on the disk
-	again := NewFileLog(dir, o)
+	again := eventlog.NewFileLog(dir, o)
 	defer again.Close()
 	if got := again.Durable(engine); got != 7 {
 		t.Fatalf("Durable of a log that was there = %d, want 7", got)
@@ -354,7 +344,7 @@ func TestDurableIsTheTickOfTheLastFrameThatIsOnTheDisk(t *testing.T) {
 }
 
 // settled waits until what the log says is safe for the engine is the tick, or fails the test.
-func settled(t *testing.T, log *FileLog, engine sim.StateID, tick uint64) {
+func settled(t *testing.T, log *eventlog.FileLog, engine sim.StateID, tick uint64) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for log.Safe(engine) != tick {
@@ -369,18 +359,40 @@ func aMessageFrom(from sim.StateID, seq, tick uint64) sim.Message {
 	return benchMessage(1).Stamp(sim.Header{From: from, Seq: seq, Tick: tick})
 }
 
+func TestTheFirstTickOfAnEngineThatWasMadeIsNotSafeUntilTheTickOfItsCreatorIs(t *testing.T) {
+	dir := t.TempDir()
+	creator, made := sim.StateID(1), sim.StateID(2)
+	quick := testFileLogOptions
+	quick.SyncEvery = 2 * time.Millisecond
+	log := eventlog.NewFileLog(dir, quick)
+	defer log.Close()
+	// the engine that was made writes its start first, which depends on the tick 3 of its creator
+	log.Append(made, 1, eventlog.Started{
+		Creator: creator, CreatorTick: 3, DirectiveID: 1, Snapshot: []byte{1},
+	})
+	log.EndTick(made, 1)
+	log.EndTick(made, 2)
+	// it is durable, and safe only before its first tick, which depends on the creator
+	settled(t, log, made, 0)
+	for tick := uint64(1); tick <= 3; tick++ {
+		log.EndTick(creator, tick)
+	}
+	settled(t, log, creator, 3)
+	settled(t, log, made, 2)
+}
+
 func TestATickThatTookAMessageIsNotSafeUntilTheTickOfItsSenderIs(t *testing.T) {
 	dir := t.TempDir()
 	a, b := sim.StateID(1), sim.StateID(2)
 	quick := testFileLogOptions
 	quick.SyncEvery = 2 * time.Millisecond
-	log := NewFileLog(dir, quick)
+	log := eventlog.NewFileLog(dir, quick)
 	defer log.Close()
 	// b takes at its tick 2 the message that a sent at its tick 3; b syncs often and a does not
 	// write at all yet
-	log.Append(b, 1, Hash{Value: 1})
+	log.Append(b, 1, eventlog.Hash{Value: 1})
 	log.EndTick(b, 1)
-	log.Append(b, 2, Inbound{Message: aMessageFrom(a, 1, 3)})
+	log.Append(b, 2, eventlog.Inbound{Message: aMessageFrom(a, 1, 3)})
 	log.EndTick(b, 2)
 	log.EndTick(b, 3)
 	if got := log.Durable(b); got > 3 {
@@ -400,13 +412,13 @@ func TestWhatIsSafeWaitsAcrossAChainOfDependencies(t *testing.T) {
 	a, b, c := sim.StateID(1), sim.StateID(2), sim.StateID(3)
 	quick := testFileLogOptions
 	quick.SyncEvery = 2 * time.Millisecond
-	log := NewFileLog(dir, quick)
+	log := eventlog.NewFileLog(dir, quick)
 	defer log.Close()
 	// c took a message of b from b's tick 2, and b took at its tick 2 a copy of a that a took at 4
-	log.Append(c, 1, Inbound{Message: aMessageFrom(b, 1, 2)})
+	log.Append(c, 1, eventlog.Inbound{Message: aMessageFrom(b, 1, 2)})
 	log.EndTick(c, 1)
 	log.EndTick(b, 1)
-	log.Append(b, 2, StableRead{Source: a, CopyTick: 4})
+	log.Append(b, 2, eventlog.StableRead{Source: a, CopyTick: 4})
 	log.EndTick(b, 2)
 	settled(t, log, c, 0)
 	settled(t, log, b, 1)
@@ -424,14 +436,14 @@ func TestWhatIsSafeWaitsAcrossAChainOfDependencies(t *testing.T) {
 func TestAnEngineWhoseLogWasThereBeforeIsSafeUpToItsLastTick(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(1)
-	first := NewFileLog(dir, testFileLogOptions)
+	first := eventlog.NewFileLog(dir, testFileLogOptions)
 	for tick := uint64(1); tick <= 5; tick++ {
 		first.EndTick(engine, tick)
 	}
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
-	second := NewFileLog(dir, testFileLogOptions)
+	second := eventlog.NewFileLog(dir, testFileLogOptions)
 	defer second.Close()
 	if got := second.Safe(engine); got != 5 {
 		t.Fatalf("Safe = %d, want 5: what is in the log is what a restart goes on from", got)
@@ -441,9 +453,9 @@ func TestAnEngineWhoseLogWasThereBeforeIsSafeUpToItsLastTick(t *testing.T) {
 func TestACloseSettlesWhatIsSafeOfEveryEngine(t *testing.T) {
 	dir := t.TempDir()
 	a, b := sim.StateID(1), sim.StateID(2)
-	log := NewFileLog(dir, testFileLogOptions) // a sync every hour: only Close syncs
+	log := eventlog.NewFileLog(dir, testFileLogOptions) // a sync every hour: only Close syncs
 	log.EndTick(a, 1)
-	log.Append(b, 1, Inbound{Message: aMessageFrom(a, 1, 1)})
+	log.Append(b, 1, eventlog.Inbound{Message: aMessageFrom(a, 1, 1)})
 	log.EndTick(b, 1)
 	if log.Safe(b) != 0 {
 		t.Fatalf("Safe(b) = %d before any sync", log.Safe(b))
@@ -459,29 +471,31 @@ func TestACloseSettlesWhatIsSafeOfEveryEngine(t *testing.T) {
 func TestAFrameMustFollowTheLastOfTheLog(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
-	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 1, Hash{Value: 1})
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 1, eventlog.Hash{Value: 1})
 	log.EndTick(engine, 1)
 	log.EndTick(engine, 2)
 	if log.Err() != nil {
 		t.Fatalf("error %v", log.Err())
 	}
-	log.Append(engine, 4, Hash{Value: 2})
+	log.Append(engine, 4, eventlog.Hash{Value: 2})
 	log.EndTick(engine, 4) // not the tick after 2: it is not written
 	if log.Err() == nil {
 		t.Fatal("a frame that does not follow was accepted")
 	}
 	log.Close()
-	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 2 {
+	if last, err := segmentlog.LastFrameID(eventlog.EngineDir(dir,
+		engine)); err != nil || last != 2 {
 		t.Fatalf("the last frame of the log is %d, error %v, want 2", last, err)
 	}
 	// a log that was there is written on after its last frame
-	again := NewFileLog(dir, testFileLogOptions)
+	again := eventlog.NewFileLog(dir, testFileLogOptions)
 	again.EndTick(engine, 3)
 	if err := again.Close(); err != nil {
 		t.Fatalf("the log that was there could not be written on: %v", err)
 	}
-	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 3 {
+	if last, err := segmentlog.LastFrameID(eventlog.EngineDir(dir,
+		engine)); err != nil || last != 3 {
 		t.Fatalf("the last frame of the log is %d, error %v, want 3", last, err)
 	}
 }
@@ -489,14 +503,15 @@ func TestAFrameMustFollowTheLastOfTheLog(t *testing.T) {
 func TestTheFirstFrameOfALogIsTheTickOne(t *testing.T) {
 	dir := t.TempDir()
 	engine := sim.StateID(21)
-	log := NewFileLog(dir, testFileLogOptions)
-	log.Append(engine, 4, Hash{Value: 1})
+	log := eventlog.NewFileLog(dir, testFileLogOptions)
+	log.Append(engine, 4, eventlog.Hash{Value: 1})
 	log.EndTick(engine, 4) // a log has the tick 1 as its first
 	if log.Err() == nil {
 		t.Fatal("a first frame of the tick 4 was accepted")
 	}
 	log.Close()
-	if last, err := segmentlog.LastFrameID(engineDir(dir, engine)); err != nil || last != 0 {
+	last, err := segmentlog.LastFrameID(eventlog.EngineDir(dir, engine))
+	if err != nil || last != 0 {
 		t.Fatalf("the last frame of the log is %d, error %v, want none", last, err)
 	}
 }
@@ -520,7 +535,7 @@ func TestTheObserverOfALogIsToldWhatIsSafeOfEveryEngineAndOnceMoreWhenTheLogIsCl
 	observer := &safeCalls{}
 	opts := testFileLogOptions
 	opts.OnSafe = observer
-	log := NewFileLog(dir, opts)
+	log := eventlog.NewFileLog(dir, opts)
 	a, b := sim.StateID(1), sim.StateID(2)
 	for tick := uint64(1); tick <= 4; tick++ {
 		log.EndTick(a, tick)

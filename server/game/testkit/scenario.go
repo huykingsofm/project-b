@@ -6,7 +6,6 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -54,7 +53,7 @@ func ScenarioConfigDocument(kept map[string]string) map[string]string {
 // variable that is not at its default, by name. The cluster sends it to its configuration engine at
 // its next step, when a variable changes, and the configuration is the new one from the tick after
 // the command is taken.
-func SetConfig(t testing.TB, c *game.Cluster, document map[string]string) {
+func SetConfig(t testing.TB, c *Cluster, document map[string]string) {
 	t.Helper()
 	if err := c.ConfigStore().Apply(document); err != nil {
 		t.Fatal(err)
@@ -64,7 +63,7 @@ func SetConfig(t testing.TB, c *game.Cluster, document map[string]string) {
 // RunScenario runs a cluster through chat in each scope, a shield, an attack, a pickup, a run of
 // movement, a new document of the config, a character that enters with cooldowns and one that
 // crosses to another zone, long enough for every engine to record a hash.
-func RunScenario(t testing.TB, c *game.Cluster, s Sender) {
+func RunScenario(t testing.TB, c *Cluster, s Sender) {
 	t.Helper()
 	RunScenarioKeeping(t, c, s, nil)
 }
@@ -73,7 +72,7 @@ func RunScenario(t testing.TB, c *game.Cluster, s Sender) {
 // force when the scenario changes it: the change is to the whole document, so without them the
 // variables they name go back to their defaults.
 func RunScenarioKeeping(
-	t testing.TB, c *game.Cluster, s Sender, kept map[string]string,
+	t testing.TB, c *Cluster, s Sender, kept map[string]string,
 ) {
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)

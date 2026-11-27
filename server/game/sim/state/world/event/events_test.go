@@ -1,4 +1,4 @@
-package event
+package event_test
 
 import (
 	"reflect"
@@ -6,15 +6,16 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
 // allEvents has an event of every kind of the package, for the tests that look at all of them.
-var allEvents = []Event{PrivateChatMessageSent{}, CharacterItemAdded{}}
+var allEvents = []event.Event{event.PrivateChatMessageSent{}, event.CharacterItemAdded{}}
 
 func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 	all := allEvents
-	seen := map[ID]Event{}
+	seen := map[event.ID]event.Event{}
 	for _, e := range all {
 		if e.ID() == 0 {
 			t.Fatalf("%T has the ID 0", e)
@@ -27,11 +28,11 @@ func TestEveryEventHasItsOwnIDAndNoneIsZero(t *testing.T) {
 }
 
 func TestPrivateEventsGoOnlyToTheOnesTheyAreAbout(t *testing.T) {
-	chat := PrivateChatMessageSent{FromID: 1, ToID: 2}.Audience()
+	chat := event.PrivateChatMessageSent{FromID: 1, ToID: 2}.Audience()
 	if chat.Kind != state.PlayersKind || !slices.Equal(chat.Players, []state.PlayerID{1, 2}) {
 		t.Fatalf("a private message has the audience %+v, want players 1 and 2", chat)
 	}
-	item := CharacterItemAdded{CharacterID: 5}.Audience()
+	item := event.CharacterItemAdded{CharacterID: 5}.Audience()
 	if item.Kind != state.CharactersKind || !slices.Equal(item.Characters, []state.CharacterID{5}) {
 		t.Fatalf("an item added has the audience %+v, want character 5", item)
 	}

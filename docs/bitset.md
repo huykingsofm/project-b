@@ -15,6 +15,8 @@
 | `Clear(i)` | clears bit `i`; reports whether `i` is inside the array |
 | `Count()` | how many bits are set |
 | `AnyInRange(lo, n)` | whether any of the `n` bits from `lo` is set; the part outside the array is clear; one word read for each 64 bits |
+| `Words()`, `FromWords(k, words)` | the bits as the words they are kept in (a copy), and the array made from them; `ErrWords` when the number of words is not the one `k` bits take, and the bits past `k` are cleared |
+| `Clone()` | a copy that shares nothing with the array |
 
 - `AnyInRange` takes about 3 ns for any short range, so a range of 1 to 3 bits is cheaper read with `Get`.
 - A bit outside `0..K-1` reads as clear and cannot be changed, and nothing panics.

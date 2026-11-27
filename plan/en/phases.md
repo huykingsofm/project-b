@@ -38,7 +38,7 @@ Clean up what is unfinished and lay the foundation for entities before building 
 
 - Update `README.md`, `docs/action/*.md`, `docs/entity/*.md` and the rules (R3, R4 and the opening of `plan/rule/index.md`) to match the scope of the plan.
 - **An entity is an interface** (detail pending approval): `ID()`, `KindID()`, `Position()`, `Radius()`, `BoundingBox()` (the smallest rectangle that contains the entity, derived from the position and the radius, for the grid). Collision uses the radius. Every entity is a value type (R29); a change replaces the value in its container.
-- `CharacterEntity` and `ItemEntity` (a dropped item, removed when its lifetime ends), and `ExitEntity` (an exit of the map, which the map gives to every zonelayer of its zone as an entity). The body of a character is moved to this interface.
+- `CharacterEntity` and `ItemEntity` (a dropped item, removed when its lifetime ends), and `ExitEntity` (an exit that the world puts in a zone while the game runs, which every zonelayer of the zone reads from the published zone). The body of a character is moved to this interface.
 - A pickup action: the picker must be within a given radius and chooses the exact `EntityID` of the item (the client works out which). The item is removed from the zonelayer first, and only then is a message sent to the world to add it to the inventory (R28). (pending approval)
 - Events: item appeared, item disappeared (with an ID registered in `events.go`).
 - An R29 test for every state: changing the state after `Clone` does not change the copy.

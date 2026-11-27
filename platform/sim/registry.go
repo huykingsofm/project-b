@@ -24,8 +24,8 @@ func (o *Outbox) Take() []Message {
 	return out
 }
 
-// Timed is an action with the tick it is set for.
-type Timed[S State] struct {
+// ScheduledAction is an action with the tick it is set for.
+type ScheduledAction[S State] struct {
 	At     uint64
 	Action Action[S]
 }
@@ -42,8 +42,9 @@ type Registry[S State] struct {
 	// Stable reads the states of the other engines.
 	Stable StableReader
 
-	self           []Timed[S]
-	engineRemovals []StateID
+	scheduledActions []ScheduledAction[S]
+
+	directives []DirectiveRequest
 }
 
 // Config returns the configuration that the engine of the tick reads: the snapshot in the copy of
@@ -94,28 +95,50 @@ func (r *Registry[S]) ToSelf(a Action[S]) { r.ToSelfAt(r.Tick+1, a) }
 // wait for a later moment, is set for exactly that tick and not tried again at every tick
 // in between. A tick that is not in the future is the next one.
 func (r *Registry[S]) ToSelfAt(tick uint64, a Action[S]) {
-	r.self = append(r.self, Timed[S]{At: tick, Action: a})
+	r.scheduledActions = append(r.scheduledActions, ScheduledAction[S]{At: tick, Action: a})
 }
 
-// RequestEngineRemoval asks the cluster to remove the engine with the ID. Nothing is done while the
-// actions run: the engine hands the requests to its cluster when the tick is done, and the cluster
-// removes the engine between two ticks of it. The state that holds the ID is changed by the action,
-// as for any other change of a state (R28): the request only ends the engine.
-func (r *Registry[S]) RequestEngineRemoval(id StateID) {
-	r.engineRemovals = append(r.engineRemovals, id)
+// RequestCreateEngine asks the cluster to make an engine of a state of type T from the state and
+// the actions that it runs once at its first tick (an action that is to run again sets itself
+// again). The state has no ID: the cluster gives the engine one. Nothing is done while the actions
+// run: the engine hands the request to its cluster when the tick is done, before it sends the
+// messages of the tick, and the cluster answers it with a directive that the state of this
+// registry takes at the start of a tick (DirectiveHandler), with the tag. The state that is to
+// list the new engine is changed by that answer, as for any other change of a state (R28): the
+// request only makes the engine. The state is the engine's from now on: the caller does not
+// change it after.
+func (r *Registry[S]) RequestCreateEngine[T State](tag []byte, st T, start ...Action[T]) {
+	actions := make([]BaseAction, len(start))
+	for i, a := range start {
+		actions[i] = a
+	}
+	r.directives = append(r.directives, DirectiveRequest{
+		Kind: DirectiveCreateEngine, Tag: tag, State: st, StartActions: actions,
+	})
 }
 
-// TakeEngineRemovalRequests returns the engines that were asked to be removed in this tick, in the
-// order they were asked, and forgets them.
-func (r *Registry[S]) TakeEngineRemovalRequests() []StateID {
-	out := r.engineRemovals
-	r.engineRemovals = nil
+// RemoveEngine asks the cluster to remove the engine with the ID, and to answer with the tag.
+// Nothing is done while the actions run: the engine hands the request to its cluster when the tick
+// is done, and the cluster removes the engine between two ticks of it. The state that holds the ID
+// is changed by the action, as for any other change of a state (R28): the request only ends the
+// engine.
+func (r *Registry[S]) RemoveEngine(id StateID, tag []byte) {
+	r.directives = append(r.directives, DirectiveRequest{
+		Kind: DirectiveRemoveEngine, Tag: tag, Target: id,
+	})
+}
+
+// TakeDirectiveRequests returns what the actions of this tick asked of the cluster, in the order
+// they asked, and forgets it.
+func (r *Registry[S]) TakeDirectiveRequests() []DirectiveRequest {
+	out := r.directives
+	r.directives = nil
 	return out
 }
 
 // TakeSelf returns what the engine set for itself in this tick, in the order it was set.
-func (r *Registry[S]) TakeSelf() []Timed[S] {
-	self := r.self
-	r.self = nil
+func (r *Registry[S]) TakeSelf() []ScheduledAction[S] {
+	self := r.scheduledActions
+	r.scheduledActions = nil
 	return self
 }

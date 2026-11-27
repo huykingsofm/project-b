@@ -166,3 +166,14 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
   1. `SendMessage`: kept in the chat table (last 100); the events get it with its tick.
 - Note: the sender need not be in this zonelayer (a zone message may come from another).
 - Example: tick 5 "hello zonelayer": recorded, its clients told. A zone message at tick 5 reaches zonelayers 1 and 2 at tick 6.
+
+### ZoneLayerAnnounceToZoneAction
+
+- Kind: system
+- Priority: `PriorityResolve`
+- Fields: `Capacity`
+- Set by: [`WorldZoneLayerAddAction`](world.md#worldzonelayeraddaction), as an action that the zonelayer starts with, for its first tick
+- Steps:
+  1. Sends [`ZoneZoneLayerAddAction`](zone.md#zonezonelayeraddaction) to the zone of the zonelayer with its own ID (`Context.Self`) and `Capacity`; dropped if not delivered.
+- Note: only the zonelayer knows its own ID, which the cluster gave it after the request.
+

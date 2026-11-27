@@ -337,9 +337,6 @@ func (l *engineLog) Durable() uint64 {
 // OpenError is why the log of the engine could not be opened, or nil.
 func (l *engineLog) OpenError() error { return l.openErr }
 
-// Usable reports whether the log of the engine was opened.
-func (l *engineLog) Usable() bool { return l.w != nil }
-
 // WriteError is the first error that writing the log has had, or nil.
 func (l *engineLog) WriteError() error {
 	if l.w == nil {

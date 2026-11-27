@@ -49,18 +49,16 @@ func (e CharacterEntity) MovedTo(pos state.Vec) state.Entity {
 }
 
 func (e CharacterEntity) Encode(w *binary.Writer) {
-	w.Uvarint(e.entityID.Local)
+	w.Uvarint(uint64(e.entityID))
 	e.pos.Encode(w)
 	w.Varint(int64(e.rad))
 	w.Varint(int64(e.hp))
 	w.Varint(int64(e.maxHp))
 }
 
-func decodeCharacterEntity(
-	r *binary.Reader, version codec.Version, owner sim.StateID,
-) (state.Entity, error) {
+func decodeCharacterEntity(r *binary.Reader, version codec.Version) (state.Entity, error) {
 	e := CharacterEntity{
-		entityID: state.NewEntityID(owner, r.Uvarint()),
+		entityID: state.EntityID(r.Uvarint()),
 		pos:      state.DecodeVec(r, version),
 		rad:      r.Int[int32](),
 		hp:       r.Int[int32](),

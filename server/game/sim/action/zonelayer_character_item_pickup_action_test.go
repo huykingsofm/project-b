@@ -1,14 +1,18 @@
-package action
+package action_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 )
+
+// pickupLayerID is the ID of the engine of the zonelayers of these tests.
+const pickupLayerID sim.StateID = 77
 
 // newPickupTestLayer makes a zonelayer with characters 1 and 2 standing in the middle of tiles
 // (1,2) and (9,2) in a map 10 by 5, and an item lying in the middle of tile (2,2) It returns the
@@ -28,8 +32,9 @@ func pickup(
 	st *zonelayerstate.State,
 	reg *sim.Registry[*zonelayerstate.State],
 ) {
-	a := ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
-	a.Apply(&sim.Context{Tick: tick}, st, reg, sim.NewPlan[*zonelayerstate.State]())
+	a := action.ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
+	ctx := &sim.Context{Self: pickupLayerID, Tick: tick}
+	a.Apply(ctx, st, reg, sim.NewPlan[*zonelayerstate.State]())
 }
 
 func TestAnItemWithinTheRadiusIsTakenOffTheGroundAndSentToTheWorld(t *testing.T) {
@@ -102,12 +107,12 @@ func TestAStackIsPickedUpWholeAndTheWorldGetsItsCountAndWhereItCameFrom(t *testi
 		t.Fatal("the stack is still on the ground")
 	}
 	toWorld := messages[0].(*sim.ActionMessage[*worldstate.State])
-	add, ok := toWorld.Actions[0].(WorldCharacterItemAddAction)
+	add, ok := toWorld.Actions[0].(action.WorldCharacterItemAddAction)
 	if !ok {
 		t.Fatalf("the message does not carry a WorldCharacterItemAddAction: %+v", messages[0])
 	}
-	want := WorldCharacterItemAddAction{
-		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: st.ID(), At: at, Expiry: 40,
+	want := action.WorldCharacterItemAddAction{
+		CharacterID: 1, ItemID: 8, Count: 5, FromZoneLayerID: pickupLayerID, At: at, Expiry: 40,
 	}
 	if add != want {
 		t.Fatalf("the message is %+v, want %+v", add, want)
@@ -126,11 +131,11 @@ func TestWhenTheMessageToTheWorldIsNotDeliveredTheItemComesBackAsItWas(t *testin
 		t.Fatalf("a failed delivery means %T, want to compensate", sent.OnFail())
 	}
 	scoped := back.With.(*sim.ActionMessage[*zonelayerstate.State])
-	put, ok := scoped.Actions[0].(ZoneLayerItemEntityAddAction)
+	put, ok := scoped.Actions[0].(action.ZoneLayerItemEntityAddAction)
 	if !ok {
 		t.Fatalf("the compensation does not carry a ZoneLayerItemEntityAddAction: %+v", back.With)
 	}
-	want := ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}
+	want := action.ZoneLayerItemEntityAddAction{ItemID: 8, Count: 5, At: at, Expiry: 40}
 	if put != want {
 		t.Fatalf("the compensation is %+v, want %+v", put, want)
 	}
@@ -168,8 +173,8 @@ func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
 	pickup(1, item, 10, st, reg)
 	reg.Take()
 	pickup(1, item, 11, st, reg)
-	pickup(1, state.NewEntityID(1, 1), 11, st, reg) // the entity of the character itself
-	pickup(1, state.NewEntityID(1, 999), 11, st, reg)
+	pickup(1, state.EntityID(1), 11, st, reg) // the entity of the character itself
+	pickup(1, state.EntityID(999), 11, st, reg)
 	if got := len(reg.Take()); got != 0 {
 		t.Fatalf("%d messages were sent for things that cannot be picked up", got)
 	}
@@ -177,7 +182,7 @@ func TestAnItemAlreadyTakenOrNotAnItemIsNotPickedUp(t *testing.T) {
 
 func TestACharacterWithNoHealthOrNotInTheZonelayerPicksNothingUp(t *testing.T) {
 	st, reg, item := newPickupTestLayer(t)
-	st.DamageEntity(state.NewEntityID(1, 1), 1000)
+	st.DamageEntity(state.EntityID(1), 1000)
 	pickup(1, item, 10, st, reg)
 	pickup(42, item, 10, st, reg)
 	if _, ok := st.ItemEntityByID(item); !ok {

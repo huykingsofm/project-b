@@ -1,9 +1,10 @@
-package engine
+package engine_test
 
 import (
-	"github.com/huykingsofm/project-b/platform/config"
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/shared/codec"
@@ -17,39 +18,52 @@ import (
 const toyType sim.StateType = 0
 
 func init() {
-	for t, name := range map[sim.StateType]string{toyType: "toy", toyType + 1: "other"} {
+	for t, name := range map[sim.StateType]string{
+		toyType: "toy", toyType + 1: "other", toyType + 2: "stuck",
+	} {
 		sim.MapStateTypeToName(t, name)
 	}
 }
 
 type toyState struct {
-	id    sim.StateID
 	tick  uint64
 	Total int64
 }
 
-func (s *toyState) ID() sim.StateID   { return s.id }
 func (*toyState) Type() sim.StateType { return toyType }
 func (s *toyState) Tick() uint64      { return s.tick }
 func (s *toyState) NextTick()         { s.tick++ }
 func (s *toyState) Clone() sim.State  { c := *s; return &c }
 
 func (s *toyState) TakeEvents() []sim.Event { return nil }
+
+// HandleDirective counts the answers of the cluster: 100 times the number of the engine that was
+// made, or -1 when it was not made.
+func (s *toyState) HandleDirective(
+	_ *sim.Context, _ *sim.Registry[*toyState], d sim.DirectiveResponse,
+) {
+	if d.Failure != "" {
+		s.Total--
+		return
+	}
+	s.Total += int64(d.Engine.Local()) * 100
+}
+
+var _ sim.DirectiveHandler[*toyState] = (*toyState)(nil)
+
 func (s *toyState) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.id))
 	h.U64(uint64(s.Total))
 	return h.Sum()
 }
 func (s *toyState) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
 	w.Varint(s.Total)
 	return nil
 }
 
 func decodeToyState(r *binary.Reader, _ codec.Version) (*toyState, error) {
-	s := &toyState{id: sim.StateID(r.Uvarint()), tick: r.Uvarint(), Total: r.Varint()}
+	s := &toyState{tick: r.Uvarint(), Total: r.Varint()}
 	return s, r.Err()
 }
 
@@ -159,9 +173,28 @@ func decodeReadAction(
 }
 
 // newCluster makes a cluster with its configuration engine, and fails the test when it cannot.
-func newCluster(t testing.TB, env *Env) *Cluster {
+// addToys makes n toy engines in the cluster, which gives them the numbers that follow the ones it
+// has given, and returns them in that order.
+func addToys(t testing.TB, c *engine.Cluster, n int) []*engine.Engine[*toyState] {
 	t.Helper()
-	c, err := NewCluster(env, 1, NoCheckpoints{}, config.NewStore())
+	var engines []*engine.Engine[*toyState]
+	for range n {
+		id, err := c.CreateEngine(&toyState{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, ok := c.Get[*toyState](id)
+		if !ok {
+			t.Fatalf("the engine %v that the cluster made is not in it", id)
+		}
+		engines = append(engines, e)
+	}
+	return engines
+}
+
+func newCluster(t testing.TB, env *engine.Environment) *engine.Cluster {
+	t.Helper()
+	c, err := engine.NewCluster(env, config.NewStore(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,17 +203,17 @@ func newCluster(t testing.TB, env *Env) *Cluster {
 
 // setConfig gives the store of the cluster the document, which the cluster sends to the
 // configuration engine at its next step.
-func setConfig(t testing.TB, c *Cluster, document map[string]string) {
+func setConfig(t testing.TB, c *engine.Cluster, document map[string]string) {
 	t.Helper()
 	if err := c.ConfigStore().Apply(document); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func toyCodecs() (*sim.Codecs, error) {
-	c := sim.NewCodecs()
-	return c, errs.Join(
-		c.RegisterState(decodeToyState),
+func toyCodecs() (*sim.Codecs, *engine.EngineRegistry, error) {
+	c, engines := sim.NewCodecs(), engine.NewEngineRegistry()
+	return c, engines, errs.Join(
+		engines.Register(c, decodeToyState),
 		c.RegisterAction(decodeToyAction),
 		c.RegisterAction(decodeForwardAction),
 		c.RegisterAction(decodeReadAction),

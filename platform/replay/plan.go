@@ -1,8 +1,10 @@
 package replay
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
@@ -10,6 +12,7 @@ import (
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/logging"
+	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
 // Plan says what a replay does: the tick that each engine is run to (its limit) and the tick that
@@ -25,7 +28,7 @@ type Plan struct {
 	limits      map[sim.StateID]uint64
 	starts      map[sim.StateID]uint64
 	logs        Logs
-	checkpoints engine.CheckpointSource
+	checkpoints CheckpointSource
 	dir         string // the directory of the files; empty when the logs are not files
 }
 
@@ -35,6 +38,17 @@ func (p *Plan) Limits() map[sim.StateID]uint64 { return maps.Clone(p.limits) }
 
 // Starts is the tick each engine starts at: the tick of its checkpoint, or 0.
 func (p *Plan) Starts() map[sim.StateID]uint64 { return maps.Clone(p.starts) }
+
+// LastStateIDs is, for each type of state, the highest number among the engines that have a log,
+// the ones that were removed and the ones that were cut to nothing included: an ID is never given
+// again, so the cluster that goes on gives IDs above them (Cluster.RaiseStateIDs).
+func (p *Plan) LastStateIDs() map[sim.StateType]uint64 {
+	last := map[sim.StateType]uint64{}
+	for _, id := range p.logs.Engines() {
+		last[id.Type()] = max(last[id.Type()], id.Local())
+	}
+	return last
+}
 
 // MakePlan makes the plan of the files under dir. It reads the logs, and the checkpoints to choose
 // from; nothing is written. The cache of the line, when it holds, saves reading the logs whole. No
@@ -63,10 +77,11 @@ func MakePlan(dir string, codecs *sim.Codecs) (*Plan, error) {
 }
 
 // PlanFrom makes the plan of logs that are not files (in memory, or as a test makes them): the
-// engines start at starts and are made from the checkpoints that checkpoints gives, new where it
-// gives none; the starts are not above the limits. Such a plan cannot be cut.
+// engines start at starts and are made from the checkpoints that checkpoints gives, and from the
+// record that begins their log where it gives none; the starts are not above the limits. Such a
+// plan cannot be cut.
 func PlanFrom(
-	logs Logs, starts map[sim.StateID]uint64, checkpoints engine.CheckpointSource,
+	logs Logs, starts map[sim.StateID]uint64, checkpoints CheckpointSource,
 ) (*Plan, error) {
 	last, err := lastTicks(logs)
 	if err != nil {
@@ -87,6 +102,71 @@ func PlanFrom(
 	return &Plan{
 		limits: limits, starts: maps.Clone(starts), logs: logs, checkpoints: checkpoints,
 	}, nil
+}
+
+// Served says which request of an engine each engine that its logs hold was made for: the record
+// that begins a log says the engine that asked and the number it gave the request (an engine that
+// no engine asked for is not in it). A cluster that goes on from the logs (Result.Handover) is
+// given these so that a request that is handed over again is not served twice.
+func (p *Plan) served() (map[engine.DirectiveKey]sim.StateID, error) {
+	out := map[engine.DirectiveKey]sim.StateID{}
+	for _, id := range p.logs.Engines() {
+		r, err := p.logs.Open(id, 1)
+		if err != nil {
+			return nil, fmt.Errorf("the log of %v: %w", id, err)
+		}
+		for r.Next() {
+			rec := r.Record()
+			if rec.Tick > 1 {
+				break
+			}
+			if started, ok := rec.Body.(eventlog.Started); ok && started.Creator != 0 {
+				out[engine.DirectiveKey{Engine: started.Creator, ID: started.DirectiveID}] = id
+			}
+		}
+		err = r.Err()
+		r.Close()
+		if err != nil {
+			return nil, fmt.Errorf("the log of %v: %w", id, err)
+		}
+	}
+	return out, nil
+}
+
+// Cut brings the files under the directory of the plan to the plan: the log of each engine is cut
+// to its limit. The checkpoints of an engine above its limit hold what was cut, so they are no
+// longer checkpoints. Nothing is deleted: what is cut of the logs, and the checkpoints that are
+// above the line, go to one directory of the archive (`.archive/cut-<n>/<engine>/`), where no one
+// reads them as a log or a checkpoint. A log that is already at its limit, and an engine with no
+// checkpoint above it, are not touched. The cache of the recovery line is written again with the
+// limits, which are what is safe now. No log may be open for writing. After it, each log ends at a
+// tick that no crash takes back, and an engine that goes on is made for the log with the tick
+// after it. A plan made from logs that are not files cannot be cut.
+func (p *Plan) Cut() error {
+	if p.dir == "" {
+		return errors.New("a plan made from logs that are not files cannot be cut")
+	}
+	cutDir, err := nextCutDir(p.dir)
+	if err != nil {
+		return err
+	}
+	for engine, limit := range p.limits {
+		logDir := eventlog.EngineDir(p.dir, engine)
+		archive := filepath.Join(cutDir, filepath.Base(logDir))
+		last, err := segmentlog.LastFrameID(logDir)
+		if err != nil {
+			return fmt.Errorf("the log of %v: %w", engine, err)
+		}
+		if last > limit {
+			if err := segmentlog.CutAfter(logDir, limit, archive); err != nil {
+				return fmt.Errorf("the log of %v: %w", engine, err)
+			}
+		}
+		if err := archiveCheckpointsAbove(p.dir, engine, limit, archive); err != nil {
+			return fmt.Errorf("the checkpoints of %v: %w", engine, err)
+		}
+	}
+	return WriteLineCache(p.dir, LineCache{Safe: p.limits})
 }
 
 // lastTicks is the last tick of the log of each engine that has one.
@@ -258,9 +338,17 @@ func copyReads(logs Logs, engine sim.StateID, after, to uint64) ([]copyKey, erro
 	return out, nil
 }
 
-// fileCheckpoints is the engine.CheckpointSource of the checkpoint files under dir: for each engine
-// that starts above tick 0 in starts, the file of its checkpoint at that tick. An engine that is
-// not in starts, or is at 0, has none and is made new.
+// CheckpointSource says which checkpoint each engine of a replay starts from: the bytes of the
+// checkpoint (EngineCheckpoint.Encode) that the engine is made from, and false when it has none:
+// the engine starts at the tick 0, from the record that begins its log. An error is one that the
+// checkpoint could not be read.
+type CheckpointSource interface {
+	Checkpoint(engine sim.StateID) ([]byte, bool, error)
+}
+
+// fileCheckpoints is the CheckpointSource of the checkpoint files under dir: for each engine that
+// starts above tick 0 in starts, the file of its checkpoint at that tick. An engine that is not in
+// starts, or is at 0, has none.
 type fileCheckpoints struct {
 	dir    string
 	starts map[sim.StateID]uint64

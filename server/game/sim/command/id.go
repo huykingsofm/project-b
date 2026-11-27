@@ -18,4 +18,7 @@ const (
 	ZoneLayerCharacterExitToCommandID
 	ZoneLayerCharacterItemPickupCommandID
 	ZoneLayerCharacterShieldGrantCommandID
+	WorldZoneAddCommandID
+	WorldZoneLayerAddCommandID
+	WorldZoneExitAddCommandID
 )

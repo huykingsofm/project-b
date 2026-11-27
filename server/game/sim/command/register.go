@@ -19,5 +19,8 @@ func Register(c *sim.Codecs) error {
 		c.RegisterCommand(decodeZoneLayerCharacterExitToCommand),
 		c.RegisterCommand(decodeZoneLayerCharacterItemPickupCommand),
 		c.RegisterCommand(decodeZoneLayerCharacterShieldGrantCommand),
+		c.RegisterCommand(decodeWorldZoneAddCommand),
+		c.RegisterCommand(decodeWorldZoneLayerAddCommand),
+		c.RegisterCommand(decodeWorldZoneExitAddCommand),
 	)
 }

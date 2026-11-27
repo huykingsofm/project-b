@@ -2,7 +2,6 @@ package zonelayer_test
 
 import (
 	"fmt"
-	"github.com/huykingsofm/project-b/shared/table"
 	"reflect"
 	"testing"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/event"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap/tilemaptest"
+	"github.com/huykingsofm/project-b/shared/table"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
 
@@ -20,10 +20,10 @@ const tile = 1024
 
 const cooldownKey zonelayer.CooldownKey = 1
 
-func newState() *zonelayer.State { return zonelayer.NewState(1, 1, 9) }
+func newState() *zonelayer.State { return zonelayer.NewState(1, 9) }
 
 func map10x5(t testing.TB) *tilemap.TileMap {
-	return tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
+	return tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil)
 }
 
 func TestAnItemAppearsAndDisappearsAndTheEventsSayIt(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAnyEntityCanBeMovedIncludingAnItem(t *testing.T) {
 	if e, _ := st.ItemEntityByID(item); e.Position() != (state.Vec{X: 5500, Y: 3500}) {
 		t.Fatalf("the item is at %+v, want the middle of tile (5,3)", e.Position())
 	}
-	if st.MoveEntity(tiles, state.NewEntityID(1, 999), state.East, 1000) {
+	if st.MoveEntity(tiles, state.EntityID(999), state.East, 1000) {
 		t.Fatal("an entity that does not exist moved")
 	}
 }
@@ -122,7 +122,7 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 	copied := st.Clone().(*zonelayer.State)
 
 	st.SetCooldown(1, cooldownKey, 99)
-	st.DamageEntity(state.NewEntityID(1, 1), 3)
+	st.DamageEntity(state.EntityID(1), 3)
 	st.AddItemEntity(8, 1, state.Vec{X: 4500, Y: 4500}, 0)
 	st.SendMessage(zonelayer.NewChatMessage(1, "again", 0))
 	if copied.Hash() != before || copied.ChatMessageCount() != chatBefore {
@@ -131,20 +131,20 @@ func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) 
 
 	copiedHash := copied.Hash()
 	copied.SetCooldown(1, cooldownKey, 7)
-	copied.RemoveItemEntity(state.NewEntityID(1, 2))
+	copied.RemoveItemEntity(state.EntityID(2))
 	if st.Hash() == copiedHash {
 		t.Fatal("the test did not change the state apart from the copy")
 	}
 	if until := st.CooldownUntil(1, cooldownKey); until != 99 {
 		t.Fatalf("a change of the copy changed the state: cooldown = %d", until)
 	}
-	if _, ok := st.ItemEntityByID(state.NewEntityID(1, 2)); !ok {
+	if _, ok := st.ItemEntityByID(state.EntityID(2)); !ok {
 		t.Fatal("removing an item from the copy removed it from the state")
 	}
 }
 
 func TestAMoveStopsAtTheLastUnitBeforeAWallAndCanBeShorterThanATile(t *testing.T) {
-	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}})
 	st := newState()
 	id := st.AddItemEntity(7, 1, state.Vec{X: 2*tile + tile/2, Y: 3*tile + tile/2}, 0)
 	// The item is in the middle of tile (2,3); the wall is tile (4,3), which starts a tile and a
@@ -185,7 +185,7 @@ func TestTheRadiusOfACharacterLivesOnItsBodyAndTravelsWithIt(t *testing.T) {
 }
 
 func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
-	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}}, nil)
+	walls := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, []tilemap.Tile{{X: 4, Y: 3}})
 	st := newState()
 	at := state.Vec{X: 2 * tile, Y: 2*tile + tile/2}
 	point := st.AddCharacterEntity(newCharacter(1, "point", 10, 1000, 0), at)
@@ -204,7 +204,7 @@ func TestABodyMovesOnlyAsFarAsItsRadiusAllows(t *testing.T) {
 }
 
 func BenchmarkMoveEntity(b *testing.B) {
-	tiles := tilemaptest.New(b, 200, 200, tilemap.Tile{}, nil, nil)
+	tiles := tilemaptest.New(b, 200, 200, tilemap.Tile{}, nil)
 	for _, radius := range []int32{0, 256} {
 		b.Run(fmt.Sprintf("radius %d/a character's step of a tick", radius), func(b *testing.B) {
 			st := newState()
@@ -292,7 +292,7 @@ func TestTheTypesOfTheZoneLayerStateObeyTheRuleOfData(t *testing.T) {
 }
 
 func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
-	st := zonelayer.NewState(1, 1, 9)
+	st := zonelayer.NewState(1, 9)
 	at := state.Vec{X: 3500, Y: 3500}
 	first := st.AddItemEntity(7, 1, at, 0)
 	st.RemoveItemEntity(first)
@@ -305,7 +305,7 @@ func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
 }
 
 func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
-	st := zonelayer.NewState(1, 1, 9)
+	st := zonelayer.NewState(1, 9)
 	at := state.Vec{X: 1500, Y: 1500}
 	body := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at)
 	if _, ok := st.RemoveCharacterEntity(1); !ok {

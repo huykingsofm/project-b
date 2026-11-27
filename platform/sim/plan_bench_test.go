@@ -1,27 +1,29 @@
-package sim
+package sim_test
 
 import (
 	"fmt"
 	"testing"
+
+	"github.com/huykingsofm/project-b/platform/sim"
 )
 
 // The kinds of action of the plan of a tick: a move and an attack of a character (they have an
 // author), the damage that the attack makes, and a regen.
 const (
-	benchMoveID   ActionID = 60010
-	benchAttackID ActionID = 60011
-	benchDamageID ActionID = 60012
-	benchRegenID  ActionID = 60013
+	benchMoveID   sim.ActionID = 60010
+	benchAttackID sim.ActionID = 60011
+	benchDamageID sim.ActionID = 60012
+	benchRegenID  sim.ActionID = 60013
 )
 
 type benchAction struct {
 	anonymousAction
-	id     ActionID
+	id     sim.ActionID
 	author int
 	amount int32
 }
 
-func (a *benchAction) ID() ActionID { return a.id }
+func (a *benchAction) ID() sim.ActionID { return a.id }
 
 type authoredBenchAction struct{ benchAction }
 
@@ -29,8 +31,8 @@ func (a *authoredBenchAction) Actor() any { return a.author }
 
 // planActions is the actions of a tick as an engine sees them: moves and attacks of characters
 // (they have an author), then the damage that the attacks make and the regens.
-func planActions(n int) []Action[*toyState] {
-	out := make([]Action[*toyState], 0, n)
+func planActions(n int) []sim.Action[*toyState] {
+	out := make([]sim.Action[*toyState], 0, n)
 	for i := range n {
 		author := 1000 + i%200
 		switch i % 5 {
@@ -47,8 +49,8 @@ func planActions(n int) []Action[*toyState] {
 	return out
 }
 
-func filledPlan(n int) *Plan[*toyState] {
-	p := NewPlan[*toyState]()
+func filledPlan(n int) *sim.Plan[*toyState] {
+	p := sim.NewPlan[*toyState]()
 	for _, a := range planActions(n) {
 		p.Append(a)
 	}
@@ -62,7 +64,7 @@ func BenchmarkPlanAppend(b *testing.B) {
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
-			p := NewPlan[*toyState]()
+			p := sim.NewPlan[*toyState]()
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Reset()
@@ -81,7 +83,7 @@ func BenchmarkPlanAppendAndRun(b *testing.B) {
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
-			p := NewPlan[*toyState]()
+			p := sim.NewPlan[*toyState]()
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Reset()
@@ -104,7 +106,7 @@ func BenchmarkPlanBuildAndRun(b *testing.B) {
 	for _, n := range planSizes {
 		b.Run(fmt.Sprintf("actions=%d", n), func(b *testing.B) {
 			actions := planActions(n)
-			p := NewPlan[*toyState]()
+			p := sim.NewPlan[*toyState]()
 			p.Reset()
 			b.ReportAllocs()
 			for b.Loop() {

@@ -1,15 +1,16 @@
-package action
+package action_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 )
 
 func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t *testing.T) {
-	st := zonelayerstate.NewState(1, 1, 9)
+	st := zonelayerstate.NewState(1, 9)
 	c, err := zonelayerstate.NewCharacter(1, "An", 100, 250, 256)
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +21,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 
 	var reg sim.Registry[*zonelayerstate.State]
 	reg.Begin(10)
-	a := ZoneLayerCharacterRegenAction{Every: 7}
+	a := action.ZoneLayerCharacterRegenAction{Every: 7}
 	a.Apply(&sim.Context{Tick: 10}, st, &reg, sim.NewPlan[*zonelayerstate.State]())
 	if health() != 71 {
 		t.Fatalf("health %d after the heal, want 71", health())
@@ -31,7 +32,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 		t.Fatalf("it set %v, want itself at 17", later)
 	}
 
-	once := ZoneLayerCharacterRegenAction{}
+	once := action.ZoneLayerCharacterRegenAction{}
 	once.Apply(&sim.Context{Tick: 17}, st, &reg, sim.NewPlan[*zonelayerstate.State]())
 	if later := reg.TakeSelf(); health() != 72 || len(later) != 0 {
 		t.Fatalf("a period of 0 healed to %d and set %d again", health(), len(later))

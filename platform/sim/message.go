@@ -75,10 +75,6 @@ type Message interface {
 	// Dest is the ID of the state, and so of the engine, that the message is for.
 	Dest() StateID
 	Head() Header
-	// Subject is the actor that the message is about (the author of its first action that has
-	// one): the one that is told when the message could not be delivered and the OnFail is to
-	// notify. It is nil when no action of the message has an author.
-	Subject() any
 	OnFail() OnFail
 	Attempts() int
 	// Stamp, Again and Redirected return copies.
@@ -130,9 +126,6 @@ type NestedOnFail interface {
 type Bouncer interface {
 	// Resend makes the engine send the message at its next flush.
 	Resend(m Message)
-	// Tell tells an actor something, as a text key with arguments. An actor that is nil is told
-	// nothing.
-	Tell(actor any, key string, args []string)
 	// Drop forgets a message and counts it.
 	Drop()
 	// Stopping reports whether the engine is stopping, when nothing is sent again.

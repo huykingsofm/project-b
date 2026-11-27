@@ -10,12 +10,16 @@ import (
 type kind interface{ Number() uint16 }
 
 type apple struct{}
-type pear struct{}
-type plum struct{}
 
 func (apple) Number() uint16 { return 1 }
-func (pear) Number() uint16  { return 2 }
-func (plum) Number() uint16  { return 1 } // the number of apple
+
+type pear struct{}
+
+func (pear) Number() uint16 { return 2 }
+
+type plum struct{}
+
+func (plum) Number() uint16 { return 1 } // the number of apple
 
 type reader func(b []byte) (kind, error)
 

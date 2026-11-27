@@ -10,7 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/platform/engine"
 	"github.com/huykingsofm/project-b/platform/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
@@ -24,20 +23,16 @@ var _ engine.CheckpointWriter = (*checkpoint.FileWriter)(nil)
 // everySeventhTick is a configuration in which every engine takes a checkpoint every 7 ticks.
 var everySeventhTick = map[string]string{"checkpoint.every_ticks": "7"}
 
-// aWorldThatCheckpointsToFiles is the world of testkit.WorldBuilder, which takes a checkpoint every
+// aWorldThatCheckpointsToFiles is the world of testkit.NewCluster, which takes a checkpoint every
 // 7 ticks to files under dir and records its log in memory.
 func aWorldThatCheckpointsToFiles(
 	t *testing.T, dir string,
-) (*game.Cluster, *eventlog.MemLog, *checkpoint.FileWriter) {
+) (*testkit.Cluster, *eventlog.MemLog, *checkpoint.FileWriter) {
 	t.Helper()
 	mem, files := &eventlog.MemLog{}, checkpoint.NewFileWriter(dir, 64)
-	c, err := testkit.WorldBuilder(t, 7, 10).
-		WithEventLog(mem).
-		WithCheckpointWriter(files).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	o := testkit.Options(t, 7)
+	o.EventLog, o.CheckpointWriter = mem, files
+	c := testkit.NewCluster(t, o, 10)
 	testkit.SetConfig(t, c, everySeventhTick)
 	return c, mem, files
 }
@@ -45,7 +40,7 @@ func aWorldThatCheckpointsToFiles(
 // hashOfRestored makes an engine from a checkpoint, in an environment of its own, and returns its
 // tick and its hash.
 func hashOfRestored(
-	t *testing.T, c *game.Cluster, id sim.StateID, data []byte,
+	t *testing.T, c *testkit.Cluster, id sim.StateID, data []byte,
 ) (uint64, uint64) {
 	t.Helper()
 	env := aFreshEnv(c)
@@ -54,17 +49,17 @@ func hashOfRestored(
 	switch id.Type() {
 	case state.WorldType:
 		var e *engine.Engine[*worldstate.State]
-		if e, err = restoreEngine[*worldstate.State](data, env, 7); err == nil {
+		if e, err = restoreEngine[*worldstate.State](data, env); err == nil {
 			tick, hash = e.Tick(), hashOf(e)
 		}
 	case state.ZoneType:
 		var e *engine.Engine[*zonestate.State]
-		if e, err = restoreEngine[*zonestate.State](data, env, 7); err == nil {
+		if e, err = restoreEngine[*zonestate.State](data, env); err == nil {
 			tick, hash = e.Tick(), hashOf(e)
 		}
 	case state.ZoneLayerType:
 		var e *engine.Engine[*zonelayerstate.State]
-		if e, err = restoreEngine[*zonelayerstate.State](data, env, 7); err == nil {
+		if e, err = restoreEngine[*zonelayerstate.State](data, env); err == nil {
 			tick, hash = e.Tick(), hashOf(e)
 		}
 	default:
@@ -93,7 +88,7 @@ func loggedHashes(mem *eventlog.MemLog) map[sim.StateID]map[uint64]uint64 {
 // checkTheFilesOfEveryEngine checks that every engine of the cluster has checkpoints under dir,
 // a period apart, and that each makes an engine with the hash that the log has at its tick.
 func checkTheFilesOfEveryEngine(
-	t *testing.T, c *game.Cluster, mem *eventlog.MemLog, dir string, every uint64,
+	t *testing.T, c *testkit.Cluster, mem *eventlog.MemLog, dir string, every uint64,
 ) map[sim.StateID][]uint64 {
 	t.Helper()
 	hashes := loggedHashes(mem)
@@ -152,7 +147,7 @@ func TestEveryEngineWritesACheckpointFileEveryPeriodThatMakesItAgainWithTheHashO
 	}
 
 	// a replay, whose engines take no checkpoint, hashes at the same ticks
-	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine())
+	result, err := runOn(testkit.Options(t, 7), mem.ByEngine())
 	if err != nil {
 		t.Fatal(err)
 	}

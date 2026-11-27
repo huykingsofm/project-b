@@ -1,7 +1,6 @@
-package replay
+package replay_test
 
 import (
-	"github.com/huykingsofm/project-b/platform/config"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,41 +8,42 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/checkpoint"
+	"github.com/huykingsofm/project-b/platform/config"
 	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
 
 // theLine is the recovery line of the files under dir, with the cache of the line when it holds.
 func theLine(dir string) (map[sim.StateID]uint64, error) {
-	logs, err := eventlog.NewFileLogs(dir, toyCodecs())
+	p, err := replay.MakePlan(dir, toyCodecs())
 	if err != nil {
 		return nil, err
 	}
-	last, err := lastTicks(logs)
-	if err != nil {
-		return nil, err
-	}
-	return recoveryLine(logs, last, knownSafe(dir, last))
+	return p.Limits(), nil
 }
 
 // cutToTheLine cuts the files under dir to the recovery line and returns it.
 func cutToTheLine(dir string) (map[sim.StateID]uint64, error) {
-	p, err := MakePlan(dir, toyCodecs())
+	p, err := replay.MakePlan(dir, toyCodecs())
 	if err != nil {
 		return nil, err
 	}
 	return p.Limits(), p.Cut()
 }
 
-// startsOf is where each engine of limits starts, from the checkpoints under dir.
-func startsOf(dir string, limits map[sim.StateID]uint64) (map[sim.StateID]uint64, error) {
-	logs, err := eventlog.NewFileLogs(dir, toyCodecs())
+// startsOf is where each engine starts, from the checkpoints under dir.
+func startsOf(dir string) (map[sim.StateID]uint64, error) {
+	p, err := replay.MakePlan(dir, toyCodecs())
 	if err != nil {
 		return nil, err
 	}
-	return chooseStarts(dir, logs, limits)
+	return p.Starts(), nil
 }
+
+// lineCacheFile is the name of the file of the cache of the line, in the directory of the cluster.
+const lineCacheFile = "recovery-line"
 
 var testFileLogOptions = eventlog.FileLogOptions{
 	Seed: 42, SegmentBytes: 1 << 20, SyncEvery: time.Hour, Backlog: 4,
@@ -158,7 +158,7 @@ func TestACutToTheRecoveryLineLeavesLogsThatEndAtThePointAndKeepsWhatItCutInTheA
 	if engines, _ := eventlog.Engines(dir); len(engines) != 2 {
 		t.Fatalf("the archive is read as a log: engines %v", engines)
 	}
-	if cache, found, err := ReadLineCache(dir); err != nil || !found ||
+	if cache, found, err := replay.ReadLineCache(dir); err != nil || !found ||
 		!reflect.DeepEqual(cache.Safe, want) {
 		t.Fatalf("the cache is %v (%v, %v), want %v", cache.Safe, found, err, want)
 	}
@@ -229,14 +229,18 @@ func TestTheCacheOfTheLineSavesReadingTheLogUpToWhatItSaysIsSafe(t *testing.T) {
 		55: eventlog.Inbound{Message: aMessageFrom(a, 1, 50)},
 	})
 	log.Close()
+	// the engines start at 40, so the plan reads their logs from there: the damage below is in the
+	// part that only a read of the line from the start would meet
+	checkpoints(t, dir, a, 40)
+	checkpoints(t, dir, b, 40)
 	want := map[sim.StateID]uint64{a: 60, b: 60}
 	if got, err := theLine(dir); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("without a cache: %v, %v, want %v", got, err, want)
 	}
 	// the cache says 40 of each is safe; the first segment of each is damaged, which only a read
 	// from the start would find
-	forty := LineCache{Safe: map[sim.StateID]uint64{a: 40, b: 40}}
-	if err := WriteLineCache(dir, forty); err != nil {
+	forty := replay.LineCache{Safe: map[sim.StateID]uint64{a: 40, b: 40}}
+	if err := replay.WriteLineCache(dir, forty); err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range []sim.StateID{a, b} {
@@ -255,18 +259,18 @@ func TestTheCacheOfTheLineSavesReadingTheLogUpToWhatItSaysIsSafe(t *testing.T) {
 	}
 	// a cache that says more than a log holds is not used: the logs are read whole, and the damage
 	// is found
-	tooMuch := LineCache{Safe: map[sim.StateID]uint64{a: 61, b: 40}}
-	if err := WriteLineCache(dir, tooMuch); err != nil {
+	tooMuch := replay.LineCache{Safe: map[sim.StateID]uint64{a: 61, b: 40}}
+	if err := replay.WriteLineCache(dir, tooMuch); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := theLine(dir); err == nil {
 		t.Fatal("a cache that says more than the log holds was used")
 	}
 	// so is one that names an engine that has no log, and one that is cut
-	for _, bad := range []LineCache{
+	for _, bad := range []replay.LineCache{
 		{Safe: map[sim.StateID]uint64{a: 40, b: 40, 9: 1}},
 	} {
-		if err := WriteLineCache(dir, bad); err != nil {
+		if err := replay.WriteLineCache(dir, bad); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := theLine(dir); err == nil {
@@ -283,10 +287,17 @@ func TestTheCacheOfTheLineSavesReadingTheLogUpToWhatItSaysIsSafe(t *testing.T) {
 
 func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 	dir := t.TempDir()
-	if _, found, err := ReadLineCache(dir); found || err != nil {
+	if _, found, err := replay.ReadLineCache(dir); found || err != nil {
 		t.Fatalf("no file: found %v, err %v", found, err)
 	}
-	whole := LineCache{Safe: map[sim.StateID]uint64{1: 5, 2: 9}}.encode()
+	if err := replay.WriteLineCache(dir, replay.LineCache{Safe: map[sim.StateID]uint64{1: 5,
+		2: 9}}); err != nil {
+		t.Fatal(err)
+	}
+	whole, err := os.ReadFile(filepath.Join(dir, lineCacheFile))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, data := range map[string][]byte{
 		"cut":         whole[:len(whole)-1],
 		"a byte too":  append(append([]byte{}, whole...), 0),
@@ -297,14 +308,15 @@ func TestACacheThatIsBadIsAnErrorWhenReadAndNeverAPanic(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, lineCacheFile), data, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, found, err := ReadLineCache(dir); found || err == nil {
+		if _, found, err := replay.ReadLineCache(dir); found || err == nil {
 			t.Fatalf("%s: found %v, err %v", name, found, err)
 		}
 	}
-	if err := WriteLineCache(dir, LineCache{Safe: map[sim.StateID]uint64{1: 5, 2: 9}}); err != nil {
+	if err := replay.WriteLineCache(dir, replay.LineCache{Safe: map[sim.StateID]uint64{1: 5,
+		2: 9}}); err != nil {
 		t.Fatal(err)
 	}
-	got, found, err := ReadLineCache(dir)
+	got, found, err := replay.ReadLineCache(dir)
 	if err != nil || !found || !reflect.DeepEqual(got.Safe, map[sim.StateID]uint64{1: 5, 2: 9}) {
 		t.Fatalf("read back %v (%v, %v)", got.Safe, found, err)
 	}
@@ -316,9 +328,9 @@ func TestTheWriterOfTheCacheWritesWhenAnEngineIsAPeriodAheadAndAtTheEnd(t *testi
 	if err := store.Apply(map[string]string{"replay.line_cache_every_ticks": "10"}); err != nil {
 		t.Fatal(err)
 	}
-	w := NewLineCacheWriter(dir, store)
+	w := replay.NewLineCacheWriter(dir, store)
 	read := func() map[sim.StateID]uint64 {
-		c, found, err := ReadLineCache(dir)
+		c, found, err := replay.ReadLineCache(dir)
 		if err != nil || !found {
 			return nil
 		}
@@ -346,14 +358,14 @@ func TestALogThatTellsTheWriterOfTheCacheLeavesTheCacheOfWhatWasSafeWhenItClosed
 	dir := t.TempDir()
 	a, b := sim.StateID(1), sim.StateID(2)
 	opts := testFileLogOptions
-	opts.OnSafe = NewLineCacheWriter(dir, nil)
+	opts.OnSafe = replay.NewLineCacheWriter(dir, nil)
 	log := eventlog.NewFileLog(dir, opts)
 	ticks(log, a, 5, nil)
 	ticks(log, b, 8, nil)
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
-	cache, found, err := ReadLineCache(dir)
+	cache, found, err := replay.ReadLineCache(dir)
 	if err != nil || !found || !reflect.DeepEqual(cache.Safe, map[sim.StateID]uint64{a: 5, b: 8}) {
 		t.Fatalf("the cache is %v (%v, %v)", cache.Safe, found, err)
 	}
@@ -379,8 +391,7 @@ func TestAStartIsTheLatestCheckpointAtOrBelowTheLimitAndGoesBackWhereACopyIsRead
 	checkpoints(t, dir, a, 10, 20, 30)
 	checkpoints(t, dir, b, 20)
 	checkpoints(t, dir, c, 6, 24)
-	limits := map[sim.StateID]uint64{a: 30, b: 30, c: 28}
-	starts, err := startsOf(dir, limits)
+	starts, err := startsOf(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +415,7 @@ func TestAStartThatNoCopyIsReadBeforeIsTheLatestCheckpoint(t *testing.T) {
 	log.Close()
 	checkpoints(t, dir, a, 10, 20)
 	checkpoints(t, dir, b, 20)
-	starts, err := startsOf(dir, map[sim.StateID]uint64{a: 30, b: 30})
+	starts, err := startsOf(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

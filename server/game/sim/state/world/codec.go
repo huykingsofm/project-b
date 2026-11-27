@@ -25,10 +25,7 @@ func count(r *binary.Reader) (uint64, error) {
 
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
-	s := &State{
-		id: r.Uint[sim.StateID](), tick: r.Uvarint(),
-		privateChat: ring.New[PrivateChatMessage](chatKeep),
-	}
+	s := &State{tick: r.Uvarint(), privateChat: ring.New[PrivateChatMessage](chatKeep)}
 	n, err := count(r)
 	if err != nil {
 		return nil, err
@@ -42,20 +39,16 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	for range n {
 		s.zoneLayers = append(s.zoneLayers, r.Uint[sim.StateID]())
 	}
-	s.lastStateID = r.Uvarint()
 	if err = r.Err(); err != nil {
 		return nil, err
-	}
-	if s.lastStateID > sim.MaxLocalStateID {
-		return nil, fmt.Errorf("the world has given the number %d: too large", s.lastStateID)
 	}
 	seen := make(map[sim.StateID]bool, len(s.zoneLayers))
 	for _, zoneLayerID := range s.zoneLayers {
 		if zoneLayerID.Type() != state.ZoneLayerType {
 			return nil, fmt.Errorf("the zonelayer %d is a state of another type", zoneLayerID)
 		}
-		if zoneLayerID.Local() == 0 || zoneLayerID.Local() > s.lastStateID {
-			return nil, fmt.Errorf("the zonelayer %d was never given", zoneLayerID)
+		if zoneLayerID.Local() == 0 {
+			return nil, fmt.Errorf("the zonelayer %d has the number 0, never given", zoneLayerID)
 		}
 		if seen[zoneLayerID] {
 			return nil, fmt.Errorf("the zonelayer %d is there twice", zoneLayerID)
