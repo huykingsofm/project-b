@@ -42,7 +42,7 @@ A zonelayer announces itself: the action that makes it also sets, for its first 
 
 | Cluster is run by | The engine ends |
 |---|---|
-| `stepping.Step` (a script, a test) | at the end of the step (`Cluster.RetireRequested`), so it runs no tick after the step that asked |
+| `stepping.Step` (a script, a test) | at the end of the step (`stepping.Step` retires the engine that was asked to and tells the cluster to forget it, `Cluster.Forget`), so it runs no tick after the step that asked |
 | `Cluster.Run` | on its own goroutine, between two of its ticks (`Engine.RequestRetirement` makes `Engine.Run` call `Engine.Retire` and return), and the cluster drops it |
 
 - `Cluster.RemoveEngine(id)` ends an engine at once when the cluster does not run (between two steps, not from a tick), and asks it to end when `Run` runs it; the configuration engine is never removed. A request from an engine (`DirectiveRemoveEngine`) always asks, and a request for the configuration engine or for an ID that no engine has is dropped.

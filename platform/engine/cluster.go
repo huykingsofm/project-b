@@ -56,12 +56,9 @@ type EngineHandle interface {
 	// Engine.HandleDirectiveResponse.
 	HandleDirectiveResponse(d sim.DirectiveResponse) error
 	// RequestRetirement asks the engine to retire between two of its ticks: Run does it, or the
-	// code that steps the engines itself (RetireIfRequested); it does not wait, and may be called
-	// from any goroutine.
+	// code that steps the engines itself (Engine.RetireIfRequested); it does not wait, and may be
+	// called from any goroutine.
 	RequestRetirement()
-	// RetireIfRequested retires the engine if it was asked to, and says whether it did: see
-	// Engine.RetireIfRequested.
-	RetireIfRequested() bool
 	// IsClosed says that the engine has been closed: it retired or was closed.
 	IsClosed() bool
 }
@@ -195,9 +192,9 @@ func (c *Cluster) RemoveEngine(id sim.StateID) bool {
 }
 
 // requestEngineRemoval asks the engine to end itself, between two of its ticks: on its own
-// goroutine when Run runs it, and when the code that steps the engines calls RetireRequested
-// otherwise. It does not wait, and may be called from the tick of an engine, which RemoveEngine may
-// not. It reports whether the cluster has the engine.
+// goroutine when Run runs it, and when the code that steps the engines retires it otherwise. It
+// does not wait, and may be called from the tick of an engine, which RemoveEngine may not. It
+// reports whether the cluster has the engine.
 func (c *Cluster) requestEngineRemoval(id sim.StateID) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -210,18 +207,10 @@ func (c *Cluster) requestEngineRemoval(id sim.StateID) bool {
 	return false
 }
 
-// RetireRequested retires the engines that were asked to retire and forgets them. It is for the
-// code that steps the engines itself, between two steps: Run does it for the engines it runs.
-func (c *Cluster) RetireRequested() {
-	for _, e := range c.Engines() {
-		if e.RetireIfRequested() {
-			c.forget(e.StateID())
-		}
-	}
-}
-
-// forget drops an engine that has ended from the list.
-func (c *Cluster) forget(id sim.StateID) {
+// Forget drops an engine from the list of the cluster. It is for an engine that has retired: it is
+// not retired by this, and the router still knows it. Run calls it for the engines it runs, and the
+// code that steps the engines itself calls it for the ones that retired between two steps.
+func (c *Cluster) Forget(id sim.StateID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.engines = slices.DeleteFunc(c.engines, func(e EngineHandle) bool { return e.StateID() == id })
@@ -483,7 +472,7 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 					})
 				}
 				if e.IsClosed() {
-					c.forget(e.StateID())
+					c.Forget(e.StateID())
 				}
 			})
 		}

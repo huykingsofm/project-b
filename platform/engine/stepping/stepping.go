@@ -8,11 +8,15 @@ import (
 	"fmt"
 
 	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/sim"
 )
 
-// engineHandle is what Step needs of an engine of the cluster: to run one tick.
+// engineHandle is what Step needs of an engine of the cluster: to say which engine it is, to run
+// one tick, and to retire when it was asked to.
 type engineHandle interface {
+	StateID() sim.StateID
 	Step() error
+	RetireIfRequested() bool
 }
 
 // Step runs one tick of every engine of the cluster, one after the other. A message that an engine
@@ -30,7 +34,11 @@ func Step(c *engine.Cluster) error {
 			return fmt.Errorf("the cluster stopped: %w", err)
 		}
 	}
-	c.RetireRequested()
+	for _, e := range c.Engines() {
+		if h := e.(engineHandle); h.RetireIfRequested() {
+			c.Forget(h.StateID())
+		}
+	}
 	return nil
 }
 
