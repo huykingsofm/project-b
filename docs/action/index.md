@@ -56,7 +56,7 @@ What must happen outside a state goes in its `sim.ActionRegistry[S]` and happens
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick (a tick that is not in the future is the next one) |
 | `RequestCreateEngine(tag, state, startActions...)` | asks the cluster for an engine of a state without an ID, which runs the actions given once at its first tick; the state that is to list it takes the answer (`sim.DirectiveHandler`), not the action ([engines](../engine_lifecycle.md)) |
-| `RemoveEngine(id, tag)` | asks the cluster to remove the engine |
+| `RequestRetireEngine(id, tag)` | asks the cluster to retire the engine |
 
 ## Failed delivery
 
@@ -132,9 +132,9 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | zone | [ZoneZoneLayerAddAction](zone.md#zonezonelayeraddaction) | message |
 | zone | [ZoneExitAddAction](zone.md#zoneexitaddaction) | message |
 | zonelayer | [ZoneLayerCharacterMoveAction](zonelayer.md#zonelayercharactermoveaction) | intent, cancellable |
-| zonelayer | [ZoneLayerCharacterNormalAttackTriggerAction](zonelayer.md#zonelayercharacternormalattackaction) | intent |
+| zonelayer | [ZoneLayerCharacterNormalAttackTriggerAction](zonelayer.md#zonelayercharacternormalattacktriggeraction) | intent |
 | zonelayer | [ZoneLayerCharacterDamageAction](zonelayer.md#zonelayercharacterdamageaction) | made |
-| zonelayer | [ZoneLayerCharacterShieldGrantAction](zonelayer.md#zonelayercharactershieldaction) | intent, standing |
+| zonelayer | [ZoneLayerCharacterShieldGrantAction](zonelayer.md#zonelayercharactershieldgrantaction) | intent, standing |
 | zonelayer | [ZoneLayerCharacterRegenAction](zonelayer.md#zonelayercharacterregenaction) | system |
 | zonelayer | [ZoneLayerCharacterEnterAction](zonelayer.md#zonelayercharacterenteraction) | message |
 | zonelayer | [ZoneLayerCharacterExitToAction](zonelayer.md#zonelayercharacterexittoaction) | intent |

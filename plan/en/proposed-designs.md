@@ -119,7 +119,7 @@ Replay is the engines running again, not a second implementation:
 
 - **Going live is making the engines again in the real environment (agreed):** after the log is played to its end, each replayed engine is checkpointed at its last tick, and an engine is restored from that checkpoint (`Restore...Engine`) in the environment with the real router, store, emitter and file log; it goes on from its own tick. A replayed engine never runs live, so no engine that runs carries an adapter of the replay and the path of a running engine has no extra indirection. Recovery and replay share the runner; they differ in what is made at the end.
 - What making them again needs:
-  - what repeats checked: `ZoneLayerEngine.EnsureRegen` sets the first heal when none waits and refuses a period that differs from the one that waits;
+  - what repeats needs no check: it is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other;
   - the latest copy of each engine put in the registry, so that the others can read it;
   - the queues empty (what was not taken from them is in the log);
   - the store of the configuration at its latest version;

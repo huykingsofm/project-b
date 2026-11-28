@@ -19,7 +19,7 @@
 | `checkpoint.Read(dir, id, tick)` | the bytes of the checkpoint of an engine at a tick |
 
 - `Restore` registers the engine in the router of `env`, as `engine.New` does; a checkpoint whose state is not at its tick is an error, and registers nothing.
-- What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. `game.EnsureRegen(engine, every)` checks it after a restore: the action that waits must have the period the cluster asks for, and a different one is an error.
+- What an engine does again and again (a zonelayer healing its characters) is an action that sets itself again, so it waits in the scheduler and is in the checkpoint like any other. An engine that a request made is given its first one as an action it starts with (`WorldZoneLayerAddAction` gives the regen of a zonelayer when `RegenEvery` is above 0).
 - A checkpoint that is cut, has a byte too many, is of another data version or of another type of state is an error, never a panic.
 
 ## What it holds
@@ -102,7 +102,7 @@ Each engine takes its own checkpoints, with no set for the cluster: no checkpoin
 | Key | Value |
 |---|---|
 | path | `<dir>/<name>-<id>/ckpt-<tick>.snap`, in the directory of the engine next to its event log (`eventlog.EngineDir`); the tick in 20 digits |
-| how it is written | with `atomicfile.Write` ([atomicfile](atomicfile.md)): to `ckpt-<tick>.snap.tmp`, synced, renamed, then the directory is synced: a file with the name of a checkpoint is whole |
+| how it is written | with `atomicfile.Write` ([atomicfile](shared.md#atomicfile)): to `ckpt-<tick>.snap.tmp`, synced, renamed, then the directory is synced: a file with the name of a checkpoint is whole |
 | a temporary file left by a crash | not a checkpoint; written over when the same tick is written again |
 | order | one writer for the cluster, in the order the checkpoints were offered |
 | a full queue, or a writer that is closed | the checkpoint is dropped, logged and counted (`Dropped`); the engine goes on, and its next checkpoint is a period later |

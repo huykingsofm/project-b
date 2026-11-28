@@ -67,7 +67,7 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 - Never fail, never leave their state; what must happen outside goes in the registry ([registry](action/index.md#registry)).
 - An action that must wait sets itself at the tick it knows it can run.
-- The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldGrantAction`](action/zonelayer.md#zonelayercharactershieldaction) is the pattern.
+- The plan is indexed by the ID of its actions and by their author, so an action can find others without walking the plan; [`ZoneLayerCharacterShieldGrantAction`](action/zonelayer.md#zonelayercharactershieldgrantaction) is the pattern.
 - A cancellable action implements `sim.Cancellable[S]` (a `sim.Action[S]` with one more method, `ApplyCancel`).
 - Every action is a value type, with its methods on the value ([R13](../plan/rule/r13-clone-or-value.md)): an action that changes as it runs sets a changed copy of itself for a later tick. Its `Clone` returns itself, and one that holds a character clones the character: a checkpoint and an engine that takes a message copy actions with it.
 - Cooldowns: [action/index.md](action/index.md#cooldowns).
@@ -130,14 +130,15 @@ The simulation core touches nothing outside: no gateway, no database, no network
 | Package | What it is |
 |---|---|
 | `shared/stablemap` | map with a stable order of visit: the same for the same calls, though not the order of insertion once a key is deleted (R9) |
-| `shared/table` | `Table[K, V]`: a stablemap with columns, values found by one key, or by two (the first alone or both), found by the type of the key (`Index`, `Index2`, `Lookup`, `LookupAs`, `Lookup2`, `Lookup2First`); `PriorityQueue[V, P]` (`V` says its own priority, `Priority() P`, as a `Prioritier[P]`; the zero queue is ready): elements taken by priority and then by arrival, which remembers what it held in the round, with the same columns on all of it (`Add`, `BuildFrom`, `Next`, `All`, `Pending`) |
+| `shared/table` | `Table[K, V]`: a stablemap with columns, found by one key or by two; `PriorityQueue[V, P]`: elements taken by priority and then by arrival, with the same columns |
 | `shared/ring` | the last rows of a log that only grows at the end (the chat) |
 | `shared/registry` | the latest published copy under a key |
-| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it; and `Version`, the version of the data that a `Decode` reads, for the event log; refuses a number or a Go type that two kinds share |
+| `shared/codec` | a register of kinds told apart by a number, each with the function that reads it, and `Version`, the version of the data that a `Decode` reads; it refuses a number or a Go type that two kinds share |
 | `shared/bimap` | two-way map (the zonelayer state links characters and bodies with it) |
 | `shared/channels` | `Drain` |
 | `shared/logging` | key=value log lines; a call only fills a channel ([logging](logging.md)) |
-| `shared/bitset` | K bits, the walls of a `TileMap` ([bitset](bitset.md)) |
+| `shared/bitset` | K bits, the walls of a `TileMap` ([bitset](shared.md#bitset)) |
+| `shared/atomicfile`, `shared/rand` | a file written whole or not at all; the random numbers of an owner with their place in bytes ([shared](shared.md)) |
 | `shared/segmentlog` | append-only log in segment files, under the event log ([segmentlog](segmentlog.md)) |
 | `shared/codec/binary` | integers (checked against the type they are read as) and strings as bytes: `Writer` and `Reader` |
 | `shared/errs` | `Join`: joins what many registrations returned into one error |
@@ -151,8 +152,5 @@ The simulation core touches nothing outside: no gateway, no database, no network
 
 ## Replay
 
-- Needs the inputs from outside and what only the time decides (`platform/journal/eventlog/`); what engines send themselves is made again from the state.
-- The hash an engine records is the hash of its state, of what it waits for and of what only it knows ([checkpoint](checkpoint.md#hash)).
-- An engine records, in its own log: the messages it took (whole), the messages it sent that came back and the reason, the commands of clients, the hash of its state every few ticks, and which copy of another engine it read first.
-- In files: [eventlog](eventlog.md).
-- Run again from the records, on the real engines with other adapters: [replay](replay.md). Cut to the recovery line and run again from the checkpoints: [replay](replay.md).
+What an engine records in its own log, and why: [eventlog](eventlog.md). The hash it records, which is of its state, of what it waits for and of what only it knows: [checkpoint](checkpoint.md#hash). Run again from the records on the real engines with other adapters, cut to the recovery line and started from the checkpoints: [replay](replay.md).
+

@@ -1,6 +1,6 @@
 # Unsettled messages and acks
 
-`platform/runtime/engine/unsettled_messages.go`, `platform/runtime/engine/peer.go` (`releaseAckedMessages`, `flushUnsettledMessages`, `resendUnackedMessages`, `publishAcks`, `handleReturnedMessages`), `platform/journal/eventlog/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
+`platform/runtime/engine/unsettled_messages.go`, `platform/runtime/engine/peer.go` (`releaseAckedMessages`, `flushUnsettledMessages`, `resendUnackedMessages`, `publishMessageAcks`, `handleReturnedMessages`), `platform/journal/eventlog/safe.go`. The unsettled messages of an engine (`unsettledMessages`) are what it keeps of the messages it sends until the engine that took them has them where a crash does not take them back. The design: `plan/en/roadmap.md`. They are not `sim.Outbox`, the list that the actions of a tick put the messages in, which is emptied when the tick sends them.
 
 ## What they hold
 
@@ -31,7 +31,7 @@
 | Part | What it is |
 |---|---|
 | `stable.AckBoard` | a number for each pair (receiver, sender) that only goes up, in the memory of the process: `Raise(receiver, sender, seq)` says it and `Acked(receiver, sender)` reads it (0 when nothing was said); it is not a message, and is never written to a log or a checkpoint |
-| receiver | at the end of each tick asks its event log up to which tick it is safe (`Log.Safe`), and for the messages it took in those ticks raises the number of each sender to the largest it took (`publishAcks`) |
+| receiver | at the end of each tick asks its event log up to which tick it is safe (`Log.Safe`), and for the messages it took in those ticks raises the number of each sender to the largest it took (`publishMessageAcks`) |
 | sender | at each tick, before the flush (`releaseAckedMessages`), reads the number of each receiver it holds a message for, and lets go of the messages for it that have a number up to it |
 | a restore | what the checkpoint says an engine took (`lastRecvSeq`) is in a place that no crash takes back, so it is raised on the board at once |
 

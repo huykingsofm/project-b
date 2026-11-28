@@ -21,6 +21,7 @@ docs/
   action/                           reference of the actions: index.md (conventions, priorities, index), and world.md, zone.md, zonelayer.md
   coordinatorengine.md              the coordinator engine: the configuration it holds, how it is changed and read
   tilemap.md                        reference of TileMap: construction, Free, FreeForBody, Reach, exits
+  shared.md                         the small libraries of `shared`: atomicfile, rand, bitset (the others have a document each)
   simulation.md                     how the simulation works: platform and game, states, a tick, delivery, replay
   entity/                           reference of the entities: entity.md (the interfaces), character.md, item.md, exit.md
 plan/

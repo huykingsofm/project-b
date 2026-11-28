@@ -19,7 +19,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
   3. Reads the map.
   4. `MoveEntity` by `Character.Speed` units towards `Dir` (`TileMap.Reach` follows the whole path and stops at the last unit before the body, a square of the entity's radius, touches a tile that cannot be stood on; a diagonal across a corner needs both tiles beside it free). Cost: [benchmarks](../benchmark/move.md).
   5. `Ticks` -= 1; if any left, `ToSelf`.
-- On cancel: `ApplyZoneLayerCancel`: if the run had taken its place and the cooldown is still ahead, the cooldown becomes this tick.
+- On cancel: `ApplyCancel`: if the run had taken its place and the cooldown is still ahead, the cooldown becomes this tick.
 - Example: tick 10, `{East, 3}` then `{South, 2}`. Run 1: cooldown 13, moves at 10, 11, 12. Run 2: start 13, cooldown 15, moves at 13, 14. Ends three steps east and two south; the runs never overlap.
 
 ### ZoneLayerCharacterNormalAttackTriggerAction
@@ -44,7 +44,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Kind: made
 - Priority: `PriorityResolve`
 - Fields: `SourceID`, `VictimID` (entities), `Amount`
-- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`FindByID` with `ZoneLayerCharacterDamageActionID`)
+- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattacktriggeraction); found in the plan by ID only (`FindByID` with `ZoneLayerCharacterDamageActionID`)
 - Steps:
   1. Nothing if `Amount` <= 0.
   2. `DamageEntity` on the victim (a [`DamageableEntity`](../entity/entity.md#damageableentity-interface)).
@@ -69,7 +69,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Kind: system
 - Priority: `PrioritySystem`
 - Fields: `Every`, the ticks between two heals; 0 heals once
-- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is set by `game.EnsureRegen(engine, RegenEvery)` when the cluster is built, 0 never
+- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is an action that the zonelayer starts with, given by `WorldZoneLayerAddAction` when `RegenEvery` is above 0 (0: never)
 - Steps:
   1. `HealAllEntities(1)`: every damageable entity above 0 health gets 1, up to its most; one health-changed event per change.
   2. When `Every` is more than 0, `ToSelfAt(tick + Every, itself)`.

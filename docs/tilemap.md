@@ -4,7 +4,7 @@
 
 ## Storage
 
-- One bit for each tile, row by row, in a [`bitset.Array`](bitset.md); `width * height` bits.
+- One bit for each tile, row by row, in a [`bitset.Array`](shared.md#bitset); `width * height` bits.
 - A row of 4 or more tiles of a body is read with `AnyInRange`; a column, or a row of fewer tiles, bit by bit.
 - Compared with a `[]bool` in [the benchmarks of a move](benchmark/move.md#tile-storage).
 

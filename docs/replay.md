@@ -31,29 +31,6 @@ A replay always runs on a plan, and a plan is made only by `MakeRecoveryPlan` or
 - An engine runs from its start to its limit. A limit is a tick that the log has, so a tick with no record is not run past the last one.
 - Each log is read a tick at a time and never whole: one pass indexes it, one runs it. What is kept follows the ticks that are loaded and the reads still to come, not the length of the log.
 
-## Files
-
-| File | Holds |
-|---|---|
-| `plan.go` | `RecoveryPlan` with `RecoveryPlan.Cut`, `MakeRecoveryPlan`, `RecoveryPlanFrom`; the recovery line; the choice of the start of each engine; the checkpoint files as a source |
-| `cut.go` | the archive of what `RecoveryPlan.Cut` cuts |
-| `line_cache.go` | the cache of the line and its writer |
-| `replay.go` | `Run`, `Recover`, `Result` with `Result.Handover`, `DivergenceError` |
-| `run.go` | the run: `engineRun` (what a replay holds of one engine: the engine, its limit, the tick it has run to, its log and the records of the tick loaded) in a `stablemap.Map` that keeps the order of `Step`; how an engine is made (from its checkpoint, or from its start record) and begins; the inputs of a tick |
-| `index.go` | the pass over each log before the run: how many reads each copy has, which messages came back, a hash of each message as it was taken, the size of the queues, the seed |
-| `logs.go` | `Logs`, and the `tickReader` that reads the records of one engine a tick at a time |
-| `adapters.go` | `replayRouter`, `replayStable` and `verifyLog` |
-| `divergence.go` | the first difference of each engine |
-
-## Tests
-
-| Where | Holds |
-|---|---|
-| `platform/journal/replay/recovery_test.go`, `toy_test.go` | the line, the cut, the cache and the start rule, on toy engines |
-| `server/game/replay_runner_test.go`, `recovery_test.go` | the replay and the recovery of the world of this game, and their benchmarks |
-| `server/game/handover_test.go` | the handover of the world: tick and hash of each engine, the logs written after it recovered again with no divergence, a message that its receiver lost taken once |
-| `server/game/testkit` | what the tests of the game share: the world they run (`Options`, `Make`, `NewCluster`, `NewWorld`), an event log that writes in memory and to files (`NewTeeWorld`), and the scenario that runs a cluster through every kind of input (`RunScenario`) |
-
 ## What the platform gives it
 
 | Seam | Used for |
@@ -61,7 +38,7 @@ A replay always runs on a plan, and a plan is made only by `MakeRecoveryPlan` or
 | `router.MessageRouter`, `stable.Store` | the adapters on `Environment` |
 | `stable.CopySource` and `stable.NewView` | a store that finds the copy a read names |
 | `cluster.NewReplayCluster`, `Cluster.AddEngineByCheckpoint` and `engine.EngineRegistry` | making the engines in the environment of the replay, each from its checkpoint or from the record that begins its log |
-| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `RequestRetirement`, `RetireIfRequested`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`, `WaitsForResponse`, `Adopt`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
+| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `RequestRetirement`, `RetireIfRequested`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`, `WaitsForDirectiveResponse`, `Adopt`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
 
 ## Adapters
 
@@ -116,7 +93,7 @@ Before the first tick, for each engine that starts above tick 0:
 | Key | Value |
 |---|---|
 | what it holds | the `Safe` of each engine at some time (`LineCache.Safe`); a tick that is safe is never cut, so the line of an engine is at or above it |
-| file | `<dir>/recovery-line`, written whole or not at all ([atomicfile](atomicfile.md)) |
+| file | `<dir>/recovery-line`, written whole or not at all ([atomicfile](shared.md#atomicfile)) |
 | what it saves | `MakeRecoveryPlan` reads the log of an engine from the tick after the cached one, and not from tick 1, to work out the line |
 | written by | `LineCacheWriter`, the `FileLogOptions.OnSafe` of the cluster's `eventlog.FileLog`: when some engine is `replay.line_cache_every_ticks` (600) past what was written, and when the log is closed; and by `RecoveryPlan.Cut`, with the limits |
 | used when | every engine it names has a log and none of its ticks is above the last tick of that log; an engine it does not name is read from tick 1 |
@@ -152,7 +129,7 @@ Before the first tick, for each engine that starts above tick 0:
 |---|---|
 | refused | a result with a divergence is not handed over |
 | checkpoint | each engine of the replayed cluster is checkpointed at its limit (`Engine.EncodeCheckpoint`) |
-| engines | `cluster.NewCluster(env, store, configCheckpoint)` makes the cluster and `Cluster.AddEngineByCheckpoint` each of the other engines from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env` (`engine.NewEnvironment` makes such an environment) |
+| engines | `cluster.NewCluster(env, orchestrator, coordinatorCheckpoint)` makes the cluster and `Cluster.AddEngineByCheckpoint` each of the other engines from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env` (`engine.NewEnvironment` makes such an environment) |
 | sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
 | copies | each engine that ran a tick publishes its state (`PublishState`), for the engines that read it; one at the tick 0 publishes nothing, so a read that records the tick 0 means that it found no copy |
 | engines that never ran | an engine with `Init` and nothing after it is kept and run when the log of the engine that asked holds the response (also when that engine retired after), and dropped, with `Retired` written to its log, when the request still waits there or no response is in its log ([engines](engine_lifecycle.md)) |

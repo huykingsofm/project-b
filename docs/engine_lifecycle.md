@@ -74,8 +74,7 @@ A@100 asks, B is made, A takes the response at its tick 103.
 
 ## IDs
 
-- `cluster.Orchestrator` stores the highest number given for each type in `state-id-marks`, in the directory of the logs (`atomicfile`), before it gives a number. The caller makes it (`NewOrchestrator(dir, store)`; an empty `dir` stores nothing) and gives it to `NewCluster`; `cmd/world` gives its directory, and `Handover` the directory of the plan. It belongs to the cluster (`Cluster.Orchestrator()`), not to the `Environment` that every engine gets. It also holds the configuration store and brings it into the coordinator engine (`Orchestrator.SyncConfig`), so a cluster of a replay, which has none, has no store.
-- A recovery reads the file (`cluster.ReadStateIDMarks`). An engine above the number of its type is not valid: its last tick is 0 and it is cut away with what depends on it. A file that is damaged, or missing while the logs hold an engine that the orchestrator gave an ID to, stops the recovery with an error.
+The orchestrator gives the numbers and keeps the highest of each type in a file, and a recovery cuts what is above it: [ids](ids.md#who-gives-the-numbers). It belongs to the cluster (`Cluster.Orchestrator()`), not to the `Environment` that every engine gets, and it also brings the configuration store into the coordinator engine (`Orchestrator.SyncConfig`).
 
 ## Replay and recovery
 
@@ -93,16 +92,3 @@ A@100 asks, B is made, A takes the response at its tick 103.
 ## Starting `cmd/world`
 
 `-new-dir DIR` starts a new cluster that writes under `DIR`, which must hold no log: it sends the coordinator engine `CreateEngineCommand` for the world and steps until the world runs. `-replay-dir DIR` cuts the logs under `DIR` to the recovery line, runs each engine on its log, compares it with what was recorded (a divergence is an error), and goes on live, writing after the cut.
-
-## Tests
-
-| Where | Holds |
-|---|---|
-| `platform/runtime/cluster/creation_test.go` | an engine runs only after its creator took the response, with `Init` at the tick 1 and `Started` at the tick 2 and the dependencies each says; a message before it joined comes back as not started; the engines of two requests; a creator that is gone before it acknowledges ends the engine; a creator that took the response and retired at once does not; a creator is told of a failure; the numbers of a type; an engine made while the cluster runs; a request that waits in a checkpoint is published again once |
-| `platform/runtime/engine/engine_registry_test.go` | an engine is made from a state of a known type, runs its tick 1 and is outside the router; an engine made again from `Init` writes no `Init` |
-| `platform/runtime/cluster/removal_test.go` | the requests are published once when the tick is done; the step ends the engine and its log ends with `Retired` alone; the response carries the tick of `Retired` and depends on it; an engine that ends itself gets no response; the coordinator engine is kept; an unknown ID is a failure; an engine that runs on its own ends between two ticks; many goroutines ask while others run (`-race`) |
-| `platform/runtime/cluster/orchestrator_test.go` | the numbers count from 1 for each type and are stored; a cluster that goes on does not give one again; a damaged file is an error |
-| `platform/journal/replay/recovery_test.go` | the recovery line, the cut, the cache and the starts |
-| `server/game/made_engine_test.go` | the zonelayer that the world asks for, its ID and the response that the world takes; recovery from a checkpoint and from `Init`; a handover; a cluster on its goroutines; a response that the world lost makes the engine again with another ID; a zonelayer that lost all but its `Init` while the world kept the response is kept and writes `Started` again, also when the world retired after; an engine that cannot be made |
-| `server/game/removed_engine_test.go` | the recovery of a world in which an engine was ended (by `stepping.RetireEngine`, by a command to the coordinator engine, by a cluster on its goroutines); a handover does not make it again |
-| `server/game/handover_scenarios_test.go` | a handover after any engine lost its log at any tick keeps every message once |

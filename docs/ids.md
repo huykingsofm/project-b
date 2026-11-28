@@ -20,6 +20,8 @@
 
 The orchestrator of the cluster gives the `StateID` of an engine that has none given (`Orchestrator.NextStateID`, [engines](engine_lifecycle.md)): it counts the numbers of each type up from 1, and stores the highest in a file of its own, so when the cluster starts again it counts from above it. The world knows the zones and the zonelayers by the IDs that the cluster gave, which it takes from the answer of the cluster (`State.HandleDirective`, `AddZone`, `AddZoneLayer`, `RemoveZoneLayer`). There is no counter type for entities: a state that gives IDs holds the last number it gave, as a plain field, which is written in its checkpoint and worked into its hash.
 
+The orchestrator writes the highest number of each type to `state-id-marks`, in the directory of the logs ([atomicfile](shared.md#atomicfile)), before it gives a number. The caller makes it (`NewOrchestrator(dir, store)`; an empty `dir` stores nothing) and gives it to `NewCluster`: `cmd/world` gives its directory, and `Handover` the directory of the plan. A recovery reads the file (`cluster.ReadStateIDMarks`): an engine above the number of its type is not valid, its last tick is 0 and it is cut away with what depends on it; a file that is damaged, or missing while the logs hold an engine that the orchestrator gave an ID to, stops the recovery with an error.
+
 | State | Field | What it gives |
 |---|---|---|
 | `zonelayer` | `lastEntityID` | the `EntityID` of each entity: a body, an item (`AddCharacterEntity`, `AddItemEntity`) |
