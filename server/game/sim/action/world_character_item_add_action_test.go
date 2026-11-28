@@ -12,7 +12,7 @@ import (
 
 func TestAFullInventorySendsWhatDoesNotFitBackToTheGroundAsItWas(t *testing.T) {
 	s := worldstate.NewState()
-	reg := &sim.Registry[*worldstate.State]{}
+	reg := &sim.ActionRegistry[*worldstate.State]{}
 	at := state.Vec{X: 2500, Y: 2500}
 	// The defaults are 20 slots of 99, so 20 slots of 99 fill it.
 	fill := action.WorldCharacterItemAddAction{

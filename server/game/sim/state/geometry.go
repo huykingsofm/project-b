@@ -5,30 +5,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// Vec is a position or a distance, in units. Every position, radius and distance of the simulation
-// is in units; only the map knows how it is cut into tiles (package tilemap).
-type Vec struct{ X, Y int32 }
-
-// Add returns the sum of the two vectors.
-func (v Vec) Add(o Vec) Vec { return Vec{v.X + o.X, v.Y + o.Y} }
-
-// Encode writes a vector: its two coordinates.
-func (v Vec) Encode(w *binary.Writer) {
-	w.Varint(int64(v.X))
-	w.Varint(int64(v.Y))
-}
-
-// Dir is a direction of movement.
-type Dir uint8
-
-// Vec returns the step of one unit in the direction, in each axis it moves in.
-func (d Dir) Vec() Vec {
-	if int(d) >= len(dirVec) {
-		return Vec{}
-	}
-	return dirVec[d]
-}
-
 // The eight directions, and none.
 const (
 	NoDir Dir = iota
@@ -47,8 +23,26 @@ var dirVec = [...]Vec{
 	South: {0, 1}, SouthWest: {-1, 1}, West: {-1, 0}, NorthWest: {-1, -1},
 }
 
+// Dir is a direction of movement.
+type Dir uint8
+
+// Vec returns the step of one unit in the direction, in each axis it moves in.
+func (d Dir) Vec() Vec {
+	if int(d) >= len(dirVec) {
+		return Vec{}
+	}
+	return dirVec[d]
+}
+
 // Rect is a rectangle of units, both ends included.
 type Rect struct{ Min, Max Vec }
+
+// RectCovering returns the smallest rectangle that holds both positions.
+func RectCovering(a, b Vec) Rect {
+	return Rect{
+		Min: Vec{X: min(a.X, b.X), Y: min(a.Y, b.Y)}, Max: Vec{X: max(a.X, b.X), Y: max(a.Y, b.Y)},
+	}
+}
 
 // Grown returns the rectangle with n more units on every side.
 func (r Rect) Grown(n int32) Rect {
@@ -65,15 +59,21 @@ func (r Rect) Contains(v Vec) bool {
 	return v.X >= r.Min.X && v.X <= r.Max.X && v.Y >= r.Min.Y && v.Y <= r.Max.Y
 }
 
-// RectCovering returns the smallest rectangle that holds both positions.
-func RectCovering(a, b Vec) Rect {
-	return Rect{
-		Min: Vec{X: min(a.X, b.X), Y: min(a.Y, b.Y)}, Max: Vec{X: max(a.X, b.X), Y: max(a.Y, b.Y)},
-	}
-}
+// Vec is a position or a distance, in units. Every position, radius and distance of the simulation
+// is in units; only the map knows how it is cut into tiles (package tilemap).
+type Vec struct{ X, Y int32 }
 
 // DecodeVec reads what Vec.Encode wrote, of the data version given. A reader that has failed gives
 // the zero vector.
 func DecodeVec(r *binary.Reader, version codec.Version) Vec {
 	return Vec{X: r.Int[int32](), Y: r.Int[int32]()}
+}
+
+// Add returns the sum of the two vectors.
+func (v Vec) Add(o Vec) Vec { return Vec{v.X + o.X, v.Y + o.Y} }
+
+// Encode writes a vector: its two coordinates.
+func (v Vec) Encode(w *binary.Writer) {
+	w.Varint(int64(v.X))
+	w.Varint(int64(v.Y))
 }

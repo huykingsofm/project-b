@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
+	"github.com/huykingsofm/project-b/platform/runtime/router"
+	"github.com/huykingsofm/project-b/platform/runtime/stable"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -51,7 +53,7 @@ func aWorldWithActionsThatWait(t testing.TB) *testkit.Cluster {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: an})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: an})
 	testkit.Steps(t, c, 4)
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		theLayer, onfail.Drop{},
@@ -60,11 +62,11 @@ func aWorldWithActionsThatWait(t testing.TB) *testkit.Cluster {
 		},
 	).Stamp(sim.Header{From: 99, Seq: 1}))
 	l := c.ZoneLayer(theLayer)
-	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 1, Duration: 100})
-	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
+	l.SendCommand(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 1, Duration: 100})
+	l.SendCommand(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
 	testkit.Steps(t, c, 3)
-	c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
-	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
+	c.World.SendCommand(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
 	testkit.Steps(t, c, 2)
 	return c
 }
@@ -73,8 +75,8 @@ func aWorldWithActionsThatWait(t testing.TB) *testkit.Cluster {
 // engine has been made, and with the codecs of the cluster.
 func aFreshEnv(c *testkit.Cluster) *engine.Environment {
 	return &engine.Environment{
-		Router: engine.NewRouter(), EventLog: eventlog.NopLog{},
-		StableStore: engine.NewStableStateStore(), Codecs: c.Env.Codecs,
+		Router: router.NewRouter(), EventLog: eventlog.NopLog{},
+		StableStore: stable.NewStateStore(), Codecs: c.Env.Codecs,
 		EngineRegistry: c.Env.EngineRegistry, Seed: 7, QueueSize: 16, Emitter: engine.NopEmitter{},
 	}
 }
@@ -434,7 +436,7 @@ func hashOf[S sim.State](e *engine.Engine[S]) uint64 { return e.Hash(sim.NewHash
 func restoreEngine[S sim.State](
 	data []byte, env *engine.Environment,
 ) (*engine.Engine[S], error) {
-	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
+	c, err := engine.DecodeCheckpoint[S](data, env.Codecs)
 	if err != nil {
 		return nil, err
 	}

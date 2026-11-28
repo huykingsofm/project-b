@@ -1,6 +1,6 @@
 # Actions
 
-An action is one step of the plan of an engine. Each belongs to exactly one scope of this game (the state it changes) and is a `sim.Action[S]` for the state type `S` of that scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`server/game/sim/action`](../../server/game/sim/action); what an action is made of is in [`platform/sim`](../../platform/sim). Entities: [docs/entity](../entity/entity.md). Rules: [R25](../../plan/rule/r25-action-naming-and-files.md) (names).
+An action is one step of the plan of an engine. Each belongs to exactly one scope of this game (the state it changes) and is a `sim.Action[S]` for the state type `S` of that scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`server/game/sim/action`](../../server/game/sim/action); what an action is made of is in [`platform/sim`](../../platform/sim). Entities: [docs/entity](../entity/entity.md). Rules: [R11](../../plan/rule/r11-action-naming-and-files.md) (names).
 
 ## Naming
 
@@ -47,7 +47,7 @@ A smaller number runs first; equal priorities run in the order they arrived.
 
 ## Registry
 
-What must happen outside a state goes in its `sim.Registry[S]` and happens after the plan.
+What must happen outside a state goes in its `sim.ActionRegistry[S]` and happens after the plan.
 
 | Call | Target |
 |---|---|

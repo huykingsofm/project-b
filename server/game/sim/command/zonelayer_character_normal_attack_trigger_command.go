@@ -16,6 +16,16 @@ type ZoneLayerCharacterNormalAttackTriggerCommand struct {
 	TargetID    state.CharacterID
 }
 
+// decodeZoneLayerCharacterNormalAttackTriggerCommand reads what Encode wrote.
+func decodeZoneLayerCharacterNormalAttackTriggerCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterNormalAttackTriggerCommand, error) {
+	c := ZoneLayerCharacterNormalAttackTriggerCommand{
+		CharacterID: r.Uint[state.CharacterID](), TargetID: r.Uint[state.CharacterID](),
+	}
+	return c, r.Err()
+}
+
 func (ZoneLayerCharacterNormalAttackTriggerCommand) ID() sim.CommandID {
 	return ZoneLayerCharacterNormalAttackTriggerCommandID
 }
@@ -40,14 +50,4 @@ func (c ZoneLayerCharacterNormalAttackTriggerCommand) Encode(w *binary.Writer) e
 	w.Uvarint(uint64(c.CharacterID))
 	w.Uvarint(uint64(c.TargetID))
 	return nil
-}
-
-// decodeZoneLayerCharacterNormalAttackTriggerCommand reads what Encode wrote.
-func decodeZoneLayerCharacterNormalAttackTriggerCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterNormalAttackTriggerCommand, error) {
-	c := ZoneLayerCharacterNormalAttackTriggerCommand{
-		CharacterID: r.Uint[state.CharacterID](), TargetID: r.Uint[state.CharacterID](),
-	}
-	return c, r.Err()
 }

@@ -11,6 +11,11 @@ import (
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
+var (
+	defaultsOnce     sync.Once
+	defaultsSnapshot *Snapshot
+)
+
 // ReadOnlySnapshot is what a reader of the configuration is given: the value of every variable
 // through Var.Get. Only a *Snapshot is one, so no one outside this package can make
 // a configuration that a variable would read, and no one can change one.
@@ -19,6 +24,8 @@ type ReadOnlySnapshot interface {
 	lookup(idx int) (any, bool)
 }
 
+var _ ReadOnlySnapshot = (*Snapshot)(nil)
+
 // Snapshot is the value of every variable at one moment, and the text of the JSON value of each
 // variable that was set, which is what it was built from. It never changes after it is built, so
 // any number of goroutines can read it, and a tick that reads one snapshot at its start sees one
@@ -26,28 +33,6 @@ type ReadOnlySnapshot interface {
 type Snapshot struct {
 	vals  []any
 	texts stablemap.Map[string, string] // by name, in the order of the names
-}
-
-var _ ReadOnlySnapshot = (*Snapshot)(nil)
-
-func (s *Snapshot) lookup(idx int) (any, bool) {
-	if s == nil || idx >= len(s.vals) {
-		return nil, false
-	}
-	return s.vals[idx], true
-}
-
-// Texts returns the name of each variable that was set, in the order of the names, with the text
-// of its JSON value: what Build makes the same snapshot from.
-func (s *Snapshot) Texts() iter.Seq2[string, string] { return s.texts.All() }
-
-// Encode writes the texts of the variables that were set, which is all that Decode needs.
-func (s *Snapshot) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(s.texts.Len()))
-	for name, text := range s.texts.All() {
-		w.String(name)
-		w.String(text)
-	}
 }
 
 // DecodeSnapshot reads what Encode wrote, and builds the snapshot of the texts again. It returns an
@@ -69,6 +54,31 @@ func DecodeSnapshot(r *binary.Reader) (*Snapshot, error) {
 		texts[name] = text
 	}
 	return Build(texts)
+}
+
+// Defaults returns the snapshot with every variable at its default, the same one each time. The
+// first call, like Build, ends the declaration of variables.
+func Defaults() *Snapshot {
+	defaultsOnce.Do(func() { defaultsSnapshot, _ = std.build(nil) })
+	return defaultsSnapshot
+}
+
+// Build returns the snapshot with the overrides applied to the defaults.
+func Build(overrides map[string]string) (*Snapshot, error) {
+	return std.build(overrides)
+}
+
+// Texts returns the name of each variable that was set, in the order of the names, with the text
+// of its JSON value: what Build makes the same snapshot from.
+func (s *Snapshot) Texts() iter.Seq2[string, string] { return s.texts.All() }
+
+// Encode writes the texts of the variables that were set, which is all that Decode needs.
+func (s *Snapshot) Encode(w *binary.Writer) {
+	w.Uvarint(uint64(s.texts.Len()))
+	for name, text := range s.texts.All() {
+		w.String(name)
+		w.String(text)
+	}
 }
 
 // Apply returns the snapshot that has the variables of set at the text of their value, and the
@@ -115,19 +125,9 @@ func (s *Snapshot) Diff(other ReadOnlySnapshot) []string {
 	return changed
 }
 
-var (
-	defaultsOnce     sync.Once
-	defaultsSnapshot *Snapshot
-)
-
-// Defaults returns the snapshot with every variable at its default, the same one each time. The
-// first call, like Build, ends the declaration of variables.
-func Defaults() *Snapshot {
-	defaultsOnce.Do(func() { defaultsSnapshot, _ = std.build(nil) })
-	return defaultsSnapshot
-}
-
-// Build returns the snapshot with the overrides applied to the defaults.
-func Build(overrides map[string]string) (*Snapshot, error) {
-	return std.build(overrides)
+func (s *Snapshot) lookup(idx int) (any, bool) {
+	if s == nil || idx >= len(s.vals) {
+		return nil, false
+	}
+	return s.vals[idx], true
 }

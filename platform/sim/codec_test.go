@@ -159,7 +159,7 @@ func (noEncodeAction) ID() sim.ActionID { return addID }
 func (noEncodeAction) Priority() int16  { return 0 }
 func (noEncodeAction) Actor() any       { return nil }
 func (noEncodeAction) Apply(
-	*sim.Context, *toyState, *sim.Registry[*toyState], *sim.Plan[*toyState],
+	*sim.Context, *toyState, *sim.ActionRegistry[*toyState], *sim.Plan[*toyState],
 ) {
 }
 func (a noEncodeAction) Clone() sim.Action[*toyState] { return a }
@@ -226,7 +226,7 @@ func (f fixedReader) Read(id sim.StateID) (sim.State, error) {
 }
 
 func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) {
-	r := &sim.Registry[*toyState]{Stable: fixedReader{1: &toyState{id: 1}, 2: &otherState{}}}
+	r := &sim.ActionRegistry[*toyState]{Stable: fixedReader{1: &toyState{id: 1}, 2: &otherState{}}}
 	if got, err := r.Get[*toyState](1); err != nil || got.id != 1 {
 		t.Fatalf("a state that is there: %v, %v", got, err)
 	}
@@ -243,7 +243,7 @@ func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) 
 }
 
 func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
-	var r sim.Registry[*toyState]
+	var r sim.ActionRegistry[*toyState]
 	other := sim.NewStateID(otherType, 9)
 	r.Send(other, testDrop{}, otherAction{})
 	r.Send(5, testDrop{}, addAction{N: 1})
@@ -260,7 +260,7 @@ func TestDirectivesComeBackAsTheyWereWrittenAndKeepNoViewOfTheBytes(t *testing.T
 		State:        &toyState{id: 4, tick: 0, Total: -3},
 		StartActions: []sim.BaseAction{addAction{N: 2}},
 	}
-	remove := sim.DirectiveRequest{ID: 4, Kind: sim.DirectiveRemoveEngine, Tag: nil, Target: 77}
+	remove := sim.DirectiveRequest{ID: 4, Kind: sim.DirectiveRetireEngine, Tag: nil, Target: 77}
 	for _, d := range []sim.DirectiveRequest{create, remove} {
 		var w binary.Writer
 		if err := sim.EncodeDirectiveRequest(&w, d); err != nil {
@@ -297,13 +297,13 @@ func TestDirectivesComeBackAsTheyWereWrittenAndKeepNoViewOfTheBytes(t *testing.T
 }
 
 func TestAnActionAsksTheClusterForAnEngineThroughItsRegistry(t *testing.T) {
-	var r sim.Registry[*toyState]
+	var r sim.ActionRegistry[*toyState]
 	r.RequestCreateEngine([]byte("a"), &toyState{Total: 1}, addAction{N: 2})
-	r.RemoveEngine(9, []byte("b"))
+	r.RequestRetireEngine(9, []byte("b"))
 	got := r.TakeDirectiveRequests()
 	if len(got) != 2 || got[0].Kind != sim.DirectiveCreateEngine || string(got[0].Tag) != "a" ||
 		len(got[0].StartActions) != 1 || got[0].StartActions[0] != (addAction{N: 2}) ||
-		got[1].Kind != sim.DirectiveRemoveEngine || got[1].Target != 9 {
+		got[1].Kind != sim.DirectiveRetireEngine || got[1].Target != 9 {
 		t.Fatalf("the requests are %+v", got)
 	}
 	if again := r.TakeDirectiveRequests(); len(again) != 0 {

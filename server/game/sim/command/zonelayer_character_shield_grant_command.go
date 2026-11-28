@@ -16,6 +16,16 @@ type ZoneLayerCharacterShieldGrantCommand struct {
 	Duration    uint64
 }
 
+// decodeZoneLayerCharacterShieldGrantCommand reads what Encode wrote.
+func decodeZoneLayerCharacterShieldGrantCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterShieldGrantCommand, error) {
+	c := ZoneLayerCharacterShieldGrantCommand{
+		CharacterID: r.Uint[state.CharacterID](), Duration: r.Uvarint(),
+	}
+	return c, r.Err()
+}
+
 func (ZoneLayerCharacterShieldGrantCommand) ID() sim.CommandID {
 	return ZoneLayerCharacterShieldGrantCommandID
 }
@@ -38,14 +48,4 @@ func (c ZoneLayerCharacterShieldGrantCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	w.Uvarint(c.Duration)
 	return nil
-}
-
-// decodeZoneLayerCharacterShieldGrantCommand reads what Encode wrote.
-func decodeZoneLayerCharacterShieldGrantCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterShieldGrantCommand, error) {
-	c := ZoneLayerCharacterShieldGrantCommand{
-		CharacterID: r.Uint[state.CharacterID](), Duration: r.Uvarint(),
-	}
-	return c, r.Err()
 }

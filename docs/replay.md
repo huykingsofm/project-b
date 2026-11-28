@@ -1,20 +1,20 @@
 # Replay
 
-Package `platform/replay`. Brings a cluster back from its directory: the event logs and the checkpoints of its engines. It works out the recovery line (the plan), cuts the logs and the checkpoints to it, and runs each engine again from its latest checkpoint to its limit on its own log, saying whether each engine did what its log says. What is recorded: [eventlog](eventlog.md). What a checkpoint holds: [checkpoint](checkpoint.md). The design: `plan/en/proposed-designs.md`.
+Package `platform/journal/replay`. Brings a cluster back from its directory: the event logs and the checkpoints of its engines. It works out the recovery line (the plan), cuts the logs and the checkpoints to it, and runs each engine again from its latest checkpoint to its limit on its own log, saying whether each engine did what its log says. What is recorded: [eventlog](eventlog.md). What a checkpoint holds: [checkpoint](checkpoint.md). The design: `plan/en/proposed-designs.md`.
 
-A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFrom`, which work out the recovery line of the logs: a replay never runs on logs in which an engine took what its sender did not send, or read a copy that its source did not publish.
+A replay always runs on a plan, and a plan is made only by `MakeRecoveryPlan` or `RecoveryPlanFrom`, which work out the recovery line of the logs: a replay never runs on logs in which an engine took what its sender did not send, or read a copy that its source did not publish.
 
 ## Entry points
 
 | Call | What it does |
 |---|---|
-| `replay.MakePlan(dir, codecs)` | the plan of the files under `dir`: the limits (the recovery line) and the start of each engine; reads, writes nothing; no log may be open for writing |
-| `replay.PlanFrom(logs, starts, checkpoints)` | the plan of logs that are not files (memory, or as a test makes them), with the starts and the checkpoints that are given; it cannot be cut |
-| `(*Plan).Limits()`, `(*Plan).Starts()` | the last tick of each engine that is kept, and the tick each engine starts at (its checkpoint, or 0) |
-| `(*Plan).Cut()` | brings the files to the plan: each log is cut to its limit, each checkpoint above its limit goes to the archive, the cache of the line is written again |
+| `replay.MakeRecoveryPlan(dir, codecs)` | the plan of the files under `dir`: the limits (the recovery line) and the start of each engine; reads, writes nothing; no log may be open for writing |
+| `replay.RecoveryPlanFrom(logs, starts, checkpoints)` | the plan of logs that are not files (memory, or as a test makes them), with the starts and the checkpoints that are given; it cannot be cut |
+| `(*RecoveryPlan).Limits()`, `(*RecoveryPlan).Starts()` | the last tick of each engine that is kept, and the tick each engine starts at (its checkpoint, or 0) |
+| `(*RecoveryPlan).Cut()` | brings the files to the plan: each log is cut to its limit, each checkpoint above its limit goes to the archive, the cache of the line is written again |
 | `replay.Run(options, plan)` | runs the engines again on the plan and returns the `Result`; changes nothing on the disk |
-| `replay.Recover(dir, options)` | `MakePlan`, `Cut` and `Run`; an engine that did not do what its log says is a `*DivergenceError`, returned with the result |
-| `(*Result).Handover(env, store)` | makes the engines again in `env`, the environment of a cluster that runs (`engine.NewEnvironment`), and returns the cluster, which has not run yet (below) |
+| `replay.Recover(dir, options)` | `MakeRecoveryPlan`, `Cut` and `Run`; an engine that did not do what its log says is a `*DivergenceError`, returned with the result |
+| `(*Result).Handover(env, store)` | makes the engines again in `env`, the environment of a cluster that runs (`engine.NewEnvironment`), with an orchestrator for the directory of the plan and `store`, and returns the cluster, which has not run yet (below) |
 | `eventlog.NewFileLogs(dir, codecs)`, `eventlog.MemoryLogs`, `eventlog.MemLog` | where the records come from: the files of a `FileLog`, and records in memory (below) |
 | `replay.ReadLineCache(dir)`, `replay.WriteLineCache(dir, cache)`, `replay.NewLineCacheWriter(dir, store)` | the cache of the line (below); `store` is the `config.Store` that the cluster is made with, which gives the period; nil means the default |
 
@@ -35,8 +35,8 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 
 | File | Holds |
 |---|---|
-| `plan.go` | `Plan` with `Plan.Cut`, `MakePlan`, `PlanFrom`; the recovery line; the choice of the start of each engine; the checkpoint files as a source |
-| `cut.go` | the archive of what `Plan.Cut` cuts |
+| `plan.go` | `RecoveryPlan` with `RecoveryPlan.Cut`, `MakeRecoveryPlan`, `RecoveryPlanFrom`; the recovery line; the choice of the start of each engine; the checkpoint files as a source |
+| `cut.go` | the archive of what `RecoveryPlan.Cut` cuts |
 | `line_cache.go` | the cache of the line and its writer |
 | `replay.go` | `Run`, `Recover`, `Result` with `Result.Handover`, `DivergenceError` |
 | `run.go` | the run: `engineRun` (what a replay holds of one engine: the engine, its limit, the tick it has run to, its log and the records of the tick loaded) in a `stablemap.Map` that keeps the order of `Step`; how an engine is made (from its checkpoint, or from its start record) and begins; the inputs of a tick |
@@ -49,7 +49,7 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 
 | Where | Holds |
 |---|---|
-| `platform/replay/recovery_test.go`, `toy_test.go` | the line, the cut, the cache and the start rule, on toy engines |
+| `platform/journal/replay/recovery_test.go`, `toy_test.go` | the line, the cut, the cache and the start rule, on toy engines |
 | `server/game/replay_runner_test.go`, `recovery_test.go` | the replay and the recovery of the world of this game, and their benchmarks |
 | `server/game/handover_test.go` | the handover of the world: tick and hash of each engine, the logs written after it recovered again with no divergence, a message that its receiver lost taken once |
 | `server/game/testkit` | what the tests of the game share: the world they run (`Options`, `Make`, `NewCluster`, `NewWorld`), an event log that writes in memory and to files (`NewTeeWorld`), and the scenario that runs a cluster through every kind of input (`RunScenario`) |
@@ -58,17 +58,17 @@ A replay always runs on a plan, and a plan is made only by `MakePlan` or `PlanFr
 
 | Seam | Used for |
 |---|---|
-| `engine.MessageRouter`, `engine.StableStore` | the adapters on `Environment` |
-| `engine.CopySource` and `engine.NewStableView` | a store that finds the copy a read names |
-| `engine.NewReplayCluster`, `Cluster.AddEngineByCheckpoint` and `engine.EngineRegistry` | making the engines in the environment of the replay, each from its checkpoint or from the record that begins its log |
-| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `HandleDirectiveResponse`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
+| `router.MessageRouter`, `stable.Store` | the adapters on `Environment` |
+| `stable.CopySource` and `stable.NewView` | a store that finds the copy a read names |
+| `cluster.NewReplayCluster`, `Cluster.AddEngineByCheckpoint` and `engine.EngineRegistry` | making the engines in the environment of the replay, each from its checkpoint or from the record that begins its log |
+| `Cluster.Engines()`, whose handles (`engine.EngineHandle`, which holds only what the cluster needs) the replay converts to its own interfaces (`runEngineHandle`: `Step`, `StateID`, `TypeName`, `Tick`, `Hash`, `GetSentMessages`, `PublishState`, `SendBaseCommand`, `RequestRetirement`, `RetireIfRequested`; `handoverEngineHandle`: `StateID`, `Tick`, `EncodeCheckpoint`, `PublishState`, `WaitsForResponse`, `Adopt`) | running each engine and giving it its commands; a command of another type of state is an error of the replay, not a panic |
 
 ## Adapters
 
 | Seam | Type in `Environment` | In a replay |
 |---|---|---|
 | router | `MessageRouter` | `replayRouter`: holds the real `Router` to carry what the replay puts in the queue of an engine |
-| published states | `StableStore` | `replayStable`: keeps the copies that some read asks for, by tick, and gives each read the copy its record names |
+| published states | `stable.Store` | `replayStable`: keeps the copies that some read asks for, by tick, and gives each read the copy its record names |
 | event log | `eventlog.Log` | `verifyLog`: compares each record the engine makes with the next one of its log |
 | emitter | `Emitter` | `NopEmitter` |
 
@@ -81,10 +81,10 @@ Before an engine runs a tick, the records of that tick are given to it, in the o
 | `KindCommand` | `SendBaseCommand` of the engine |
 | `KindInbound` | the message is put in the queue of the engine; the queue is as large as the busiest tick needs |
 | `KindReturned` | a message sent in an earlier tick is given back at this one (`Router.Return`); one that is sent in this tick is refused at once, with the reason, when its sender sends it |
-| `KindStarted` | the first record of the log of an engine: the replay makes the engine from the checkpoint inside it (the engine as it was made) when it starts from no checkpoint; the record is then left out of the records that the engine is compared with, since it was made from it ([engines](engine_lifecycle.md)) |
-| `KindDirective` | an answer of the cluster to a request of the engine: given to the engine at its tick like a command (`HandleDirectiveResponse`); the requests are kept in its data and not handed over, since a replay has no cluster |
+| `KindInit` | the record of the tick 1 of the log of an engine: the replay makes the engine from the checkpoint inside it (the engine as it was made) when it starts from no checkpoint; the record, and `KindStarted`, are left out of the records that the engine is compared with ([engines](engine_lifecycle.md)) |
+| `KindDirective` | a response of the cluster to a request of the engine: put in the directive router of the replay, which the engine takes it from at its tick; the requests and the acknowledgements of the engines are thrown away, since a replay has no cluster |
 | `KindRetired` | the engine is removed (`Cluster.Remove`) and runs no tick: the frame of the tick holds this record and no other, and it is the last of the log (the index refuses a log in which it is not); the cluster of the result does not hold the engine, and its ID is in `Result.Retired` |
-| `KindStableRead` | the read at this tick gets the copy of the tick in the record; the engine does not run before the source engine has run to that tick; the configuration is read so, from the copy of the configuration engine ([configengine](configengine.md)) |
+| `KindStableRead` | the read at this tick gets the copy of the tick in the record; the engine does not run before the source engine has run to that tick; the configuration is read so, from the copy of the coordinator engine ([coordinatorengine](coordinatorengine.md)) |
 
 ## An engine that starts from a checkpoint
 
@@ -117,8 +117,8 @@ Before the first tick, for each engine that starts above tick 0:
 |---|---|
 | what it holds | the `Safe` of each engine at some time (`LineCache.Safe`); a tick that is safe is never cut, so the line of an engine is at or above it |
 | file | `<dir>/recovery-line`, written whole or not at all ([atomicfile](atomicfile.md)) |
-| what it saves | `MakePlan` reads the log of an engine from the tick after the cached one, and not from tick 1, to work out the line |
-| written by | `LineCacheWriter`, the `FileLogOptions.OnSafe` of the cluster's `eventlog.FileLog`: when some engine is `replay.line_cache_every_ticks` (600) past what was written, and when the log is closed; and by `Plan.Cut`, with the limits |
+| what it saves | `MakeRecoveryPlan` reads the log of an engine from the tick after the cached one, and not from tick 1, to work out the line |
+| written by | `LineCacheWriter`, the `FileLogOptions.OnSafe` of the cluster's `eventlog.FileLog`: when some engine is `replay.line_cache_every_ticks` (600) past what was written, and when the log is closed; and by `RecoveryPlan.Cut`, with the limits |
 | used when | every engine it names has a log and none of its ticks is above the last tick of that log; an engine it does not name is read from tick 1 |
 | not used when | it is not readable, names an engine with no log, or says more than a log holds: it is logged as a warning and the logs are read whole |
 
@@ -152,10 +152,11 @@ Before the first tick, for each engine that starts above tick 0:
 |---|---|
 | refused | a result with a divergence is not handed over |
 | checkpoint | each engine of the replayed cluster is checkpointed at its limit (`Engine.EncodeCheckpoint`) |
-| engines | `engine.NewCluster(env, store, configCheckpoint)` makes the cluster and `Cluster.AddEngineByCheckpoint` each of the other engines from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env` (`engine.NewEnvironment` makes such an environment) |
+| engines | `cluster.NewCluster(env, store, configCheckpoint)` makes the cluster and `Cluster.AddEngineByCheckpoint` each of the other engines from its checkpoint, with the router, the published states, the emitter, the acks and the checkpoint writer of `env` (`engine.NewEnvironment` makes such an environment) |
 | sent messages | in the checkpoint of each replayed engine: the replay has an `AckBoard`, so an engine holds the messages it sent that no receiver took in the part of its log that was kept, as a live one does ([unsettled messages](unsettled_messages.md)) |
 | copies | each engine that ran a tick publishes its state (`PublishState`), for the engines that read it; one at the tick 0 publishes nothing, so a read that records the tick 0 means that it found no copy |
-| IDs and requests | the cluster raises its next IDs above the ones its logs hold (`RaiseStateIDs`), and knows which request made which engine (`RestoreServed`, from the `Started` records), so a request that waits in a checkpoint is not served twice |
+| engines that never ran | an engine with `Init` and nothing after it is kept and run when the log of the engine that asked holds the response (also when that engine retired after), and dropped, with `Retired` written to its log, when the request still waits there or no response is in its log ([engines](engine_lifecycle.md)) |
+| IDs | the orchestrator of the cluster goes on from its file (`state-id-marks`); the recovery drops an engine whose ID is above it |
 | removed engines | the engines in `Result.Retired` are not made again: the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 

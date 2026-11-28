@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/checkpoint"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
@@ -151,7 +151,7 @@ func BenchmarkRecoveryLineWithTheCacheAtTheEndOfTheLogs(b *testing.B) {
 	codecs := testkit.Options(b, 7).Codecs
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := replay.MakePlan(dir, codecs); err != nil {
+		if _, err := replay.MakeRecoveryPlan(dir, codecs); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -165,13 +165,15 @@ func BenchmarkRecoveryLineWithNoCache(b *testing.B) {
 	codecs := testkit.Options(b, 7).Codecs
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := replay.MakePlan(dir, codecs); err != nil {
+		if _, err := replay.MakeRecoveryPlan(dir, codecs); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func benchmarkReplay(b *testing.B, planOf func(dir string, c *sim.Codecs) (*replay.Plan, error)) {
+func benchmarkReplay(
+	b *testing.B, planOf func(dir string, c *sim.Codecs) (*replay.RecoveryPlan, error),
+) {
 	dir := aLongWorld(b)
 	recoverTheWorld(b, dir, everyFiveHundredTicks)
 	builder := testkit.Options(b, 7)
@@ -189,16 +191,16 @@ func benchmarkReplay(b *testing.B, planOf func(dir string, c *sim.Codecs) (*repl
 }
 
 func BenchmarkReplayFromTheCheckpoints(b *testing.B) {
-	benchmarkReplay(b, replay.MakePlan)
+	benchmarkReplay(b, replay.MakeRecoveryPlan)
 }
 
 func BenchmarkReplayFromTickZero(b *testing.B) {
-	benchmarkReplay(b, func(dir string, c *sim.Codecs) (*replay.Plan, error) {
+	benchmarkReplay(b, func(dir string, c *sim.Codecs) (*replay.RecoveryPlan, error) {
 		logs, err := eventlog.NewFileLogs(dir, c)
 		if err != nil {
 			return nil, err
 		}
-		return replay.PlanFrom(logs, nil, nil)
+		return replay.RecoveryPlanFrom(logs, nil, nil)
 	})
 }
 

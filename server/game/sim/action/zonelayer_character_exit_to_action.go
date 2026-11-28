@@ -27,11 +27,27 @@ type ZoneLayerCharacterExitToAction struct {
 	ExitEntityID state.EntityID
 }
 
+// decodeZoneLayerCharacterExitToAction reads what Encode wrote.
+func decodeZoneLayerCharacterExitToAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterExitToAction, error) {
+	characterID := r.Uint[state.CharacterID]()
+	exitEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterExitToAction{}, err
+	}
+	return ZoneLayerCharacterExitToAction{
+		CharacterID: characterID, ExitEntityID: exitEntityID,
+	}, r.Err()
+}
+
 func (a ZoneLayerCharacterExitToAction) ID() sim.ActionID {
 	return ZoneLayerCharacterExitToActionID
 }
+
 func (a ZoneLayerCharacterExitToAction) Priority() int16 { return PriorityIntent }
-func (a ZoneLayerCharacterExitToAction) Actor() any      { return a.CharacterID }
+
+func (a ZoneLayerCharacterExitToAction) Actor() any { return a.CharacterID }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -40,7 +56,7 @@ func (a ZoneLayerCharacterExitToAction) Clone() sim.Action[*zonelayerstate.State
 
 // Apply takes the character out and sends it to the zonelayer that has room.
 func (a ZoneLayerCharacterExitToAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
@@ -87,18 +103,4 @@ func (a ZoneLayerCharacterExitToAction) Apply(
 func (a ZoneLayerCharacterExitToAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	a.ExitEntityID.Encode(w)
-}
-
-// decodeZoneLayerCharacterExitToAction reads what Encode wrote.
-func decodeZoneLayerCharacterExitToAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterExitToAction, error) {
-	characterID := r.Uint[state.CharacterID]()
-	exitEntityID, err := state.DecodeEntityID(r)
-	if err != nil {
-		return ZoneLayerCharacterExitToAction{}, err
-	}
-	return ZoneLayerCharacterExitToAction{
-		CharacterID: characterID, ExitEntityID: exitEntityID,
-	}, r.Err()
 }

@@ -15,7 +15,7 @@ func TestAZoneStateComesBackAsItWasWrittenWithItsMap(t *testing.T) {
 	st.AddZoneLayer(5, 20)
 	st.SendMessage(zone.NewChatMessage(1, "hello zone", 3))
 	for range 7 {
-		st.NextTick()
+		st.AdvanceTick()
 	}
 
 	var w binary.Writer

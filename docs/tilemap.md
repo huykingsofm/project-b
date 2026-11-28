@@ -47,5 +47,5 @@
 |---|---|
 | `m.Encode(w)` | writes the size, the spawn, the walls (as the words of the bit array) and the exits; the zone writes its map with its state, in its checkpoint and in the record that begins its log |
 | `tilemap.Decode(r, version)` | reads what `Encode` wrote; a size that its words do not fit is an error |
-| `m.Clone()` | a copy that shares nothing with the map: the map never changes and the engines share one, but a command or an action that holds one is copied like anything that holds a reference (R29) |
+| `m.Clone()` | a copy that shares nothing with the map: the map never changes and the engines share one, but a command or an action that holds one is copied like anything that holds a reference (R13) |
 

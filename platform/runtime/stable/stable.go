@@ -1,0 +1,112 @@
+package stable
+
+import (
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/shared/registry"
+)
+
+// Store is where the engines publish their states and where they read each other's: the
+// StableStateStore of a cluster that runs, or the one a replay gives them, which serves the copy
+// that the log says each read found.
+type Store interface {
+	// Publish makes a state the latest copy of the engine with the ID. The state must not be
+	// changed after.
+	Publish(id sim.StateID, s sim.State)
+	// Remove forgets what an engine published, as the engine is removed.
+	Remove(id sim.StateID)
+	// View returns what the engine with the ID reads of the store.
+	View(reader sim.StateID, eventLog eventlog.Log) *View
+}
+
+var _ Store = (*StateStore)(nil)
+
+// CopySource says which copy of an engine a StableView finds when its engine reads one at a tick. A
+// store that runs gives the latest; a replay gives the one that was read. It returns nil for an
+// engine that published none.
+type CopySource interface {
+	Copy(reader sim.StateID, tick uint64, id sim.StateID) sim.State
+}
+
+// StateStore is the store of the states that the engines published: the latest copy of the
+// state of each engine, whatever its type.
+//
+// An engine publishes at the end of every tick a Snapshot of its state, and never changes that copy
+// again. The other engines read the latest copy they find, with no lock and no wait, and keep it
+// for as long as they need it; nothing has to be given back. What they read may be a few ticks old,
+// and it is not found for an engine that published nothing yet or was removed. Only the engine that
+// owns a piece of data knows exactly what it is.
+type StateStore struct {
+	states registry.Registry[sim.StateID, sim.State]
+}
+
+// NewStateStore makes an empty store.
+func NewStateStore() *StateStore { return &StateStore{} }
+
+// Publish makes a copy the latest of its engine.
+func (s *StateStore) Publish(id sim.StateID, st sim.State) { s.states.Publish(id, st) }
+
+// Remove forgets what an engine published.
+func (s *StateStore) Remove(id sim.StateID) { s.states.Remove(id) }
+
+// View returns what the engine with the ID reads of the store. The store does not give its states
+// out itself: an engine reads them through its own view, which keeps the first copy it reads of
+// each ID in a tick (see StableView) and writes the read to the event log.
+func (s *StateStore) View(reader sim.StateID, eventLog eventlog.Log) *View {
+	return NewView(s, reader, eventLog)
+}
+
+// Copy returns the latest published copy, or nil.
+func (s *StateStore) Copy(_ sim.StateID, _ uint64, id sim.StateID) sim.State {
+	st, _ := s.states.Get(id)
+	return st
+}
+
+// View is what one engine reads of the StableStore in a tick. The first time the engine reads
+// a state in the tick it keeps the copy it got, and every later read of that state in the tick
+// returns the same copy, so what an engine knows of the others does not change while its plan runs
+// (the store itself gives the latest copy at the moment of the read, and the other engines publish
+// at any time; a replay gives the copy that the log says was read). The first read of each state in
+// a tick is written to the event log, with the tick of the copy, so that a replay can give the
+// engine the same one. Only the goroutine of its engine uses it, so it takes no lock.
+type View struct {
+	source   CopySource
+	eventLog eventlog.Log
+	me       sim.StateID
+	tick     uint64
+	states   map[sim.StateID]sim.State
+}
+
+// NewView makes the view of the engine with the ID, which finds the copies that the source
+// gives, and writes each first read of a tick to the event log.
+func NewView(source CopySource, reader sim.StateID, eventLog eventlog.Log) *View {
+	return &View{
+		source: source, eventLog: eventLog, me: reader, states: map[sim.StateID]sim.State{},
+	}
+}
+
+// Read returns the copy of the state that this tick read first, or sim.ErrStateNotFound.
+func (v *View) Read(id sim.StateID) (sim.State, error) {
+	st, ok := v.states[id]
+	if !ok {
+		st = v.source.Copy(v.me, v.tick, id)
+		v.states[id] = st
+		var copyTick uint64
+		if st != nil {
+			copyTick = st.Tick()
+		}
+		v.eventLog.Append(v.me, v.tick, eventlog.StableRead{Source: id, CopyTick: copyTick})
+	}
+	if st == nil {
+		return nil, sim.ErrStateNotFound
+	}
+	return st, nil
+}
+
+// BeginTick forgets what was kept: a new tick reads again.
+func (v *View) BeginTick(tick uint64) {
+	v.tick = tick
+	clear(v.states)
+}
+
+var _ sim.StableReader = (*View)(nil)

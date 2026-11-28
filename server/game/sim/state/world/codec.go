@@ -10,19 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/ring"
 )
 
-// count reads how many items follow, and refuses a number that claims more than the bytes left can
-// hold: an item takes at least one byte.
-func count(r *binary.Reader) (uint64, error) {
-	n := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return 0, err
-	}
-	if n > uint64(r.Left()) {
-		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
-	}
-	return n, nil
-}
-
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 	s := &State{tick: r.Uvarint(), privateChat: ring.New[PrivateChatMessage](chatKeep)}
@@ -87,4 +74,17 @@ func DecodeState(r *binary.Reader, _ codec.Version) (*State, error) {
 		s.inventories.Set(characterID, inventory)
 	}
 	return s, r.Err()
+}
+
+// count reads how many items follow, and refuses a number that claims more than the bytes left can
+// hold: an item takes at least one byte.
+func count(r *binary.Reader) (uint64, error) {
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return 0, err
+	}
+	if n > uint64(r.Left()) {
+		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
+	}
+	return n, nil
 }

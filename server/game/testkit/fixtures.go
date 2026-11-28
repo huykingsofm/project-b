@@ -20,37 +20,45 @@ const (
 // RemoveLayerCommand asks the world to forget a zonelayer and the cluster to remove its engine.
 type RemoveLayerCommand struct{ Layer sim.StateID }
 
-func (RemoveLayerCommand) ID() sim.CommandID { return removeLayerCommandID }
-func (c RemoveLayerCommand) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(c.Layer))
-	return nil
-}
-func (c RemoveLayerCommand) Translate() []sim.Action[*worldstate.State] {
-	return []sim.Action[*worldstate.State]{RemoveLayerAction{Layer: c.Layer}}
-}
-func (c RemoveLayerCommand) Clone() sim.Command[*worldstate.State] { return c }
-
 func decodeRemoveLayerCommand(r *binary.Reader, _ codec.Version) (RemoveLayerCommand, error) {
 	return RemoveLayerCommand{Layer: r.Uint[sim.StateID]()}, r.Err()
 }
 
+func (RemoveLayerCommand) ID() sim.CommandID { return removeLayerCommandID }
+
+func (c RemoveLayerCommand) Encode(w *binary.Writer) error {
+	w.Uvarint(uint64(c.Layer))
+	return nil
+}
+
+func (c RemoveLayerCommand) Translate() []sim.Action[*worldstate.State] {
+	return []sim.Action[*worldstate.State]{RemoveLayerAction{Layer: c.Layer}}
+}
+
+func (c RemoveLayerCommand) Clone() sim.Command[*worldstate.State] { return c }
+
 // RemoveLayerAction makes the world forget a zonelayer and asks for its engine to be removed.
 type RemoveLayerAction struct{ Layer sim.StateID }
-
-func (RemoveLayerAction) ID() sim.ActionID { return removeLayerActionID }
-func (RemoveLayerAction) Priority() int16  { return 0 }
-func (RemoveLayerAction) Actor() any       { return nil }
-func (a RemoveLayerAction) Apply(
-	_ *sim.Context, s *worldstate.State, r *sim.Registry[*worldstate.State],
-	_ *sim.Plan[*worldstate.State],
-) {
-	if s.RemoveZoneLayer(a.Layer) {
-		r.RemoveEngine(a.Layer, nil)
-	}
-}
-func (a RemoveLayerAction) Clone() sim.Action[*worldstate.State] { return a }
-func (a RemoveLayerAction) Encode(w *binary.Writer)              { w.Uvarint(uint64(a.Layer)) }
 
 func decodeRemoveLayerAction(r *binary.Reader, _ codec.Version) (RemoveLayerAction, error) {
 	return RemoveLayerAction{Layer: r.Uint[sim.StateID]()}, r.Err()
 }
+
+func (RemoveLayerAction) ID() sim.ActionID { return removeLayerActionID }
+
+func (RemoveLayerAction) Priority() int16 { return 0 }
+
+func (RemoveLayerAction) Actor() any { return nil }
+
+func (a RemoveLayerAction) Apply(
+	_ *sim.Context, s *worldstate.State, r *sim.ActionRegistry[*worldstate.State],
+	_ *sim.Plan[*worldstate.State],
+) {
+	if s.RemoveZoneLayer(a.Layer) {
+		r.RequestRetireEngine(a.Layer, nil)
+	}
+}
+
+func (a RemoveLayerAction) Clone() sim.Action[*worldstate.State] { return a }
+
+func (a RemoveLayerAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.Layer)) }

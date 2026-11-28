@@ -24,10 +24,10 @@ func (t testStable) Read(id sim.StateID) (sim.State, error) {
 
 func newMoveTestWorld(
 	t *testing.T, zonePublished bool,
-) (*zonelayerstate.State, *sim.Registry[*zonelayerstate.State]) {
+) (*zonelayerstate.State, *sim.ActionRegistry[*zonelayerstate.State]) {
 	st := zonelayerstate.NewState(1, 9)
 	st.AddCharacterEntity(newCharacter(1, "a", 100, 1000, 0), state.Vec{X: 1500, Y: 2500})
-	reg := &sim.Registry[*zonelayerstate.State]{}
+	reg := &sim.ActionRegistry[*zonelayerstate.State]{}
 	if zonePublished {
 		tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil)
 		reg.Stable = testStable{zone: zonestate.NewState(9, tiles)}

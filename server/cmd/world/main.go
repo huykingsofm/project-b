@@ -27,12 +27,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/engine/stepping"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/checkpoint"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -43,34 +44,6 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/logging"
 )
-
-// printer is the output of the engines: it shows each change with the engine that made it.
-type printer struct{}
-
-func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
-	for _, c := range events {
-		fmt.Printf("    %-11s t=%-3d %T %+v\n", label(from), tick, c, c)
-	}
-}
-
-// label says an engine by the type of its state and its number: "zonelayer 2".
-func label(id sim.StateID) string {
-	names := map[sim.StateType]string{
-		state.WorldType: "world", state.ZoneType: "zone", state.ZoneLayerType: "zonelayer",
-	}
-	name, ok := names[id.Type()]
-	if !ok {
-		name = fmt.Sprintf("type %d", id.Type())
-	}
-	return fmt.Sprintf("%s %d", name, id.Local())
-}
-
-// printTicks prints the engines of the cluster whose state is a S, each with its tick.
-func printTicks[S sim.State](cluster *engine.Cluster) {
-	for _, e := range cluster.All[S]() {
-		fmt.Printf("  %-11s t=%d\n", label(e.StateID()), e.Tick())
-	}
-}
 
 // The IDs of the states of the world. The cluster gives the numbers 1, 2, 3 of each type in the
 // order of the requests.
@@ -88,20 +61,56 @@ const (
 	queueSize = 256
 )
 
+// printer is the output of the engines: it shows each change with the engine that made it.
+type printer struct{}
+
+func (printer) Emit(from sim.StateID, tick uint64, events []sim.Event) {
+	for _, c := range events {
+		fmt.Printf("    %-11s t=%-3d %T %+v\n", label(from), tick, c, c)
+	}
+}
+
 // world is the cluster with the engines of the game that the script reaches for.
 type world struct {
-	*engine.Cluster
+	*cluster.Cluster
 	world *engine.Engine[*worldstate.State]
 }
 
 func (w world) zone(id sim.StateID) *engine.Engine[*zonestate.State] {
-	e, _ := w.Get[*zonestate.State](id)
+	e, _ := w.FindOfType[*zonestate.State](id)
 	return e
 }
 
 func (w world) zoneLayer(id sim.StateID) *engine.Engine[*zonelayerstate.State] {
-	e, _ := w.Get[*zonelayerstate.State](id)
+	e, _ := w.FindOfType[*zonelayerstate.State](id)
 	return e
+}
+
+// step runs n ticks of every engine, as a titled part of the script.
+func (w world) step(fail func(string, error), title string, n int) {
+	fmt.Printf("\n== %s (%d ticks)\n", title, n)
+	if err := stepping.Steps(w.Cluster, n); err != nil {
+		fail("the cluster could not run a tick", err)
+	}
+}
+
+// label says an engine by the type of its state and its number: "zonelayer 2".
+func label(id sim.StateID) string {
+	names := map[sim.StateType]string{
+		state.WorldType: "world", state.ZoneType: "zone", state.ZoneLayerType: "zonelayer",
+	}
+	name, ok := names[id.Type()]
+	if !ok {
+		name = fmt.Sprintf("type %d", id.Type())
+	}
+	return fmt.Sprintf("%s %d", name, id.Local())
+}
+
+// printTicks prints the engines of the cluster whose state is a S, each with its tick.
+func printTicks[S sim.State](cluster *cluster.Cluster) {
+	for _, e := range cluster.AllOfType[S]() {
+		fmt.Printf("  %-11s t=%d\n", label(e.StateID()), e.Tick())
+	}
 }
 
 func main() {
@@ -161,6 +170,7 @@ func main() {
 		}
 		checkpointFiles = checkpoint.NewFileWriter(dir, 64)
 		options.CheckpointWriter = checkpointFiles
+
 		replayFile = eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 			Seed: seed, SegmentBytes: 1 << 20, SyncEvery: time.Second, Backlog: 64,
 		})
@@ -176,7 +186,7 @@ func main() {
 			fail("the cluster cannot go on from its replay", err)
 		}
 		w = world{Cluster: cluster}
-		w.world, _ = cluster.Get[*worldstate.State](worldID)
+		w.world, _ = cluster.FindOfType[*worldstate.State](worldID)
 		fmt.Printf("\nthe cluster was made again from %s: %d engines, each at its tick:\n",
 			dir, len(cluster.Engines()))
 		printTicks[*worldstate.State](cluster)
@@ -185,15 +195,31 @@ func main() {
 		step := func(title string, n int) { w.step(fail, title, n) }
 		step("the cluster goes on from the logs", 5)
 	} else {
-		cluster, err := engine.NewCluster(env, store, nil)
+		orchestrator, err := cluster.NewOrchestrator(dir, store)
+		if err != nil {
+			fail("the orchestrator could not be made", err)
+		}
+		cluster, err := cluster.NewCluster(env, orchestrator, nil)
 		if err != nil {
 			fail("the cluster could not be made", err)
 		}
 		w = world{Cluster: cluster}
-		if _, err := cluster.CreateEngine(worldstate.NewState()); err != nil {
-			fail("the world could not be made", err)
+		createWorld := sim.CreateEngineCommand{State: worldstate.NewState()}
+		if !cluster.CoordinatorEngine().SendCommand(createWorld) {
+			fail("the world could not be asked for",
+				errors.New("the queue of the coordinator engine is full"))
 		}
-		w.world, _ = cluster.Get[*worldstate.State](worldID)
+		for range 10 { // the coordinator asks, the cluster makes the world, the world runs
+			if err := stepping.Step(cluster); err != nil {
+				fail("the cluster could not run a tick", err)
+			}
+			if w.world, _ = cluster.FindOfType[*worldstate.State](worldID); w.world != nil {
+				break
+			}
+		}
+		if w.world == nil {
+			fail("the world could not be made", errors.New("no world after 10 steps"))
+		}
 		runScript(w, fail)
 	}
 
@@ -221,14 +247,6 @@ func mustHoldNoCluster(dir string) error {
 			dir, len(engines))
 	}
 	return nil
-}
-
-// step runs n ticks of every engine, as a titled part of the script.
-func (w world) step(fail func(string, error), title string, n int) {
-	fmt.Printf("\n== %s (%d ticks)\n", title, n)
-	if err := stepping.Steps(w.Cluster, n); err != nil {
-		fail("the cluster could not run a tick", err)
-	}
 }
 
 // runScript makes the zones and the zonelayers of the world, and then puts the world through the
@@ -259,7 +277,7 @@ func runScript(w world, fail func(string, error)) {
 		command.WorldZoneLayerAddCommand{ZoneID: zone1ID, Capacity: 2, RegenEvery: 10},
 		command.WorldZoneLayerAddCommand{ZoneID: zone2ID, Capacity: 4, RegenEvery: 10},
 	} {
-		w.world.Send(c)
+		w.world.SendCommand(c)
 	}
 	step(
 		"the world asks the cluster for two zones and three zonelayers, takes the answers, and "+
@@ -281,7 +299,7 @@ func runScript(w world, fail func(string, error)) {
 			Arrival: tilemap.Tile{X: 8, Y: 2}.Center(),
 		},
 	} {
-		w.world.Send(c)
+		w.world.SendCommand(c)
 	}
 	step("the world joins the two zones with an exit on each side", 3)
 
@@ -294,7 +312,7 @@ func runScript(w world, fail func(string, error)) {
 			logging.Error("character does not enter", "name", c.name, "err", err)
 			continue
 		}
-		w.zone(zone1ID).Send(command.ZoneCharacterEnterCommand{Character: character})
+		w.zone(zone1ID).SendCommand(command.ZoneCharacterEnterCommand{Character: character})
 	}
 	step(
 		"two characters enter zone 1: the zone places them in zonelayer 1, the zonelayer accepts "+
@@ -302,22 +320,22 @@ func runScript(w world, fail func(string, error)) {
 		4,
 	)
 
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerChatSendCommand{FromID: 1, Text: "hello zonelayer"},
 	)
-	w.zone(zone1ID).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
-	w.world.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
+	w.zone(zone1ID).SendCommand(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"})
+	w.world.SendCommand(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"})
 	step(
 		"chat: a zonelayer message stays in the zonelayer, a zone message goes to every zonelayer "+
 			"of the zone, a private message is the world's alone",
 		4,
 	)
 
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
 	)
 	step("a shield is granted to Binh: it stands in the plan from now on", 2)
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 	)
 	step(
@@ -325,15 +343,15 @@ func runScript(w world, fail func(string, error)) {
 			"blocks it",
 		3,
 	)
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 	)
 	step("a second attack after the cooldown: the shield is gone, health drops", 10)
 
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3},
 	)
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
 	)
 	step(
@@ -342,7 +360,7 @@ func runScript(w world, fail func(string, error)) {
 		10,
 	)
 
-	w.zoneLayer(layer1ID).Send(
+	w.zoneLayer(layer1ID).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: 1},
 	)
 	step(

@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/engine/stepping"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
+	"github.com/huykingsofm/project-b/platform/runtime/stable"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -64,7 +66,7 @@ func recordsOnDisk(t *testing.T, dir string, id sim.StateID) []eventlog.Record {
 
 // heldAndNotTaken is the messages that the engines of the cluster hold as sent and that their
 // receivers have not taken in the logs under dir.
-func heldAndNotTaken(t *testing.T, dir string, live *engine.Cluster) [][3]uint64 {
+func heldAndNotTaken(t *testing.T, dir string, live *cluster.Cluster) [][3]uint64 {
 	t.Helper()
 	taken := map[sim.StateID]map[[2]uint64]int{}
 	var out [][3]uint64
@@ -100,7 +102,7 @@ func everyMessageIsTakenOnce(t *testing.T, dir string, lost [][3]uint64) {
 	}
 }
 
-func step(t *testing.T, c *engine.Cluster, n int) {
+func step(t *testing.T, c *cluster.Cluster, n int) {
 	t.Helper()
 	if err := stepping.Steps(c, n); err != nil {
 		t.Fatal(err)
@@ -126,6 +128,11 @@ func aCrashThenAHandover(
 	everyMessageIsTakenOnce(t, dir, lost)
 	second := recoverTheWorld(t, dir, every)
 	for _, id := range testkit.ClusterEngines {
+		if _, goesOn := live.Find(id); !goesOn {
+			// an engine that a request made and that never ran is dropped when the engine that
+			// asked lost the tick that took the response; it is made again with another ID
+			continue
+		}
 		if want := first.Ticks[id] + uint64(n); second.Ticks[id] != want {
 			t.Fatalf("%v was recovered to the tick %d, want %d", id, second.Ticks[id], want)
 		}
@@ -191,7 +198,7 @@ func TestAHandoverOfAnEngineWhoseLogIsGoneDoesNotMakeItAgainAndCutsWhatDependsOn
 	if _, ok := live.Find(testkit.Layer3); ok {
 		t.Fatal("an engine that has no log was made: nothing says what it was")
 	}
-	published := live.Env.StableStore.(*engine.StableStateStore)
+	published := live.Env.StableStore.(*stable.StateStore)
 	for _, handle := range live.Engines() {
 		e := handle.(engineReading)
 		copy := published.Copy(0, 0, e.StateID())
@@ -259,11 +266,11 @@ func TestACommandAfterAHandoverIsInTheLogAndRecovers(t *testing.T) {
 	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
 	before := len(recordsOnDisk(t, dir, testkit.Layer1))
 	_, live, closeLog := handedOver(t, dir)
-	layer, ok := live.Get[*zonelayerstate.State](testkit.Layer1)
+	layer, ok := live.FindOfType[*zonelayerstate.State](testkit.Layer1)
 	if !ok {
 		t.Fatal("the cluster has no first zonelayer")
 	}
-	if !layer.Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "after the handover"}) {
+	if !layer.SendCommand(command.ZoneLayerChatSendCommand{FromID: 1, Text: "after the handover"}) {
 		t.Fatal("the queue is full")
 	}
 	step(t, live, 10)
@@ -290,8 +297,8 @@ func TestANewDocumentOfTheConfigurationAfterAHandoverReachesTheEnginesAndRecover
 		t.Fatal(err)
 	}
 	step(t, live, 10)
-	if got := live.ConfigEngine().State().Snapshot(); got == nil {
-		t.Fatal("the configuration engine has no snapshot")
+	if got := live.CoordinatorEngine().State().Snapshot(); got == nil {
+		t.Fatal("the coordinator engine has no snapshot")
 	}
 	closeLog()
 	recoverTheWorld(t, dir, everySeventhTick)

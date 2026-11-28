@@ -17,16 +17,30 @@ type ZoneExitAddAction struct {
 	Arrival  state.Vec
 }
 
+// decodeZoneExitAddAction reads what Encode wrote.
+func decodeZoneExitAddAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneExitAddAction, error) {
+	a := ZoneExitAddAction{}
+	a.Area.Min = state.DecodeVec(r, version)
+	a.Area.Max = state.DecodeVec(r, version)
+	a.ToZoneID = r.Uint[sim.StateID]()
+	a.Arrival = state.DecodeVec(r, version)
+	return a, r.Err()
+}
+
 func (a ZoneExitAddAction) ID() sim.ActionID { return ZoneExitAddActionID }
-func (a ZoneExitAddAction) Priority() int16  { return PriorityResolve }
-func (a ZoneExitAddAction) Actor() any       { return nil }
+
+func (a ZoneExitAddAction) Priority() int16 { return PriorityResolve }
+
+func (a ZoneExitAddAction) Actor() any { return nil }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneExitAddAction) Clone() sim.Action[*zonestate.State] { return a }
 
 // Apply adds the exit; an area that is not in the map of the zone adds none.
 func (a ZoneExitAddAction) Apply(
-	_ *sim.Context, s *zonestate.State, _ *sim.Registry[*zonestate.State],
+	_ *sim.Context, s *zonestate.State, _ *sim.ActionRegistry[*zonestate.State],
 	_ *sim.Plan[*zonestate.State],
 ) {
 	s.AddExit(a.Area, a.ToZoneID, a.Arrival)
@@ -38,16 +52,4 @@ func (a ZoneExitAddAction) Encode(w *binary.Writer) {
 	a.Area.Max.Encode(w)
 	w.Uvarint(uint64(a.ToZoneID))
 	a.Arrival.Encode(w)
-}
-
-// decodeZoneExitAddAction reads what Encode wrote.
-func decodeZoneExitAddAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneExitAddAction, error) {
-	a := ZoneExitAddAction{}
-	a.Area.Min = state.DecodeVec(r, version)
-	a.Area.Max = state.DecodeVec(r, version)
-	a.ToZoneID = r.Uint[sim.StateID]()
-	a.Arrival = state.DecodeVec(r, version)
-	return a, r.Err()
 }

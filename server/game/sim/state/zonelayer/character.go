@@ -10,6 +10,10 @@ import (
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
+// ErrUnknownCooldownKey is returned when bytes name a cooldown key that is too large to be the
+// number of a key.
+var ErrUnknownCooldownKey = errors.New("zonelayer: the number is not one of a cooldown key")
+
 // CooldownKey names what a cooldown is for. The register of the keys, with their numbers, is in
 // package action.
 type CooldownKey uint16
@@ -24,26 +28,20 @@ type CooldownKey uint16
 // zonelayer they are on the body (the health on a damageable entity, entity.DamageableEntity), and
 // CharacterByID reads them from there.
 type Character struct {
+	// who it is, and how much health it has
 	characterID state.CharacterID
 	name        string
 	health      int32
 	maxHealth   int32
-	// radius is how far the body of the character reaches from its position, in units. The body is
-	// a square of any size: a boss may cover many tiles.
+
+	// its body: how far it reaches from its position, in units (a square of any size: a boss may
+	// cover many tiles), and how many units it goes in a tick when it moves
 	radius int32
-	// speed is how many units the character goes in a tick when it moves.
-	speed int32
+	speed  int32
 
-	// cooldowns says, for each key, the first tick at which the character is free of what the
-	// key stands for. A key is a number of the register of the cooldown keys (see package action).
+	// for each key, the first tick at which the character is free of what the key stands for (a
+	// key is a number of the register of the cooldown keys, see package action)
 	cooldowns stablemap.Map[CooldownKey, uint64]
-}
-
-// Clone returns a copy of the character that shares nothing with it: its cooldowns are copied,
-// because they hold a map and slices that assignment does not copy.
-func (c Character) Clone() Character {
-	c.cooldowns = c.cooldowns.Clone()
-	return c
 }
 
 // NewCharacter makes a character that has just been made, with all its health, the speed, in units
@@ -66,26 +64,6 @@ func NewCharacter(
 		speed:       speed,
 		radius:      radius,
 	}, nil
-}
-
-// ErrUnknownCooldownKey is returned when bytes name a cooldown key that is too large to be the
-// number of a key.
-var ErrUnknownCooldownKey = errors.New("zonelayer: the number is not one of a cooldown key")
-
-// Encode writes a character: its fields and its cooldowns, each as the number of its key and the
-// tick it ends at, in the order they were set.
-func (c Character) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(c.characterID))
-	w.String(c.name)
-	w.Varint(int64(c.health))
-	w.Varint(int64(c.maxHealth))
-	w.Varint(int64(c.radius))
-	w.Varint(int64(c.speed))
-	w.Uvarint(uint64(c.cooldowns.Len()))
-	for key, until := range c.cooldowns.All() {
-		w.Uvarint(uint64(key))
-		w.Uvarint(until)
-	}
 }
 
 // DecodeCharacter reads what Character.Encode wrote, of the data version given. It returns an error
@@ -111,6 +89,29 @@ func DecodeCharacter(r *binary.Reader, version codec.Version) (Character, error)
 		c.cooldowns.Set(CooldownKey(code), until)
 	}
 	return c, r.Err()
+}
+
+// Clone returns a copy of the character that shares nothing with it: its cooldowns are copied,
+// because they hold a map and slices that assignment does not copy.
+func (c Character) Clone() Character {
+	c.cooldowns = c.cooldowns.Clone()
+	return c
+}
+
+// Encode writes a character: its fields and its cooldowns, each as the number of its key and the
+// tick it ends at, in the order they were set.
+func (c Character) Encode(w *binary.Writer) {
+	w.Uvarint(uint64(c.characterID))
+	w.String(c.name)
+	w.Varint(int64(c.health))
+	w.Varint(int64(c.maxHealth))
+	w.Varint(int64(c.radius))
+	w.Varint(int64(c.speed))
+	w.Uvarint(uint64(c.cooldowns.Len()))
+	for key, until := range c.cooldowns.All() {
+		w.Uvarint(uint64(key))
+		w.Uvarint(until)
+	}
 }
 
 // CharacterID is the ID of the character.

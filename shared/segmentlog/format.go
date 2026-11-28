@@ -64,6 +64,42 @@ var (
 
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)
 
+// Segments lists the segments of the log in dir, in the order they were made. Files that are not
+// named like a segment are ignored. A directory that does not exist has none.
+func Segments(dir string) ([]Segment, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []Segment
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, namePrefix) ||
+			!strings.HasSuffix(name, nameSuffix) {
+			continue
+		}
+		index, err := strconv.ParseUint(
+			strings.TrimSuffix(strings.TrimPrefix(name, namePrefix), nameSuffix), 10, 64,
+		)
+		if err != nil {
+			continue
+		}
+		out = append(out, Segment{Index: index, Path: filepath.Join(dir, name)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
+	return out, nil
+}
+
+// Segment is a segment file of a log: its index, counted from 0 in the order the segments were
+// made.
+type Segment struct {
+	Index uint64
+	Path  string
+}
+
 // appendHeader appends the header of a segment whose first record has the ID begin.
 func appendHeader(b []byte, begin uint64, meta []byte) []byte {
 	start := len(b)
@@ -101,42 +137,6 @@ func appendCommit(b []byte, count uint32) []byte {
 	return binary.LittleEndian.AppendUint32(b, count)
 }
 
-// Segment is a segment file of a log: its index, counted from 0 in the order the segments were
-// made.
-type Segment struct {
-	Index uint64
-	Path  string
-}
-
 func segmentName(index uint64) string {
 	return fmt.Sprintf("%s%020d%s", namePrefix, index, nameSuffix)
-}
-
-// Segments lists the segments of the log in dir, in the order they were made. Files that are not
-// named like a segment are ignored. A directory that does not exist has none.
-func Segments(dir string) ([]Segment, error) {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []Segment
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasPrefix(name, namePrefix) ||
-			!strings.HasSuffix(name, nameSuffix) {
-			continue
-		}
-		index, err := strconv.ParseUint(
-			strings.TrimSuffix(strings.TrimPrefix(name, namePrefix), nameSuffix), 10, 64,
-		)
-		if err != nil {
-			continue
-		}
-		out = append(out, Segment{Index: index, Path: filepath.Join(dir, name)})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
-	return out, nil
 }

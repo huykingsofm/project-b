@@ -32,12 +32,12 @@ type BaseAction interface {
 // An action of one type of state cannot be given to an engine of another, and a message to a state
 // carries only actions of that state's type: the compiler checks both.
 //
-// An action is a value type, with its methods on the value (R29): no one changes it through the
+// An action is a value type, with its methods on the value (R13): no one changes it through the
 // interface that holds it. One that changes what it holds as it runs (a run of movement that
 // reserved its time) changes its own copy and sets that copy for a later tick with the registry.
 type Action[S State] interface {
 	BaseAction
-	Apply(c *Context, s S, r *Registry[S], p *Plan[S])
+	Apply(c *Context, s S, r *ActionRegistry[S], p *Plan[S])
 	// Clone returns a copy that shares nothing with the action: the action itself, or a copy of
 	// what it holds that is not a value (a character). A checkpoint, and an engine that takes a
 	// message, copy actions with it.
@@ -48,5 +48,5 @@ type Action[S State] interface {
 // runs. It is an action in every other way: it has an ID and a priority.
 type Cancellable[S State] interface {
 	Action[S]
-	ApplyCancel(c *Context, s S, r *Registry[S])
+	ApplyCancel(c *Context, s S, r *ActionRegistry[S])
 }

@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/checkpoint"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -49,7 +50,7 @@ func aWorldThatRan(
 // aLayerWasMade makes a zonelayer by a command to the world after 10 ticks, and runs 20 more.
 func aLayerWasMade(c *testkit.Cluster, t *testing.T) {
 	testkit.Steps(t, c, 10)
-	c.World.Send(command.WorldZoneLayerAddCommand{
+	c.World.SendCommand(command.WorldZoneLayerAddCommand{
 		ZoneID: testkit.Zone1, Capacity: 2, RegenEvery: 10,
 	})
 	testkit.Steps(t, c, 20)
@@ -58,32 +59,36 @@ func aLayerWasMade(c *testkit.Cluster, t *testing.T) {
 func TestAZonelayerThatTheWorldAsksForGetsTheNextIDAndTheWorldLearnsItFromTheAnswer(t *testing.T) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 10)
-	c.World.Send(command.WorldZoneLayerAddCommand{
+	c.World.SendCommand(command.WorldZoneLayerAddCommand{
 		ZoneID: testkit.Zone1, Capacity: 2, RegenEvery: 10,
 	})
-	testkit.Steps(t, c, 1) // the world asks, and the cluster makes the engine and answers
+	testkit.Steps(t, c, 1) // the world asks
+	if _, ok := c.Cluster.Find(layer4); ok {
+		t.Fatal("the engine is in the cluster before the cluster served the request")
+	}
+	// the cluster makes the engine and answers, and the world takes the answer
+	testkit.Steps(t, c, 1)
+	if _, ok := c.Cluster.Find(layer4); ok {
+		t.Fatalf("the engine of %v is in the cluster before the world acknowledged", layer4)
+	}
+	if !slices.Contains(c.World.State().ZoneLayerIDs(), layer4) {
+		t.Fatal("the world does not list the zonelayer after it took the answer")
+	}
+	testkit.Steps(t, c, 1) // the cluster takes the engine in, and it runs its tick 2
 	found, ok := c.Cluster.Find(layer4)
 	if !ok {
 		t.Fatalf("the engine of %v is not in the cluster", layer4)
 	}
 	made := found.(engineReading)
-	if made.Tick() != 0 {
-		t.Fatalf("the engine of %v is at the tick %d, want it made and not run",
-			layer4, made.Tick())
-	}
-	if slices.Contains(c.World.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world lists the zonelayer before it took the answer that says its ID")
-	}
-	testkit.Steps(t, c, 1)
-	if !slices.Contains(c.World.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world does not list the zonelayer after it took the answer")
+	if made.Tick() != 2 {
+		t.Fatalf("the engine of %v is at the tick %d, want 2", layer4, made.Tick())
 	}
 	testkit.Steps(t, c, 4)
-	if made.Tick() != 5 {
-		t.Fatalf("the new engine is at the tick %d after 5 steps, want 5", made.Tick())
+	if made.Tick() != 6 {
+		t.Fatalf("the new engine is at the tick %d after 7 steps, want 6", made.Tick())
 	}
 	first := mem.ByEngine()[layer4][0]
-	started, isStarted := first.Body.(eventlog.Started)
+	started, isStarted := first.Body.(eventlog.Init)
 	if !isStarted || first.Tick != 1 || started.Creator != testkit.World ||
 		started.CreatorTick == 0 || started.DirectiveID == 0 || len(started.Snapshot) == 0 {
 		t.Fatalf("the first record of its log is %+v, want its start by the world", first)
@@ -149,7 +154,7 @@ func TestAClusterThatRunsOnItsOwnAndMakesAZonelayerWritesLogsThatRecover(t *test
 		finished := make(chan struct{})
 		go func() { c.Run(ctx, time.Millisecond); close(finished) }()
 		time.Sleep(50 * time.Millisecond)
-		c.World.Send(command.WorldZoneLayerAddCommand{
+		c.World.SendCommand(command.WorldZoneLayerAddCommand{
 			ZoneID: testkit.Zone1, Capacity: 2, RegenEvery: 10,
 		})
 		for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(time.Millisecond) {
@@ -177,7 +182,7 @@ func TestAZonelayerThatWasMadeAndThenRemovedIsOnlyRefusedMessagesAfterAHandover(
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
 		aLayerWasMade(c, t)
-		c.World.Send(testkit.RemoveLayerCommand{Layer: layer4})
+		c.World.SendCommand(testkit.RemoveLayerCommand{Layer: layer4})
 		testkit.Steps(t, c, 10)
 	})
 	first, live, closeLog := handedOver(t, dir)
@@ -204,7 +209,7 @@ func TestAZonelayerWhoseCreatorLostTheTickThatMadeItIsCutToNothingAndTheWorldFor
 ) {
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) { aLayerWasMade(c, t) })
-	started := recordsOnDisk(t, dir, layer4)[0].Body.(eventlog.Started)
+	started := recordsOnDisk(t, dir, layer4)[0].Body.(eventlog.Init)
 	// the world lost the tick at which it asked for the zonelayer and everything after it
 	crash(t, dir, testkit.World, started.CreatorTick-1)
 	first, live, closeLog := handedOver(t, dir)
@@ -215,13 +220,14 @@ func TestAZonelayerWhoseCreatorLostTheTickThatMadeItIsCutToNothingAndTheWorldFor
 	if _, ok := live.Find(layer4); ok {
 		t.Fatal("the cluster that went live has a zonelayer that the world never asked for")
 	}
-	world, _ := live.Get[*worldstate.State](testkit.World)
+	world, _ := live.FindOfType[*worldstate.State](testkit.World)
 	if slices.Contains(world.State().ZoneLayerIDs(), layer4) {
 		t.Fatal("the world lists a zonelayer that it asked for in a tick that it lost")
 	}
 	// its ID is not given again, though the log of the engine was cut to nothing
-	if got := live.NewStateID(state.ZoneLayerType); got != sim.NewStateID(state.ZoneLayerType, 5) {
-		t.Fatalf("the next zonelayer is %v, want the number 5", got)
+	got, err := live.Orchestrator().NextStateID(state.ZoneLayerType)
+	if err != nil || got != sim.NewStateID(state.ZoneLayerType, 5) {
+		t.Fatalf("the next zonelayer is %v, %v, want the number 5", got, err)
 	}
 	closeLog()
 }
@@ -232,7 +238,7 @@ func TestAZonelayerWhoseRemovalWasLostToACrashIsMadeAgainAndTheWorldThatForgotIt
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
 		aLayerWasMade(c, t)
-		c.World.Send(testkit.RemoveLayerCommand{Layer: layer4})
+		c.World.SendCommand(testkit.RemoveLayerCommand{Layer: layer4})
 		testkit.Steps(t, c, 10)
 	})
 	// the log of the zonelayer lost its last frame, the one of its removal
@@ -245,7 +251,7 @@ func TestAZonelayerWhoseRemovalWasLostToACrashIsMadeAgainAndTheWorldThatForgotIt
 	if _, ok := live.Find(layer4); !ok {
 		t.Fatal("the zonelayer was not made again from what its log keeps")
 	}
-	world, _ := live.Get[*worldstate.State](testkit.World)
+	world, _ := live.FindOfType[*worldstate.State](testkit.World)
 	if slices.Contains(world.State().ZoneLayerIDs(), layer4) {
 		t.Fatal("the world lists the zonelayer that it forgot")
 	}
@@ -291,20 +297,21 @@ func TestAHandoverAfterAnyEngineLostItsLogWhileAZonelayerWasMadeGoesOnAndRecover
 	})
 }
 
-func TestTheWorldBeginsItsLogWithItsStartAskedForByNoEngineAndTheOthersWithOneAskedForByTheWorld(
+func TestTheWorldBeginsItsLogWithAnInitAskedForByTheCoordinatorEngineAndTheOthersByTheWorld(
 	t *testing.T,
 ) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 2)
 	for _, id := range testkit.ClusterEngines {
 		first := mem.ByEngine()[id][0]
-		started, ok := first.Body.(eventlog.Started)
+		started, ok := first.Body.(eventlog.Init)
 		if !ok || first.Tick != 1 || len(started.Snapshot) == 0 {
 			t.Fatalf("the first record of %v is %+v, want its start", id, first)
 		}
 		_, depends := first.Dependency()
-		if id == testkit.World && (started.Creator != 0 || depends) {
-			t.Fatalf("the start of the world is %+v, which no engine asked for", started)
+		if id == testkit.World && (started.Creator != sim.CoordinatorStateID || !depends) {
+			t.Fatalf("the start of the world is %+v, want it asked for by the coordinator engine",
+				started)
 		}
 		if id != testkit.World && (started.Creator != testkit.World || !depends) {
 			t.Fatalf("the start of %v is %+v, want it asked for by the world", id, started)
@@ -316,7 +323,7 @@ func TestAnEngineThatCannotBeMadeLeavesTheWorldWithoutItAndItsIDIsNotGivenAgain(
 	c, _, _ := testkit.NewWorld(t, 7, 10)
 	c.Env.EngineRegistry = engine.NewEngineRegistry() // knows no state of the game
 	testkit.Steps(t, c, 10)
-	c.World.Send(command.WorldZoneLayerAddCommand{ZoneID: testkit.Zone1, Capacity: 2})
+	c.World.SendCommand(command.WorldZoneLayerAddCommand{ZoneID: testkit.Zone1, Capacity: 2})
 	testkit.Steps(t, c, 3)
 	if _, ok := c.Cluster.Find(layer4); ok {
 		t.Fatal("an engine was made that the registry cannot make")
@@ -325,39 +332,123 @@ func TestAnEngineThatCannotBeMadeLeavesTheWorldWithoutItAndItsIDIsNotGivenAgain(
 		t.Fatal("the world lists a zonelayer that was not made")
 	}
 	// the number 4 went to an engine that could not be made, and is not given again
-	next := c.Cluster.NewStateID(state.ZoneLayerType)
-	if next != sim.NewStateID(state.ZoneLayerType, 5) {
-		t.Fatalf("the next zonelayer is %v, want the number 5", next)
+	next, err := c.Cluster.Orchestrator().NextStateID(state.ZoneLayerType)
+	if err != nil || next != sim.NewStateID(state.ZoneLayerType, 5) {
+		t.Fatalf("the next zonelayer is %v, %v, want the number 5", next, err)
 	}
 }
 
-func TestARequestWhoseAnswerWasLostToACrashIsNotServedAgainAfterAHandoverAndItsAnswerComes(
+func TestAZonelayerWhoseResponseTheWorldLostToACrashIsMadeAgainWithAnotherIDAfterAHandover(
 	t *testing.T,
 ) {
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) { aLayerWasMade(c, t) })
-	started := recordsOnDisk(t, dir, layer4)[0].Body.(eventlog.Started)
-	// the world kept the tick at which it asked, and lost the tick that took the answer
-	crash(t, dir, testkit.World, started.CreatorTick)
+	init := recordsOnDisk(t, dir, layer4)[0].Body.(eventlog.Init)
+	// the world kept the tick at which it asked, and lost the tick that took the response
+	crash(t, dir, testkit.World, init.CreatorTick)
 	_, live, closeLog := handedOver(t, dir)
 	defer closeLog()
-	world, _ := live.Get[*worldstate.State](testkit.World)
-	if _, ok := live.Find(layer4); !ok {
-		t.Fatal("the zonelayer that the world asked for is not in the cluster")
+	world, _ := live.FindOfType[*worldstate.State](testkit.World)
+	if _, ok := live.Find(layer4); ok {
+		t.Fatal("the zonelayer that the world never took the response for is in the cluster")
 	}
+	layer5 := sim.NewStateID(state.ZoneLayerType, 5)
+	step(t, live, 8)
 	if slices.Contains(world.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the world lists the zonelayer before it took the answer, which it lost")
+		t.Fatal("the world lists the zonelayer that was dropped")
 	}
-	engines := len(live.Engines())
+	if !slices.Contains(world.State().ZoneLayerIDs(), layer5) {
+		t.Fatal("the request was not made again: the world lists no new zonelayer")
+	}
+	if _, ok := live.Find(layer5); !ok {
+		t.Fatal("the engine of the request that was made again is not in the cluster")
+	}
+	records := recordsOnDisk(t, dir, layer4)
+	if _, retired := records[len(records)-1].Body.(eventlog.Retired); !retired {
+		t.Fatalf("the log of the dropped engine ends with %+v, want Retired",
+			records[len(records)-1])
+	}
+	next, err := live.Orchestrator().NextStateID(state.ZoneLayerType)
+	if err != nil || next != sim.NewStateID(state.ZoneLayerType, 6) {
+		t.Fatalf("the next zonelayer is %v, %v, want the number 6", next, err)
+	}
+}
+
+// responseTickFor is the tick at which the world took the response that made the engine, as its
+// log under dir holds it.
+func responseTickFor(t *testing.T, dir string, made sim.StateID) uint64 {
+	t.Helper()
+	for _, r := range recordsOnDisk(t, dir, testkit.World) {
+		if d, ok := r.Body.(eventlog.Directive); ok && d.Response.Engine == made {
+			return r.Tick
+		}
+	}
+	t.Fatalf("the log of the world holds no response that made %v", made)
+	return 0
+}
+
+// startedOf is the record Started in the log of the engine under dir.
+func startedOf(t *testing.T, dir string, id sim.StateID) (eventlog.Record, eventlog.Started) {
+	t.Helper()
+	for _, r := range recordsOnDisk(t, dir, id) {
+		if started, ok := r.Body.(eventlog.Started); ok {
+			return r, started
+		}
+	}
+	t.Fatalf("the log of %v holds no Started", id)
+	return eventlog.Record{}, eventlog.Started{}
+}
+
+// aZonelayerThatLostAllButItsInitIsKeptAndStartedAgain checks a handover after the zonelayer lost
+// its log after its tick 1, while the world kept the tick at which it took the response: the
+// zonelayer is kept, writes Started again for that tick, goes on and recovers.
+func aZonelayerThatLostAllButItsInitIsKeptAndStartedAgain(
+	t *testing.T, dir string, wantWorld bool,
+) {
+	t.Helper()
+	took := responseTickFor(t, dir, layer4)
+	crash(t, dir, layer4, 1)
+	first, live, closeLog := handedOver(t, dir)
+	if first.Ticks[layer4] != 1 {
+		t.Fatalf("the zonelayer was replayed to %d, want 1", first.Ticks[layer4])
+	}
+	if _, ok := live.Find(testkit.World); ok != wantWorld {
+		t.Fatalf("the world is in the cluster that went live: %v, want %v", ok, wantWorld)
+	}
+	if _, ok := live.Find(layer4); !ok {
+		t.Fatal("the zonelayer whose response the world took was dropped")
+	}
 	step(t, live, 5)
-	if !slices.Contains(world.State().ZoneLayerIDs(), layer4) {
-		t.Fatal("the answer did not come again: the world does not list the zonelayer")
+	closeLog()
+	record, started := startedOf(t, dir, layer4)
+	if record.Tick != 2 || started.Creator != testkit.World || started.ResponseTick != took {
+		t.Fatalf("Started is %+v, want it at the tick 2 for the response that the world took at "+
+			"its tick %d", record, took)
 	}
-	if got := len(live.Engines()); got != engines {
-		t.Fatalf("the cluster has %d engines, had %d: the request was served again", got, engines)
+	second := recoverTheWorld(t, dir, everySeventhTick)
+	if second.Ticks[layer4] != 6 {
+		t.Fatalf("the zonelayer was recovered to %d, want 6", second.Ticks[layer4])
 	}
-	next := live.NewStateID(state.ZoneLayerType)
-	if next != sim.NewStateID(state.ZoneLayerType, 5) {
-		t.Fatalf("the next zonelayer is %v, want the number 5", next)
-	}
+}
+
+func TestAZonelayerThatLostAllButItsInitWhileTheWorldTookItsResponseIsKeptAndRunsOn(
+	t *testing.T,
+) {
+	dir := t.TempDir()
+	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) { aLayerWasMade(c, t) })
+	aZonelayerThatLostAllButItsInitIsKeptAndStartedAgain(t, dir, true)
+}
+
+func TestAZonelayerThatLostAllButItsInitIsKeptWhenTheWorldTookItsResponseAndThenRetired(
+	t *testing.T,
+) {
+	dir := t.TempDir()
+	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
+		aLayerWasMade(c, t)
+		if !stepping.RetireEngine(c.Cluster, testkit.World) {
+			t.Fatal("the world is not in the cluster")
+		}
+		testkit.Steps(t, c, 5)
+	})
+	aZonelayerThatLostAllButItsInitIsKeptAndStartedAgain(t, dir, false)
 }

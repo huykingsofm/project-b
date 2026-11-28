@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/checkpoint"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/checkpoint"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -127,11 +127,11 @@ func TestEveryEngineWritesACheckpointFileEveryPeriodThatMakesItAgainWithTheHashO
 	dir := t.TempDir()
 	c, mem, files := aWorldThatCheckpointsToFiles(t, dir)
 	testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
 	)
 	testkit.WalkToTheEastExit(t, c, 1) // crosses to zone 2: messages between the engines
-	c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 2, Text: "hello"})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneChatSendCommand{FromID: 2, Text: "hello"})
 	testkit.Steps(t, c, 30)
 	files.Close()
 	if files.Dropped() != 0 || files.Failed() != 0 {

@@ -29,11 +29,24 @@ type ZoneLayerCharacterNormalAttackTriggerAction struct {
 	TargetID    state.CharacterID // the character it hits
 }
 
+// decodeZoneLayerCharacterNormalAttackTriggerAction reads what Encode wrote.
+func decodeZoneLayerCharacterNormalAttackTriggerAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterNormalAttackTriggerAction, error) {
+	a := ZoneLayerCharacterNormalAttackTriggerAction{
+		CharacterID: r.Uint[state.CharacterID](),
+		TargetID:    r.Uint[state.CharacterID](),
+	}
+	return a, r.Err()
+}
+
 func (a ZoneLayerCharacterNormalAttackTriggerAction) ID() sim.ActionID {
 	return ZoneLayerCharacterNormalAttackTriggerActionID
 }
+
 func (a ZoneLayerCharacterNormalAttackTriggerAction) Priority() int16 { return PriorityIntent }
-func (a ZoneLayerCharacterNormalAttackTriggerAction) Actor() any      { return a.CharacterID }
+
+func (a ZoneLayerCharacterNormalAttackTriggerAction) Actor() any { return a.CharacterID }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -42,7 +55,7 @@ func (a ZoneLayerCharacterNormalAttackTriggerAction) Clone() sim.Action[*zonelay
 
 // Apply sets the cooldown and adds the hit to the plan, or does nothing.
 func (a ZoneLayerCharacterNormalAttackTriggerAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	p *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
@@ -81,15 +94,4 @@ func (a ZoneLayerCharacterNormalAttackTriggerAction) Apply(
 func (a ZoneLayerCharacterNormalAttackTriggerAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	w.Uvarint(uint64(a.TargetID))
-}
-
-// decodeZoneLayerCharacterNormalAttackTriggerAction reads what Encode wrote.
-func decodeZoneLayerCharacterNormalAttackTriggerAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterNormalAttackTriggerAction, error) {
-	a := ZoneLayerCharacterNormalAttackTriggerAction{
-		CharacterID: r.Uint[state.CharacterID](),
-		TargetID:    r.Uint[state.CharacterID](),
-	}
-	return a, r.Err()
 }

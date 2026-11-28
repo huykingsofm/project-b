@@ -1,7 +1,7 @@
 package game
 
 import (
-	"github.com/huykingsofm/project-b/platform/engine"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"

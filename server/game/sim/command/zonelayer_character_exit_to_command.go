@@ -16,6 +16,20 @@ type ZoneLayerCharacterExitToCommand struct {
 	ExitEntityID state.EntityID
 }
 
+// decodeZoneLayerCharacterExitToCommand reads what Encode wrote.
+func decodeZoneLayerCharacterExitToCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterExitToCommand, error) {
+	characterID := r.Uint[state.CharacterID]()
+	exitEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterExitToCommand{}, err
+	}
+	return ZoneLayerCharacterExitToCommand{
+		CharacterID: characterID, ExitEntityID: exitEntityID,
+	}, r.Err()
+}
+
 func (ZoneLayerCharacterExitToCommand) ID() sim.CommandID {
 	return ZoneLayerCharacterExitToCommandID
 }
@@ -36,18 +50,4 @@ func (c ZoneLayerCharacterExitToCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	c.ExitEntityID.Encode(w)
 	return nil
-}
-
-// decodeZoneLayerCharacterExitToCommand reads what Encode wrote.
-func decodeZoneLayerCharacterExitToCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterExitToCommand, error) {
-	characterID := r.Uint[state.CharacterID]()
-	exitEntityID, err := state.DecodeEntityID(r)
-	if err != nil {
-		return ZoneLayerCharacterExitToCommand{}, err
-	}
-	return ZoneLayerCharacterExitToCommand{
-		CharacterID: characterID, ExitEntityID: exitEntityID,
-	}, r.Err()
 }

@@ -22,16 +22,30 @@ type WorldZoneExitAddAction struct {
 	Arrival    state.Vec
 }
 
+// decodeWorldZoneExitAddAction reads what Encode wrote.
+func decodeWorldZoneExitAddAction(
+	r *binary.Reader, version codec.Version,
+) (WorldZoneExitAddAction, error) {
+	a := WorldZoneExitAddAction{FromZoneID: r.Uint[sim.StateID]()}
+	a.Area.Min = state.DecodeVec(r, version)
+	a.Area.Max = state.DecodeVec(r, version)
+	a.ToZoneID = r.Uint[sim.StateID]()
+	a.Arrival = state.DecodeVec(r, version)
+	return a, r.Err()
+}
+
 func (a WorldZoneExitAddAction) ID() sim.ActionID { return WorldZoneExitAddActionID }
-func (a WorldZoneExitAddAction) Priority() int16  { return PriorityResolve }
-func (a WorldZoneExitAddAction) Actor() any       { return nil }
+
+func (a WorldZoneExitAddAction) Priority() int16 { return PriorityResolve }
+
+func (a WorldZoneExitAddAction) Actor() any { return nil }
 
 // Clone returns the action itself: it holds only values.
 func (a WorldZoneExitAddAction) Clone() sim.Action[*worldstate.State] { return a }
 
 // Apply sends the exit to the zone it stands in.
 func (a WorldZoneExitAddAction) Apply(
-	_ *sim.Context, s *worldstate.State, r *sim.Registry[*worldstate.State],
+	_ *sim.Context, s *worldstate.State, r *sim.ActionRegistry[*worldstate.State],
 	_ *sim.Plan[*worldstate.State],
 ) {
 	zones := s.ZoneIDs()
@@ -51,16 +65,4 @@ func (a WorldZoneExitAddAction) Encode(w *binary.Writer) {
 	a.Area.Max.Encode(w)
 	w.Uvarint(uint64(a.ToZoneID))
 	a.Arrival.Encode(w)
-}
-
-// decodeWorldZoneExitAddAction reads what Encode wrote.
-func decodeWorldZoneExitAddAction(
-	r *binary.Reader, version codec.Version,
-) (WorldZoneExitAddAction, error) {
-	a := WorldZoneExitAddAction{FromZoneID: r.Uint[sim.StateID]()}
-	a.Area.Min = state.DecodeVec(r, version)
-	a.Area.Max = state.DecodeVec(r, version)
-	a.ToZoneID = r.Uint[sim.StateID]()
-	a.Arrival = state.DecodeVec(r, version)
-	return a, r.Err()
 }

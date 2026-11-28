@@ -1,6 +1,6 @@
 # World actions
 
-State: [`state/world`](../../server/game/sim/state/world): private messages between players, inventories of characters. Registry: `sim.Registry[*worldstate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/world`](../../server/game/sim/state/world): private messages between players, inventories of characters. Registry: `sim.ActionRegistry[*worldstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## WorldChatPrivateSendAction
 
@@ -31,7 +31,7 @@ State: [`state/world`](../../server/game/sim/state/world): private messages betw
 - Command: `WorldZoneAddCommand{Tiles}`
 - Fields: `Tiles` (the map; copied with `Clone`)
 - Steps:
-  1. `CreateEngine` with the tag `TagZone` and a zone state of this world (`Context.Self`) on the map. The world lists the zone when the cluster answers, not here (R28): `State.HandleDirective` takes the answer.
+  1. `CreateEngine` with the tag `TagZone` and a zone state of this world (`Context.Self`) on the map. The world lists the zone when the cluster answers, not here (R12): `State.HandleDirective` takes the answer.
 - Example: tick 1 the command; the cluster makes the zone and answers; at tick 2 the world lists it.
 
 ## WorldZoneLayerAddAction

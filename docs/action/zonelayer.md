@@ -1,6 +1,6 @@
 # Zonelayer actions
 
-State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `sim.Registry[*zonelayerstate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `sim.ActionRegistry[*zonelayerstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## Character
 

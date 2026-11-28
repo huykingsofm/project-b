@@ -8,10 +8,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/table"
 )
 
-// EntryStatus says where an entry of a plan stands: whether its action is still to run, and if not,
-// why.
-type EntryStatus uint8
-
 const (
 	EntryPending   EntryStatus = iota // the action is still to run
 	EntryRan                          // the action ran
@@ -19,22 +15,9 @@ const (
 	EntryCut                          // the action was cut: its chain went too deep
 )
 
-// PlanEntry is an action in a plan, with what the plan knows of it.
-type PlanEntry[S State] struct {
-	action Action[S]
-	depth  uint8 // how many actions deep the chain that made it is; 0 for a command or a message
-	status EntryStatus
-}
-
-// Action returns the action of the entry.
-func (e *PlanEntry[S]) Action() Action[S] { return e.action }
-
-// Priority is the priority of the action of the entry, which orders the entry in the plan.
-func (e *PlanEntry[S]) Priority() int16 { return e.action.Priority() }
-
-// Status returns where the entry stands. FindByID gives the entries that ran or were
-// cancelled as well as the ones to run, so whoever walks them checks the status of each.
-func (e *PlanEntry[S]) Status() EntryStatus { return e.status }
+// EntryStatus says where an entry of a plan stands: whether its action is still to run, and if not,
+// why.
+type EntryStatus uint8
 
 // Plan is the list of actions an engine runs in a tick, sorted by priority (smaller first) and, for
 // equal priorities, by arrival. It is a table.PriorityQueue: whatever is added while it runs goes
@@ -184,3 +167,20 @@ func (p *Plan[S]) Cancel(e *PlanEntry[S]) {
 // Cancelled returns the entries that were cancelled in this tick, in the order they were, so that
 // the engine can tell their actions that they did not run.
 func (p *Plan[S]) Cancelled() []*PlanEntry[S] { return p.cancelled }
+
+// PlanEntry is an action in a plan, with what the plan knows of it.
+type PlanEntry[S State] struct {
+	action Action[S]
+	depth  uint8 // how many actions deep the chain that made it is; 0 for a command or a message
+	status EntryStatus
+}
+
+// Action returns the action of the entry.
+func (e *PlanEntry[S]) Action() Action[S] { return e.action }
+
+// Priority is the priority of the action of the entry, which orders the entry in the plan.
+func (e *PlanEntry[S]) Priority() int16 { return e.action.Priority() }
+
+// Status returns where the entry stands. FindByID gives the entries that ran or were
+// cancelled as well as the ones to run, so whoever walks them checks the status of each.
+func (e *PlanEntry[S]) Status() EntryStatus { return e.status }

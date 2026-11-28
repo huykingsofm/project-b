@@ -67,13 +67,6 @@ func (r *Reader) Err() error { return r.err }
 // Left is how many bytes have not been read.
 func (r *Reader) Left() int { return len(r.b) }
 
-func (r *Reader) fail(err error) {
-	if r.err == nil {
-		r.err = err
-	}
-	r.b = nil
-}
-
 // Uint8 reads one byte.
 func (r *Reader) Uint8() uint8 {
 	if len(r.b) < 1 {
@@ -188,4 +181,11 @@ func (r *Reader) Bytes() []byte {
 	b := r.b[:n:n]
 	r.b = r.b[n:]
 	return b
+}
+
+func (r *Reader) fail(err error) {
+	if r.err == nil {
+		r.err = err
+	}
+	r.b = nil
 }

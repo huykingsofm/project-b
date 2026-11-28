@@ -4,9 +4,6 @@ import (
 	"slices"
 )
 
-// AudienceKind says how an Audience names the ones who receive an event.
-type AudienceKind uint8
-
 // The kinds of audience. A new kind is added at the end of the list, and a number is never changed
 // or reused.
 const (
@@ -22,6 +19,9 @@ const (
 	// where the audience is resolved, not by the event.
 	InSightOfKind
 )
+
+// AudienceKind says how an Audience names the ones who receive an event.
+type AudienceKind uint8
 
 // Audience says who receives an event. The event declares it, and whatever sends events to the
 // clients resolves it: the events themselves never name a connection. An audience is meant for the

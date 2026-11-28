@@ -1,6 +1,6 @@
 # Zone actions
 
-State: [`state/zone`](../../server/game/sim/state/zone): the map, the exit entities, the zonelayers and their capacity, messages said in the zone. The zone keeps no count of who is in its zonelayers. Registry: `sim.Registry[*zonestate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/zone`](../../server/game/sim/state/zone): the map, the exit entities, the zonelayers and their capacity, messages said in the zone. The zone keeps no count of who is in its zonelayers. Registry: `sim.ActionRegistry[*zonestate.State]`. Conventions, keys and priorities: [index](index.md).
 
 Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAction`](zonelayer.md#zonelayercharacterexittoaction).
 

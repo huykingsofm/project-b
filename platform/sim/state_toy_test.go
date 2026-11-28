@@ -22,7 +22,7 @@ type toyState struct {
 
 func (*toyState) Type() sim.StateType { return toyType }
 func (s *toyState) Tick() uint64      { return s.tick }
-func (s *toyState) NextTick()         { s.tick++ }
+func (s *toyState) AdvanceTick()      { s.tick++ }
 func (s *toyState) Clone() sim.State  { c := *s; return &c }
 func (s *toyState) Hash() uint64 {
 	h := sim.NewHasher()
@@ -74,7 +74,7 @@ type anonymousAction struct {
 func (a anonymousAction) ID() sim.ActionID { return testID }
 func (a anonymousAction) Priority() int16  { return a.priority }
 func (a anonymousAction) Actor() any       { return nil }
-func (a anonymousAction) Apply(*sim.Context, *toyState, *sim.Registry[*toyState],
+func (a anonymousAction) Apply(*sim.Context, *toyState, *sim.ActionRegistry[*toyState],
 	*sim.Plan[*toyState]) {
 }
 func (a anonymousAction) Clone() sim.Action[*toyState] { return a }
@@ -107,7 +107,7 @@ const addID sim.ActionID = 60002
 func (a addAction) ID() sim.ActionID { return addID }
 func (a addAction) Priority() int16  { return 0 }
 func (a addAction) Actor() any       { return nil }
-func (a addAction) Apply(_ *sim.Context, s *toyState, _ *sim.Registry[*toyState],
+func (a addAction) Apply(_ *sim.Context, s *toyState, _ *sim.ActionRegistry[*toyState],
 	_ *sim.Plan[*toyState]) {
 	s.Total += a.N
 }
@@ -127,7 +127,7 @@ const otherActionID sim.ActionID = 60003
 func (otherAction) ID() sim.ActionID { return otherActionID }
 func (otherAction) Priority() int16  { return 0 }
 func (otherAction) Actor() any       { return nil }
-func (otherAction) Apply(*sim.Context, *otherState, *sim.Registry[*otherState],
+func (otherAction) Apply(*sim.Context, *otherState, *sim.ActionRegistry[*otherState],
 	*sim.Plan[*otherState]) {
 }
 func (a otherAction) Clone() sim.Action[*otherState] { return a }

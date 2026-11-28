@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -24,7 +25,7 @@ import (
 
 // runOn replays the logs from tick 0 to the recovery line of the logs.
 func runOn(o engine.Options, logs replay.Logs) (*replay.Result, error) {
-	plan, err := replay.PlanFrom(logs, nil, nil)
+	plan, err := replay.RecoveryPlanFrom(logs, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -156,14 +157,14 @@ func TestAReplayWithoutTheLogOfTheConfigurationEngineCutsTheEnginesThatReadTheCo
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.RunScenario(t, c, testkit.Sender{T: t})
 	logs := mem.ByEngine()
-	if len(logs[sim.ConfigStateID]) == 0 {
-		t.Fatal("the scenario recorded nothing of the configuration engine")
+	if len(logs[sim.CoordinatorStateID]) == 0 {
+		t.Fatal("the scenario recorded nothing of the coordinator engine")
 	}
-	delete(logs, sim.ConfigStateID)
+	delete(logs, sim.CoordinatorStateID)
 	// an engine with no log has no tick that a recovery keeps, so every engine that read a copy of
 	// the configuration is cut before the tick that read it, and nothing of what the
 	// configuration changed is replayed against logs that do not hold it
-	plan, err := replay.PlanFrom(logs, nil, nil)
+	plan, err := replay.RecoveryPlanFrom(logs, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func TestAReplayWithoutTheLogOfTheConfigurationEngineCutsTheEnginesThatReadTheCo
 		}
 	}
 	if cut == 0 {
-		t.Fatal("no engine was cut for want of the log of the configuration engine")
+		t.Fatal("no engine was cut for want of the log of the coordinator engine")
 	}
 	result, err := replay.Run(testkit.Options(t, 7), plan)
 	if err != nil || len(result.Divergences) != 0 {
@@ -193,8 +194,8 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 	t.Run("refused at once", func(t *testing.T) {
 		c, mem := everyTickHashed(t)
 		testkit.WalkToTheEastExit(t, c, 1)
-		c.Env.Router.Retire(testkit.Layer3)
-		c.ZoneLayer(testkit.Layer1).Send(exitEast)
+		c.Env.Router.MarkRetired(testkit.Layer3)
+		c.ZoneLayer(testkit.Layer1).SendCommand(exitEast)
 		testkit.Steps(t, c, 10)
 		replayAndCompare(t, c, mem)
 	})
@@ -217,7 +218,7 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 			}
 			break
 		}
-		c.ZoneLayer(testkit.Layer1).Send(exitEast)
+		c.ZoneLayer(testkit.Layer1).SendCommand(exitEast)
 		for range 10 {
 			c.ZoneLayer(testkit.Layer1).Step()
 		}
@@ -236,7 +237,7 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 	t.Run("comes back later", func(t *testing.T) {
 		c, mem := everyTickHashed(t)
 		testkit.WalkToTheEastExit(t, c, 1)
-		c.ZoneLayer(testkit.Layer1).Send(exitEast)
+		c.ZoneLayer(testkit.Layer1).SendCommand(exitEast)
 		// the message to zonelayer 3 is in its queue, which does not run
 		c.ZoneLayer(testkit.Layer1).Step()
 		ctx, cancel := context.WithCancel(context.Background())
@@ -414,7 +415,7 @@ func TestEveryLogIsOpenedTwiceAndClosedAndOneThatFailsIsAnErrorNotAMatch(t *test
 	logs := mem.ByEngine()
 
 	counting := &countingLogs{Logs: logs}
-	plan, err := replay.PlanFrom(counting, nil, nil) // reads each log once, for the line
+	plan, err := replay.RecoveryPlanFrom(counting, nil, nil) // reads each log once, for the line
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,8 +482,8 @@ func TestFilesMadeWithAnotherSeedThanTheBuilderHasAreRefused(t *testing.T) {
 }
 
 // layerOf is the engine of a zonelayer of a cluster, or nil.
-func layerOf(c *engine.Cluster, id sim.StateID) *engine.Engine[*zonelayerstate.State] {
-	e, _ := c.Get[*zonelayerstate.State](id)
+func layerOf(c *cluster.Cluster, id sim.StateID) *engine.Engine[*zonelayerstate.State] {
+	e, _ := c.FindOfType[*zonelayerstate.State](id)
 	return e
 }
 
@@ -499,7 +500,7 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if err != nil {
 		t.Fatal(err)
 	}
-	planBefore, err := replay.MakePlan(dir, c.Env.Codecs)
+	planBefore, err := replay.MakeRecoveryPlan(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +512,7 @@ func TestAClusterWhoseLogsAreCutToTheRecoveryLineAfterALostTailStillReplaysWithN
 	if err = segmentlog.CutAfter(layerDir, kept, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := replay.MakePlan(dir, c.Env.Codecs)
+	plan, err := replay.MakeRecoveryPlan(dir, c.Env.Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}

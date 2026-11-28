@@ -17,7 +17,7 @@ func TestAWorldStateComesBackAsItWasWrittenAndCutBytesAreAnError(t *testing.T) {
 	st.AddItemToCharacter(4, 8, 5, 4, 99)
 	st.SendPrivateMessage(world.NewPrivateChatMessage(1, 2, "psst", 5))
 	for range 9 {
-		st.NextTick()
+		st.AdvanceTick()
 	}
 	st.AddZone(2)
 	st.AddZone(3)

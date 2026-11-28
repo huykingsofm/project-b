@@ -79,7 +79,7 @@ func TestAnExitThatIsNotInTheMapOrNotToAZoneIsRefusedAndChangesNothing(t *testin
 	}
 }
 
-// R29: nothing in a state is shared with its clone, except the map, which never changes.
+// R13: nothing in a state is shared with its clone, except the map, which never changes.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
 	st := newState(t)
 	st.AddZoneLayer(1, 4)

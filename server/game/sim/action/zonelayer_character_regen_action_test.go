@@ -19,7 +19,7 @@ func TestRegenHealsEveryoneAndSetsItselfAgainEveryPeriodUnlessThePeriodIsZero(t 
 	st.DamageEntity(body, 30)
 	health := func() int32 { ch, _ := st.CharacterByID(1); return ch.Health() }
 
-	var reg sim.Registry[*zonelayerstate.State]
+	var reg sim.ActionRegistry[*zonelayerstate.State]
 	reg.Begin(10)
 	a := action.ZoneLayerCharacterRegenAction{Every: 7}
 	a.Apply(&sim.Context{Tick: 10}, st, &reg, sim.NewPlan[*zonelayerstate.State]())

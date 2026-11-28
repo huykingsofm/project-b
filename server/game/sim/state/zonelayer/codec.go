@@ -10,19 +10,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// count reads how many items follow, and refuses a number that claims more than the bytes left can
-// hold: an item takes at least one byte.
-func count(r *binary.Reader) (uint64, error) {
-	n := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return 0, err
-	}
-	if n > uint64(r.Left()) {
-		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
-	}
-	return n, nil
-}
-
 // DecodeState reads what State.Encode wrote, of the data version given.
 func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	zoneID, worldID := r.Uint[sim.StateID](), r.Uint[sim.StateID]()
@@ -72,4 +59,17 @@ func DecodeState(r *binary.Reader, version codec.Version) (*State, error) {
 	}
 	s.lastEntityID = r.Uvarint()
 	return s, r.Err()
+}
+
+// count reads how many items follow, and refuses a number that claims more than the bytes left can
+// hold: an item takes at least one byte.
+func count(r *binary.Reader) (uint64, error) {
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return 0, err
+	}
+	if n > uint64(r.Left()) {
+		return 0, fmt.Errorf("%w: %d items", binary.ErrShort, n)
+	}
+	return n, nil
 }

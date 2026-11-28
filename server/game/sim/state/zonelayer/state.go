@@ -56,20 +56,8 @@ func NewState(zoneID, worldID sim.StateID) *State {
 	return s
 }
 
-// clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
-func (s *State) clone() *State {
-	return &State{
-		zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
-		entities:     s.entities.Clone(),
-		characters:   s.characters.Clone(),
-		chat:         s.chat.Clone(),
-		bodies:       s.bodies.Clone(),
-		lastEntityID: s.lastEntityID,
-	}
-}
-
-// NextTick takes the state to the next tick.
-func (s *State) NextTick() { s.tick++ }
+// AdvanceTick takes the state to the next tick.
+func (s *State) AdvanceTick() { s.tick++ }
 
 // Type is the type of the state of a zonelayer.
 func (s *State) Type() sim.StateType { return state.ZoneLayerType }
@@ -156,7 +144,7 @@ func (s *State) AddCharacterEntity(c Character, at state.Vec) state.EntityID {
 	e := entity.NewCharacterEntity(id, at, c.radius, c.health, c.maxHealth)
 	s.entities.Set(e.ID(), e)
 	// the state owns its copy: what the caller sent, and keeps, is never changed by the engine
-	// (R29)
+	// (R13)
 	c = c.Clone()
 	c.health, c.maxHealth, c.radius = 0, 0, 0 // from here on they are the body's
 	s.characters.Set(c.characterID, c)
@@ -321,7 +309,7 @@ func (s *State) ChatMessageCount() int { return s.chat.Len() }
 // Encode writes the data of the state: the IDs of its zone and world and its tick, its entities,
 // its characters, what was said, which character has which body, and the number the next entity
 // gets. The events are not data
-// (R18) and are not written. It returns an error, and the writer holds a partial state, when an
+// (R9) and are not written. It returns an error, and the writer holds a partial state, when an
 // entity cannot be written.
 func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(s.zoneID))
@@ -382,10 +370,22 @@ func (s *State) Hash() uint64 {
 	return h.Sum()
 }
 
-// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
-// a copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyZoneLayerState interface {
-	CharacterCount() int
+// clone returns a copy of the data, with an empty event. The copy shares nothing with the state.
+func (s *State) clone() *State {
+	return &State{
+		zoneID: s.zoneID, worldID: s.worldID, tick: s.tick,
+		entities:     s.entities.Clone(),
+		characters:   s.characters.Clone(),
+		chat:         s.chat.Clone(),
+		bodies:       s.bodies.Clone(),
+		lastEntityID: s.lastEntityID,
+	}
 }
 
 var _ ReadOnlyZoneLayerState = (*State)(nil)
+
+// ReadOnlyZoneLayerState is the read methods of the state of a zonelayer: what an action may use of
+// a copy that another engine published, which it must never change (R5, R12).
+type ReadOnlyZoneLayerState interface {
+	CharacterCount() int
+}

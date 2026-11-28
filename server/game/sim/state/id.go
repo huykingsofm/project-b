@@ -40,6 +40,12 @@ type (
 // holds the ID of that state beside it (0: the state it is run on). 0 is no entity.
 type EntityID uint64
 
+// DecodeEntityID reads what Encode wrote.
+func DecodeEntityID(r *binary.Reader) (EntityID, error) {
+	id := EntityID(r.Uvarint())
+	return id, r.Err()
+}
+
 // String is the number, for a log.
 func (id EntityID) String() string { return fmt.Sprintf("%d", uint64(id)) }
 
@@ -48,12 +54,6 @@ func (id EntityID) Hash(h *sim.Hasher) { h.U64(uint64(id)) }
 
 // Encode writes the ID as a uvarint.
 func (id EntityID) Encode(w *binary.Writer) { w.Uvarint(uint64(id)) }
-
-// DecodeEntityID reads what Encode wrote.
-func DecodeEntityID(r *binary.Reader) (EntityID, error) {
-	id := EntityID(r.Uvarint())
-	return id, r.Err()
-}
 
 // ItemID names a kind of item: what a dropped item is, and what an inventory holds.
 type ItemID uint32

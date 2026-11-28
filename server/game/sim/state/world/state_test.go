@@ -71,7 +71,7 @@ func TestOnlyWhatWasAddedIsTold(t *testing.T) {
 	}
 }
 
-// R29: nothing in a state is shared with its clone.
+// R13: nothing in a state is shared with its clone.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
 	st := world.NewState()
 	st.AddItemToCharacter(1, 7, 1, 3, 10)

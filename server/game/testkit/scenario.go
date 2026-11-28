@@ -13,31 +13,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// Sender gives the commands of a scenario to the engines as they are, or after they were written to
-// bytes and read back: a copy that shares nothing with what the caller made, as a command that came
-// from a client does.
-type Sender struct {
-	T         testing.TB
-	RoundTrip bool
-	Codecs    *sim.Codecs // reads the commands back, when RoundTrip is set
-	Reuses    bool        // the Sender goes on using the value it sent, and changes it
-}
-
-func (s Sender) Via[C sim.BaseCommand](c C) C {
-	if !s.RoundTrip {
-		return c
-	}
-	var w binary.Writer
-	if err := sim.EncodeCommand(&w, c); err != nil {
-		s.T.Fatal(err)
-	}
-	got, err := s.Codecs.DecodeCommand(binary.NewReader(w.B), 1)
-	if err != nil {
-		s.T.Fatal(err)
-	}
-	return got.(C)
-}
-
 // ScenarioConfigDocument is the document of the configuration that the scenario sets: the overrides
 // that stay in force, and its own.
 func ScenarioConfigDocument(kept map[string]string) map[string]string {
@@ -50,7 +25,7 @@ func ScenarioConfigDocument(kept map[string]string) map[string]string {
 }
 
 // SetConfig gives the store of the cluster the document: the text of the JSON value of each
-// variable that is not at its default, by name. The cluster sends it to its configuration engine at
+// variable that is not at its default, by name. The cluster sends it to its coordinator engine at
 // its next step, when a variable changes, and the configuration is the new one from the tick after
 // the command is taken.
 func SetConfig(t testing.TB, c *Cluster, document map[string]string) {
@@ -77,12 +52,12 @@ func RunScenarioKeeping(
 	t.Helper()
 	an := NewCharacter(1, "An", 100, 1000, 0)
 	an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 9)
-	c.Zone(Zone1).Send(s.Via(command.ZoneCharacterEnterCommand{Character: an}))
+	c.Zone(Zone1).SendCommand(s.Via(command.ZoneCharacterEnterCommand{Character: an}))
 	if s.Reuses {
 		an.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 1<<40)
 	}
 	Steps(t, c, 4)
-	c.Zone(Zone1).Send(
+	c.Zone(Zone1).SendCommand(
 		s.Via(command.ZoneCharacterEnterCommand{Character: NewCharacter(2, "Binh", 100, 1000, 0)}),
 	)
 	Steps(t, c, 4)
@@ -99,21 +74,54 @@ func RunScenarioKeeping(
 	}
 
 	l := c.ZoneLayer(Layer1)
-	c.World.Send(s.Via(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"}))
-	c.Zone(Zone1).Send(s.Via(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"}))
-	l.Send(s.Via(command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"}))
-	l.Send(s.Via(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100}))
-	l.Send(
+	c.World.SendCommand(
+		s.Via(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"}),
+	)
+	c.Zone(Zone1).SendCommand(s.Via(command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"}))
+	l.SendCommand(s.Via(command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"}))
+	l.SendCommand(
+		s.Via(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100}),
+	)
+	l.SendCommand(
 		s.Via(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2}),
 	)
-	l.Send(
+	l.SendCommand(
 		s.Via(command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID}),
 	)
 	Steps(t, c, 6)
 	// a new document of the config: the engines record that they read it
 	SetConfig(t, c, ScenarioConfigDocument(kept))
-	l.Send(s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}))
+	l.SendCommand(
+		s.Via(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8}),
+	)
 	Steps(t, c, 14)
-	l.Send(s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}))
+	l.SendCommand(
+		s.Via(command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: EastExit}),
+	)
 	Steps(t, c, 60) // the zone it went to records a hash too
+}
+
+// Sender gives the commands of a scenario to the engines as they are, or after they were written to
+// bytes and read back: a copy that shares nothing with what the caller made, as a command that came
+// from a client does.
+type Sender struct {
+	T         testing.TB
+	RoundTrip bool
+	Codecs    *sim.Codecs // reads the commands back, when RoundTrip is set
+	Reuses    bool        // the Sender goes on using the value it sent, and changes it
+}
+
+func (s Sender) Via[C sim.BaseCommand](c C) C {
+	if !s.RoundTrip {
+		return c
+	}
+	var w binary.Writer
+	if err := sim.EncodeCommand(&w, c); err != nil {
+		s.T.Fatal(err)
+	}
+	got, err := s.Codecs.DecodeCommand(binary.NewReader(w.B), 1)
+	if err != nil {
+		s.T.Fatal(err)
+	}
+	return got.(C)
 }

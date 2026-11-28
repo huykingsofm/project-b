@@ -16,6 +16,18 @@ type ZoneLayerCharacterMoveCommand struct {
 	Ticks       uint32
 }
 
+// decodeZoneLayerCharacterMoveCommand reads what Encode wrote.
+func decodeZoneLayerCharacterMoveCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterMoveCommand, error) {
+	c := ZoneLayerCharacterMoveCommand{
+		CharacterID: r.Uint[state.CharacterID](),
+		Dir:         state.Dir(r.Uint8()),
+		Ticks:       r.Uint[uint32](),
+	}
+	return c, r.Err()
+}
+
 func (ZoneLayerCharacterMoveCommand) ID() sim.CommandID { return ZoneLayerCharacterMoveCommandID }
 
 // Clone returns the command itself: it holds only values.
@@ -35,16 +47,4 @@ func (c ZoneLayerCharacterMoveCommand) Encode(w *binary.Writer) error {
 	w.Uint8(uint8(c.Dir))
 	w.Uvarint(uint64(c.Ticks))
 	return nil
-}
-
-// decodeZoneLayerCharacterMoveCommand reads what Encode wrote.
-func decodeZoneLayerCharacterMoveCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterMoveCommand, error) {
-	c := ZoneLayerCharacterMoveCommand{
-		CharacterID: r.Uint[state.CharacterID](),
-		Dir:         state.Dir(r.Uint8()),
-		Ticks:       r.Uint[uint32](),
-	}
-	return c, r.Err()
 }

@@ -18,7 +18,7 @@
 
 ## Who gives the numbers
 
-The cluster gives the `StateID` of an engine that has none given (`Cluster.NewStateID`, [engines](engine_lifecycle.md)): it counts the numbers of each type up from 1, and when it starts again it counts from above the highest that its logs hold. The world knows the zones and the zonelayers by the IDs that the cluster gave, which it takes from the answer of the cluster (`State.HandleDirective`, `AddZone`, `AddZoneLayer`, `RemoveZoneLayer`). There is no counter type for entities: a state that gives IDs holds the last number it gave, as a plain field, which is written in its checkpoint and worked into its hash.
+The orchestrator of the cluster gives the `StateID` of an engine that has none given (`Orchestrator.NextStateID`, [engines](engine_lifecycle.md)): it counts the numbers of each type up from 1, and stores the highest in a file of its own, so when the cluster starts again it counts from above it. The world knows the zones and the zonelayers by the IDs that the cluster gave, which it takes from the answer of the cluster (`State.HandleDirective`, `AddZone`, `AddZoneLayer`, `RemoveZoneLayer`). There is no counter type for entities: a state that gives IDs holds the last number it gave, as a plain field, which is written in its checkpoint and worked into its hash.
 
 | State | Field | What it gives |
 |---|---|---|

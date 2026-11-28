@@ -7,6 +7,18 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 )
 
+// The IDs of the events.
+const (
+	CharacterEnteredID ID = iota + 1
+	CharacterLeftID
+	ChatMessageSentID
+	EntityDiedID
+	EntityHealthChangedID
+	EntityMovedID
+	ItemAppearedID
+	ItemDisappearedID
+)
+
 // ID names a kind of event of a zonelayer, so that a client or an encoder can tell the kinds apart
 // by number. The numbers count up from 1 and 0 is no event. Each event type returns its own, with a
 // method ID() in its file.
@@ -25,15 +37,3 @@ type Event interface {
 	ID() ID
 	Audience() state.Audience
 }
-
-// The IDs of the events.
-const (
-	CharacterEnteredID ID = iota + 1
-	CharacterLeftID
-	ChatMessageSentID
-	EntityDiedID
-	EntityHealthChangedID
-	EntityMovedID
-	ItemAppearedID
-	ItemDisappearedID
-)

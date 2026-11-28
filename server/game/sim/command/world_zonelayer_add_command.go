@@ -15,6 +15,16 @@ type WorldZoneLayerAddCommand struct {
 	RegenEvery uint64
 }
 
+// decodeWorldZoneLayerAddCommand reads what Encode wrote.
+func decodeWorldZoneLayerAddCommand(
+	r *binary.Reader, version codec.Version,
+) (WorldZoneLayerAddCommand, error) {
+	c := WorldZoneLayerAddCommand{
+		ZoneID: r.Uint[sim.StateID](), Capacity: r.Int[int32](), RegenEvery: r.Uvarint(),
+	}
+	return c, r.Err()
+}
+
 func (WorldZoneLayerAddCommand) ID() sim.CommandID { return WorldZoneLayerAddCommandID }
 
 // Clone returns the command itself: it holds only values.
@@ -34,14 +44,4 @@ func (c WorldZoneLayerAddCommand) Encode(w *binary.Writer) error {
 	w.Varint(int64(c.Capacity))
 	w.Uvarint(c.RegenEvery)
 	return nil
-}
-
-// decodeWorldZoneLayerAddCommand reads what Encode wrote.
-func decodeWorldZoneLayerAddCommand(
-	r *binary.Reader, version codec.Version,
-) (WorldZoneLayerAddCommand, error) {
-	c := WorldZoneLayerAddCommand{
-		ZoneID: r.Uint[sim.StateID](), Capacity: r.Int[int32](), RegenEvery: r.Uvarint(),
-	}
-	return c, r.Err()
 }

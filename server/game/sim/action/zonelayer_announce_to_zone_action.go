@@ -15,16 +15,26 @@ type ZoneLayerAnnounceToZoneAction struct {
 	Capacity int32
 }
 
+// decodeZoneLayerAnnounceToZoneAction reads what Encode wrote.
+func decodeZoneLayerAnnounceToZoneAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerAnnounceToZoneAction, error) {
+	a := ZoneLayerAnnounceToZoneAction{Capacity: r.Int[int32]()}
+	return a, r.Err()
+}
+
 func (a ZoneLayerAnnounceToZoneAction) ID() sim.ActionID { return ZoneLayerAnnounceToZoneActionID }
-func (a ZoneLayerAnnounceToZoneAction) Priority() int16  { return PriorityResolve }
-func (a ZoneLayerAnnounceToZoneAction) Actor() any       { return nil }
+
+func (a ZoneLayerAnnounceToZoneAction) Priority() int16 { return PriorityResolve }
+
+func (a ZoneLayerAnnounceToZoneAction) Actor() any { return nil }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerAnnounceToZoneAction) Clone() sim.Action[*zonelayerstate.State] { return a }
 
 // Apply gives the zone the zonelayer.
 func (a ZoneLayerAnnounceToZoneAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	r.Send(
@@ -35,11 +45,3 @@ func (a ZoneLayerAnnounceToZoneAction) Apply(
 
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a ZoneLayerAnnounceToZoneAction) Encode(w *binary.Writer) { w.Varint(int64(a.Capacity)) }
-
-// decodeZoneLayerAnnounceToZoneAction reads what Encode wrote.
-func decodeZoneLayerAnnounceToZoneAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerAnnounceToZoneAction, error) {
-	a := ZoneLayerAnnounceToZoneAction{Capacity: r.Int[int32]()}
-	return a, r.Err()
-}

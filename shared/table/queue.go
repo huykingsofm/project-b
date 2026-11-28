@@ -7,16 +7,16 @@ import (
 	"sort"
 )
 
+// Prioritier is what an element of a PriorityQueue says of itself: its priority, the smaller the
+// sooner. It is read once, when the element is added, and the element must not change its answer
+// after that: the queue does not see it.
+type Prioritier[P cmp.Ordered] interface{ Priority() P }
+
 // slot is where an element stands in the order of a queue.
 type slot[P cmp.Ordered] struct {
 	key int64
 	p   P
 }
-
-// Prioritier is what an element of a PriorityQueue says of itself: its priority, the smaller the
-// sooner. It is read once, when the element is added, and the element must not change its answer
-// after that: the queue does not see it.
-type Prioritier[P cmp.Ordered] interface{ Priority() P }
 
 // PriorityQueue is a list of elements that are taken one by one, the one with the smallest priority
 // first, and the ones of the same priority in the order they came. It remembers every element it
@@ -59,14 +59,6 @@ func (q *PriorityQueue[V, P]) Reset() {
 	q.cols.reset()
 	clear(q.order)
 	q.order, q.next = q.order[:0], 0
-}
-
-// add stores an element and gives it its key, and does not put it in the order.
-func (q *PriorityQueue[V, P]) add(v V) slot[P] {
-	key := int64(len(q.vals))
-	q.vals = append(q.vals, v)
-	q.cols.add(key, v)
-	return slot[P]{key: key, p: v.Priority()}
 }
 
 // Add puts an element in the queue, in its place among the elements still to be taken, and returns
@@ -137,16 +129,6 @@ func (q *PriorityQueue[V, P]) Index2[A, B comparable](keyOf func(V) (A, B, bool)
 	return q.cols.declare2(keyOf, q.All())
 }
 
-// each gives the elements of the keys. It is a function of its own, not a closure, so that a
-// Lookup is small enough to be put where it is walked and makes no allocation.
-func (q *PriorityQueue[V, P]) each(keys []int64, yield func(int64, V) bool) {
-	for _, k := range keys {
-		if !yield(k, q.vals[k]) {
-			return
-		}
-	}
-}
-
 // Lookup walks the elements whose column of the key type IK has the key, taken or not, in the
 // stable order of the column (the order they were added in, since the queue never takes one out of
 // its columns before Reset).
@@ -179,4 +161,22 @@ func (q *PriorityQueue[V, P]) Lookup2First[A comparable](a A) iter.Seq2[int64, V
 // not one.
 func (q *PriorityQueue[V, P]) Lookup2FirstAs[A comparable, T any](a A) iter.Seq2[int64, T] {
 	return as[int64, V, T](q.Lookup2First(a))
+}
+
+// add stores an element and gives it its key, and does not put it in the order.
+func (q *PriorityQueue[V, P]) add(v V) slot[P] {
+	key := int64(len(q.vals))
+	q.vals = append(q.vals, v)
+	q.cols.add(key, v)
+	return slot[P]{key: key, p: v.Priority()}
+}
+
+// each gives the elements of the keys. It is a function of its own, not a closure, so that a
+// Lookup is small enough to be put where it is walked and makes no allocation.
+func (q *PriorityQueue[V, P]) each(keys []int64, yield func(int64, V) bool) {
+	for _, k := range keys {
+		if !yield(k, q.vals[k]) {
+			return
+		}
+	}
 }

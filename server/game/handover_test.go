@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/engine/stepping"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
@@ -18,7 +19,7 @@ import (
 // log writes on after the cut. closeLog closes that log, so that the files can be recovered again.
 func handedOver(
 	t *testing.T, dir string,
-) (result *replay.Result, live *engine.Cluster, closeLog func()) {
+) (result *replay.Result, live *cluster.Cluster, closeLog func()) {
 	t.Helper()
 	result = recoverTheWorld(t, dir, everySeventhTick)
 	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{

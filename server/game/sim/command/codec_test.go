@@ -302,10 +302,13 @@ func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *tes
 			"the commands declared are\n%v\nand the ones in examples are\n%v", declared, listed,
 		)
 	}
-	// the command of the configuration engine is in every codecs and is not one of the game
+	// the command of the coordinator engine is in every codecs and is not one of the game
 	decoders := len(slices.DeleteFunc(
 		slices.Clone(codecs.Commands.Numbers()),
-		func(id sim.CommandID) bool { return id == sim.UpdateConfigCommandID },
+		func(id sim.CommandID) bool {
+			return id == sim.UpdateConfigCommandID || id == sim.CreateEngineCommandID ||
+				id == sim.RetireEngineCommandID
+		},
 	))
 	if n := registerSize(t); n != decoders || n != len(declared) {
 		t.Fatalf(
@@ -329,7 +332,7 @@ func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
 }
 
 // Commands come from outside, with the goroutine that sends one still holding what it sent, so what
-// a command holds is a value or has Clone, and the state that takes it copies it (R29).
+// a command holds is a value or has Clone, and the state that takes it copies it (R13).
 func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 	rules := aliasing.Rules{Boundary: true}
 	for _, c := range examples {

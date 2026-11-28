@@ -21,11 +21,26 @@ type ZoneLayerCharacterShieldGrantAction struct {
 	until   uint64
 }
 
+// decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
+func decodeZoneLayerCharacterShieldGrantAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterShieldGrantAction, error) {
+	a := ZoneLayerCharacterShieldGrantAction{
+		CharacterID: r.Uint[state.CharacterID](),
+		Duration:    r.Uvarint(),
+		started:     r.Bool(),
+		until:       r.Uvarint(),
+	}
+	return a, r.Err()
+}
+
 func (a ZoneLayerCharacterShieldGrantAction) ID() sim.ActionID {
 	return ZoneLayerCharacterShieldGrantActionID
 }
+
 func (a ZoneLayerCharacterShieldGrantAction) Priority() int16 { return PriorityModifier }
-func (a ZoneLayerCharacterShieldGrantAction) Actor() any      { return a.CharacterID }
+
+func (a ZoneLayerCharacterShieldGrantAction) Actor() any { return a.CharacterID }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerCharacterShieldGrantAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -34,7 +49,7 @@ func (a ZoneLayerCharacterShieldGrantAction) Clone() sim.Action[*zonelayerstate.
 
 // Apply blocks the first damage that is aimed at the character, or stands again next tick.
 func (a ZoneLayerCharacterShieldGrantAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	p *sim.Plan[*zonelayerstate.State],
 ) {
 	if !a.started {
@@ -63,17 +78,4 @@ func (a ZoneLayerCharacterShieldGrantAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.Duration)
 	w.Bool(a.started)
 	w.Uvarint(a.until)
-}
-
-// decodeZoneLayerCharacterShieldGrantAction reads what Encode wrote.
-func decodeZoneLayerCharacterShieldGrantAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterShieldGrantAction, error) {
-	a := ZoneLayerCharacterShieldGrantAction{
-		CharacterID: r.Uint[state.CharacterID](),
-		Duration:    r.Uvarint(),
-		started:     r.Bool(),
-		until:       r.Uvarint(),
-	}
-	return a, r.Err()
 }

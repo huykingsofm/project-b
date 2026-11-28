@@ -15,6 +15,16 @@ import (
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
+// chatKeep is how many private messages the world keeps.
+const chatKeep = 1000
+
+// The tags that the world gives its requests for engines, which the cluster gives back with the
+// answer: what the engine that was made is.
+const (
+	TagZone      byte = iota + 1 // the engine is a zone of the world
+	TagZoneLayer                 // the engine is a zonelayer of a zone of the world
+)
+
 // PrivateChatMessage is something a player sent privately to another player. A private message is
 // between players, not between characters: a character is not always played by a player.
 type PrivateChatMessage struct {
@@ -34,39 +44,6 @@ func NewPrivateChatMessage(
 	}
 }
 
-// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
-// is empty.
-type InventorySlot struct {
-	itemID state.ItemID
-	count  uint32
-}
-
-// ItemID is the kind of item that the slot holds.
-func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
-
-// Count is how many items the slot holds; 0 is an empty slot.
-func (i InventorySlot) Count() uint32 { return i.count }
-
-// Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R29).
-type Inventory struct {
-	slots []InventorySlot
-}
-
-// Clone returns a copy that shares nothing with the inventory.
-func (i Inventory) Clone() Inventory {
-	return Inventory{slots: slices.Clone(i.slots)}
-}
-
-// chatKeep is how many private messages the world keeps.
-const chatKeep = 1000
-
-// The tags that the world gives its requests for engines, which the cluster gives back with the
-// answer: what the engine that was made is.
-const (
-	TagZone      byte = iota + 1 // the engine is a zone of the world
-	TagZoneLayer                 // the engine is a zonelayer of a zone of the world
-)
-
 // State is the state of the world.
 type State struct {
 	// Data.
@@ -78,7 +55,7 @@ type State struct {
 	privateChat ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
-	// (R28).
+	// (R12).
 	inventories stablemap.Map[state.CharacterID, Inventory]
 
 	// Events: not data, never cloned.
@@ -90,19 +67,8 @@ func NewState() *State {
 	return &State{privateChat: ring.New[PrivateChatMessage](chatKeep)}
 }
 
-// clone returns a copy of the data, with an empty event.
-func (s *State) clone() *State {
-	return &State{
-		tick:        s.tick,
-		zones:       slices.Clone(s.zones),
-		zoneLayers:  slices.Clone(s.zoneLayers),
-		privateChat: s.privateChat.Clone(),
-		inventories: s.inventories.CloneFunc(Inventory.Clone),
-	}
-}
-
-// NextTick takes the state to the next tick.
-func (s *State) NextTick() { s.tick++ }
+// AdvanceTick takes the state to the next tick.
+func (s *State) AdvanceTick() { s.tick++ }
 
 // Type is the type of the state of a world.
 func (s *State) Type() sim.StateType { return state.WorldType }
@@ -214,7 +180,7 @@ func (s *State) InventorySlots(characterID state.CharacterID) []InventorySlot {
 
 // Encode writes the data of the state: its tick, the zones and zonelayers it knows, the IDs
 // it gives the states it makes, the private messages, and the inventory of every character. The
-// events are not data (R18) and are not written.
+// events are not data (R9) and are not written.
 func (s *State) Encode(w *binary.Writer) error {
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(len(s.zones)))
@@ -268,9 +234,9 @@ func (s *State) Hash() uint64 {
 
 // HandleDirective takes the answer of the cluster to a request of the world for an engine: the
 // zone or the zonelayer that was made is listed by the world, which is the one that knows which
-// zones and zonelayers there are (R28). An engine that could not be made is not listed.
+// zones and zonelayers there are (R12). An engine that could not be made is not listed.
 func (s *State) HandleDirective(
-	_ *sim.Context, _ *sim.Registry[*State], d sim.DirectiveResponse,
+	_ *sim.Context, _ *sim.ActionRegistry[*State], d sim.DirectiveResponse,
 ) {
 	if d.Kind != sim.DirectiveCreateEngine || len(d.Tag) == 0 {
 		return
@@ -287,17 +253,51 @@ func (s *State) HandleDirective(
 	}
 }
 
-// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
-// copy that another engine published, which it must never change (R26, R28).
-type ReadOnlyWorldState interface {
-	Hash() uint64
-	ZoneIDs() []sim.StateID
-	ZoneLayerIDs() []sim.StateID
+// clone returns a copy of the data, with an empty event.
+func (s *State) clone() *State {
+	return &State{
+		tick:        s.tick,
+		zones:       slices.Clone(s.zones),
+		zoneLayers:  slices.Clone(s.zoneLayers),
+		privateChat: s.privateChat.Clone(),
+		inventories: s.inventories.CloneFunc(Inventory.Clone),
+	}
 }
 
 var _ ReadOnlyWorldState = (*State)(nil)
 
 var _ sim.DirectiveHandler[*State] = (*State)(nil)
+
+// Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R13).
+type Inventory struct {
+	slots []InventorySlot
+}
+
+// Clone returns a copy that shares nothing with the inventory.
+func (i Inventory) Clone() Inventory {
+	return Inventory{slots: slices.Clone(i.slots)}
+}
+
+// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
+// is empty.
+type InventorySlot struct {
+	itemID state.ItemID
+	count  uint32
+}
+
+// ItemID is the kind of item that the slot holds.
+func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
+
+// Count is how many items the slot holds; 0 is an empty slot.
+func (i InventorySlot) Count() uint32 { return i.count }
+
+// ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
+// copy that another engine published, which it must never change (R5, R12).
+type ReadOnlyWorldState interface {
+	Hash() uint64
+	ZoneIDs() []sim.StateID
+	ZoneLayerIDs() []sim.StateID
+}
 
 // topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
 // stackLimit in each, and returns how many are left.

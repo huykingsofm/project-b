@@ -26,7 +26,7 @@ func aStateWithEverything(t testing.TB) *zonelayer.State {
 	st.DamageEntity(body.ID(), 30)
 	st.SendMessage(zonelayer.NewChatMessage(1, "xin chào", 4))
 	for range 12 {
-		st.NextTick()
+		st.AdvanceTick()
 	}
 	return st
 }

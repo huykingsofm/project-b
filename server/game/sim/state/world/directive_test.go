@@ -29,7 +29,7 @@ func TestTheWorldListsTheZoneAndTheZoneLayerThatTheClusterAnswersWithAndNoOther(
 	// an engine that was not made is not listed, and nor is the answer to something else
 	answer(world.TagZone, sim.NewStateID(state.ZoneType, 4), "full")
 	st.HandleDirective(nil, nil, sim.DirectiveResponse{
-		Kind: sim.DirectiveRemoveEngine, Tag: []byte{world.TagZone}, Engine: layer,
+		Kind: sim.DirectiveRetireEngine, Tag: []byte{world.TagZone}, Engine: layer,
 	})
 	st.HandleDirective(nil, nil, sim.DirectiveResponse{Kind: sim.DirectiveCreateEngine})
 	if len(st.ZoneIDs()) != 1 || len(st.ZoneLayerIDs()) != 1 {

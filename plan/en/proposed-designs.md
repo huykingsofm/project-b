@@ -19,7 +19,7 @@ Both are only ideas so far, with no code.
 
 ## Entities
 
-An entity is an interface with `ID()`, `KindID()`, `Position()`, `Radius()` and `BoundingBox()`. Collision and pickup distance use the radius; `BoundingBox()` is derived from the position and the radius so that the grid knows which cells an entity is in. Every kind is a value type (R29), and every kind has its own table in the zonelayer state, keyed by `EntityID`, with its own events.
+An entity is an interface with `ID()`, `KindID()`, `Position()`, `Radius()` and `BoundingBox()`. Collision and pickup distance use the radius; `BoundingBox()` is derived from the position and the radius so that the grid knows which cells an entity is in. Every kind is a value type (R13), and every kind has its own table in the zonelayer state, keyed by `EntityID`, with its own events.
 
 | Kind | Example data | Phase |
 |---|---|---|
@@ -31,9 +31,9 @@ An entity is an interface with `ID()`, `KindID()`, `Position()`, `Radius()` and 
 | Trap | owner, trigger radius, effect ID, ready tick, uses left, who can see it | 3 |
 | Projectile | owner, direction and speed, damage, range left or expiry tick | 3 |
 
-The first two kinds are built in phase 0; the others are added when needed, and each is pending approval. An action says which kinds it applies to through the general mechanism (R7), with no special case for each action.
+The first two kinds are built in phase 0; the others are added when needed, and each is pending approval. An action says which kinds it applies to through the general mechanism (R0), with no special case for each action.
 
-An item has an ID of its own and exactly one owner (an entity on the ground, an inventory or a corpse). Inventories belong to the world, combat stats to the zonelayer (R28). Picking up: the zonelayer removes the item first and then sends a message to the world; if the message is lost, the item is lost but never duplicated, and the log can restore it.
+An item has an ID of its own and exactly one owner (an entity on the ground, an inventory or a corpse). Inventories belong to the world, combat stats to the zonelayer (R12). Picking up: the zonelayer removes the item first and then sends a message to the world; if the message is lost, the item is lost but never duplicated, and the log can restore it.
 
 ## Event log and checkpoint
 
@@ -83,14 +83,14 @@ The log:
 The checkpoint:
 
 - **One file for each engine, at the tick of its own offset** (the hash of its ID, as the hash of the log has), so the engines do not write at the same time. What is written, in a file: the tick; the state data, by the codec of its scope; the scheduler (the actions set for each tick, in order); the self list; the state of the random generator; the sequence number of its messages and the last number it took from each sender; the version of the configuration read. Not the map of a zone (its ID finds it). What an engine does again and again is an action that sets itself again, so it is in the scheduler and nothing else is written for it.
-- **Taken at the end of the tick, written outside the goroutine.** At its checkpoint tick the engine makes an `EngineCheckpoint`: the clone it publishes as the state, and a clone of what is outside the state (the scheduler with each action, the random numbers, what its peer knows with each unsettled message), so it shares nothing with the engine; it hands its `Encode` to one writer goroutine for the cluster; the write is a temporary file, a sync and a rename. A writer whose queue is full drops the checkpoint and logs it. The log of the engine has the hash at the checkpoint tick, and no marker.
+- **Taken at the end of the tick, written outside the goroutine.** At its checkpoint tick the engine makes a `Checkpoint`: the clone it publishes as the state, and a clone of what is outside the state (the scheduler with each action, the random numbers, what its peer knows with each unsettled message), so it shares nothing with the engine; it hands its `Encode` to one writer goroutine for the cluster; the write is a temporary file, a sync and a rename. A writer whose queue is full drops the checkpoint and logs it. The log of the engine has the hash at the checkpoint tick, and no marker.
 - **Staggered ticks are not a consistent cut,** so the replay chooses where each engine starts: the start tick of an engine is its latest snapshot not later than the smallest copy of it that another engine reads after that engine's own start, and the choice is repeated until it stops changing. It ends, at worst at tick 0. A start that goes far back is accepted: exactness comes before the time a replay takes, and how far each start went is a metric. A message in flight at the cut does not matter: its receiver has it in its log, with its actions.
 - **Nothing is deleted.** Segments and snapshots stay where they are; storage and archive are a separate job, planned later.
 - **Loading is the replay:** after a stop, the cluster starts as the replay runner does, plays every log to its end in dependency order, and goes live with each engine at its own tick.
 
 Codecs and the hash:
 
-- Every action gets `Encode(w)` and a decode function found by its ID in a table (R8); a test fails when an action of the register has none. The states of the three scopes get an `Encode` and a `Decode`, and each kind of entity is found by its `KindID` in a table.
+- Every action gets `Encode(w)` and a decode function found by its ID in a table (R0); a test fails when an action of the register has none. The states of the three scopes get an `Encode` and a `Decode`, and each kind of entity is found by its `KindID` in a table.
 - The hash covers the scheduler, by hashing the encoding of its actions.
 - `Inbound` carries the actions, and the checkpoint carries the messages the bouncer holds.
 - **`OnFail` is data, not a function: an interface, and each kind is a type of its own, in package `platform/sim/onfail`.** A kind holds what it needs (`onfail.Compensate{With}` the message that undoes what the first one set going, with its own `OnFail`; `onfail.Redirect{To}` an address), runs itself on the engine that sent the message through an interface that package `platform/sim` defines (`sim.Bouncer`), and writes itself (`Encode`); its decoder is found by its ID in a table. A new kind is a new type and a new ID. The vocabulary that the kinds and the actions share (`Header`, `Reason`, `Message`, `OnFail`, `Bouncer`) is in `platform/sim`, which the kinds import, so that the actions can build kinds and the kinds can name messages. The chain of compensations ends at a kind that holds no message (`Drop`, `Retry`). A message is written whole by one codec (the type of state, the destination, the actions, the `OnFail`), used for `Inbound`, for the checkpoint and for the message that compensates. Nothing a message does on failure depends on the `Reason` today; a kind that must can read it, since `Handle` is given it.
@@ -131,7 +131,7 @@ Costs and risks:
 
 - The runner is one goroutine that plays the engines in turn: replay costs about what the cluster costs live on one core, which is the machine the server targets. Running it in parallel as live does, one goroutine for each engine that waits for what it depends on, is a task of the plan.
 - The log is bigger by the bodies of the messages; the benchmark of the event log records it.
-- An engine added at run time needs the control stream; its shape is fixed now (R22) and the feature comes with the zonelayers that are added and removed.
+- An engine added at run time needs the control stream; its shape is fixed now (R4) and the feature comes with the zonelayers that are added and removed.
 
 The order of the work, one commit for each step, all in one pull request, each step with its tests:
 
@@ -140,6 +140,65 @@ The order of the work, one commit for each step, all in one pull request, each s
 3. Codecs of the states, and the checkpoint of one engine: written, read, and the restored engine has the same hash, with actions waiting in the scheduler.
 4. Periodic writing with offsets, each engine on its own.
 5. Loading from the checkpoints of the engines with the start rule, the recovery line, and sending again what was in flight; going live by making each engine again in the real environment from a checkpoint of the replayed engine; the acceptance test of the phase.
+
+## Making and ending engines
+
+Agreed (phase 1) and built; see [engines](../../docs/engine_lifecycle.md). It replaced the way an engine handed its requests to its cluster inside its own tick.
+
+- **No engine comes from nothing.** Every engine is made by a request of another engine, except the coordinator engine (the engine that holds the configuration), which the cluster makes. The coordinator engine also takes a command that asks the cluster to make or to end an engine: the way for an admin to start the engines of the game. `Cluster.CreateEngine` goes away.
+- **A request is complete only when the engine that asked has taken the response.** The cluster remembers nothing of what it served: a request that is handed over again is one that was not completed, so no engine exists for it.
+- **The requests and the responses go through a directive router**, a part of the cluster of its own, beside the message router: a list of requests and a list of responses for each engine, behind one mutex. Each side defines its own small interface (R1). An engine publishes its requests, takes its responses at the start of its tick and publishes an acknowledgement; the cluster takes the requests and the acknowledgements, and publishes the responses. Nothing is dropped because a queue is full. When an engine leaves the router, what waits for it is let go; the acknowledgements it published stay, since they say what it did.
+- **The cluster takes them in a periodic task** (`Cluster.RunPeriodicTasks`), which also holds what `sendConfigToCoordinatorEngine` does today (now private). `Cluster.Run` calls it on a ticker, and `stepping.Step` calls it before each step. A request waits at most one period; an engine sends nothing to an engine it does not know yet, and a message to one that does not exist yet comes back as "not started".
+- **A request carries the tick at which its engine made it.**
+
+### Making an engine
+
+A@100 is the tick 100 of the engine A that asks, B is the engine that is made.
+
+| Step | Who | What | Record and dependency |
+|---|---|---|---|
+| 1 | A | an action asks (`ActionRegistry.RequestCreateEngine`); at the end of the tick the engine numbers the request, keeps it in its own data (checkpoint and hash) and publishes it, with the tick | |
+| 2 | cluster | gives the ID, makes B from the state and the actions it starts with, and runs the tick 1 of B itself, as a normal tick, with B outside the message router and on no goroutine | `Init` at B@1: the state as it was made, the creator, its tick and the number of the request; depends on A@100. The start actions are for the tick 2 and later |
+| 3 | cluster | publishes the response: the ID of B, or the failure | |
+| 4 | A | takes the response at the start of its tick, 103 | `Directive` at A@103; depends on B@1 |
+| 5 | A | at the end of the tick, after its copy is published, publishes the acknowledgement: the number of the request and the tick 103 | |
+| 6 | cluster | takes the acknowledgement, puts B in the message router and runs it | `Started` at B@2: the creator and the tick 103; depends on A@103. B then runs as every engine does |
+
+- **No cycle:** B@1 depends on A@100, A@103 on B@1, and B@2 on A@103. Every edge is a tick of an engine, so what is safe is worked out as it is for the other records (`dependencyList.Safe`), and the cache of the recovery line keeps its meaning.
+- **Until the response is taken, B is not seen:** the router does not know it and no goroutine runs it. Its ID is in the response only, so no engine can read it before. There is no gate in the stable store.
+- **If the engine that asked ends before it takes the response,** the cluster drops B: its log holds `Init` and nothing else.
+- **If it takes the response and then ends,** B runs: the acknowledgement it published stays in the router when it leaves.
+- **A request that fails** (a state type that is not registered, a start action of another state, a state that cannot be written) makes no engine and answers with the failure.
+
+### Ending an engine
+
+| Step | Who | What | Record and dependency |
+|---|---|---|---|
+| 1 | A | an action asks (`ActionRegistry.RequestRetireEngine`), as above | |
+| 2 | cluster | asks B to retire, and waits until B is closed | |
+| 3 | B | retires between two of its ticks | `Retired` with the engine that asked and its tick; depends on that tick. It is empty when the engine asked for itself |
+| 4 | cluster | publishes the response: B ended, with the tick of its `Retired`; false when B was not there | |
+| 5 | A | takes the response | `Directive` depends on `Retired` of B |
+
+- **An engine that asks for itself to end gets no response:** it is gone. If its frame of `Retired` is lost, its request waits in its data and is handed over again.
+- **The coordinator engine is never ended.**
+- **What other engines read of B stays** until B is closed and removed from the store.
+
+### Recovery
+
+- **An engine whose log holds `Init` and nothing after it** (it never ran): at the handover it is kept and run when the log of A, as it is kept, holds the response (A took it), also when A retired after, and dropped, with its log in the archive, when the request still waits in A (it is handed over again at the first tick of A and made again with a new ID) or when the log of A holds no response (A was gone before it took one).
+- **An engine whose `Started` was lost:** the ticks that depend on what it did are cut, and the cluster runs it on from `Init`.
+- **A response whose `Init` was lost** is cut with the tick of A that took it, so the request waits and is handed over again.
+- **Nothing is checked against a table of what was served.** `served`, `DirectiveKey`, `RestoreServed` and the periodic hand-over of the requests are not needed.
+
+### IDs
+
+- **The orchestrator holds the state of the IDs: the highest ID given for each type of state.** It is an object of the cluster (not an engine, and not the coordinator engine), made for the coordination of the cluster, of which the IDs are the first part. It stores the state in a file of its own in the directory of the logs, so a recovery does not read the logs from the start to find it, and it provides the IDs to the cluster. Only the cluster calls it, from the periodic task and one goroutine at a time, so it takes no lock. An engine whose ID is above what it holds is not valid and counts as not made. The numbers between are never given again, whether an engine had them or not.
+- **When the file is lost or damaged, the recovery stops with an error.** A way to rebuild it is for later.
+
+## The store: in memory first
+
+For the storage phase, pending approval. A repository that is read often has an in-memory layer, an adapter that implements the same port as the database one, and that layer is the source of truth: it is loaded when the process starts and the database is written afterwards, by a bounded queue that keeps the order of the writes and is written out at shutdown. A write that depends on the database (a unique name, a foreign key) stays synchronous. The pattern assumes that one process writes a row; a process split brings an owner fence.
 
 ## List of ideas
 
@@ -159,5 +218,6 @@ The order of the work, one commit for each step, all in one pull request, each s
 | Load tool | Bots that log in, walk and chat; load measurement scenarios | 8 | pending approval |
 | Tiled map reading | Load the map, spawn points, destinations and exits from a file | 3 | pending approval |
 | Zonelayer on demand, layer change | A zone creates a layer only when someone arrives; move people between layers | 1 | pending approval |
+| Engines made and ended by requests | An engine asks for another to be made or ended through the directive router; the cluster makes it in two steps (`Init`, then `Started` when the engine that asked took the response); no engine is made from nothing | 1 | agreed |
 | Write-behind queue | Writing to the store does not block a tick | 6 | pending approval |
 | Character names | Unicode normalization, allowed alphabet, duplicate check, banned words | 6 | pending approval |

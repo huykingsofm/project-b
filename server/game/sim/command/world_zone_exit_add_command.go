@@ -18,6 +18,18 @@ type WorldZoneExitAddCommand struct {
 	Arrival    state.Vec
 }
 
+// decodeWorldZoneExitAddCommand reads what Encode wrote.
+func decodeWorldZoneExitAddCommand(
+	r *binary.Reader, version codec.Version,
+) (WorldZoneExitAddCommand, error) {
+	c := WorldZoneExitAddCommand{FromZoneID: r.Uint[sim.StateID]()}
+	c.Area.Min = state.DecodeVec(r, version)
+	c.Area.Max = state.DecodeVec(r, version)
+	c.ToZoneID = r.Uint[sim.StateID]()
+	c.Arrival = state.DecodeVec(r, version)
+	return c, r.Err()
+}
+
 func (WorldZoneExitAddCommand) ID() sim.CommandID { return WorldZoneExitAddCommandID }
 
 // Clone returns the command itself: it holds only values.
@@ -35,16 +47,4 @@ func (c WorldZoneExitAddCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.ToZoneID))
 	c.Arrival.Encode(w)
 	return nil
-}
-
-// decodeWorldZoneExitAddCommand reads what Encode wrote.
-func decodeWorldZoneExitAddCommand(
-	r *binary.Reader, version codec.Version,
-) (WorldZoneExitAddCommand, error) {
-	c := WorldZoneExitAddCommand{FromZoneID: r.Uint[sim.StateID]()}
-	c.Area.Min = state.DecodeVec(r, version)
-	c.Area.Max = state.DecodeVec(r, version)
-	c.ToZoneID = r.Uint[sim.StateID]()
-	c.Arrival = state.DecodeVec(r, version)
-	return c, r.Err()
 }

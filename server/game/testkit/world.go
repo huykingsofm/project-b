@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/engine/stepping"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
@@ -32,28 +33,6 @@ var (
 // EastExit is the ID of the exit on the east edge of Zone1, the first entity that the zone holds.
 const EastExit state.EntityID = 1
 
-// Cluster is the cluster of the test world: the engines of the platform and the ones of the game
-// that a test reaches for by their IDs.
-type Cluster struct {
-	*engine.Cluster
-	World *engine.Engine[*worldstate.State]
-}
-
-// Zone returns the engine of a zone, or nil.
-func (c *Cluster) Zone(zoneID sim.StateID) *engine.Engine[*zonestate.State] {
-	e, _ := c.Get[*zonestate.State](zoneID)
-	return e
-}
-
-// ZoneLayer returns the engine of a zonelayer, or nil.
-func (c *Cluster) ZoneLayer(zoneLayerID sim.StateID) *engine.Engine[*zonelayerstate.State] {
-	e, _ := c.Get[*zonelayerstate.State](zoneLayerID)
-	return e
-}
-
-// Step runs one tick of every engine, one after the other (see stepping.Step).
-func (c *Cluster) Step() error { return stepping.Step(c.Cluster) }
-
 // Options are what the cluster of the test world is made with, and what a replay of it needs: the
 // seed, the queues of 256, and the codecs and the registry of the game with the fixtures of the
 // tests. The event log, the emitter and the writer of checkpoints are the caller's to add.
@@ -69,25 +48,64 @@ func Options(t testing.TB, seed uint64) engine.Options {
 	return engine.Options{Seed: seed, QueueSize: 256, Codecs: codecs, Engines: engines}
 }
 
-// LayerSpec says how many characters a zonelayer holds and how often it heals them.
-type LayerSpec struct {
-	Capacity   int32
-	RegenEvery uint64
+// Steps runs n ticks of every engine of the cluster, and fails the test when one fails.
+func Steps(t testing.TB, c *Cluster, n int) {
+	t.Helper()
+	for range n {
+		if err := c.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
-// ExitSpec says an exit of a zone: the area (in units) that leads to the zone To, where a character
-// comes out at Arrival.
-type ExitSpec struct {
-	Area    state.Rect
-	To      sim.StateID
-	Arrival state.Vec
+func Enter(
+	t *testing.T,
+	c *Cluster,
+	zoneID sim.StateID,
+	characterID state.CharacterID,
+	name string,
+) {
+	t.Helper()
+	EnterCharacter(t, c, zoneID, NewCharacter(characterID, name, 100, 1000, 0))
 }
 
-// ZoneSpec says the map of a zone, its zonelayers and its exits.
-type ZoneSpec struct {
-	Tiles  *tilemap.TileMap
-	Layers []LayerSpec
-	Exits  []ExitSpec
+// EnterCharacter puts a character, as it is, in the world through a zone.
+func EnterCharacter(
+	t *testing.T, c *Cluster, zoneID sim.StateID, character zonelayerstate.Character,
+) {
+	t.Helper()
+	if !c.Zone(zoneID).SendCommand(command.ZoneCharacterEnterCommand{Character: character}) {
+		t.Fatal("zone queue full")
+	}
+	Steps(t, c, 4)
+}
+
+// WalkToTheEastExit enters a character in Zone1 and walks it to the exit.
+func WalkToTheEastExit(t *testing.T, c *Cluster, characterID state.CharacterID) {
+	t.Helper()
+	Enter(t, c, Zone1, characterID, "An")
+	c.ZoneLayer(Layer1).SendCommand(
+		command.ZoneLayerCharacterMoveCommand{CharacterID: characterID, Dir: state.East, Ticks: 8},
+	)
+	Steps(t, c, 12)
+}
+
+// NewCharacter is a character of the values of a test, which are never invalid.
+func NewCharacter(
+	characterID state.CharacterID, name string, maxHealth, speed, radius int32,
+) zonelayerstate.Character {
+	c, err := zonelayerstate.NewCharacter(characterID, name, maxHealth, speed, radius)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// Cluster is the cluster of the test world: the engines of the platform and the ones of the game
+// that a test reaches for by their IDs.
+type Cluster struct {
+	*cluster.Cluster
+	World *engine.Engine[*worldstate.State]
 }
 
 // Make makes a world in the environment of the options, with the zones given, by the commands of
@@ -103,18 +121,32 @@ func Make(
 	if store == nil {
 		store = config.NewStore()
 	}
-	cluster, err := engine.NewCluster(engine.NewEnvironment(o), store, nil)
+	orchestrator, err := cluster.NewOrchestrator(logDirectory(o), store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	worldID, err := cluster.CreateEngine(worldstate.NewState())
+	cluster, err := cluster.NewCluster(engine.NewEnvironment(o), orchestrator, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if worldID != World {
-		t.Fatalf("the world has the ID %v, want %v", worldID, World)
+	coordinator := cluster.CoordinatorEngine()
+	if !coordinator.SendCommand(sim.CreateEngineCommand{State: worldstate.NewState()}) {
+		t.Fatal("the queue of the coordinator engine is full")
 	}
-	world, _ := cluster.Get[*worldstate.State](worldID)
+	// the coordinator engine asks, the cluster makes the world, the coordinator engine takes the
+	// answer, and the world runs
+	var world *engine.Engine[*worldstate.State]
+	for range 10 {
+		if err := stepping.Step(cluster); err != nil {
+			t.Fatal(err)
+		}
+		if world, _ = cluster.FindOfType[*worldstate.State](World); world != nil {
+			break
+		}
+	}
+	if world == nil {
+		t.Fatalf("the world %v was not made", World)
+	}
 	c := &Cluster{Cluster: cluster, World: world}
 	var commands []sim.Command[*worldstate.State]
 	for _, z := range zones {
@@ -129,7 +161,7 @@ func Make(
 		}
 	}
 	for _, c := range commands {
-		if !world.Send(c) {
+		if !world.SendCommand(c) {
 			t.Fatal("the queue of the world is full")
 		}
 	}
@@ -140,7 +172,7 @@ func Make(
 	for i, z := range zones {
 		for _, e := range z.Exits {
 			from := sim.NewStateID(state.ZoneType, uint64(i+1))
-			if !world.Send(command.WorldZoneExitAddCommand{
+			if !world.SendCommand(command.WorldZoneExitAddCommand{
 				FromZoneID: from, Area: e.Area, ToZoneID: e.To, Arrival: e.Arrival,
 			}) {
 				t.Fatal("the queue of the world is full")
@@ -201,55 +233,47 @@ func NewWorld(
 	return NewCluster(t, o, regenEvery), rec, eventLog
 }
 
-// Steps runs n ticks of every engine of the cluster, and fails the test when one fails.
-func Steps(t testing.TB, c *Cluster, n int) {
-	t.Helper()
-	for range n {
-		if err := c.Step(); err != nil {
-			t.Fatal(err)
-		}
+// Zone returns the engine of a zone, or nil.
+func (c *Cluster) Zone(zoneID sim.StateID) *engine.Engine[*zonestate.State] {
+	e, _ := c.FindOfType[*zonestate.State](zoneID)
+	return e
+}
+
+// ZoneLayer returns the engine of a zonelayer, or nil.
+func (c *Cluster) ZoneLayer(zoneLayerID sim.StateID) *engine.Engine[*zonelayerstate.State] {
+	e, _ := c.FindOfType[*zonelayerstate.State](zoneLayerID)
+	return e
+}
+
+// Step runs one tick of every engine, one after the other (see stepping.Step).
+func (c *Cluster) Step() error { return stepping.Step(c.Cluster) }
+
+// LayerSpec says how many characters a zonelayer holds and how often it heals them.
+type LayerSpec struct {
+	Capacity   int32
+	RegenEvery uint64
+}
+
+// ExitSpec says an exit of a zone: the area (in units) that leads to the zone To, where a character
+// comes out at Arrival.
+type ExitSpec struct {
+	Area    state.Rect
+	To      sim.StateID
+	Arrival state.Vec
+}
+
+// ZoneSpec says the map of a zone, its zonelayers and its exits.
+type ZoneSpec struct {
+	Tiles  *tilemap.TileMap
+	Layers []LayerSpec
+	Exits  []ExitSpec
+}
+
+// logDirectory is the directory that the event log of the options writes to, and empty for a log
+// that does not write files: the orchestrator of the cluster stores its file there.
+func logDirectory(o engine.Options) string {
+	if directory, ok := o.EventLog.(interface{ Dir() string }); ok {
+		return directory.Dir()
 	}
-}
-
-func Enter(
-	t *testing.T,
-	c *Cluster,
-	zoneID sim.StateID,
-	characterID state.CharacterID,
-	name string,
-) {
-	t.Helper()
-	EnterCharacter(t, c, zoneID, NewCharacter(characterID, name, 100, 1000, 0))
-}
-
-// EnterCharacter puts a character, as it is, in the world through a zone.
-func EnterCharacter(
-	t *testing.T, c *Cluster, zoneID sim.StateID, character zonelayerstate.Character,
-) {
-	t.Helper()
-	if !c.Zone(zoneID).Send(command.ZoneCharacterEnterCommand{Character: character}) {
-		t.Fatal("zone queue full")
-	}
-	Steps(t, c, 4)
-}
-
-// WalkToTheEastExit enters a character in Zone1 and walks it to the exit.
-func WalkToTheEastExit(t *testing.T, c *Cluster, characterID state.CharacterID) {
-	t.Helper()
-	Enter(t, c, Zone1, characterID, "An")
-	c.ZoneLayer(Layer1).Send(
-		command.ZoneLayerCharacterMoveCommand{CharacterID: characterID, Dir: state.East, Ticks: 8},
-	)
-	Steps(t, c, 12)
-}
-
-// NewCharacter is a character of the values of a test, which are never invalid.
-func NewCharacter(
-	characterID state.CharacterID, name string, maxHealth, speed, radius int32,
-) zonelayerstate.Character {
-	c, err := zonelayerstate.NewCharacter(characterID, name, maxHealth, speed, radius)
-	if err != nil {
-		panic(err)
-	}
-	return c
+	return ""
 }

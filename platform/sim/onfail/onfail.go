@@ -21,6 +21,18 @@ const (
 	DropID
 )
 
+// Register registers the kinds of OnFail with the codecs, so that a message that holds one can be
+// read back.
+func Register(c *sim.Codecs) error {
+	return errs.Join(
+		c.RegisterOnFail(Retry{}, decodeRetry),
+		c.RegisterOnFail(Redirect{}, decodeRedirect),
+		c.RegisterOnFail(Compensate{}, decodeCompensate),
+		c.RegisterOnFail(Escalate{}, decodeEscalate),
+		c.RegisterOnFail(Drop{}, decodeDrop),
+	)
+}
+
 // resendable reports whether a message that is to be sent again may be: not while the engine stops,
 // and not once it has been tried the most that it may. When it may not, it is dropped.
 func resendable(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) bool {
@@ -38,16 +50,4 @@ func resendable(b sim.Bouncer, m sim.Message, r sim.DeliveryFailure) bool {
 		return false
 	}
 	return true
-}
-
-// Register registers the kinds of OnFail with the codecs, so that a message that holds one can be
-// read back.
-func Register(c *sim.Codecs) error {
-	return errs.Join(
-		c.RegisterOnFail(Retry{}, decodeRetry),
-		c.RegisterOnFail(Redirect{}, decodeRedirect),
-		c.RegisterOnFail(Compensate{}, decodeCompensate),
-		c.RegisterOnFail(Escalate{}, decodeEscalate),
-		c.RegisterOnFail(Drop{}, decodeDrop),
-	)
 }

@@ -3,8 +3,8 @@ package game_test
 import (
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
@@ -35,7 +35,7 @@ func TestAZonelayerThatTheWorldAskedForHealsAtThePeriodAskedAndOneAskedForNoHeal
 func TestAZonelayerMadeAgainFromItsStartHealsAtTheSamePeriod(t *testing.T) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 2)
-	started := mem.ByEngine()[testkit.Layer1][0].Body.(eventlog.Started)
+	started := mem.ByEngine()[testkit.Layer1][0].Body.(eventlog.Init)
 	made, err := c.Env.EngineRegistry.Restore(aFreshEnv(c), started.Snapshot)
 	if err != nil {
 		t.Fatal(err)

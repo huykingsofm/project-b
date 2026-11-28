@@ -21,7 +21,7 @@ func TestTheWorldAsksForAZoneOfItsOwnOnTheMapAndForAZoneLayerThatStartsByTelling
 	if err != nil {
 		t.Fatal(err)
 	}
-	var reg sim.Registry[*worldstate.State]
+	var reg sim.ActionRegistry[*worldstate.State]
 	ctx := &sim.Context{Self: worldEngineID, Tick: 3}
 	action.WorldZoneAddAction{Tiles: tiles}.Apply(ctx, worldstate.NewState(), &reg, nil)
 	action.WorldZoneLayerAddAction{ZoneID: 7, Capacity: 20, RegenEvery: 15}.Apply(
@@ -56,7 +56,7 @@ func TestTheWorldAsksForAZoneOfItsOwnOnTheMapAndForAZoneLayerThatStartsByTelling
 func TestAZoneLayerThatStartsTellsItsZoneWhoItIsAndTheZoneKnowsItFromThen(t *testing.T) {
 	layerID := sim.NewStateID(state.ZoneLayerType, 5)
 	layer := zonelayerstate.NewState(9, worldEngineID)
-	var reg sim.Registry[*zonelayerstate.State]
+	var reg sim.ActionRegistry[*zonelayerstate.State]
 	action.ZoneLayerAnnounceToZoneAction{Capacity: 6}.Apply(
 		&sim.Context{Self: layerID}, layer, &reg, nil,
 	)

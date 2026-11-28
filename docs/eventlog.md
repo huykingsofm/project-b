@@ -1,6 +1,6 @@
 # Event log in files
 
-`platform/eventlog/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `eventlog.Log` that writes to files, and the reader of those files; `MemLog` keeps records in memory and `MemoryLogs` holds them by engine, and both, like `FileLogs` (the files under a directory, one log for each engine), are read the way a replay reads logs (`Engines`, `Last`, `Open`). What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
+`platform/journal/eventlog/` (`log.go`, `record.go`, `mem.go`, `file.go`, `reader.go`). The `eventlog.Log` that writes to files, and the reader of those files; `MemLog` keeps records in memory and `MemoryLogs` holds them by engine, and both, like `FileLogs` (the files under a directory, one log for each engine), are read the way a replay reads logs (`Engines`, `Last`, `Open`). What is recorded and why: [simulation](simulation.md#replay). The storage under it: [segmentlog](segmentlog.md).
 
 ## Files
 
@@ -12,7 +12,7 @@
 
 - An engine writes only to its own log, with no lock shared with the others. Its methods are called from the goroutine of the engine.
 - A log writes what it is given: `NopLog` is a place holder that takes everything and keeps nothing, and the engine works out a hash at its period whatever the log is.
-- The name of a type of state is set where the type is defined, with `sim.MapStateTypeToName(type, name)`: a type has one name, a name belongs to one type, and neither is ever changed, because the name is in the path of a log on the disk. A second name for a type, no name, or a name that another type has makes it panic when the program starts: the owner fixes it before the server runs (R31). A type that was given none is called `state type <number>`.
+- The name of a type of state is set where the type is defined, with `sim.MapStateTypeToName(type, name)`: a type has one name, a name belongs to one type, and neither is ever changed, because the name is in the path of a log on the disk. A second name for a type, no name, or a name that another type has makes it panic when the program starts: the owner fixes it before the server runs (R10). A type that was given none is called `state type <number>`.
 
 ## Writing
 
@@ -81,14 +81,15 @@ What an engine writes in a tick is one frame, which is one record of the segment
 | `KindHash` | 3 | the hash, 8 bytes |
 | `KindStableRead` | 4 | state ID of the engine read, the tick of the copy |
 | `KindReturned` | 5 | the header of a message the engine sent that came back (state ID of the sender, `Seq`, the tick it was sent at), the reason `u8` (`sim.DeliveryFailure`) |
-| `KindRetired` | 6 | nothing: the engine was removed for good; it is the only record of the last frame of its log |
-| `KindStarted` | 7 | the engine that asked for this one to be made (state ID; 0 for an engine that the code that runs the cluster added), its tick (`uvarint`), the number of its request (`uvarint`; 0 for none), and the engine as it was made, at the tick 0, written as a checkpoint (length and bytes): the first record of the log of every engine but the configuration engine |
-| `KindDirective` | 8 | the answer of the cluster to a request of the engine: the number of the request, its kind, its tag, the ID of the engine that was made or removed, and why not (a string; empty for success) |
+| `KindRetired` | 6 | the engine that asked for the engine to be removed (state ID) and its tick (`uvarint`), both 0 when it asked for itself: the engine was removed for good; it is the only record of the last frame of its log |
+| `KindInit` | 7 | the engine that asked for this one to be made (state ID), its tick (`uvarint`), the number of its request (`uvarint`), and the engine as it was made, at the tick 0, written as a checkpoint (length and bytes): the record of the tick 1 of the log of every engine but the coordinator engine |
+| `KindDirective` | 8 | the response of the cluster to a request of the engine: the number of the request, its kind, its tag, the ID of the engine that was made or removed, the tick of its `Retired` (for a removal), and why not (a string; empty for success) |
+| `KindStarted` | 9 | the engine that asked for this one to be made (state ID) and the tick at which it took the response (`uvarint`): the record of the tick 2 of an engine that a request made |
 
 - Integers are `uvarint` unless a width is said. The address of an engine is its state ID.
 - An inbound message is recorded whole.
 - A returned message is recorded at the tick its sender settled it: the tick of the send when the router refuses it at once, the tick it is taken from the return queue otherwise.
-- A `Started` record makes the engine depend on that tick of the creator, as a message does of its sender (`Record.Dependency()`); an engine that no engine asked for depends on none. A `Directive` record depends on nothing: it is an answer that the engine takes, as it takes a command.
+- An `Init` record makes the engine depend on the tick at which its creator asked, and a `Started` record on the tick at which the creator took the response; a `Retired` record that has an engine that asked depends on the tick at which it asked. A `Directive` record that answers that an engine was made depends on the tick 1 of that engine, and one that answers that an engine was removed on the tick of its `Retired`; the others depend on nothing ([engines](engine_lifecycle.md)).
 - A message carries the tick of its sender when it was sent (`Header.Tick`, set when the engine sends it). An `Inbound` record makes the engine depend on that tick of the sender, and a `StableRead` record, which has the tick of the copy it read, makes it depend on that tick of the source: `Record.Dependency()` says which as a `sim.StateDependency{Source, Tick}`, or false when a record depends on nothing (a message with no tick, a read that found no copy, any other kind).
 - A receiver drops a message whose `Seq` is not larger than the last it took from the same sender, and records nothing for it. `Seq` 0 is never a copy.
 

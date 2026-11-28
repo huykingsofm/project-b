@@ -5,12 +5,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// KindID names a kind of entity, by a number. A number is never changed or reused, because
-// checkpoints and the event log write it; 0 is no kind. Every kind of the game is in this one
-// list, so a kind means one thing whichever state holds it, and each state holds the kinds that it
-// chooses (the entities of a kind are in the package entity below the state).
-type KindID uint16
-
 // The kinds.
 const (
 	CharacterKindID KindID = iota + 1
@@ -18,8 +12,33 @@ const (
 	ExitKindID
 )
 
+// BoundingBoxAround is the smallest rectangle that holds a circle of the radius at the position.
+func BoundingBoxAround(pos Vec, radius int32) Rect {
+	return Rect{
+		Min: Vec{X: pos.X - radius, Y: pos.Y - radius},
+		Max: Vec{X: pos.X + radius, Y: pos.Y + radius},
+	}
+}
+
+// HashEntity adds what every entity has to a hash: its ID, its kind and its bounding box. The
+// entity adds the fields of its own kind after it.
+func HashEntity(h *sim.Hasher, e Entity) {
+	e.ID().Hash(h)
+	h.U64(uint64(e.KindID()))
+	box := e.BoundingBox()
+	for _, n := range [...]int32{box.Min.X, box.Min.Y, box.Max.X, box.Max.Y} {
+		h.U64(uint64(uint32(n)))
+	}
+}
+
+// KindID names a kind of entity, by a number. A number is never changed or reused, because
+// checkpoints and the event log write it; 0 is no kind. Every kind of the game is in this one
+// list, so a kind means one thing whichever state holds it, and each state holds the kinds that it
+// chooses (the entities of a kind are in the package entity below the state).
+type KindID uint16
+
 // Entity is what stands in a state: a body, an item on the ground, an exit. Every entity is a
-// value type (R29): a change builds a new value and replaces the old one in its container.
+// value type (R13): a change builds a new value and replaces the old one in its container.
 type Entity interface {
 	ID() EntityID
 	KindID() KindID
@@ -45,23 +64,4 @@ type DamageableEntity interface {
 	OnDamage(amount int32) DamageableEntity
 	// OnHeal returns the entity with health raised, never above MaxHealth.
 	OnHeal(amount int32) DamageableEntity
-}
-
-// BoundingBoxAround is the smallest rectangle that holds a circle of the radius at the position.
-func BoundingBoxAround(pos Vec, radius int32) Rect {
-	return Rect{
-		Min: Vec{X: pos.X - radius, Y: pos.Y - radius},
-		Max: Vec{X: pos.X + radius, Y: pos.Y + radius},
-	}
-}
-
-// HashEntity adds what every entity has to a hash: its ID, its kind and its bounding box. The
-// entity adds the fields of its own kind after it.
-func HashEntity(h *sim.Hasher, e Entity) {
-	e.ID().Hash(h)
-	h.U64(uint64(e.KindID()))
-	box := e.BoundingBox()
-	for _, n := range [...]int32{box.Min.X, box.Min.Y, box.Max.X, box.Max.Y} {
-		h.U64(uint64(uint32(n)))
-	}
 }

@@ -73,7 +73,7 @@ func TestAllActionsListsEveryActionOfThePackage(t *testing.T) {
 }
 
 // An action is made by one engine and may be put in a message for another, so what it holds is a
-// value or a type with Clone, and whoever stores it in a state copies it (R29).
+// value or a type with Clone, and whoever stores it in a state copies it (R13).
 func TestEveryActionHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 	rules := aliasing.Rules{Boundary: true}
 	for _, a := range allActions {

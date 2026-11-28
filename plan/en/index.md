@@ -5,9 +5,9 @@ The plan covers everything an online game needs: the simulation engine, space, c
 ## Principles
 
 - Every idea is designed for project-b itself, and the owner approves a design before any code is written.
-- The owner decides every state method, action and mechanism (R26). The plan only lists proposals, marked `pending approval`.
+- The owner decides every state method, action and mechanism (R5). The plan only lists proposals, marked `pending approval`.
 - The plan is divided into phases and tasks, and every phase has a measurable acceptance. A later phase builds on an earlier one.
-- The rules in `plan/rule/` (R0 to R36) apply to every phase.
+- The rules in `plan/rule/` (R0 to R16) apply to every phase.
 
 ## Files
 

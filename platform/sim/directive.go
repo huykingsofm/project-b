@@ -1,36 +1,39 @@
 package sim
 
-// DirectiveKind is what a directive asks of the cluster, or answers.
-type DirectiveKind uint8
-
 const (
 	// DirectiveCreateEngine asks the cluster to make an engine from a state and the actions that
 	// it starts with.
 	DirectiveCreateEngine DirectiveKind = iota + 1
-	// DirectiveRemoveEngine asks the cluster to remove the engine with the ID in Target.
-	DirectiveRemoveEngine
+	// DirectiveRetireEngine asks the cluster to remove the engine with the ID in Target.
+	DirectiveRetireEngine
 )
+
+// DirectiveKind is what a directive asks of the cluster, or answers.
+type DirectiveKind uint8
 
 // DirectiveRequest is what an engine asks of its cluster, since an engine cannot make or remove
 // another engine itself. Its actions put it in their registry; the engine numbers it, keeps it in
-// its own data until the cluster has answered, and hands it to the cluster at the end of the tick
-// (and again, as long as no answer came): the cluster serves a request once, whatever the number of
-// times it is given.
+// its own data until the cluster has answered, and publishes it to the directive router at the end
+// of the tick; the engine publishes the ones that wait again at its first tick after it was made
+// again from a checkpoint.
 type DirectiveRequest struct {
-	// ID is the number that the engine gave the request: counted up from 1 in its own order, so
-	// (the engine, ID) names the request.
+	// ID is the number that the engine gave the request, counted up from 1 in its own order, so
+	// (the engine, ID) names it; Tick is the tick of the engine at which its actions made it, which
+	// the engine sets (the engine that is made from it depends on that tick); Kind says what it
+	// asks; Tag is what the requester wants back with the answer, which it writes and reads itself
 	ID   uint64
+	Tick uint64
 	Kind DirectiveKind
-	// Tag is what the requester wants back with the answer, which it writes and reads itself: what
-	// the engine is for.
-	Tag []byte
-	// State and StartActions are the engine to make, for DirectiveCreateEngine: the state as the
-	// first tick of its engine finds it, and the actions that run once, at that first tick: an
-	// action that is to run again sets itself again. The cluster gives the engine its ID and keeps
-	// a copy of the state, so the request is never changed.
+	Tag  []byte
+
+	// the engine to make, for DirectiveCreateEngine: the state as the first tick of its engine
+	// finds it, and the actions that run once, at that first tick (an action that is to run again
+	// sets itself again); the cluster gives the engine its ID and keeps a copy of the state, so
+	// the request is never changed
 	State        State
 	StartActions []BaseAction
-	// Target is the engine to remove, for DirectiveRemoveEngine.
+
+	// the engine to retire, for DirectiveRetireEngine
 	Target StateID
 }
 
@@ -38,14 +41,17 @@ type DirectiveRequest struct {
 // engine that asked, at the tick it was taken at, as a command is, since a replay cannot make it
 // again.
 type DirectiveResponse struct {
-	// ID is the number of the request that this answers.
+	// ID is the number of the request that this answers; Kind and Tag are those of the request
 	ID   uint64
 	Kind DirectiveKind
-	// Tag is the tag of the request.
-	Tag []byte
-	// Engine is the ID of the engine that was made, or the one that was removed; 0 for a failure.
-	Engine StateID
-	// Failure says why the request was not done; empty for success.
+	Tag  []byte
+
+	// the result: the ID of the engine that was made or retired (0 for a failure); for a retired
+	// engine, the tick of the last frame of its log, which holds that it retired, and which the
+	// answer depends on (0 for the other answers); and why the request was not done (empty for
+	// success)
+	Engine  StateID
+	Tick    uint64
 	Failure string
 }
 
@@ -55,5 +61,5 @@ type DirectiveResponse struct {
 // the one that gives it the answer. A state that is not a handler gets none: the engine logs a line
 // of data to fix and drops the answer.
 type DirectiveHandler[S State] interface {
-	HandleDirective(ctx *Context, reg *Registry[S], response DirectiveResponse)
+	HandleDirective(ctx *Context, reg *ActionRegistry[S], response DirectiveResponse)
 }

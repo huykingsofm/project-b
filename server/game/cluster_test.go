@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/stable"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -54,9 +55,9 @@ func TestRunsOfMovementAreAppliedInOrderThroughTheCooldown(t *testing.T) {
 	l := c.ZoneLayer(testkit.Layer1)
 	start, _ := l.State().CharacterEntityByCharacterID(1)
 
-	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
+	l.SendCommand(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 3})
 	// arrives while the first runs: it waits its turn
-	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.South, Ticks: 2})
+	l.SendCommand(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.South, Ticks: 2})
 	testkit.Steps(t, c, 8)
 
 	end, _ := l.State().CharacterEntityByCharacterID(1)
@@ -75,7 +76,9 @@ func TestChatInEachScope(t *testing.T) {
 	c, rec, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 
-	c.ZoneLayer(testkit.Layer1).Send(command.ZoneLayerChatSendCommand{FromID: 1, Text: "zonelayer"})
+	c.ZoneLayer(testkit.Layer1).SendCommand(
+		command.ZoneLayerChatSendCommand{FromID: 1, Text: "zonelayer"},
+	)
 	testkit.Steps(t, c, 3)
 	if n := rec.Count[zonelayerevent.ChatMessageSent](); n != 1 {
 		t.Fatalf("a zonelayer message was heard by %d zonelayers, want 1", n)
@@ -84,7 +87,7 @@ func TestChatInEachScope(t *testing.T) {
 		t.Fatalf("a zonelayer message reached the zone %d times", n)
 	}
 
-	c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "zone"})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneChatSendCommand{FromID: 1, Text: "zone"})
 	testkit.Steps(t, c, 3)
 	if n := rec.Count[zoneevent.ChatMessageSent](); n != 1 {
 		t.Fatalf("the zone recorded %d messages, want 1", n)
@@ -94,7 +97,7 @@ func TestChatInEachScope(t *testing.T) {
 		t.Fatalf("zonelayer messages heard = %d, want 3", n)
 	}
 
-	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "private"})
+	c.World.SendCommand(command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "private"})
 	testkit.Steps(t, c, 3)
 	if n := rec.Count[worldevent.PrivateChatMessageSent](); n != 1 {
 		t.Fatalf("the world recorded %d private messages, want 1", n)
@@ -114,14 +117,14 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 		return ch.Health()
 	}
 
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	testkit.Steps(t, c, 3)
 	if health(2) != 99 {
 		t.Fatalf("health after a hit = %d, want 99", health(2))
 	}
 
 	// The attack is on its cooldown: the second one does nothing.
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	testkit.Steps(t, c, 2)
 	if health(2) != 99 {
 		t.Fatalf("an attack in the cooldown did something: health %d", health(2))
@@ -129,22 +132,22 @@ func TestNormalAttackCooldownAndShield(t *testing.T) {
 
 	// After the cooldown the attack lands again.
 	testkit.Steps(t, c, 6)
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	testkit.Steps(t, c, 3)
 	if health(2) != 98 {
 		t.Fatalf("the attack after the cooldown did not land: health %d, want 98", health(2))
 	}
 
 	// A shield stands in the plan, runs before the damage lands, and blocks the first one only.
-	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 1000})
+	l.SendCommand(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 1000})
 	testkit.Steps(t, c, 8)
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	testkit.Steps(t, c, 3)
 	if health(2) != 98 {
 		t.Fatalf("a shield did not block a hit: health %d", health(2))
 	}
 	testkit.Steps(t, c, 8)
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2})
 	testkit.Steps(t, c, 3)
 	if health(2) != 97 {
 		t.Fatalf("the shield blocked a second hit: health %d, want 97", health(2))
@@ -155,7 +158,7 @@ func TestAttackOnATargetThatIsNotThereDoesNothing(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	l := c.ZoneLayer(testkit.Layer1)
-	l.Send(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 9})
+	l.SendCommand(command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 9})
 	testkit.Steps(t, c, 3)
 	if ch, _ := l.State().CharacterByID(1); ch.Health() != 100 {
 		t.Fatalf("an attack on nobody changed health to %d", ch.Health())
@@ -167,7 +170,7 @@ func TestAKilledCharacterStaysDead(t *testing.T) {
 	testkit.Enter(t, c, testkit.Zone1, 1, "An")
 	testkit.EnterCharacter(t, c, testkit.Zone1, testkit.NewCharacter(2, "Binh", 2, 1000, 0))
 	for range 3 {
-		c.ZoneLayer(testkit.Layer1).Send(
+		c.ZoneLayer(testkit.Layer1).SendCommand(
 			command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 		)
 		testkit.Steps(t, c, 8)
@@ -193,7 +196,7 @@ func TestAZoneLayerHealsEveryCharacterEveryPeriod(t *testing.T) {
 func TestAnExitMovesTheCharacterAtOnceToAZoneLayerOfTheOtherZone(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.WalkToTheEastExit(t, c, 1)
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
 	)
 	testkit.Steps(t, c, 4)
@@ -211,7 +214,7 @@ func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
 	testkit.Enter(t, c, testkit.Zone2, 9, "Full") // zone 2 takes one character, so it is now full
 	testkit.WalkToTheEastExit(t, c, 1)
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
 	)
 	testkit.Steps(t, c, 6)
@@ -226,9 +229,9 @@ func TestAnExitDoesNothingWhenTheOtherZoneHasNoRoom(t *testing.T) {
 
 func TestAnExitToAZoneThatWasRemovedDoesNothing(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
-	c.Cluster.RemoveEngine(testkit.Zone2)
+	stepping.RetireEngine(c.Cluster, testkit.Zone2)
 	testkit.WalkToTheEastExit(t, c, 1)
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
 	)
 	testkit.Steps(t, c, 6)
@@ -243,10 +246,10 @@ func TestACharacterWhoseEnterCannotBeDeliveredIsPutBackWhereItWas(t *testing.T) 
 	testkit.WalkToTheEastExit(t, c, 1)
 	// The zonelayer that the exit will choose goes away after it published how many characters it
 	// holds, so the exit sees room and the message to it cannot be delivered.
-	c.Env.Router.Retire(testkit.Layer3)
+	c.Env.Router.MarkRetired(testkit.Layer3)
 	before, _ := c.ZoneLayer(testkit.Layer1).State().CharacterEntityByCharacterID(1)
 
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
 	)
 	testkit.Steps(t, c, 10)
@@ -270,9 +273,9 @@ func TestAMessageThatCameBackIsRecordedWithItsHeaderAndReasonAtTheTickItWasSettl
 	testkit.WalkToTheEastExit(t, c, 1)
 	// the zonelayer is removed: the world forgets it, and the router has no engine for it
 	c.World.State().RemoveZoneLayer(testkit.Layer3)
-	c.Env.Router.Retire(testkit.Layer3)
+	c.Env.Router.MarkRetired(testkit.Layer3)
 
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: testkit.EastExit},
 	)
 	testkit.Steps(t, c, 10)
@@ -375,13 +378,13 @@ func TestTheSameInputsGiveTheSameEventLog(t *testing.T) {
 		c, _, j := testkit.NewWorld(t, 7, 0)
 		testkit.Enter(t, c, testkit.Zone1, 1, "An")
 		testkit.Enter(t, c, testkit.Zone1, 2, "Binh")
-		c.ZoneLayer(testkit.Layer1).Send(
+		c.ZoneLayer(testkit.Layer1).SendCommand(
 			command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
 		)
-		c.ZoneLayer(testkit.Layer1).Send(
+		c.ZoneLayer(testkit.Layer1).SendCommand(
 			command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 2, TargetID: 1},
 		)
-		c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
+		c.Zone(testkit.Zone1).SendCommand(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
 		testkit.Steps(t, c, 15)
 		return j.Records
 	}
@@ -401,8 +404,8 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 
 	an := testkit.NewCharacter(1, "An", 100, 1000, 0)
 	binh := testkit.NewCharacter(2, "Binh", 100, 1000, 0)
-	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: an})
-	c.Zone(testkit.Zone2).Send(command.ZoneCharacterEnterCommand{Character: binh})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: an})
+	c.Zone(testkit.Zone2).SendCommand(command.ZoneCharacterEnterCommand{Character: binh})
 
 	// Read only what the engines published: their own states belong to their goroutines.
 	deadline := time.Now().Add(5 * time.Second)
@@ -427,7 +430,7 @@ func TestAPickedUpItemLeavesTheGroundAndArrivesInTheInventoryInTheWorld(t *testi
 	itemID := c.ZoneLayer(testkit.Layer1).State().
 		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)
 	testkit.Steps(t, c, 4)
@@ -453,10 +456,10 @@ func TestTwoCharactersGoingForTheSameItemAtOnceOnlyOneGetsIt(t *testing.T) {
 	itemID := c.ZoneLayer(testkit.Layer1).State().
 		AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
 
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: itemID},
 	)
 	testkit.Steps(t, c, 4)
@@ -475,7 +478,7 @@ func TestAnItemThatDoesNotFitInTheInventoryComesBackToTheGroundWhereItWas(t *tes
 	itemID := c.ZoneLayer(testkit.Layer1).State().
 		AddItemEntity(7, 3, at, 0)
 
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)
 	testkit.Steps(t, c, 6)
@@ -500,7 +503,7 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 	c.World.State().AddItemToCharacter(1, 9, 20*99, 20, 99) // every slot is full of another kind
 	itemID := c.ZoneLayer(testkit.Layer1).State().
 		AddItemEntity(7, 3, state.Vec{X: 2500, Y: 2500}, 20)
-	c.ZoneLayer(testkit.Layer1).Send(
+	c.ZoneLayer(testkit.Layer1).SendCommand(
 		command.ZoneLayerCharacterItemPickupCommand{CharacterID: 1, ItemEntityID: itemID},
 	)
 	testkit.Steps(t, c, 6)
@@ -526,14 +529,14 @@ func TestAnItemThatCameBackToTheGroundIsRemovedWhenItsExpiryEnds(t *testing.T) {
 func TestAnEngineDoesNotTakeANilCommand(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
 	l := c.ZoneLayer(testkit.Layer1)
-	if c.World.Send(nil) || c.Zone(testkit.Zone1).Send(nil) || l.Send(nil) {
+	if c.World.SendCommand(nil) || c.Zone(testkit.Zone1).SendCommand(nil) || l.SendCommand(nil) {
 		t.Fatal("an engine took a nil command")
 	}
 	testkit.Steps(t, c, 3) // and nothing in a tick breaks on it
 }
 
 // layerCount is how many characters a zonelayer published, or -1 when it published nothing.
-func layerCount(view *engine.StableView, id sim.StateID) int {
+func layerCount(view *stable.View, id sim.StateID) int {
 	st, err := view.Read(id)
 	if err != nil {
 		return -1

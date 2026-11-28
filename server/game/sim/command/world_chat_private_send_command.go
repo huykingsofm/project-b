@@ -16,6 +16,16 @@ type WorldChatPrivateSendCommand struct {
 	Text   string
 }
 
+// decodeWorldChatPrivateSendCommand reads what Encode wrote.
+func decodeWorldChatPrivateSendCommand(
+	r *binary.Reader, version codec.Version,
+) (WorldChatPrivateSendCommand, error) {
+	c := WorldChatPrivateSendCommand{
+		FromID: r.Uint[state.PlayerID](), ToID: r.Uint[state.PlayerID](), Text: r.String(),
+	}
+	return c, r.Err()
+}
+
 func (WorldChatPrivateSendCommand) ID() sim.CommandID { return WorldChatPrivateSendCommandID }
 
 // Clone returns the command itself: it holds only values.
@@ -33,14 +43,4 @@ func (c WorldChatPrivateSendCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.ToID))
 	w.String(c.Text)
 	return nil
-}
-
-// decodeWorldChatPrivateSendCommand reads what Encode wrote.
-func decodeWorldChatPrivateSendCommand(
-	r *binary.Reader, version codec.Version,
-) (WorldChatPrivateSendCommand, error) {
-	c := WorldChatPrivateSendCommand{
-		FromID: r.Uint[state.PlayerID](), ToID: r.Uint[state.PlayerID](), Text: r.String(),
-	}
-	return c, r.Err()
 }

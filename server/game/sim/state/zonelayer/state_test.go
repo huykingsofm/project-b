@@ -109,7 +109,7 @@ func TestOnlyADamageableEntityLosesHealth(t *testing.T) {
 	}
 }
 
-// R29: nothing in a state is shared with its clone.
+// R13: nothing in a state is shared with its clone.
 func TestAChangeAfterCloneDoesNotChangeTheCopyAndTheOtherWayRound(t *testing.T) {
 	st := newState()
 	st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), state.Vec{X: 1500, Y: 1500})
@@ -241,7 +241,7 @@ func TestACharacterWithANegativeRadiusIsAnErrorNotACharacter(t *testing.T) {
 	}
 }
 
-// R29: a character that enters is copied, so the state shares nothing with what the caller sent and
+// R13: a character that enters is copied, so the state shares nothing with what the caller sent and
 // still holds.
 func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 	st := newState()
@@ -262,7 +262,7 @@ func TestACharacterThatEntersSharesNothingWithTheStateItEnters(t *testing.T) {
 	}
 }
 
-// R29: a character that leaves is the one the state held, now outside it; what it gives up is not
+// R13: a character that leaves is the one the state held, now outside it; what it gives up is not
 // shared with a copy that was published.
 func TestAClonedStateSharesNoMemoryWithTheState(t *testing.T) {
 	st := newState()
@@ -297,7 +297,7 @@ func TestAnEntityThatLeavesIsNeverGivenItsIDAgain(t *testing.T) {
 	first := st.AddItemEntity(7, 1, at, 0)
 	st.RemoveItemEntity(first)
 	for tick := uint64(1); tick <= 10; tick++ {
-		st.NextTick()
+		st.AdvanceTick()
 		if got := st.AddItemEntity(7, 1, at, 0); got == first {
 			t.Fatalf("the ID of an entity that left was given again at tick %d", tick)
 		}
@@ -311,7 +311,7 @@ func TestTheBodyOfACharacterThatLeavesGetsANewIDWhenItComesBack(t *testing.T) {
 	if _, ok := st.RemoveCharacterEntity(1); !ok {
 		t.Fatal("the character was not taken out")
 	}
-	st.NextTick()
+	st.AdvanceTick()
 	back := st.AddCharacterEntity(newCharacter(1, "a", 10, 1000, 0), at)
 	if back == body {
 		t.Fatalf("the body that came back got the ID of the one that left, %d", body)

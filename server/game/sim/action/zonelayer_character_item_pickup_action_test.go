@@ -19,7 +19,7 @@ const pickupLayerID sim.StateID = 77
 // layer, its registry and the entity of the item.
 func newPickupTestLayer(
 	t *testing.T,
-) (*zonelayerstate.State, *sim.Registry[*zonelayerstate.State], state.EntityID) {
+) (*zonelayerstate.State, *sim.ActionRegistry[*zonelayerstate.State], state.EntityID) {
 	st, reg := newMoveTestWorld(t, true)
 	st.AddCharacterEntity(newCharacter(2, "b", 100, 1000, 0), state.Vec{X: 9500, Y: 2500})
 	return st, reg, st.AddItemEntity(7, 1, state.Vec{X: 2500, Y: 2500}, 0)
@@ -30,7 +30,7 @@ func pickup(
 	item state.EntityID,
 	tick uint64,
 	st *zonelayerstate.State,
-	reg *sim.Registry[*zonelayerstate.State],
+	reg *sim.ActionRegistry[*zonelayerstate.State],
 ) {
 	a := action.ZoneLayerCharacterItemPickupAction{CharacterID: characterID, ItemEntityID: item}
 	ctx := &sim.Context{Self: pickupLayerID, Tick: tick}

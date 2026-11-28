@@ -20,7 +20,7 @@ var zoneLayerCharacterItemPickupActionRadius = config.NewVar(
 // farther than that from the item.
 //
 // The item is taken off the ground first, and only then is a message sent to the world to put it in
-// the inventory of the character (R28), so the item is never in both places. What does not fit in
+// the inventory of the character (R12), so the item is never in both places. What does not fit in
 // the inventory comes back to the ground (WorldCharacterItemAddAction), and so does the whole stack
 // when the message cannot be delivered, in both cases with the same kind, count, position and
 // expiry, as a new entity whose expiry starts again.
@@ -29,11 +29,27 @@ type ZoneLayerCharacterItemPickupAction struct {
 	ItemEntityID state.EntityID
 }
 
+// decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
+func decodeZoneLayerCharacterItemPickupAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterItemPickupAction, error) {
+	characterID := r.Uint[state.CharacterID]()
+	itemEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterItemPickupAction{}, err
+	}
+	return ZoneLayerCharacterItemPickupAction{
+		CharacterID: characterID, ItemEntityID: itemEntityID,
+	}, r.Err()
+}
+
 func (a ZoneLayerCharacterItemPickupAction) ID() sim.ActionID {
 	return ZoneLayerCharacterItemPickupActionID
 }
+
 func (a ZoneLayerCharacterItemPickupAction) Priority() int16 { return PriorityIntent }
-func (a ZoneLayerCharacterItemPickupAction) Actor() any      { return a.CharacterID }
+
+func (a ZoneLayerCharacterItemPickupAction) Actor() any { return a.CharacterID }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerCharacterItemPickupAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -42,7 +58,7 @@ func (a ZoneLayerCharacterItemPickupAction) Clone() sim.Action[*zonelayerstate.S
 
 // Apply takes the item off the ground and sends it to the world.
 func (a ZoneLayerCharacterItemPickupAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	ch, ok := s.CharacterByID(a.CharacterID)
@@ -87,18 +103,4 @@ func (a ZoneLayerCharacterItemPickupAction) Apply(
 func (a ZoneLayerCharacterItemPickupAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.CharacterID))
 	a.ItemEntityID.Encode(w)
-}
-
-// decodeZoneLayerCharacterItemPickupAction reads what Encode wrote.
-func decodeZoneLayerCharacterItemPickupAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterItemPickupAction, error) {
-	characterID := r.Uint[state.CharacterID]()
-	itemEntityID, err := state.DecodeEntityID(r)
-	if err != nil {
-		return ZoneLayerCharacterItemPickupAction{}, err
-	}
-	return ZoneLayerCharacterItemPickupAction{
-		CharacterID: characterID, ItemEntityID: itemEntityID,
-	}, r.Err()
 }

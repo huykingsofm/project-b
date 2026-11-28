@@ -76,23 +76,6 @@ func (b *BiMap[V1, V2]) UnlinkByV2(v2 V2) bool {
 	return true
 }
 
-// removeAt removes the link at a position: the last link moves into its place.
-func (b *BiMap[V1, V2]) removeAt(i int) {
-	last := len(b.vals1) - 1
-	delete(b.index1, b.vals1[i])
-	delete(b.index2, b.vals2[i])
-	if i != last {
-		b.vals1[i], b.vals2[i] = b.vals1[last], b.vals2[last]
-		b.index1[b.vals1[i]] = i
-		b.index2[b.vals2[i]] = i
-	}
-	var zero1 V1
-	var zero2 V2
-	b.vals1[last], b.vals2[last] = zero1, zero2 // hold nothing that is no longer linked
-	b.vals1 = b.vals1[:last]
-	b.vals2 = b.vals2[:last]
-}
-
 // GetByV1 returns the V2 that v1 is linked to.
 func (b *BiMap[V1, V2]) GetByV1(v1 V1) (V2, bool) {
 	i, ok := b.index1[v1]
@@ -142,4 +125,21 @@ func (b *BiMap[V1, V2]) Clone() BiMap[V1, V2] {
 		index1: maps.Clone(b.index1), index2: maps.Clone(b.index2),
 		vals1: slices.Clone(b.vals1), vals2: slices.Clone(b.vals2),
 	}
+}
+
+// removeAt removes the link at a position: the last link moves into its place.
+func (b *BiMap[V1, V2]) removeAt(i int) {
+	last := len(b.vals1) - 1
+	delete(b.index1, b.vals1[i])
+	delete(b.index2, b.vals2[i])
+	if i != last {
+		b.vals1[i], b.vals2[i] = b.vals1[last], b.vals2[last]
+		b.index1[b.vals1[i]] = i
+		b.index2[b.vals2[i]] = i
+	}
+	var zero1 V1
+	var zero2 V2
+	b.vals1[last], b.vals2[last] = zero1, zero2 // hold nothing that is no longer linked
+	b.vals1 = b.vals1[:last]
+	b.vals2 = b.vals2[:last]
 }

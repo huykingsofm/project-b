@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -129,12 +129,12 @@ func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t
 	go func() { c.Run(ctx, time.Millisecond); close(done) }()
 
 	for i := range 30 {
-		c.Zone(testkit.Zone1).Send(
+		c.Zone(testkit.Zone1).SendCommand(
 			command.ZoneCharacterEnterCommand{
 				Character: testkit.NewCharacter(state.CharacterID(i+1), "x", 100, 1000, 0),
 			},
 		)
-		c.World.Send(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
+		c.World.SendCommand(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
 		time.Sleep(2 * time.Millisecond)
 	}
 	time.Sleep(60 * time.Millisecond)

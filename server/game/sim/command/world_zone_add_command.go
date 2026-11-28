@@ -14,6 +14,14 @@ type WorldZoneAddCommand struct {
 	Tiles *tilemap.TileMap
 }
 
+// decodeWorldZoneAddCommand reads what Encode wrote.
+func decodeWorldZoneAddCommand(
+	r *binary.Reader, version codec.Version,
+) (WorldZoneAddCommand, error) {
+	tiles, err := tilemap.Decode(r, version)
+	return WorldZoneAddCommand{Tiles: tiles}, err
+}
+
 func (WorldZoneAddCommand) ID() sim.CommandID { return WorldZoneAddCommandID }
 
 // Clone returns a copy that shares no map with the command.
@@ -29,12 +37,4 @@ func (c WorldZoneAddCommand) Translate() []sim.Action[*worldstate.State] {
 func (c WorldZoneAddCommand) Encode(w *binary.Writer) error {
 	c.Tiles.Encode(w)
 	return nil
-}
-
-// decodeWorldZoneAddCommand reads what Encode wrote.
-func decodeWorldZoneAddCommand(
-	r *binary.Reader, version codec.Version,
-) (WorldZoneAddCommand, error) {
-	tiles, err := tilemap.Decode(r, version)
-	return WorldZoneAddCommand{Tiles: tiles}, err
 }

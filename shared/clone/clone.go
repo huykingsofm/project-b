@@ -6,12 +6,6 @@ package clone
 
 import "slices"
 
-// Cloner is implemented by a type that has a method Clone that returns a copy sharing nothing with
-// it. The method may be on the value or on the pointer.
-type Cloner[T any] interface {
-	Clone() T
-}
-
 // Has reports whether T, or the pointer to T, has the method Clone() T. A type that has not is
 // copied by assignment, which is right only for a value: no pointer, slice, map, channel or
 // function in it.
@@ -33,4 +27,10 @@ func Slice[T any](s []T) []T {
 		out[i] = any(&s[i]).(Cloner[T]).Clone()
 	}
 	return out
+}
+
+// Cloner is implemented by a type that has a method Clone that returns a copy sharing nothing with
+// it. The method may be on the value or on the pointer.
+type Cloner[T any] interface {
+	Clone() T
 }

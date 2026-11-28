@@ -83,7 +83,7 @@ func TestEveryEventSaysWhoReceivesItAndWhatIsPrivateIsNotPublic(t *testing.T) {
 }
 
 // Events leave the engine to the emitter, which reads them on another goroutine, so they are values
-// (R29).
+// (R13).
 func TestEveryEventIsAValue(t *testing.T) {
 	for _, e := range allEvents {
 		rules := aliasing.Rules{Boundary: true}
