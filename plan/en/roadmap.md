@@ -1,6 +1,6 @@
 # Roadmap
 
-What has been built and what is to be built, in the order it is done. What is built is described in `docs/`; what is to be built is described here until it is.
+What has been built and what is to be built, in the order it is done. The platform comes first: what is of the game of cultivation is after `base-v1` ([phases.md](phases.md), phase 10), so nothing of it is in the list below. What is built is described in `docs/`; what is to be built is described here until it is.
 
 ## Built
 
@@ -30,19 +30,28 @@ What has been built and what is to be built, in the order it is done. What is bu
 
 ## To build
 
-What is left of the recovery of a cluster: a cluster is recovered and goes on live from the recovery line; what is not there yet is the measure below.
+In the order they are done. 1 and 2 close what is open after the engines made by requests, 3 to 5 are what phase 1 still lacks, 6 is the order of the end of a tick that the snapshot of phase 2 needs, and 7 is the design that opens phase 2.
 
-| Piece | What it is |
-|---|---|
-| To measure | the size of the unsettled messages in a checkpoint |
+| # | Piece | What it is | Status |
+|---|---|---|---|
+| 1 | Loose ends | `Cluster.Run` returns an error, and never panics, on the cluster of a replay (it has no orchestrator); the comments and the names of tests that say removed say retired; the change of `.gitignore` goes in with this pull request | `done` |
+| 2 | The numbers of the benchmarks | the numbers of `docs/benchmark/replay.md` and `checkpoint.md` are checked against a run on the commit before the last pull request, and say what changed | `done` |
+| 3 | A stop that loses nothing | `Run` ends where it is, writes nothing and sends nothing back: a message that waits in a channel is held by its sender until it is acked, and the senders send them again after a restart; a test that `Step` and `Run` give the same result; a test that a kill and a stop lose no message that was received | `done` |
+| 4 | Counts and metrics | the messages that are refused (`DeliveryFailureFull`) and lost are logged by the router at once, where they happen, and not counted; plain metrics of the engine (a histogram of the tick time; the players and the capacity are of the game and come with it); the engine does not know Prometheus, and what is measured is logged | `done` |
+| 5 | The benchmarks that are left | on one and two cores (`GOMAXPROCS`, `taskset`), of many zonelayers in parallel, of the router, and of every action and state method; a table for each in `docs/benchmark/` | `done` |
+| 6 | The order of the end of a tick | `Engine.Step` publishes the copy of the tick before it emits the events of the tick (today it emits first), so that a reader that subscribes and then reads the copy misses no event ([protocol.md](protocol.md#entering-and-the-snapshot-the-method-that-loses-no-event)); a test: a reader that subscribes and then reads gets every batch above the tick of its copy, with the engine running | `agreed` |
+| 7 | The design of phase 2 | written in [proposed-designs.md](proposed-designs.md#early-playable-slice-phase-2): eight parts in order and the table of choices of the owner (the WebSocket library, where the gateway lives, the login, the snapshot on entering, the first monster, the client, the tools); no code before the owner chooses | `pending approval` |
 
 ## Later
 
 Status: `agreed`.
 
+The business of the game of cultivation (formulas, death, level and experience, seasons, quests, economy, sects, war) is not listed here: it is phase 10, after `base-v1`; the cooldown that follows a character from one engine to another is of it.
+
 | Item | What it is |
 |---|---|
-| The rule that decides when the game makes a zone, a zonelayer or an exit | the mechanism is built, and only a command makes one (`WorldZoneAddCommand`, `WorldZoneLayerAddCommand`, `WorldZoneExitAddCommand`); the rule of the game that says when, and who asks, is not designed |
+| The rule that decides when the game makes a zone, a zonelayer or an exit | the mechanism is built, and only a command makes one (`WorldZoneAddCommand`, `WorldZoneLayerAddCommand`, `WorldZoneExitAddCommand`); the rule of the game that says when, and who asks, is not designed, and it is after `base-v1`; the same rule makes a zonelayer when someone arrives and moves a character to another layer of its zone |
+| The replay in parallel | one goroutine for each engine, each waiting for what it depends on, so a replay uses the cores that the cluster uses; a later optimization of phase 1 |
 | Telling a player that a message could not be delivered | the kind `onfail.Notify`, `Bouncer.Tell` and `Noticer` were removed; to build again, planned: `Compensate` with an action that tells the actor, which the state turns into an event (R9); needs a concrete plan |
 | Encoding and hash made asynchronous | `Append` keeps the struct, and a goroutine of the log encodes it and works out the hash from the copy of the state that the engine publishes and a copy it takes of what only it knows, in the order of the ticks; needs a rule that a struct given to `Append` is never changed (with a test), a bound on the list, and `engineHash` as a function of copies; measure the hash with a large zonelayer first |
 | A version for each encoder | `Encode()` returns `(version, bytes)`, the version is written beside the bytes, and each `Decode` is given the version written for its own bytes; no one version for all the data; R15 changes with it |

@@ -84,7 +84,7 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 
 | `sim.DeliveryFailure` | Number | Meaning |
 |---|---|---|
-| `DeliveryFailureRetired` | 1 | the state was removed |
+| `DeliveryFailureRetired` | 1 | the state was retired |
 | `DeliveryFailureNotStarted` | 2 | the engine does not exist yet, or the ID names none; the message can be sent again |
 | `DeliveryFailureStopping` | 3 | the engine, or the cluster, is stopping |
 | `DeliveryFailureFull` | 4 | the inbox of the engine is full |

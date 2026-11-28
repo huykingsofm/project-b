@@ -22,7 +22,7 @@ func readsOf(c *cluster.Cluster, reader, source sim.StateID) []uint64 {
 	return out
 }
 
-func TestAnEngineThatWasRemovedIsReadAsItsLastTickBeforeAndAsNothingAfter(t *testing.T) {
+func TestAnEngineThatWasRetiredIsReadAsItsLastTickBeforeAndAsNothingAfter(t *testing.T) {
 	c, a, b, _ := threeToys(t)
 	for tick := uint64(1); tick <= 3; tick++ {
 		b.ScheduleAt(tick, testkit.ToyAction{N: 1})
@@ -41,7 +41,7 @@ func TestAnEngineThatWasRemovedIsReadAsItsLastTickBeforeAndAsNothingAfter(t *tes
 	a.ScheduleAt(5, testkit.ReadAction{From: 2})
 	stepAll(t, []*engine.Engine[*testkit.ToyState]{a}, 1)
 	if a.State().Total != 3 {
-		t.Fatalf("a has %d after b was removed, want 3: nothing was read", a.State().Total)
+		t.Fatalf("a has %d after b was retired, want 3: nothing was read", a.State().Total)
 	}
 	if got := readsOf(c, 1, 2); len(got) != 2 || got[0] != 3 || got[1] != 0 {
 		t.Fatalf("a read the copies of the ticks %v of b, want 3 and then none (0)", got)

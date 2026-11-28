@@ -17,7 +17,7 @@ var (
 	namedTypes  = map[string]StateType{}
 )
 
-// ErrStateNotFound is the error of a state that no engine published, or that was removed.
+// ErrStateNotFound is the error of a state that no engine published, or that was retired.
 var ErrStateNotFound = errors.New("sim: no engine published a state with that ID")
 
 // ErrStateWrongType is the error of a state that was found but is not of the Go type that was asked

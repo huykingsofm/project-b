@@ -84,7 +84,7 @@ func NewCluster(
 }
 
 // NewReplayCluster makes the cluster of a replay: as NewCluster does, but it makes no engine, since
-// the log says which engines were made and removed and when, and what the cluster answered. The
+// the log says which engines were made and retired and when, and what the cluster answered. The
 // environment has the directive router that the replay gives the responses of the log to.
 func NewReplayCluster(env *engine.Environment, coordinatorCheckpoint []byte) (*Cluster, error) {
 	return buildCluster(env, coordinatorCheckpoint)
@@ -230,10 +230,13 @@ func (c *Cluster) AllOfType[S sim.State]() []*engine.Engine[S] {
 // Run runs every engine of the cluster on a goroutine of its own, ticking every period, the ones
 // that are added while it runs included, and returns when the context ends and all of them have
 // stopped. An engine is not waited for by the others. When the tick of an engine fails, the whole
-// cluster stops as if the context had ended, and the error is logged here, once: Run is where it
-// ends. An engine that an action asked to remove ends between two of its ticks on its own
-// goroutine, and the cluster drops it.
-func (c *Cluster) Run(ctx context.Context, period time.Duration) {
+// cluster stops as if the context had ended, and the error is returned. A cluster of a replay has
+// no orchestrator and does not run: Run returns an error at once. An engine that an action asked
+// to retire ends between two of its ticks on its own goroutine, and the cluster drops it.
+func (c *Cluster) Run(ctx context.Context, period time.Duration) error {
+	if c.orchestrator == nil {
+		return errors.New("a cluster of a replay has no orchestrator and does not run")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var (
@@ -283,11 +286,12 @@ func (c *Cluster) Run(ctx context.Context, period time.Duration) {
 		}
 	})
 	<-ctx.Done()
-	c.Env.Router.Stop()
 	wg.Wait()
+	c.Env.Router.Stop() // after the engines: each runs its last tick with the router open
 	if failure != nil {
-		logging.Error("the cluster stopped", "err", failure)
+		return fmt.Errorf("the cluster stopped: %w", failure)
 	}
+	return nil
 }
 
 // addEngineLocked puts an engine in the list of the cluster and among the ones that Run is to run.

@@ -22,6 +22,7 @@ docs/
   coordinatorengine.md              the coordinator engine: the configuration it holds, how it is changed and read
   tilemap.md                        reference of TileMap: construction, Free, FreeForBody, Reach, exits
   shared.md                         the small libraries of `shared`: atomicfile, rand, bitset (the others have a document each)
+  logged_problems.md                what is logged when something is not as expected: refused and lost messages, the time of the ticks
   simulation.md                     how the simulation works: platform and game, states, a tick, delivery, replay
   entity/                           reference of the entities: entity.md (the interfaces), character.md, item.md, exit.md
 plan/

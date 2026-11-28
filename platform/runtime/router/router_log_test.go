@@ -1,9 +1,7 @@
 package router_test
 
 import (
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/huykingsofm/project-b/platform/runtime/router"
 	"github.com/huykingsofm/project-b/platform/runtime/testkit"
@@ -12,33 +10,40 @@ import (
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
-type logRecorder struct {
-	mu      sync.Mutex
-	entries []logging.Entry
-}
-
-func (r *logRecorder) Consume(es []logging.Entry) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.entries = append(r.entries, es...)
-	return nil
-}
-
 func TestReturnLogsAWarningWhenTheSenderIsGone(t *testing.T) {
-	r := &logRecorder{}
-	closeLogs, err := logging.Init(r, logging.WithFlushEvery(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
+	finish := testkit.RecordLogs(t)
 	rt := router.NewRouter()
 	m := sim.NewActionMessage[*testkit.ToyState](1, onfail.Drop{}).Stamp(sim.Header{From: 9})
 	rt.Return(m, sim.DeliveryFailureRetired)
-	closeLogs()
+	entries := finish()
 
-	if rt.Dropped() != 1 {
-		t.Fatalf("dropped %d, want 1", rt.Dropped())
+	if len(entries) != 1 || entries[0].Level != logging.LevelWarn {
+		t.Fatalf("entries %+v, want one warning", entries)
 	}
-	if len(r.entries) != 1 || r.entries[0].Level != logging.LevelWarn {
-		t.Fatalf("entries %+v, want one warning", r.entries)
+}
+
+func TestAMessageThatFindsTheChannelOfItsReceiverFullIsRefusedAndLogged(t *testing.T) {
+	finish := testkit.RecordLogs(t)
+	_, out := router.NewChannel(5, 1)
+	rt := router.NewRouter()
+	rt.Register(out)
+	if reason, ok := rt.Deliver(testkit.ToyMessage(5, 1)); !ok {
+		t.Fatalf("the first message was refused: %v", reason)
+	}
+	if reason, ok := rt.Deliver(testkit.ToyMessage(5, 2)); ok || reason != sim.DeliveryFailureFull {
+		t.Fatalf("the second message: %v, %v, want it refused as full", reason, ok)
+	}
+	// an engine that is not there is another refusal, which is not logged here
+	reason, ok := rt.Deliver(testkit.ToyMessage(9, 3))
+	if ok || reason != sim.DeliveryFailureNotStarted {
+		t.Fatalf("a message for an engine that is not there: %v, %v", reason, ok)
+	}
+	entries := finish()
+
+	if len(entries) != 1 || entries[0].Level != logging.LevelWarn {
+		t.Fatalf("entries %+v, want one warning, for the message refused as full", entries)
+	}
+	if dest, _ := testkit.LogField(entries[0], "dest"); dest != sim.StateID(5) {
+		t.Fatalf("the warning says the message was for %v, want 5", dest)
 	}
 }

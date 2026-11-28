@@ -126,7 +126,12 @@ func TestTheFilesOfEnginesThatRunOnTheirOwnGoroutinesHoldWhatTheMemoryLogHolds(t
 	c, mem, file := testkit.NewTeeWorld(t, dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { c.Run(ctx, time.Millisecond); close(done) }()
+	go func() {
+		if err := c.Run(ctx, time.Millisecond); err != nil {
+			t.Error(err)
+		}
+		close(done)
+	}()
 
 	for i := range 30 {
 		c.Zone(testkit.Zone1).SendCommand(

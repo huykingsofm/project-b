@@ -400,7 +400,12 @@ func TestActorsRunOnTheirOwnGoroutinesWithoutWaitingForEachOther(t *testing.T) {
 	c, _, _ := testkit.NewWorld(t, 1, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { c.Run(ctx, time.Millisecond); close(done) }()
+	go func() {
+		if err := c.Run(ctx, time.Millisecond); err != nil {
+			t.Error(err)
+		}
+		close(done)
+	}()
 
 	an := testkit.NewCharacter(1, "An", 100, 1000, 0)
 	binh := testkit.NewCharacter(2, "Binh", 100, 1000, 0)

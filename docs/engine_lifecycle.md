@@ -70,7 +70,7 @@ A@100 asks, B is made, A takes the response at its tick 103.
 - A request for an engine that is not there answers with a failure; the coordinator engine is never ended.
 - `Cluster.RequestEngineRetirement(id)` asks from outside, and `stepping.RetireEngine(c, id)` asks and retires at once, between two steps, for a cluster that `Run` does not run.
 - `Engine.Retire` writes the last frame of the log and then cleans up what the engine registered (`cleanUpRegistrations`): what it published goes, its queue goes back to its senders, and a message to it comes back as `DeliveryFailureRetired`.
-- An engine ends for the stop of the cluster (the context of `Run`) differently: nothing is written and it goes on after a restart.
+- An engine ends for the stop of the cluster (the context of `Run`) differently: it stops where it is, nothing is written and nothing is sent back, and it is made again after a restart from its latest checkpoint and its log. A message that waited in its channel is not lost: its sender holds it until it is acked, and sends it again. The cluster stops the router after the engines, so no send is refused for the stop.
 
 ## IDs
 
@@ -83,7 +83,7 @@ The orchestrator gives the numbers and keeps the highest of each type in a file,
 | a log | the replay makes the engine from its latest checkpoint when it starts from one, else from the checkpoint inside `Init`; `Init` and `Started` are left out of the records the engine is compared with |
 | a `Directive` record | put in the router of the replay for the engine to take, as the engine took it |
 | the requests and the acknowledgements of a replayed engine | thrown away: the log says which engines were made |
-| the log ends with `Retired` | the replay removes the engine at that tick (`Result.Retired`) |
+| the log ends with `Retired` | the replay retires the engine at that tick (`Result.Retired`) |
 | a handover: an engine with `Init` and nothing after it | kept and run when the log of the engine that asked, as it is kept, holds the response, also when that engine retired after: it writes `Started` at its next tick, with the tick found there. Dropped, with `Retired` written to its log, when the request still waits in the engine that asked (it is published again at its first tick and made again, with another ID), or when its log holds no response (it was gone before it took one) |
 | a handover: the other engines | made again from their checkpoints at their limits (`Cluster.AddEngineByCheckpoint`) |
 | `Started` lost | the ticks that depend on what the engine did are cut, and the engine is run on from `Init` |

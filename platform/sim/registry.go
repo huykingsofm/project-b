@@ -112,10 +112,10 @@ func (r *ActionRegistry[S]) RequestCreateEngineOf(tag []byte, st State, start []
 	})
 }
 
-// RequestRetireEngine asks the cluster to remove the engine with the ID, and to answer with the
+// RequestRetireEngine asks the cluster to retire the engine with the ID, and to answer with the
 // tag.
 // Nothing is done while the actions run: the engine hands the request to its cluster when the tick
-// is done, and the cluster removes the engine between two ticks of it. The state that holds the ID
+// is done, and the cluster retires the engine between two ticks of it. The state that holds the ID
 // is changed by the action, as for any other change of a state (R12): the request only ends the
 // engine.
 func (r *ActionRegistry[S]) RequestRetireEngine(id StateID, tag []byte) {

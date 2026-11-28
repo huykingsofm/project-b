@@ -249,7 +249,9 @@ func TestAClusterThatRunsOnItsOwnAfterAHandoverWritesLogsThatRecover(t *testing.
 	lost := heldAndNotTaken(t, dir, live)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	live.Run(ctx, time.Millisecond)
+	if err := live.Run(ctx, time.Millisecond); err != nil {
+		t.Error(err)
+	}
 	closeLog()
 	everyMessageIsTakenOnce(t, dir, lost)
 	second := recoverTheWorld(t, dir, everySeventhTick)

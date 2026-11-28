@@ -35,7 +35,6 @@ type Router struct {
 	mu       sync.Mutex
 	data     atomic.Pointer[routerData]
 	stopping atomic.Bool
-	dropped  atomic.Uint64
 }
 
 // NewRouter makes an empty router.
@@ -84,18 +83,24 @@ func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 		return sim.DeliveryFailureNotStarted, false
 	}
 	if !ch.Send(l) {
+		logging.Warn(
+			"message refused: the channel of its receiver is full",
+			"from",
+			l.Head().From,
+			"dest",
+			l.Dest(),
+		)
 		return sim.DeliveryFailureFull, false
 	}
 	return 0, true
 }
 
 // Return gives a message that its receiver could not take back to its sender. A sender that
-// is gone or full loses it, and it is counted.
+// is gone or full loses it, and it is logged.
 func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 	from := l.Head().From
 	ch, ok := rt.data.Load().chans[from]
 	if !ok {
-		rt.dropped.Add(1)
 		logging.Warn(
 			"returned sim lost: its sender is gone",
 			"from",
@@ -108,7 +113,6 @@ func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 		return
 	}
 	if !ch.SendBack(ReturnedMessage{Message: l, Reason: r}) {
-		rt.dropped.Add(1)
 		logging.Warn(
 			"returned sim lost: the back channel of its sender is full",
 			"from",
@@ -120,9 +124,6 @@ func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 		)
 	}
 }
-
-// Dropped returns how many messages were lost because their sender could not take them back.
-func (rt *Router) Dropped() uint64 { return rt.dropped.Load() }
 
 func (rt *Router) update(f func(*routerData)) {
 	rt.mu.Lock()

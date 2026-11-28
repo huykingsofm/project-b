@@ -26,7 +26,11 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Go(func() { c.Run(ctx, time.Millisecond) })
+	wg.Go(func() {
+		if err := c.Run(ctx, time.Millisecond); err != nil {
+			t.Error(err)
+		}
+	})
 
 	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: kept})
 	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: target})

@@ -17,7 +17,7 @@ import (
 // The configuration that the store holds is sent to the coordinator engine first. When the tick
 // of an engine fails the cluster stops: the router refuses every message from then on, the engines
 // after it do not run, and the error is returned. An engine that an action of this step asked to
-// remove is removed when the step ends, and does not run in the next.
+// retire is retired when the step ends, and does not run in the next.
 func Step(c *cluster.Cluster) error {
 	c.RunPeriodicTasks()
 	for _, e := range c.Engines() {

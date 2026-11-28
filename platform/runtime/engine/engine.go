@@ -31,6 +31,13 @@ var eventLogHashEvery = config.NewVar("eventlog.hash_every_ticks", 20, config.Ra
 // that the engines do not all take one at the same tick.
 var checkpointEvery = config.NewVar("checkpoint.every_ticks", 600, config.Range(1, 100000000))
 
+// tickTimesLogEvery is every how many ticks an engine logs how long its ticks took, and starts
+// the count again: the number of ticks, the time that half and 99 in 100 of them took at most, the
+// longest, and how many fell in each class of time.
+var tickTimesLogEvery = config.NewVar(
+	"engine.log_tick_times_every_ticks", 6000, config.Range(1, 1000000000),
+)
+
 // ErrCommandQueueFull is the error of a command that an engine could not take now: its queue holds
 // as many as it can.
 var ErrCommandQueueFull = errors.New("the queue of commands is full")
@@ -77,6 +84,9 @@ type Engine[S sim.State] struct {
 	initRecord                *eventlog.Init
 	startedRecord             *eventlog.Started
 	acknowledgementsToPublish []router.ResponseAcknowledgement
+
+	// how long its ticks take, counted for the log
+	tickTimes tickTimes
 
 	// how it ends: retirementSignal asks Run to retire it, retirementAsked says by whom, and
 	// retiredTick is the tick of the last frame of its log, which holds that it retired (0 until
@@ -252,7 +262,7 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 //  4. settle the actions that were cancelled, and take what the actions set for the engine;
 //  5. hand the events to the emitter;
 //  6. publish a copy of the state;
-//  7. hand the cluster the requests to make and to remove engines, let go of the messages that
+//  7. hand the cluster the requests to make and to retire engines, let go of the messages that
 //     their receivers acked, send the messages that the actions put
 //     in the outbox, and send again the ones whose ack is late;
 //  8. take a checkpoint, when it is due, and hand it to be written out of the goroutine;
@@ -263,6 +273,7 @@ func (e *Engine[S]) ScheduleAt(tick uint64, a sim.Action[S]) { e.actionScheduler
 // the state does not then say the tick that the engine is at: a state whose AdvanceTick is wrong
 // can no longer be run, nor replayed, and the cluster stops.
 func (e *Engine[S]) Step() error {
+	started := time.Now()
 	e.tick++
 	e.st.AdvanceTick()
 	if got := e.st.Tick(); got != e.tick {
@@ -335,6 +346,7 @@ func (e *Engine[S]) Step() error {
 	}
 	e.eventLog.EndTick(e.peer.me, e.tick)
 	e.peer.publishMessageAcks(e.eventLog)
+	e.countTickTime(time.Since(started), cfg)
 	return nil
 }
 
@@ -359,19 +371,21 @@ func (e *Engine[S]) PublishState() { e.stableStore.Publish(e.peer.me, e.st.Clone
 // Run steps the engine at every tick that arrives, until the context ends, a tick fails, or the
 // engine is asked to retire. It returns the error of the tick that failed, and nil otherwise. An
 // engine never stops on its own except by retiring: a failure, or a stop, is that of the whole
-// cluster.
+// cluster. When the context ends the engine stops where it is, with nothing written: its state is
+// frozen, and a restart makes it again from its latest checkpoint and its log, up to the recovery
+// line. No message is sent back: the senders hold what they sent until it is acked.
 func (e *Engine[S]) Run(ctx context.Context, ticks <-chan time.Time) error {
 	for {
 		select {
-		case <-ctx.Done(): // a stop, not a removal: the engine goes on after a restart
-			e.peer.leaveRouters()
+		case <-ctx.Done(): // a stop, not a retirement: the engine goes on after a restart
+			e.peer.stopListening()
 			return nil
 		case <-e.retirementSignal: // ends the engine for good: its log ends with the record of it
 			e.Retire()
 			return nil
 		case <-ticks:
 			if err := e.Step(); err != nil {
-				e.peer.leaveRouters()
+				e.peer.stopListening()
 				return err
 			}
 		}
@@ -411,7 +425,7 @@ func (e *Engine[S]) Hash(h sim.Hasher) uint64 {
 // is called by Retire, and by Make for an engine that could not be made.
 func (e *Engine[S]) cleanUpRegistrations() {
 	e.stableStore.Remove(e.peer.me)
-	e.peer.leaveRouters()
+	e.peer.leaveRoutersForGood()
 }
 
 // buildInitRecord makes the record of the tick 1 of the engine, which it writes at its first tick:
@@ -519,6 +533,21 @@ func (e *Engine[S]) takeDirectiveResponses(ctx *sim.Context) {
 		}
 		handler.HandleDirective(ctx, &e.stateRegistry, d)
 	}
+}
+
+// countTickTime counts a tick that took the time given, and logs how long the ticks took, and
+// starts the count again, every tickTimesLogEvery ticks.
+func (e *Engine[S]) countTickTime(took time.Duration, cfg config.ReadOnlySnapshot) {
+	e.tickTimes.add(took)
+	if e.tick%uint64(tickTimesLogEvery.Get(cfg)) != 0 {
+		return
+	}
+	logging.Info(
+		"the time of the ticks of an engine", "engine", e.peer.me, "ticks", e.tickTimes.ticks,
+		"p50", e.tickTimes.atMost(0.5), "p99", e.tickTimes.atMost(0.99),
+		"longest", e.tickTimes.longest, "classes", e.tickTimes.text(),
+	)
+	e.tickTimes.reset()
 }
 
 // periodOffsetOf is where an engine starts the count of a period: the hash of its ID. The IDs of

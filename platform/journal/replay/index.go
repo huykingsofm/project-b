@@ -28,7 +28,7 @@ type index struct {
 	// inboundMessageHash is the hash of each message as the log of its receiver took it (Inbound):
 	// the sender, replayed, has to send the same.
 	inboundMessageHash map[messageKey]uint64
-	// retiredAt is the tick at which each engine whose log ends with Retired was removed.
+	// retiredAt is the tick at which each engine whose log ends with Retired was retired.
 	retiredAt map[sim.StateID]uint64
 	// inits is the record that begins the log of each engine that starts at the tick 0: the
 	// engine as it was made.
@@ -50,10 +50,10 @@ func buildIndex(
 			return nil, fmt.Errorf("the log of %v: %w", address, err)
 		}
 	}
-	// an engine that was removed published nothing at the tick it was removed at, and what it
+	// an engine that was retired published nothing at the tick it was retired at, and what it
 	// published is gone with it: a read finds the copy of a tick it ran, or nothing
 	for copy := range idx.copyReads {
-		if tick, removed := idx.retiredAt[copy.source]; removed && copy.tick >= tick {
+		if tick, retired := idx.retiredAt[copy.source]; retired && copy.tick >= tick {
 			return nil, fmt.Errorf(
 				"a read names the copy of the tick %d of %v, which was removed at the tick %d",
 				copy.tick, copy.source, tick,
@@ -92,15 +92,15 @@ func (idx *index) add(logs Logs, address sim.StateID, seed, start uint64) error 
 		if rec.Tick != tick {
 			tick, takenMsgs, recordsOfTheTick = rec.Tick, 0, 0
 		}
-		if _, removed := idx.retiredAt[address]; removed {
-			return fmt.Errorf("a record of the tick %d is after the engine was removed", rec.Tick)
+		if _, retired := idx.retiredAt[address]; retired {
+			return fmt.Errorf("a record of the tick %d is after the engine was retired", rec.Tick)
 		}
 		recordsOfTheTick++
 		switch body := rec.Body.(type) {
 		case eventlog.Retired:
-			// the engine ran no tick: the frame of its removal holds this record and no other
+			// the engine ran no tick: the frame of its retirement holds this record and no other
 			if recordsOfTheTick > 1 {
-				return fmt.Errorf("the tick %d, at which the engine was removed, has other records",
+				return fmt.Errorf("the tick %d, at which the engine was retired, has other records",
 					rec.Tick)
 			}
 			idx.retiredAt[address] = rec.Tick
