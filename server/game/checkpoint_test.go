@@ -209,7 +209,15 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 // aBigZoneLayerOf is aBigZoneLayer, made the zonelayer of the world given.
 func aBigZoneLayerOf(t testing.TB, c *testkit.Cluster) *engine.Engine[*zonelayerstate.State] {
 	t.Helper()
-	l := c.ZoneLayer(theLayer)
+	return fillWithPlayers(t, c.ZoneLayer(theLayer))
+}
+
+// fillWithPlayers puts 150 characters on the map of the zonelayer, with an item on the ground by
+// each and an action that waits to take it off, and returns the engine.
+func fillWithPlayers(
+	t testing.TB, l *engine.Engine[*zonelayerstate.State],
+) *engine.Engine[*zonelayerstate.State] {
+	t.Helper()
 	for i := range 150 {
 		ch, err := zonelayerstate.NewCharacter(state.CharacterID(i+1), "Binh", 100, 250, 256)
 		if err != nil {

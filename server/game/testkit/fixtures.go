@@ -7,50 +7,50 @@ import (
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-// What follows is for the tests of the engines that are removed while the game runs. The game
-// removes none: no action of it removes a zonelayer. A test makes the world do it with
-// RemoveLayerCommand, which stands in for the rule of a game. The zonelayers that are made while
+// What follows is for the tests of the engines that are retired while the game runs. The game
+// retires none: no action of it retires a zonelayer. A test makes the world do it with
+// RetireLayerCommand, which stands in for the rule of a game. The zonelayers that are made while
 // the game runs are made by the commands of the game itself (command.WorldZoneLayerAddCommand).
 
 const (
-	removeLayerCommandID sim.CommandID = 9_000_002
-	removeLayerActionID  sim.ActionID  = 9_000_002
+	retireLayerCommandID sim.CommandID = 9_000_002
+	retireLayerActionID  sim.ActionID  = 9_000_002
 )
 
-// RemoveLayerCommand asks the world to forget a zonelayer and the cluster to remove its engine.
-type RemoveLayerCommand struct{ Layer sim.StateID }
+// RetireLayerCommand asks the world to forget a zonelayer and the cluster to retire its engine.
+type RetireLayerCommand struct{ Layer sim.StateID }
 
-func decodeRemoveLayerCommand(r *binary.Reader, _ codec.Version) (RemoveLayerCommand, error) {
-	return RemoveLayerCommand{Layer: r.Uint[sim.StateID]()}, r.Err()
+func decodeRetireLayerCommand(r *binary.Reader, _ codec.Version) (RetireLayerCommand, error) {
+	return RetireLayerCommand{Layer: r.Uint[sim.StateID]()}, r.Err()
 }
 
-func (RemoveLayerCommand) ID() sim.CommandID { return removeLayerCommandID }
+func (RetireLayerCommand) ID() sim.CommandID { return retireLayerCommandID }
 
-func (c RemoveLayerCommand) Encode(w *binary.Writer) error {
+func (c RetireLayerCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.Layer))
 	return nil
 }
 
-func (c RemoveLayerCommand) Translate() []sim.Action[*worldstate.State] {
-	return []sim.Action[*worldstate.State]{RemoveLayerAction{Layer: c.Layer}}
+func (c RetireLayerCommand) Translate() []sim.Action[*worldstate.State] {
+	return []sim.Action[*worldstate.State]{RetireLayerAction{Layer: c.Layer}}
 }
 
-func (c RemoveLayerCommand) Clone() sim.Command[*worldstate.State] { return c }
+func (c RetireLayerCommand) Clone() sim.Command[*worldstate.State] { return c }
 
-// RemoveLayerAction makes the world forget a zonelayer and asks for its engine to be removed.
-type RemoveLayerAction struct{ Layer sim.StateID }
+// RetireLayerAction makes the world forget a zonelayer and asks for its engine to be retired.
+type RetireLayerAction struct{ Layer sim.StateID }
 
-func decodeRemoveLayerAction(r *binary.Reader, _ codec.Version) (RemoveLayerAction, error) {
-	return RemoveLayerAction{Layer: r.Uint[sim.StateID]()}, r.Err()
+func decodeRetireLayerAction(r *binary.Reader, _ codec.Version) (RetireLayerAction, error) {
+	return RetireLayerAction{Layer: r.Uint[sim.StateID]()}, r.Err()
 }
 
-func (RemoveLayerAction) ID() sim.ActionID { return removeLayerActionID }
+func (RetireLayerAction) ID() sim.ActionID { return retireLayerActionID }
 
-func (RemoveLayerAction) Priority() int16 { return 0 }
+func (RetireLayerAction) Priority() int16 { return 0 }
 
-func (RemoveLayerAction) Actor() any { return nil }
+func (RetireLayerAction) Actor() any { return nil }
 
-func (a RemoveLayerAction) Apply(
+func (a RetireLayerAction) Apply(
 	_ *sim.Context, s *worldstate.State, r *sim.ActionRegistry[*worldstate.State],
 	_ *sim.Plan[*worldstate.State],
 ) {
@@ -59,6 +59,6 @@ func (a RemoveLayerAction) Apply(
 	}
 }
 
-func (a RemoveLayerAction) Clone() sim.Action[*worldstate.State] { return a }
+func (a RetireLayerAction) Clone() sim.Action[*worldstate.State] { return a }
 
-func (a RemoveLayerAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.Layer)) }
+func (a RetireLayerAction) Encode(w *binary.Writer) { w.Uvarint(uint64(a.Layer)) }

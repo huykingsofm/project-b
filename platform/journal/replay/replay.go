@@ -34,8 +34,8 @@ type Result struct {
 	Cluster *cluster.Cluster
 	// Ticks is the last tick of each engine that was replayed.
 	Ticks map[sim.StateID]uint64
-	// Retired is the engines that the replay removed, since their logs end with the record of their
-	// removal: the cluster does not hold them.
+	// Retired is the engines that the replay retired, since their logs end with the record of their
+	// retirement: the cluster does not hold them.
 	Retired []sim.StateID
 	// Divergences says, for each engine that did not do what its log says, the first thing that
 	// differed. A replay that matches has none.
@@ -108,7 +108,7 @@ func Recover(dir string, o engine.Options) (*Result, error) {
 // number. Each engine that ran a tick publishes its state before its next tick, for the engines
 // that read it.
 //
-// An engine that the replay removed (its log ends with the record of its removal) is not made
+// An engine that the replay retired (its log ends with the record of its retirement) is not made
 // again; messages to it are refused. An engine that a request made and that never ran (its log
 // holds Init and nothing after) is made again and run when the engine that asked took the response,
 // and ended, with a last frame that says it retired, when the request still waits there: it is made

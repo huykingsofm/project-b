@@ -19,7 +19,7 @@ var ErrUnknownCode = errors.New(
 
 // The reasons.
 const (
-	// DeliveryFailureRetired: the engine was removed.
+	// DeliveryFailureRetired: the engine was retired.
 	DeliveryFailureRetired DeliveryFailure = iota + 1
 	// DeliveryFailureNotStarted: the engine does not exist yet, or the ID names none.
 	DeliveryFailureNotStarted

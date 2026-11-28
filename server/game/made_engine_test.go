@@ -25,7 +25,7 @@ import (
 var layer4 = sim.NewStateID(state.ZoneLayerType, 4)
 
 // aWorldThatRan writes the files of a world that checkpoints every 7 ticks, and runs it with run,
-// which makes and removes zonelayers by commands to the world, then closes the files.
+// which makes and retires zonelayers by commands to the world, then closes the files.
 func aWorldThatRan(
 	t *testing.T, dir string, every map[string]string, run func(c *testkit.Cluster),
 ) {
@@ -152,7 +152,12 @@ func TestAClusterThatRunsOnItsOwnAndMakesAZonelayerWritesLogsThatRecover(t *test
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
 		ctx, cancel := context.WithCancel(context.Background())
 		finished := make(chan struct{})
-		go func() { c.Run(ctx, time.Millisecond); close(finished) }()
+		go func() {
+			if err := c.Run(ctx, time.Millisecond); err != nil {
+				t.Error(err)
+			}
+			close(finished)
+		}()
 		time.Sleep(50 * time.Millisecond)
 		c.World.SendCommand(command.WorldZoneLayerAddCommand{
 			ZoneID: testkit.Zone1, Capacity: 2, RegenEvery: 10,
@@ -178,19 +183,19 @@ func TestAClusterThatRunsOnItsOwnAndMakesAZonelayerWritesLogsThatRecover(t *test
 	}
 }
 
-func TestAZonelayerThatWasMadeAndThenRemovedIsOnlyRefusedMessagesAfterAHandover(t *testing.T) {
+func TestAZonelayerThatWasMadeAndThenRetiredIsOnlyRefusedMessagesAfterAHandover(t *testing.T) {
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
 		aLayerWasMade(c, t)
-		c.World.SendCommand(testkit.RemoveLayerCommand{Layer: layer4})
+		c.World.SendCommand(testkit.RetireLayerCommand{Layer: layer4})
 		testkit.Steps(t, c, 10)
 	})
 	first, live, closeLog := handedOver(t, dir)
 	if !slices.Contains(first.Retired, layer4) {
-		t.Fatalf("the replay removed %v, want the zonelayer", first.Retired)
+		t.Fatalf("the replay retired %v, want the zonelayer", first.Retired)
 	}
 	if _, ok := live.Find(layer4); ok {
-		t.Fatal("the cluster that went live has the zonelayer that was removed")
+		t.Fatal("the cluster that went live has the zonelayer that was retired")
 	}
 	reason, ok := live.Env.Router.Deliver(testkitMessageFor(layer4))
 	if ok || reason != sim.DeliveryFailureRetired {
@@ -200,7 +205,7 @@ func TestAZonelayerThatWasMadeAndThenRemovedIsOnlyRefusedMessagesAfterAHandover(
 	closeLog()
 	second := recoverTheWorld(t, dir, everySeventhTick)
 	if !slices.Contains(second.Retired, layer4) {
-		t.Fatalf("the second recovery removed %v", second.Retired)
+		t.Fatalf("the second recovery retired %v", second.Retired)
 	}
 }
 
@@ -232,21 +237,21 @@ func TestAZonelayerWhoseCreatorLostTheTickThatMadeItIsCutToNothingAndTheWorldFor
 	closeLog()
 }
 
-func TestAZonelayerWhoseRemovalWasLostToACrashIsMadeAgainAndTheWorldThatForgotItIsLeftToTheGame(
+func TestAZonelayerWhoseRetirementWasLostToACrashIsMadeAgainAndTheWorldThatForgotItIsLeftToTheGame(
 	t *testing.T,
 ) {
 	dir := t.TempDir()
 	aWorldThatRan(t, dir, everySeventhTick, func(c *testkit.Cluster) {
 		aLayerWasMade(c, t)
-		c.World.SendCommand(testkit.RemoveLayerCommand{Layer: layer4})
+		c.World.SendCommand(testkit.RetireLayerCommand{Layer: layer4})
 		testkit.Steps(t, c, 10)
 	})
-	// the log of the zonelayer lost its last frame, the one of its removal
+	// the log of the zonelayer lost its last frame, the one of its retirement
 	records := recordsOnDisk(t, dir, layer4)
 	crash(t, dir, layer4, records[len(records)-1].Tick-1)
 	first, live, closeLog := handedOver(t, dir)
 	if slices.Contains(first.Retired, layer4) {
-		t.Fatal("the replay says the zonelayer was removed, but its log no longer says it")
+		t.Fatal("the replay says the zonelayer was retired, but its log no longer says it")
 	}
 	if _, ok := live.Find(layer4); !ok {
 		t.Fatal("the zonelayer was not made again from what its log keeps")

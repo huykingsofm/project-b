@@ -102,7 +102,7 @@ func EncodeMessage(w *binary.Writer, m Message) error {
 
 // EncodeDirectiveRequest writes a request of an engine to its cluster: its number, its kind, its
 // tag and what the kind needs (the state and the start actions of an engine to make, or the ID of
-// the engine to remove). Nothing of a request that cannot be written is left in w.
+// the engine to retire). Nothing of a request that cannot be written is left in w.
 func EncodeDirectiveRequest(w *binary.Writer, d DirectiveRequest) error {
 	start := len(w.B)
 	w.Uvarint(d.ID)

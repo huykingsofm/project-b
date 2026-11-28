@@ -50,22 +50,22 @@ Agreed (phase 1).
 - **Recovery.** Of the cluster, not of an engine: it is the replay runner playing the logs from the checkpoints of the engines. See the end of this section.
 - **S3.** Pushing closed segments and checkpoints to S3 is in the plan at low priority (phase 6), not now.
 
-### The log and the checkpoint belong to the cluster (pending approval; replaces recovery by option A)
+### The log and the checkpoint belong to the cluster (agreed and built; [eventlog](../../docs/eventlog.md), [checkpoint](../../docs/checkpoint.md) and [replay](../../docs/replay.md) are the reference)
 
 Principle:
 
-- **The unit of recording and of recovery is the cluster.** An engine stays independent while it runs: its own goroutine, its own files, no shared lock. The log and the checkpoints are one thing for the whole cluster: one directory, one manifest, read as one by the replay. No engine loads or replays alone.
+- **The unit of recording and of recovery is the cluster.** An engine stays independent while it runs: its own goroutine, its own files, no shared lock. The log and the checkpoints are one thing for the whole cluster: one directory, read as one by the replay. No engine loads or replays alone.
 - **There is no global tick.** Engines tick at their own pace, so replaying the cluster means running every engine in an order that respects what depends on what, not in tick order.
 
 What crosses from one engine to another (the only thing a replay needs besides the input of each engine):
 
-| Crossing | Recorded today | Needed |
-|---|---|---|
-| A message (sender, `Seq`) taken by an engine at its tick | header and action IDs, at the receiver | the actions too (codecs by ID) |
-| A copy of another engine read in a tick (`StableRead`) | the tick of the copy | nothing more |
-| A message that came back (`DeliveryFailureFull`, `DeliveryFailureRetired`) and was settled at a tick | nothing | a record: the tick, the header of the message and the reason |
-| An engine added or removed while running | not built yet | a record of the cluster: which engine, when it starts, and the engine and tick that caused it |
-| The version of the configuration | at the first read of each version | the content of each version, in the control stream |
+| Crossing | Recorded |
+|---|---|
+| A message (sender, `Seq`) taken by an engine at its tick | the whole message, at the receiver (`Inbound`), its actions by their codecs |
+| A copy of another engine read in a tick (`StableRead`) | the tick of the copy |
+| A message that came back (`DeliveryFailureFull`, `DeliveryFailureRetired`) and was settled at a tick | the tick, the header of the message and the reason (`Returned`) |
+| An engine made or ended while running | the records `Init`, `Started` and `Retired` in the log of that engine |
+| The version of the configuration | the command that the coordinator engine took (`UpdateConfigCommand`), in its own log |
 
 Why it can be done:
 
@@ -75,10 +75,9 @@ Why it can be done:
 
 The log:
 
-- `<dir>/manifest`: the cluster, its seed, the format versions, and each engine with its address, kind and the tick it was born at.
-- `<dir>/<name>-<id>/`: the segments of each engine, as agreed; one writer for each file.
-- `<dir>/control/`: the records of the cluster itself: engines added and removed, and the content of each version of the configuration (what `Store.Apply` was given), so that a replay needs nothing outside the log; the cluster writes it, not an engine.
-- The manifest and the control stream are written by the cluster, never from a tick.
+- `<dir>/<name>-<n>/`: the segments of each engine; one writer for each file.
+- `<dir>/recovery-line`: the cache of the recovery line, written by the observer of the log; `<dir>/state-id-marks`: the highest ID of each type, written by the orchestrator.
+- There is no manifest and no control stream: which engines exist is in the records `Init`, `Started` and `Retired` of each engine, and what the configuration was is in the commands that the coordinator engine took.
 
 The checkpoint:
 
@@ -114,7 +113,7 @@ Replay is the engines running again, not a second implementation:
 | messages in | the router | what the log says it took at each tick (the senders, replayed, produce them) |
 | messages out and returned | the router | caught by the replay and delivered as the receivers recorded; returned as the log says |
 | copies of other engines | the latest published | the copy of the tick recorded |
-| configuration | the store | the content of the version recorded, from the control stream |
+| configuration | the store | the commands that the coordinator engine took, from its log |
 | events to clients and the event log | the emitter and the file log | nothing |
 
 - **Going live is making the engines again in the real environment (agreed):** after the log is played to its end, each replayed engine is checkpointed at its last tick, and an engine is restored from that checkpoint (`Restore...Engine`) in the environment with the real router, store, emitter and file log; it goes on from its own tick. A replayed engine never runs live, so no engine that runs carries an adapter of the replay and the path of a running engine has no extra indirection. Recovery and replay share the runner; they differ in what is made at the end.
@@ -125,21 +124,12 @@ Replay is the engines running again, not a second implementation:
   - the store of the configuration at its latest version;
   - the file logs cut at the recovery line and opened to go on writing.
 - What it costs and how it is checked: two copies of an engine are in memory while it is made again, and a field that the checkpoint does not hold, or that the hash does not cover, would be lost without a sign. So the acceptance test compares the hash of the restored engine with that of the replayed one and the bytes of their checkpoints, and runs both on for some ticks with the same hash.
-- The replay needs the published copies by tick (the registry keeps only the latest) and the configuration by version.
+- The replay needs the published copies by tick (the registry keeps only the latest) and the configuration, which it reads from the copy of the coordinator engine.
 
 Costs and risks:
 
 - The runner is one goroutine that plays the engines in turn: replay costs about what the cluster costs live on one core, which is the machine the server targets. Running it in parallel as live does, one goroutine for each engine that waits for what it depends on, is a task of the plan.
 - The log is bigger by the bodies of the messages; the benchmark of the event log records it.
-- An engine added at run time needs the control stream; its shape is fixed now (R4) and the feature comes with the zonelayers that are added and removed.
-
-The order of the work, one commit for each step, all in one pull request, each step with its tests:
-
-1. Codecs of the actions and of the message; `OnFail` as data; `Inbound` with the actions; the record of a message that came back; dropping a message received twice.
-2. The replay runner from tick 0 on the real engines with replay adapters: the whole cluster in dependency order, every recorded hash matches (`stepping.Step` is the reference run).
-3. Codecs of the states, and the checkpoint of one engine: written, read, and the restored engine has the same hash, with actions waiting in the scheduler.
-4. Periodic writing with offsets, each engine on its own.
-5. Loading from the checkpoints of the engines with the start rule, the recovery line, and sending again what was in flight; going live by making each engine again in the real environment from a checkpoint of the replayed engine; the acceptance test of the phase.
 
 ## Making and ending engines
 
@@ -196,6 +186,59 @@ A@100 is the tick 100 of the engine A that asks, B is the engine that is made.
 - **The orchestrator holds the state of the IDs: the highest ID given for each type of state.** It is an object of the cluster (not an engine, and not the coordinator engine), made for the coordination of the cluster, of which the IDs are the first part. It stores the state in a file of its own in the directory of the logs, so a recovery does not read the logs from the start to find it, and it provides the IDs to the cluster. Only the cluster calls it, from the periodic task and one goroutine at a time, so it takes no lock. An engine whose ID is above what it holds is not valid and counts as not made. The numbers between are never given again, whether an engine had them or not.
 - **When the file is lost or damaged, the recovery stops with an error.** A way to rebuild it is for later.
 
+## Early playable slice (phase 2)
+
+Status: proposed. The owner chooses in the table of choices below, and no code is written before. The slice is a generic platform: a protocol, a gateway, sessions and a client that any game of this engine could use. What the player fights, picks up and sees is sample content, marked as an example (R2); the game of cultivation comes after `base-v1`.
+
+**Goal:** a browser connects, enters a zonelayer, walks, hits a monster, sees the drop, picks it up and chats, and 2,000 bots do the same; the acceptance is in [phases.md](phases.md).
+
+### What is there, and what is not
+
+| There | Not there |
+|---|---|
+| the engines and the cluster; the commands to walk, attack, pick up, chat, take an exit, enter and grant a shield; the events with their audiences (`Everyone`, `Characters`, `Players`, `InSightOf`); the `Emitter` that every engine gives its events to at the end of its tick; the published copy of every state; the log and the replay | the protocol, the gateway, accounts and sessions, the delivery of events to a connection, the snapshot that a client gets when it enters, a monster that acts, a drop when something dies, the web client, the bot |
+| `client/`: a client prototype of the owner (Canvas 2D, JavaScript, offline, with a world of its own) | any link between that client and the server |
+
+### The parts, in order
+
+| # | Part | What it is | Test |
+|---|---|---|---|
+| 1 | Protocol ([protocol.md](protocol.md)) | `proto/` with `buf`: one `Frame` with a `oneof`; the client sends the login, the enter and the commands (walk, attack, pick up, chat); the server sends the welcome with a snapshot, one batch of events for each tick (the tick and a number that puts them in order) and the errors; code generated for Go and TypeScript; not frozen before the first release ([R15](../rule/r15-versioned-data-formats.md)) | a round trip of every message; the bytes of each kept in a table |
+| 2 | The ports | the gateway defines what it needs (R1): `Accounts` (a guest login and a token) and `World` (send the command of a character, read a snapshot of a zonelayer, listen to the events of a zonelayer); `server/gateway` knows no engine | the next parts pass their tests with fakes of the ports |
+| 3 | The adapter of the world | implements `World` on the cluster: finds the engine of the zonelayer, calls `SendCommand`, reads the published copy for the snapshot, and is the `Emitter` that hands the events to the connections | a command of a session reaches only the character of that session; no state is read from a goroutine that is not its engine's |
+| 4 | The gateway | WebSocket; one authentication when the connection opens and none after; a heartbeat; a bounded queue of frames for each connection; a connection that does not read is closed; the events of a tick are one frame | a slow client is closed and the server goes on |
+| 5 | Delivery | the events of a zonelayer go to the sessions in it (`Everyone` and `Characters`); `InSightOf` is treated as `Everyone` until phase 3 builds sight | a private event reaches one session only |
+| 6 | The slice of the game (sample) | a monster that chases and attacks, an item that drops when it dies (`ZoneLayerItemEntityAddAction`), the pick up, the chat; each is an action or a standing action, marked as an example | the replay of a fight keeps the hash |
+| 7 | The client | TypeScript, PixiJS and Vite: the map, the entities, health bars, a small inventory and chat; it applies the move rule itself and corrects when the server says so ([R8](../rule/r08-player-first.md)) | the move rule is tested against vectors that Go makes |
+| 8 | The bot | a Go client of the same protocol: it logs in, walks, attacks and chats, many at once | 2,000 bots: p99 of a tick under 20 ms at the network layer and under 45 ms per layer |
+
+Part 6 can be written and tested on the cluster alone from the start; the others need 1 to 5 to be tried end to end.
+
+### Choices of the owner
+
+| Choice | Options | Proposed |
+|---|---|---|
+| WebSocket library | `coder/websocket`; `gorilla/websocket`; `golang.org/x/net/websocket` | `coder/websocket`: maintained, takes a context, small ([R3](../rule/r03-shared-code.md)) |
+| Where the gateway lives | in `server/` as a layer of the game server, with its ports; or in `platform/` | `server/gateway`, with the ports it defines, and the adapters in `server/adapters/`; only `cmd` imports the adapters ([R1](../rule/r01-layer-dependency.md)); the platform stays free of the network |
+| Login in phase 2 | a guest with a token only; or a guest and an account with a password (argon2id) | a guest and a token now; the account with a password in phase 7 |
+| The player and the character | the session holds the character, and the client never says which one it acts as; or the client names it | the session holds it, with a test that a command cannot name another character |
+| The snapshot when a client enters | the published copy of the zonelayer; or a message to the engine; or the events played again | the published copy, read through a read-only interface: it does not wait for the engine |
+| A session that goes to another zonelayer | the gateway follows `CharacterLeft` and `CharacterEntered`; or the engine tells the session | the gateway follows the events; what zonelayer a session is in belongs to the gateway ([R12](../rule/r12-one-owner-per-datum.md)) |
+| The first monster | an action of the zonelayer that sets itself again; or an engine of its own | an action of the zonelayer, as a sample; the design of the AI is open ([decisions.md](decisions.md)) and waits for phase 9 |
+| The client | the new TypeScript client of the plan; or the prototype in `client/` with its world replaced by the network | the new client, small; the prototype stays as the reference for art and for rendering |
+| The tick of the server | how many ticks a second | the period that the code that runs the cluster gives `Cluster.Run`; the client interpolates between the ticks it receives |
+| The tools in `make ci` | `buf` and Node in the checks; or targets of their own | targets of their own (`make proto`, `make client`), so that `make ci` of the Go code needs no Node |
+
+### What it needs from phase 1
+
+The graceful stop, so that a server stops without losing a message, and the counts and metrics, so that the gateway reports its own. Both are in the roadmap before this design is built.
+
+### Risks
+
+- **The cost of telling clients** ([decisions.md](decisions.md)): this phase sends everything of a zonelayer to everyone in it, up to 22,500 deliveries a tick for 150 characters; the slice is measured with that, and phase 3 reduces it.
+- **The emitter is called on the goroutine of an engine:** it must not wait; each connection has a bounded queue and the engine only appends to it.
+- **A command that names a character that is not the session's:** closed by the adapter, and tested.
+
 ## The store: in memory first
 
 For the storage phase, pending approval. A repository that is read often has an in-memory layer, an adapter that implements the same port as the database one, and that layer is the source of truth: it is loaded when the process starts and the database is written afterwards, by a bounded queue that keeps the order of the writes and is written out at shutdown. A write that depends on the database (a unique name, a foreign key) stays synchronous. The pattern assumes that one process writes a row; a process split brings an owner fence.
@@ -206,7 +249,7 @@ For the storage phase, pending approval. A repository that is read often has an 
 |---|---|---|---|
 | Entity as an interface | `ID`, `KindID`, `Position`, `Radius`, `BoundingBox`; `CharacterEntity`, `ItemEntity`; a pickup action; appear and disappear events | 0 | detail pending approval |
 | Checkpoint and event log | The log is written to a file, append-only, in segments; periodic checkpoints offset between engines; recovery is the replay of the cluster from the checkpoints of the engines | 1 | agreed, the cluster-wide form pending approval |
-| Early playable slice | Protobuf protocol, WebSocket gateway, TypeScript and PixiJS client, fighting, monsters, drops, pickup | 2 | agreed |
+| Early playable slice | Protobuf protocol, WebSocket gateway, TypeScript and PixiJS client, fighting, monsters, drops, pickup; the design and its choices are in [the section above](#early-playable-slice-phase-2) | 2 | agreed, choices pending approval |
 | Grid | A spatial index for fast lookup by area, and localizing the map (each entity belongs to cells by its `BoundingBox`, queries by cell) | 3 | agreed |
 | Sight (AOI) | Who sees whom; entering and leaving sight; which cells changed in the tick | 3 | pending approval |
 | Loading state | A new entity stays hidden until it has loaded | 3 | agreed |

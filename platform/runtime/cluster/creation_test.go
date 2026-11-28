@@ -42,7 +42,7 @@ func toysThatCanMakeOneAnother(
 	t testing.TB, n int,
 ) (*cluster.Cluster, []*engine.Engine[*testkit.ToyState], *eventlog.MemLog) {
 	t.Helper()
-	return toysThatCanRemoveOneAnother(t, n)
+	return toysThatCanRetireOneAnother(t, n)
 }
 
 func steps(t *testing.T, c *cluster.Cluster, n int) {

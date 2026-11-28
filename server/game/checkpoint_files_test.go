@@ -166,7 +166,9 @@ func TestEnginesThatRunOnTheirOwnGoroutinesWriteTheirCheckpointsWhileTheyGoOn(t 
 		defer close(done)
 		// slow enough for the writer, which syncs each file, to keep up with the 6 engines: a
 		// checkpoint that finds its queue full is dropped, and the test wants them all
-		c.Run(ctx, 10*time.Millisecond)
+		if err := c.Run(ctx, 10*time.Millisecond); err != nil {
+			t.Error(err)
+		}
 	}()
 	for _, id := range testkit.ClusterEngines { // until each has two at least
 		for {

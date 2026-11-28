@@ -9,10 +9,10 @@
 | unsent | a message that its `OnFail` sends again (`Resend`), and that did not go yet | at the next flush, with a new number |
 | sent | a message that went into the channel of its receiver, with the number and the tick it was stamped with | when its receiver acks it, or when it comes back undelivered (`handleReturnedMessages`, by its number), or when it is sent again and its receiver is gone |
 
-- Both are in the checkpoint, each message whole. What a sent message waits for (the tick at which it is sent again) is not: after a restore each is sent again at the next flush, with the number it has.
+- Both are in the checkpoint, each message whole. What a sent message waits for (the tick at which it is sent again) is not: after a restore each is sent again at the next flush, with the number it has, before the new messages of the tick: the numbers of a sender reach its receiver in order.
 - The hash of the engine covers the unsent messages and not the sent ones: when a message is acked depends on when the log of its receiver is synced, which a replay does not repeat.
 - An engine in an environment with no `AckBoard` holds no sent message: nothing would ever let it go. A replay has an `AckBoard`, so the engines of a replay hold their sent messages as a live one does, a receiver acks one as it takes it from its log, and what is left at the limit of an engine is in its checkpoint, which a handover makes the live engine from ([replay](replay.md#handover)).
-- An engine that is removed gives back what waits in its channel, each message once: a message that its sender sent again while it waited is there more than once, and one that the engine took is still given back, since what it did is gone with the engine.
+- An engine that is retired gives back what waits in its channel, each message once: a message that its sender sent again while it waited is there more than once, and one that the engine took is still given back, since what it did is gone with the engine.
 - A message that came back undelivered is let go of at once, so its `OnFail` runs once: it would otherwise stay until it is sent again, come back a second time as `DeliveryFailureRetired` and run its `OnFail` again.
 
 ## Sending again

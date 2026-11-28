@@ -65,7 +65,7 @@ type replayRun struct {
 	directives *router.DirectiveRouter
 
 	// what it checks and reports: the log that the run is compared with, the divergences, and the
-	// engines that the replay removed, in the order it did
+	// engines that the replay retired, in the order it did
 	verify  *verifyLog
 	div     *divergences
 	retired []sim.StateID
@@ -296,8 +296,8 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 		return err
 	}
 	if len(er.tickRecords) > 0 {
-		if _, removed := er.tickRecords[0].Body.(eventlog.Retired); removed {
-			return r.removeEngine(id, er, tick)
+		if _, retired := er.tickRecords[0].Body.(eventlog.Retired); retired {
+			return r.retireEngine(id, er, tick)
 		}
 	}
 	for _, rec := range er.tickRecords {
@@ -335,17 +335,17 @@ func (r *replayRun) stepEngine(id sim.StateID, er *engineRun) error {
 	return nil
 }
 
-// removeEngine removes the engine, as its log says it was at the tick: the frame of that tick holds
-// the record of the removal and no other (the index checks it), and the engine runs no tick.
-func (r *replayRun) removeEngine(id sim.StateID, er *engineRun, tick uint64) error {
+// retireEngine retires the engine, as its log says it was at the tick: the frame of that tick holds
+// the record of the retirement and no other (the index checks it), and the engine runs no tick.
+func (r *replayRun) retireEngine(id sim.StateID, er *engineRun, tick uint64) error {
 	if len(er.tickRecords) != 1 {
-		return fmt.Errorf("%v tick %d: the engine was removed and the tick has %d records",
+		return fmt.Errorf("%v tick %d: the engine was retired and the tick has %d records",
 			id, tick, len(er.tickRecords))
 	}
 	retired := er.tickRecords[0].Body.(eventlog.Retired)
 	er.engine.RequestRetirement(retired.By, retired.ByTick)
 	if !er.engine.RetireIfRequested() {
-		return fmt.Errorf("%v tick %d: the engine was removed and did not retire", id, tick)
+		return fmt.Errorf("%v tick %d: the engine was retired and did not retire", id, tick)
 	}
 	r.cluster.Forget(id)
 	r.retired = append(r.retired, id)

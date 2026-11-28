@@ -187,13 +187,17 @@ func (c *peer) receivedActions[S sim.State](tick uint64, rpl eventlog.Log) []sim
 	return out
 }
 
-// flushUnsettledMessages sends what the engine wants to send: first the messages that earlier
-// failures made necessary, then what the actions of this tick put in the outbox; and it sends
-// again, with the number they have, the messages that went and have not been acked for a while. A
-// message that cannot be delivered is handled at once, and the event log records that it came
-// back, at the tick of the send. The tick lets go of the acked messages before it calls this.
+// flushUnsettledMessages sends what the engine wants to send: first, again and with the number they
+// have, the messages that went and have not been acked for a while, then the messages that earlier
+// failures made necessary, then what the actions of this tick put in the outbox. The old ones go
+// first so that the numbers of a sender reach its receiver in order, as the receiver lets go of a
+// number that is not above the last it took: a message that goes again after a restore, with an
+// older number than the new ones, would be taken for one it had. A message that cannot be
+// delivered is handled at once, and the event log records that it came back, at the tick of the
+// send. The tick lets go of the acked messages before it calls this.
 func (c *peer) flushUnsettledMessages(tick uint64, fresh []sim.Message, rpl eventlog.Log) {
 	cfg := c.configSnapshot()
+	c.resendUnackedMessages(tick)
 	for _, m := range append(c.data.unsettledMessages.TakeUnsent(), fresh...) {
 		c.data.sentSeq++
 		m = m.Stamp(sim.Header{From: c.me, Seq: c.data.sentSeq, Tick: tick})
@@ -208,7 +212,6 @@ func (c *peer) flushUnsettledMessages(tick uint64, fresh []sim.Message, rpl even
 			c.data.unsettledMessages.MarkSent(m, tick, cfg)
 		}
 	}
-	c.resendUnackedMessages(tick)
 }
 
 // releaseAckedMessages lets go of the messages that their receivers say they hold safe.
@@ -258,11 +261,19 @@ func (c *peer) publishMessageAcks(rpl eventlog.Log) {
 	c.takenMessages = append(c.takenMessages[:0], c.takenMessages[n:]...)
 }
 
-// leaveRouters makes the engine unreachable and gives back what is
-// waiting in its channels, each message once. It is what the end of an engine does, whether it is
-// stopped (the context of Run ended or a tick failed) or removed for good: whether anything else
-// is written, and whether what it published goes, is for the caller.
-func (c *peer) leaveRouters() {
+// stopListening is what an engine does when it stops and goes on after a restart: it takes back
+// what it published to the directive router and sends nothing again. Nothing is given back to the
+// senders: what waits in its channel is lost with the process, and each sender holds the messages
+// it sent until they are acked, in its checkpoint, so it sends them again.
+func (c *peer) stopListening() {
+	c.directives.Leave(c.me)
+	c.bounce.Stop()
+}
+
+// leaveRoutersForGood makes the engine unreachable and gives back what is waiting in its
+// channels, each message once, as retired. It is what the end of an engine does when it retires:
+// whether anything else is written, and whether what it published goes, is for the caller.
+func (c *peer) leaveRoutersForGood() {
 	c.messageRouter.MarkRetired(c.me)
 	c.directives.Leave(c.me)
 	c.bounce.Stop()

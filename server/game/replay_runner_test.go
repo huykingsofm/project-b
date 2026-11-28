@@ -240,11 +240,13 @@ func TestAReplayGivesBackTheMessagesThatCameBackAtTheTickTheyCameBack(t *testing
 		c.ZoneLayer(testkit.Layer1).SendCommand(exitEast)
 		// the message to zonelayer 3 is in its queue, which does not run
 		c.ZoneLayer(testkit.Layer1).Step()
-		ctx, cancel := context.WithCancel(context.Background())
+		c.ZoneLayer(testkit.Layer3).RequestRetirement(0, 0)
 		done := make(chan struct{})
-		go func() { c.ZoneLayer(testkit.Layer3).Run(ctx, make(chan time.Time)); close(done) }()
-		cancel() // the zonelayer retires and gives back what waits in its queue
-		<-done
+		go func() {
+			c.ZoneLayer(testkit.Layer3).Run(context.Background(), make(chan time.Time))
+			close(done)
+		}()
+		<-done // the zonelayer retires and gives back what waits in its queue
 		for range 3 {
 			c.ZoneLayer(testkit.Layer1).Step()
 		}

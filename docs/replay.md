@@ -22,7 +22,7 @@ A replay always runs on a plan, and a plan is made only by `MakeRecoveryPlan` or
 |---|---|
 | the options | an `engine.Options` (`Seed`, `QueueSize`, `Codecs`, `Engines`): what the cluster that was recorded was made with; what it sets for the event log, the emitter and the checkpoints is not used. No builder: each engine is made from its checkpoint, or from the record that begins its log, through the registry (`engine.EngineRegistry`) |
 | the logs | `replay.Logs`: for each engine, its last tick (`Last`) and an `eventlog.Source` that gives its records in order, one at a time, from a tick (`Open(engine, from)`: the tick `from` and the ones after it); `eventlog.FileLogs` reads the files of an `eventlog.FileLog`, and `eventlog.MemoryLogs` and `eventlog.MemLog` hold records in memory |
-| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, the engines it removed (`Retired`), and the divergences |
+| `Result` | the plan, the cluster (each engine at its limit), the last tick of each engine, the engines it retired (`Retired`), and the divergences |
 | an error | the replay cannot run: wrong options, a record that cannot be given to its engine, a log that begins with no record of how its engine was made and has no checkpoint to start from, engines that wait for each other for ever, a file that cannot be read or cut, a checkpoint that cannot make its engine (or is of another tick than its file says) |
 | a divergence | the first difference of an engine between the run and its log; not an error of `Run`, a `*DivergenceError` of `Recover` |
 
@@ -60,7 +60,7 @@ Before an engine runs a tick, the records of that tick are given to it, in the o
 | `KindReturned` | a message sent in an earlier tick is given back at this one (`Router.Return`); one that is sent in this tick is refused at once, with the reason, when its sender sends it |
 | `KindInit` | the record of the tick 1 of the log of an engine: the replay makes the engine from the checkpoint inside it (the engine as it was made) when it starts from no checkpoint; the record, and `KindStarted`, are left out of the records that the engine is compared with ([engines](engine_lifecycle.md)) |
 | `KindDirective` | a response of the cluster to a request of the engine: put in the directive router of the replay, which the engine takes it from at its tick; the requests and the acknowledgements of the engines are thrown away, since a replay has no cluster |
-| `KindRetired` | the engine is removed (`Cluster.Remove`) and runs no tick: the frame of the tick holds this record and no other, and it is the last of the log (the index refuses a log in which it is not); the cluster of the result does not hold the engine, and its ID is in `Result.Retired` |
+| `KindRetired` | the engine is retired (`Cluster.RequestEngineRetirement`) and runs no tick: the frame of the tick holds this record and no other, and it is the last of the log (the index refuses a log in which it is not); the cluster of the result does not hold the engine, and its ID is in `Result.Retired` |
 | `KindStableRead` | the read at this tick gets the copy of the tick in the record; the engine does not run before the source engine has run to that tick; the configuration is read so, from the copy of the coordinator engine ([coordinatorengine](coordinatorengine.md)) |
 
 ## An engine that starts from a checkpoint
@@ -134,7 +134,7 @@ Before the first tick, for each engine that starts above tick 0:
 | copies | each engine that ran a tick publishes its state (`PublishState`), for the engines that read it; one at the tick 0 publishes nothing, so a read that records the tick 0 means that it found no copy |
 | engines that never ran | an engine with `Init` and nothing after it is kept and run when the log of the engine that asked holds the response (also when that engine retired after), and dropped, with `Retired` written to its log, when the request still waits there or no response is in its log ([engines](engine_lifecycle.md)) |
 | IDs | the orchestrator of the cluster goes on from its file (`state-id-marks`); the recovery drops an engine whose ID is above it |
-| removed engines | the engines in `Result.Retired` are not made again: the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
+| retired engines | the engines in `Result.Retired` are not made again: the router refuses a message for one as `DeliveryFailureRetired` and its log is not written on |
 | after | the caller runs the cluster; each engine goes on from its own tick, and the event log of `env` writes on after the cut |
 
 | Part | What happens |
@@ -146,7 +146,7 @@ Before the first tick, for each engine that starts above tick 0:
 | the queues | empty: what was not taken from them is not in any log |
 | the configuration | the engine has what its checkpoint holds; a later document of the store is sent by the cluster as a command |
 
-- A read of an engine that was removed names a copy of a tick that it ran, or none: what it published goes when it is removed, and it publishes nothing at the tick of its removal (the index refuses a read of a copy at that tick or after).
+- A read of an engine that was retired names a copy of a tick that it ran, or none: what it published goes when it is retired, and it publishes nothing at the tick of its retirement (the index refuses a read of a copy at that tick or after).
 - A replayed engine sends its unacked messages again, as a live one does, into the router of the replay, which compares each with what its receiver recorded and carries nothing.
 - The hash of an engine that is made again is the hash of the replayed one: the test of `server/game/handover_test.go` checks it, and the run does not.
 

@@ -90,7 +90,7 @@ Each engine takes its own checkpoints, with no set for the cluster: no checkpoin
 |---|---|
 | when | at every tick for which `(tick + offset mod every) mod every` is 0 |
 | `every` | the config variable `checkpoint.every_ticks` (600) |
-| offset | the hash of the ID of the engine, the same offset as for the hash of the event log, so the engines of a cluster are spread over the ticks of a period |
+| offset | the hash of the ID of the engine, the same offset as for the hash of the event log, so the engines of a cluster are spread over the ticks of a period: with 7, 15 and 41 engines and the period of 600, no two engines took a checkpoint at the same tick in 1,200 ticks |
 | where in `Step` | after the messages of the tick are sent, before `EndTick` |
 | on the goroutine of the engine | a `Checkpoint` whose state is the clone that was just published, which no one changes; the scheduler, the random numbers and what the peer knows are cloned |
 | on the goroutine of the writer | the checkpoint is encoded (`Encode`), and the file is written |

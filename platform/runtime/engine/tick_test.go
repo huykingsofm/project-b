@@ -88,7 +88,12 @@ func TestRunStopsEveryEngineWhenOneFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	done := make(chan struct{})
-	go func() { c.Run(ctx, time.Millisecond); close(done) }()
+	go func() {
+		if err := c.Run(ctx, time.Millisecond); err == nil {
+			t.Error("the cluster stopped with no error, though an engine failed")
+		}
+		close(done)
+	}()
 	select {
 	case <-done:
 	case <-ctx.Done():

@@ -36,6 +36,7 @@ type Router struct {
 	data     atomic.Pointer[routerData]
 	stopping atomic.Bool
 	dropped  atomic.Uint64
+	refused  atomic.Uint64
 }
 
 // NewRouter makes an empty router.
@@ -84,6 +85,7 @@ func (rt *Router) Deliver(l sim.Message) (sim.DeliveryFailure, bool) {
 		return sim.DeliveryFailureNotStarted, false
 	}
 	if !ch.Send(l) {
+		rt.refused.Add(1)
 		return sim.DeliveryFailureFull, false
 	}
 	return 0, true
@@ -123,6 +125,10 @@ func (rt *Router) Return(l sim.Message, r sim.DeliveryFailure) {
 
 // Dropped returns how many messages were lost because their sender could not take them back.
 func (rt *Router) Dropped() uint64 { return rt.dropped.Load() }
+
+// Refused returns how many messages were refused because the channel of their receiver was full:
+// their senders were told, and handled each by its OnFail.
+func (rt *Router) Refused() uint64 { return rt.refused.Load() }
 
 func (rt *Router) update(f func(*routerData)) {
 	rt.mu.Lock()

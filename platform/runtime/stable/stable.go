@@ -13,7 +13,7 @@ type Store interface {
 	// Publish makes a state the latest copy of the engine with the ID. The state must not be
 	// changed after.
 	Publish(id sim.StateID, s sim.State)
-	// Remove forgets what an engine published, as the engine is removed.
+	// Remove forgets what an engine published, as the engine is retired.
 	Remove(id sim.StateID)
 	// View returns what the engine with the ID reads of the store.
 	View(reader sim.StateID, eventLog eventlog.Log) *View
@@ -34,7 +34,7 @@ type CopySource interface {
 // An engine publishes at the end of every tick a Snapshot of its state, and never changes that copy
 // again. The other engines read the latest copy they find, with no lock and no wait, and keep it
 // for as long as they need it; nothing has to be given back. What they read may be a few ticks old,
-// and it is not found for an engine that published nothing yet or was removed. Only the engine that
+// and it is not found for an engine that published nothing yet or was retired. Only the engine that
 // owns a piece of data knows exactly what it is.
 type StateStore struct {
 	states registry.Registry[sim.StateID, sim.State]

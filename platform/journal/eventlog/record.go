@@ -223,7 +223,7 @@ func (b Returned) Same(other Body) bool { o, ok := other.(Returned); return ok &
 
 func (Returned) Kind() Kind { return KindReturned }
 
-// Retired says that the engine was removed for good: it is the only record of the last frame of
+// Retired says that the engine was retired for good: it is the only record of the last frame of
 // its log, which comes after the last tick it ran. A log that ends with it is of an engine that
 // does not go on. Its state ID is never given again. By is the engine that asked for it and ByTick
 // the tick of that engine at which it asked; both are 0 when the engine asked for itself, since the
@@ -241,7 +241,7 @@ func (b Retired) Encode(w *binary.Writer) error {
 	return nil
 }
 
-// Dependency is the engine that asked for the engine to be removed and the tick at which it asked;
+// Dependency is the engine that asked for the engine to be retired and the tick at which it asked;
 // an engine that asked for itself depends on none.
 func (b Retired) Dependency() (sim.StateDependency, bool) {
 	return sim.StateDependency{Source: b.By, Tick: b.ByTick}, b.By != 0 && b.ByTick > 0
@@ -314,11 +314,11 @@ func (Started) Kind() Kind { return KindStarted }
 // Directive is the answer of the cluster to a request of the engine, at the tick the engine took
 // it. It is not made again by a replay, so the log holds it, as it holds a command. The answer that
 // an engine was made depends on the tick 1 of that engine, the record Init, and the answer that an
-// engine was removed on the last tick of the removed engine, which holds Retired: the engine that
+// engine was retired on the last tick of the retired engine, which holds Retired: the engine that
 // took it is never ahead of what the other engine has on the disk.
 type Directive struct{ Response sim.DirectiveResponse }
 
-// Dependency is the engine that the response says was made or removed, and the tick of it that the
+// Dependency is the engine that the response says was made or retired, and the tick of it that the
 // response depends on; a response that failed depends on none.
 func (b Directive) Dependency() (sim.StateDependency, bool) {
 	r := b.Response

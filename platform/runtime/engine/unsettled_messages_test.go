@@ -127,7 +127,7 @@ func TestAMessageWhoseReceiverIsGoneComesBackOnceAndIsLetGoOf(t *testing.T) {
 	}
 }
 
-func TestAMessageThatCameBackFromAReceiverRemovedWhileItWaitedIsLetGoOfAtOnceAndComesBackOnce(
+func TestAMessageThatCameBackFromAReceiverRetiredWhileItWaitedIsLetGoOfAtOnceAndComesBackOnce(
 	t *testing.T,
 ) {
 	c, a, b, _ := twoToysThatAckWhatIsSafe(t)
@@ -186,7 +186,7 @@ func TestARestoredEngineSendsAgainWhatItHeldAndAcksWhatItTookAtOnce(t *testing.T
 	}
 }
 
-func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
+func TestAnEngineThatIsRetiredEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	dir := t.TempDir()
 	env := testkit.NewToyEnv(t)
 	log := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
@@ -201,11 +201,11 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 	}
 	// the coordinator engine stays
 	if !stepping.RetireEngine(c, 1) || len(c.Engines()) != 1 {
-		t.Fatal("the engine was not removed")
+		t.Fatal("the engine was not retired")
 	}
 	reason, ok := env.Router.Deliver(testkit.ToyMessage(1, 1))
 	if ok || reason != sim.DeliveryFailureRetired {
-		t.Fatalf("a message to the engine that was removed bounced as %v, %v", reason, ok)
+		t.Fatalf("a message to the engine that was retired bounced as %v, %v", reason, ok)
 	}
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
@@ -234,7 +234,7 @@ func TestAnEngineThatIsRemovedEndsItsLogWithAFrameThatSaysSo(t *testing.T) {
 		t.Fatal(r.Err())
 	}
 	if want := []uint64{1, 2, 3, 4}; !reflect.DeepEqual(ticks, want) || retiredAt != 4 {
-		t.Fatalf("the ticks are %v, the removal at %d; want %v and 4", ticks, retiredAt, want)
+		t.Fatalf("the ticks are %v, the retirement at %d; want %v and 4", ticks, retiredAt, want)
 	}
 }
 

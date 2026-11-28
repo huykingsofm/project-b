@@ -4,14 +4,14 @@ const (
 	// DirectiveCreateEngine asks the cluster to make an engine from a state and the actions that
 	// it starts with.
 	DirectiveCreateEngine DirectiveKind = iota + 1
-	// DirectiveRetireEngine asks the cluster to remove the engine with the ID in Target.
+	// DirectiveRetireEngine asks the cluster to retire the engine with the ID in Target.
 	DirectiveRetireEngine
 )
 
 // DirectiveKind is what a directive asks of the cluster, or answers.
 type DirectiveKind uint8
 
-// DirectiveRequest is what an engine asks of its cluster, since an engine cannot make or remove
+// DirectiveRequest is what an engine asks of its cluster, since an engine cannot make or retire
 // another engine itself. Its actions put it in their registry; the engine numbers it, keeps it in
 // its own data until the cluster has answered, and publishes it to the directive router at the end
 // of the tick; the engine publishes the ones that wait again at its first tick after it was made

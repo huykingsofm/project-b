@@ -101,7 +101,7 @@ func TestOnlyTheMessagesThatCameBackAreLetGoOfAndTheOnesForAnotherReceiverStay(t
 	}
 }
 
-func TestACompensationRunsOnceWhenTheReceiverIsRemovedWhileTheMessageWaits(t *testing.T) {
+func TestACompensationRunsOnceWhenTheReceiverIsRetiredWhileTheMessageWaits(t *testing.T) {
 	c, a, b, d := threeToys(t)
 	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
@@ -220,7 +220,7 @@ func TestACheckpointTakenAfterAMessageCameBackHoldsNoMessageForItAndAnEarlierOne
 	}
 }
 
-func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRemoved(t *testing.T) {
+func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRetired(t *testing.T) {
 	c, a, b, d := threeToys(t)
 	first := uint64(resendFirstTicks)
 	a.ScheduleAt(1, compensatedForwardAction{To: 2, Back: 3, N: 7})
@@ -239,7 +239,7 @@ func TestACompensationRunsOnceWhenTheMessageWasSentAgainBeforeItsReceiverWasRemo
 	}
 }
 
-func TestACopyOfAMessageThatWasTakenIsReturnedOnceWhenItsReceiverIsRemovedAndItsOnFailRunsOnce(
+func TestACopyOfAMessageThatWasTakenIsReturnedOnceWhenItsReceiverIsRetiredAndItsOnFailRunsOnce(
 	t *testing.T) {
 	c, a, b, d := threeToys(t)
 	first := uint64(resendFirstTicks)

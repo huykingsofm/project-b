@@ -2,3 +2,5 @@
 *.out
 plan/vi/
 .claude
+.archify
+output
