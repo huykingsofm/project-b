@@ -17,7 +17,7 @@ The results of the benchmarks, as of the code now. Rule: [ways of working](../..
 | [checkpoint.md](checkpoint.md) | writing, reading and hashing the checkpoint of an engine, taking it at a tick, and its file | `engine`, `platform/journal/checkpoint` |
 | [actions.md](actions.md) | one `Apply` of each action of the world, a zone and a zonelayer | `server/game/sim/action` |
 | [state_methods.md](state_methods.md) | each method of the three states that an action calls | `server/game/sim/state/*` |
-| [router.md](router.md) | the send, the refusal and the return of a message, and the send from many engines | `platform/runtime/router` |
+| [router.md](router.md) | the send and the return of a message, and the send from many engines | `platform/runtime/router` |
 | [cores.md](cores.md) | zonelayers in parallel on 1, 2 and 4 CPUs, and the single-goroutine benchmarks on 1 and 2 | `server/game` |
 
 ## Run

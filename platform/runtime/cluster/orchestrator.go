@@ -127,10 +127,6 @@ func (o *Orchestrator) HighestStateIDs() map[sim.StateType]uint64 { return maps.
 // ConfigStore is the configuration of the world outside the game, or nil.
 func (o *Orchestrator) ConfigStore() *config.Store { return o.configStore }
 
-// Config is the configuration that the coordinator engine has, or is sent: the one that the
-// cluster reads what it needs of the configuration from.
-func (o *Orchestrator) Config() config.ReadOnlySnapshot { return o.syncedConfig }
-
 // ConfigChanged is a channel that has a value when the store took a document; it never has one
 // when there is no store.
 func (o *Orchestrator) ConfigChanged() <-chan struct{} {

@@ -15,16 +15,6 @@ import (
 	"github.com/huykingsofm/project-b/shared/logging"
 )
 
-// refusedLogEvery and lostLogEvery are how many more messages that the router refused (the channel
-// of the receiver was full) or lost (the sender could not take them back) make the cluster log a
-// warning again.
-var (
-	refusedLogEvery = config.NewVar(
-		"router.log_every_refused_messages", 100, config.Range(1, 1000000000),
-	)
-	lostLogEvery = config.NewVar("router.log_every_lost_messages", 1, config.Range(1, 1000000000))
-)
-
 // directiveRequestKey names a request of an engine to its cluster: the engine and the number it
 // gave it.
 type directiveRequestKey struct {
@@ -67,11 +57,6 @@ type Cluster struct {
 	// configuration of the world into the coordinator engine; nil for a replay, which does
 	// neither
 	orchestrator *Orchestrator
-
-	// how many of the messages that the router refused and lost were logged: the periodic task
-	// logs again when the count has grown by what the configuration says
-	refusedLogged uint64
-	lostLogged    uint64
 }
 
 // NewCluster makes a cluster that runs, in the environment: it has its coordinator engine and no
@@ -142,16 +127,15 @@ func (c *Cluster) Forget(id sim.StateID) {
 // RunPeriodicTasks does what the cluster does at every period, from one goroutine at a time: it
 // sends the coordinator engine what the store holds, takes the engines that were made by a
 // request into the cluster when their creators have taken the response, drops the ones whose
-// creator is gone, serves the requests that the engines published, answers the requests to end
-// an engine whose engine has closed, and logs the messages that the router refused and lost. `Run`
-// calls it on a ticker; the code that steps the engines itself calls it between two steps.
+// creator is gone, serves the requests that the engines published, and answers the requests to end
+// an engine whose engine has closed. `Run` calls it on a ticker; the code that steps the engines
+// itself calls it between two steps.
 func (c *Cluster) RunPeriodicTasks() {
 	c.orchestrator.SyncConfig(c.coordinatorEngine)
 	c.adoptAcknowledgedEngines()
 	c.retireEnginesWhoseCreatorIsGone()
 	c.serveDirectiveRequests()
 	c.answerFinishedRetirements()
-	c.logMessageCounts()
 }
 
 // RequestEngineRetirement asks the engine to end itself, between two of its ticks: on its own
@@ -459,39 +443,4 @@ func (c *Cluster) makeRequestedEngine(
 		return nil, err
 	}
 	return c.Env.EngineRegistry.Make(c.Env, id, st, startActions, creator, creatorTick, directiveID)
-}
-
-// logMessageCounts logs, as a warning, the messages that the router refused because a receiver was
-// full and the ones it lost because their sender could not take them back, each time the count has
-// grown by the number that the configuration says. A router that does not count says nothing.
-func (c *Cluster) logMessageCounts() {
-	counts, counted := c.Env.Router.(messageCounts)
-	if !counted {
-		return
-	}
-	cfg := c.orchestrator.Config()
-	c.refusedLogged = logWhenItGrew(
-		"messages refused: the channel of a receiver was full", counts.Refused(), c.refusedLogged,
-		uint64(refusedLogEvery.Get(cfg)),
-	)
-	c.lostLogged = logWhenItGrew(
-		"messages lost: a sender could not take them back", counts.Dropped(), c.lostLogged,
-		uint64(lostLogEvery.Get(cfg)),
-	)
-}
-
-// messageCounts is what the cluster reads of the router to log what it refused and lost.
-type messageCounts interface {
-	Refused() uint64
-	Dropped() uint64
-}
-
-// logWhenItGrew logs a warning, with the total and how many are new, when total has grown by every
-// since it was logged last, and returns what has been logged: total then, and logged otherwise.
-func logWhenItGrew(what string, total, logged, every uint64) uint64 {
-	if total < logged+every {
-		return logged
-	}
-	logging.Warn(what, "total", total, "since", total-logged)
-	return total
 }

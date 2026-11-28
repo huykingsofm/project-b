@@ -23,19 +23,6 @@ func BenchmarkDeliver(b *testing.B) {
 	}
 }
 
-// BenchmarkDeliverRefused is the send to an engine whose channel is full: the refusal.
-func BenchmarkDeliverRefused(b *testing.B) {
-	rt := router.NewRouter()
-	_, out := router.NewChannel(1, 1)
-	rt.Register(out)
-	m := testkit.ToyMessage(1, 1)
-	rt.Deliver(m)
-	b.ReportAllocs()
-	for b.Loop() {
-		rt.Deliver(m)
-	}
-}
-
 // BenchmarkDeliverFromManyEngines is the send and the read of a message by each of as many
 // goroutines as the benchmark has CPUs, each an engine with its own channel in the one router.
 func BenchmarkDeliverFromManyEngines(b *testing.B) {
