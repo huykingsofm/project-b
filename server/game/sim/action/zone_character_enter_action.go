@@ -23,9 +23,23 @@ type ZoneCharacterEnterAction struct {
 	Character zonelayerstate.Character
 }
 
+// decodeZoneCharacterEnterAction reads what Encode wrote.
+func decodeZoneCharacterEnterAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneCharacterEnterAction, error) {
+	c, err := zonelayerstate.DecodeCharacter(r, version)
+	if err != nil {
+		return ZoneCharacterEnterAction{}, err
+	}
+	a := ZoneCharacterEnterAction{Character: c}
+	return a, r.Err()
+}
+
 func (a ZoneCharacterEnterAction) ID() sim.ActionID { return ZoneCharacterEnterActionID }
-func (a ZoneCharacterEnterAction) Priority() int16  { return PriorityIntent }
-func (a ZoneCharacterEnterAction) Actor() any       { return a.Character.CharacterID() }
+
+func (a ZoneCharacterEnterAction) Priority() int16 { return PriorityIntent }
+
+func (a ZoneCharacterEnterAction) Actor() any { return a.Character.CharacterID() }
 
 // Clone returns the action with a clone of the character it holds.
 func (a ZoneCharacterEnterAction) Clone() sim.Action[*zonestate.State] {
@@ -35,7 +49,7 @@ func (a ZoneCharacterEnterAction) Clone() sim.Action[*zonestate.State] {
 
 // Apply picks a zonelayer and sends it the character.
 func (a ZoneCharacterEnterAction) Apply(
-	_ *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],
+	_ *sim.Context, s *zonestate.State, r *sim.ActionRegistry[*zonestate.State],
 	_ *sim.Plan[*zonestate.State],
 ) {
 	for zoneLayerID, zoneLayerSlot := range s.ZoneLayerSlots() {
@@ -60,16 +74,4 @@ func (a ZoneCharacterEnterAction) Apply(
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a ZoneCharacterEnterAction) Encode(w *binary.Writer) {
 	a.Character.Encode(w)
-}
-
-// decodeZoneCharacterEnterAction reads what Encode wrote.
-func decodeZoneCharacterEnterAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneCharacterEnterAction, error) {
-	c, err := zonelayerstate.DecodeCharacter(r, version)
-	if err != nil {
-		return ZoneCharacterEnterAction{}, err
-	}
-	a := ZoneCharacterEnterAction{Character: c}
-	return a, r.Err()
 }

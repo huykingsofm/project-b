@@ -44,22 +44,31 @@ type batch struct {
 // methods can be called from any goroutine, one at a time; the engine that owns the log calls them
 // from its own.
 type Writer struct {
+	// where it writes, and how
 	dir  string
 	opts Options
 
-	mu             sync.Mutex // protects the fields up to closed
+	// what is waiting to be written (mu protects these fields and closed): the records, how many
+	// there are, the ID of the first and the ID of the next record
+	mu             sync.Mutex
 	pending        []byte
 	pendingRecords int
-	pendingFirst   uint64 // the ID of the first record of pending
-	nextID         uint64 // the ID of the next record
+	pendingFirst   uint64
+	nextID         uint64
 	closed         bool
-	next           uint64 // the index of the next segment; used by the goroutine that writes
-	batches        chan batch
-	free           chan []byte
-	done           chan struct{}
-	stalled        atomic.Uint64
-	synced         atomic.Uint64 // the ID of the last record on the disk, or 0
-	failure        atomic.Pointer[error]
+
+	// the goroutine that writes the batches: the index of the next segment (used by that goroutine
+	// only), the batches to write, the buffers given back, and done, closed when it ends
+	next    uint64
+	batches chan batch
+	free    chan []byte
+	done    chan struct{}
+
+	// what happened: how many times the writer stalled, the ID of the last record on the disk (0
+	// for none), and the first failure
+	stalled atomic.Uint64
+	synced  atomic.Uint64
+	failure atomic.Pointer[error]
 }
 
 // Open opens the log in dir, which it creates when it does not exist. A crash can leave the last
@@ -142,30 +151,6 @@ func (w *Writer) AsyncCommit() error {
 	return w.Err()
 }
 
-// handOver sends the pending records, if any. It is called with w.mu held.
-func (w *Writer) handOver() {
-	if len(w.pending) == 0 {
-		return
-	}
-	// a batch is its records and a commit
-	w.pending = appendCommit(w.pending, uint32(w.pendingRecords))
-	w.pendingRecords = 0
-	b := batch{buf: w.pending, firstID: w.pendingFirst, lastID: w.nextID - 1}
-	select {
-	case w.pending = <-w.free:
-		w.pending = w.pending[:0]
-	default:
-		w.pending = nil
-	}
-	select {
-	case w.batches <- b:
-	default:
-		w.stalled.Add(1)
-		// the goroutine that writes is behind: wait for it, a log must not lose records
-		w.batches <- b
-	}
-}
-
 // Synced is the ID of the last record that is on the disk, or 0 when none is: of the batches that
 // Commit handed over, from the first, the ones that were written and forced to disk, so a record
 // whose ID is no greater is not lost to a crash. What was in the log when the writer was opened
@@ -198,6 +183,30 @@ func (w *Writer) Close() error {
 	w.mu.Unlock()
 	<-w.done
 	return w.Err()
+}
+
+// handOver sends the pending records, if any. It is called with w.mu held.
+func (w *Writer) handOver() {
+	if len(w.pending) == 0 {
+		return
+	}
+	// a batch is its records and a commit
+	w.pending = appendCommit(w.pending, uint32(w.pendingRecords))
+	w.pendingRecords = 0
+	b := batch{buf: w.pending, firstID: w.pendingFirst, lastID: w.nextID - 1}
+	select {
+	case w.pending = <-w.free:
+		w.pending = w.pending[:0]
+	default:
+		w.pending = nil
+	}
+	select {
+	case w.batches <- b:
+	default:
+		w.stalled.Add(1)
+		// the goroutine that writes is behind: wait for it, a log must not lose records
+		w.batches <- b
+	}
 }
 
 func (w *Writer) fail(err error) {

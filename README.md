@@ -19,8 +19,9 @@ The rules the code follows are in [plan/rule/index.md](plan/rule/index.md). How 
 ```
 docs/
   action/                           reference of the actions: index.md (conventions, priorities, index), and world.md, zone.md, zonelayer.md
-  configengine.md                   the engine that owns the configuration: what it holds, how it is changed and read
+  coordinatorengine.md              the coordinator engine: the configuration it holds, how it is changed and read
   tilemap.md                        reference of TileMap: construction, Free, FreeForBody, Reach, exits
+  shared.md                         the small libraries of `shared`: atomicfile, rand, bitset (the others have a document each)
   simulation.md                     how the simulation works: platform and game, states, a tick, delivery, replay
   entity/                           reference of the entities: entity.md (the interfaces), character.md, item.md, exit.md
 plan/
@@ -33,15 +34,21 @@ shared/                             libraries of our own, each a package; import
   codec/                            Registry: kinds told apart by a number, each with the function that reads it
 platform/                           what any game that runs in ticks is made of; imports nothing of the game
   config/                           Var[T] with defaults and limits, values parsed from JSON text, an immutable Snapshot
-  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, Registry, Codecs, and the state of the configuration engine
+  sim/                              State, Action[S], Command[S], Message, Plan, Scheduler, ActionRegistry, Codecs, and the state of the coordinator engine
     onfail/                         the kinds of OnFail (retry, redirect, compensate, notify, escalate, drop)
-  engine/                           Engine[S] that runs any state, the router, the store of published states, the cluster
-  eventlog/                         the event log of an engine, in memory and in files; where each engine's directory is
-  checkpoint/                       the checkpoint files of an engine, and the writer of them
-  replay/                           plays a cluster again from the event logs and the checkpoints: the recovery line (the plan), the cut, the run
+  runtime/                          what runs the engines
+    engine/                         Engine[S] that runs any state, its peer, the environment, the registry that makes engines
+    router/                         the router of the messages, the channels, the router of the directives
+    stable/                         the store of the states that the engines publish and read, and the board of acks
+    cluster/                        the cluster of the engines, its orchestrator, and stepping (the code that steps it)
+    testkit/                        toy states and actions, to try the mechanisms with no game
+  journal/                          what is written to play the cluster again, and the playing
+    eventlog/                       the event log of an engine, in memory and in files; where each engine's directory is
+    checkpoint/                     the checkpoint files of an engine, and the writer of them
+    replay/                         plays a cluster again from the event logs and the checkpoints: the recovery line (the plan), the cut, the run
 server/
   cmd/world/                        a script that runs the whole flow
-  game/                             this game: the states, actions and commands, and the builder of the cluster
+  game/                             this game: the states, actions and commands
     sim/
       state/                        IDs of what lives in the states, Entity and the kinds, Vec (units), Rect, Dir, Audience
         world/ zone/ zonelayer/     the state of each scope, and below each an entity/ and an event/ package of its own
@@ -56,4 +63,4 @@ The rules the code follows are in [plan/rule/index.md](plan/rule/index.md). How 
 ## Not built yet
 
 Spatial grid and sight, observers that project per viewer, the store, monsters, drops, quests, sects.
-State methods and actions beyond the examples here are the owner's to define (R26).
+State methods and actions beyond the examples here are the owner's to define (R5).

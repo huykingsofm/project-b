@@ -10,11 +10,48 @@ import (
 	"github.com/huykingsofm/project-b/shared/stablemap"
 )
 
+// std is the registry that NewVar uses.
+var std = newRegistry()
+
 // Var is a declared variable of type T. Get reads its value from a Snapshot.
 type Var[T any] struct {
 	name string
 	idx  int
 	def  T
+}
+
+// NewVar declares a variable of type T with a default and options (limits, and a parser of its
+// own when json.Unmarshal is not the way the value is written). A default that breaks a limit is
+// a programming error and panics. Call it while the program starts.
+func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
+	return declare(std, name, def, opts)
+}
+
+func declare[T any](r *registry, name string, def T, opts []Option[T]) Var[T] {
+	s := spec[T]{parse: func(text string) (T, error) {
+		var v T
+		if err := json.Unmarshal([]byte(text), &v); err != nil {
+			return v, fmt.Errorf("%q is not a valid %T: %w", text, v, err)
+		}
+		return v, nil
+	}}
+	for _, o := range opts {
+		o.apply(&s)
+	}
+	if err := s.check(def); err != nil {
+		panic(fmt.Sprintf("config: default of %q: %v", name, err))
+	}
+	idx := r.add(declaration{name: name, def: def, parse: func(text string) (any, error) {
+		v, err := s.parse(text)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.check(v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	}})
+	return Var[T]{name: name, idx: idx, def: def}
 }
 
 // Name is the name the variable was declared with.
@@ -52,9 +89,6 @@ type registry struct {
 
 func newRegistry() *registry { return &registry{byName: map[string]int{}} }
 
-// std is the registry that NewVar uses.
-var std = newRegistry()
-
 // declarations returns the declared variables, in the order they were declared. It ends the
 // declaration of variables, as a snapshot does.
 func (r *registry) declarations() []declaration {
@@ -79,40 +113,6 @@ func (r *registry) add(d declaration) int {
 	r.byName[d.name] = len(r.decls)
 	r.decls = append(r.decls, d)
 	return len(r.decls) - 1
-}
-
-func declare[T any](r *registry, name string, def T, opts []Option[T]) Var[T] {
-	s := spec[T]{parse: func(text string) (T, error) {
-		var v T
-		if err := json.Unmarshal([]byte(text), &v); err != nil {
-			return v, fmt.Errorf("%q is not a valid %T: %w", text, v, err)
-		}
-		return v, nil
-	}}
-	for _, o := range opts {
-		o.apply(&s)
-	}
-	if err := s.check(def); err != nil {
-		panic(fmt.Sprintf("config: default of %q: %v", name, err))
-	}
-	idx := r.add(declaration{name: name, def: def, parse: func(text string) (any, error) {
-		v, err := s.parse(text)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.check(v); err != nil {
-			return nil, err
-		}
-		return v, nil
-	}})
-	return Var[T]{name: name, idx: idx, def: def}
-}
-
-// NewVar declares a variable of type T with a default and options (limits, and a parser of its
-// own when json.Unmarshal is not the way the value is written). A default that breaks a limit is
-// a programming error and panics. Call it while the program starts.
-func NewVar[T any](name string, def T, opts ...Option[T]) Var[T] {
-	return declare(std, name, def, opts)
 }
 
 // build makes a snapshot from the defaults and the overrides, which are the text of a JSON value

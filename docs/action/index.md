@@ -1,6 +1,6 @@
 # Actions
 
-An action is one step of the plan of an engine. Each belongs to exactly one scope of this game (the state it changes) and is a `sim.Action[S]` for the state type `S` of that scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`server/game/sim/action`](../../server/game/sim/action); what an action is made of is in [`platform/sim`](../../platform/sim). Entities: [docs/entity](../entity/entity.md). Rules: [R25](../../plan/rule/r25-action-naming-and-files.md) (names).
+An action is one step of the plan of an engine. Each belongs to exactly one scope of this game (the state it changes) and is a `sim.Action[S]` for the state type `S` of that scope: [world](world.md), [zone](zone.md) or [zonelayer](zonelayer.md). Code: [`server/game/sim/action`](../../server/game/sim/action); what an action is made of is in [`platform/sim`](../../platform/sim). Entities: [docs/entity](../entity/entity.md). Rules: [R11](../../plan/rule/r11-action-naming-and-files.md) (names).
 
 ## Naming
 
@@ -47,7 +47,7 @@ A smaller number runs first; equal priorities run in the order they arrived.
 
 ## Registry
 
-What must happen outside a state goes in its `sim.Registry[S]` and happens after the plan.
+What must happen outside a state goes in its `sim.ActionRegistry[S]` and happens after the plan.
 
 | Call | Target |
 |---|---|
@@ -55,6 +55,8 @@ What must happen outside a state goes in its `sim.Registry[S]` and happens after
 | `Get[T](id)` | the latest state that the engine with the ID published, as a `T` (see [Reading other states](#reading-other-states)) |
 | `ToSelf` | this action again, next tick |
 | `ToSelfAt` | this action again, at a tick (a tick that is not in the future is the next one) |
+| `RequestCreateEngine(tag, state, startActions...)` | asks the cluster for an engine of a state without an ID, which runs the actions given once at its first tick; the state that is to list it takes the answer (`sim.DirectiveHandler`), not the action ([engines](../engine_lifecycle.md)) |
+| `RequestRetireEngine(id, tag)` | asks the cluster to retire the engine |
 
 ## Failed delivery
 
@@ -65,9 +67,8 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | `onfail.Retry{}` | 1 | sends the message again to the same address | nothing |
 | `onfail.Redirect{To}` | 2 | sends it again to `To`, another engine | a state ID |
 | `onfail.Compensate{With}` | 3 | sends `With`, the message that undoes what the first set going | a message: where it goes, its actions, its own `OnFail` |
-| `onfail.Notify{Key, Args}` | 4 | tells the actor of the message | a text key, arguments (strings) |
-| `onfail.Escalate{To}` | 5 | gives the message to `To` to decide | a state ID |
-| `onfail.Drop{}` | 6 | forgets the message and counts it | nothing |
+| `onfail.Escalate{To}` | 4 | gives the message to `To` to decide | a state ID |
+| `onfail.Drop{}` | 5 | forgets the message and counts it | nothing |
 
 | Package | Holds |
 |---|---|
@@ -123,12 +124,17 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 |---|---|---|
 | world | [WorldChatPrivateSendAction](world.md#worldchatprivatesendaction) | intent |
 | world | [WorldCharacterItemAddAction](world.md#worldcharacteritemaddaction) | message |
+| world | [WorldZoneAddAction](world.md#worldzoneaddaction) | intent |
+| world | [WorldZoneLayerAddAction](world.md#worldzonelayeraddaction) | intent |
+| world | [WorldZoneExitAddAction](world.md#worldzoneexitaddaction) | intent |
 | zone | [ZoneCharacterEnterAction](zone.md#zonecharacterenteraction) | intent |
 | zone | [ZoneChatSendAction](zone.md#zonechatsendaction) | intent |
+| zone | [ZoneZoneLayerAddAction](zone.md#zonezonelayeraddaction) | message |
+| zone | [ZoneExitAddAction](zone.md#zoneexitaddaction) | message |
 | zonelayer | [ZoneLayerCharacterMoveAction](zonelayer.md#zonelayercharactermoveaction) | intent, cancellable |
-| zonelayer | [ZoneLayerCharacterNormalAttackTriggerAction](zonelayer.md#zonelayercharacternormalattackaction) | intent |
+| zonelayer | [ZoneLayerCharacterNormalAttackTriggerAction](zonelayer.md#zonelayercharacternormalattacktriggeraction) | intent |
 | zonelayer | [ZoneLayerCharacterDamageAction](zonelayer.md#zonelayercharacterdamageaction) | made |
-| zonelayer | [ZoneLayerCharacterShieldGrantAction](zonelayer.md#zonelayercharactershieldaction) | intent, standing |
+| zonelayer | [ZoneLayerCharacterShieldGrantAction](zonelayer.md#zonelayercharactershieldgrantaction) | intent, standing |
 | zonelayer | [ZoneLayerCharacterRegenAction](zonelayer.md#zonelayercharacterregenaction) | system |
 | zonelayer | [ZoneLayerCharacterEnterAction](zonelayer.md#zonelayercharacterenteraction) | message |
 | zonelayer | [ZoneLayerCharacterExitToAction](zonelayer.md#zonelayercharacterexittoaction) | intent |
@@ -136,3 +142,4 @@ Every message carries an `OnFail`: data, not a function, so the message can be w
 | zonelayer | [ZoneLayerItemEntityAddAction](zonelayer.md#zonelayeritementityaddaction) | message |
 | zonelayer | [ZoneLayerItemEntityRemoveAction](zonelayer.md#zonelayeritementityremoveaction) | made |
 | zonelayer | [ZoneLayerChatSendAction](zonelayer.md#zonelayerchatsendaction) | intent, message |
+| zonelayer | [ZoneLayerAnnounceToZoneAction](zonelayer.md#zonelayerannouncetozoneaction) | system |

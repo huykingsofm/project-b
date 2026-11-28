@@ -14,10 +14,9 @@ func New(
 	height int32,
 	spawn tilemap.Tile,
 	walls []tilemap.Tile,
-	exits []tilemap.ExitDefinition,
 ) *tilemap.TileMap {
 	t.Helper()
-	m, err := tilemap.New(width, height, spawn, walls, exits)
+	m, err := tilemap.New(width, height, spawn, walls)
 	if err != nil {
 		t.Fatal(err)
 	}

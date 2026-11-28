@@ -1,6 +1,6 @@
 # World actions
 
-State: [`state/world`](../../server/game/sim/state/world): private messages between players, inventories of characters. Registry: `sim.Registry[*worldstate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/world`](../../server/game/sim/state/world): private messages between players, inventories of characters. Registry: `sim.ActionRegistry[*worldstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## WorldChatPrivateSendAction
 
@@ -23,3 +23,33 @@ State: [`state/world`](../../server/game/sim/state/world): private messages betw
   1. `AddItemToCharacter`: fills the slots that hold the kind, then empty slots; the events get what was added.
   2. What does not fit goes to `FromZoneLayerID` in a [`ZoneLayerItemEntityAddAction`](zonelayer.md#zonelayeritementityaddaction) with the same place and expiry.
 - Example: slots of 99, one holds 90 of kind 7; a stack of 20 arrives: that slot 99, an empty slot 11, nothing returns. With every slot full, all 20 return.
+
+## WorldZoneAddAction
+
+- Kind: intent
+- Priority: `PriorityResolve`
+- Command: `WorldZoneAddCommand{Tiles}`
+- Fields: `Tiles` (the map; copied with `Clone`)
+- Steps:
+  1. `RequestCreateEngine` with the tag `TagZone` and a zone state of this world (`Context.Self`) on the map. The world lists the zone when the cluster answers, not here (R12): `State.HandleDirective` takes the answer.
+- Example: tick 1 the command; the cluster makes the zone and answers; at tick 2 the world lists it.
+
+## WorldZoneLayerAddAction
+
+- Kind: intent
+- Priority: `PriorityResolve`
+- Command: `WorldZoneLayerAddCommand{ZoneID, Capacity, RegenEvery}`
+- Fields: `ZoneID`, `Capacity`, `RegenEvery` (0: never heals)
+- Steps:
+  1. `RequestCreateEngine` with the tag `TagZoneLayer`, an empty zonelayer state of the zone and this world, and the actions it runs once at its first tick: [`ZoneLayerAnnounceToZoneAction`](zonelayer.md#zonelayerannouncetozoneaction) and, when `RegenEvery` is more than 0, [`ZoneLayerCharacterRegenAction`](zonelayer.md#zonelayercharacterregenaction), which heals at once and sets itself again every `RegenEvery` ticks. The world lists the zonelayer when the cluster answers.
+
+## WorldZoneExitAddAction
+
+- Kind: intent
+- Priority: `PriorityResolve`
+- Command: `WorldZoneExitAddCommand{FromZoneID, Area, ToZoneID, Arrival}`
+- Fields: `FromZoneID`, `Area` (in units), `ToZoneID`, `Arrival` (in units, in `ToZoneID`)
+- Steps:
+  1. When the world lists both zones, sends [`ZoneExitAddAction`](zone.md#zoneexitaddaction) to `FromZoneID`; dropped if not delivered. Another zone is not joined: nothing happens.
+- Note: one way. To join two zones both ways, two commands.
+

@@ -15,6 +15,20 @@ type ZoneLayerCharacterItemPickupCommand struct {
 	ItemEntityID state.EntityID
 }
 
+// decodeZoneLayerCharacterItemPickupCommand reads what Encode wrote.
+func decodeZoneLayerCharacterItemPickupCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterItemPickupCommand, error) {
+	characterID := r.Uint[state.CharacterID]()
+	itemEntityID, err := state.DecodeEntityID(r)
+	if err != nil {
+		return ZoneLayerCharacterItemPickupCommand{}, err
+	}
+	return ZoneLayerCharacterItemPickupCommand{
+		CharacterID: characterID, ItemEntityID: itemEntityID,
+	}, r.Err()
+}
+
 func (ZoneLayerCharacterItemPickupCommand) ID() sim.CommandID {
 	return ZoneLayerCharacterItemPickupCommandID
 }
@@ -35,18 +49,4 @@ func (c ZoneLayerCharacterItemPickupCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.CharacterID))
 	c.ItemEntityID.Encode(w)
 	return nil
-}
-
-// decodeZoneLayerCharacterItemPickupCommand reads what Encode wrote.
-func decodeZoneLayerCharacterItemPickupCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterItemPickupCommand, error) {
-	characterID := r.Uint[state.CharacterID]()
-	itemEntityID, err := state.DecodeEntityID(r)
-	if err != nil {
-		return ZoneLayerCharacterItemPickupCommand{}, err
-	}
-	return ZoneLayerCharacterItemPickupCommand{
-		CharacterID: characterID, ItemEntityID: itemEntityID,
-	}, r.Err()
 }

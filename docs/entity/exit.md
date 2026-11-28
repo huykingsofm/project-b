@@ -1,6 +1,6 @@
 # Exit
 
-`zone/entity.ExitEntity`. Implements `state.Entity`. Held in the state of a zone (built from the exits of its map when the zone state is made); every zonelayer of the zone has them.
+`zone/entity.ExitEntity`. Implements `state.Entity`. Held in the state of a zone, put there while the game runs (`zone.State.AddExit`, by the world: [engines](../engine_lifecycle.md)); every zonelayer of the zone reads them from the published zone.
 
 ## Data and methods
 
@@ -8,7 +8,7 @@ The fields are private; the exit is a value, made with `NewExitEntity(id, area, 
 
 | Method | Returns | Meaning |
 |---|---|---|
-| `ID()` | `EntityID` | made of the ID of the zone and the number it counted |
+| `ID()` | `EntityID` | the number the zone counted |
 | `KindID()` | `KindID` | `ExitKindID` |
 | `Area()` | `Rect` | the exit, both ends included, in units |
 | `ToZoneID()` | `sim.StateID` | the ID of the zone it leads to |
@@ -24,7 +24,7 @@ The fields are private; the exit is a value, made with `NewExitEntity(id, area, 
 
 ## Source
 
-Defined on the map as `tilemap.ExitDefinition{Min, Max Tile; ToZoneID; Arrival Tile}`; `TileMap.Exits()` returns `tilemap.Exit` values, in units, and the zone makes an `ExitEntity` of each with an ID of its own.
+The map has no exit. The world joins two zones with a command (`WorldZoneExitAddCommand{FromZoneID, Area, ToZoneID, Arrival}`: one way; both ways are two commands), which the world sends the zone as `ZoneExitAddAction`; the zone adds the exit (`AddExit`: the area, in units, must be in its map and not empty, and the target must be a zone) with the next number it counts, and tells the clients (`event.ExitAdded`). The area and the arrival are in units: a tile is `tilemap.TileSize` (1024) units, which is never changed (`tilemap.AreaOf`, `Tile.Center` turn tiles into units).
 
 ## Used by
 

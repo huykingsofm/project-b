@@ -22,9 +22,24 @@ type ZoneLayerItemEntityAddAction struct {
 	Expiry uint64
 }
 
+// decodeZoneLayerItemEntityAddAction reads what Encode wrote.
+func decodeZoneLayerItemEntityAddAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerItemEntityAddAction, error) {
+	a := ZoneLayerItemEntityAddAction{
+		ItemID: r.Uint[state.ItemID](),
+		Count:  r.Uint[uint32](),
+		At:     state.DecodeVec(r, version),
+		Expiry: r.Uvarint(),
+	}
+	return a, r.Err()
+}
+
 func (a ZoneLayerItemEntityAddAction) ID() sim.ActionID { return ZoneLayerItemEntityAddActionID }
-func (a ZoneLayerItemEntityAddAction) Priority() int16  { return PriorityResolve }
-func (a ZoneLayerItemEntityAddAction) Actor() any       { return nil }
+
+func (a ZoneLayerItemEntityAddAction) Priority() int16 { return PriorityResolve }
+
+func (a ZoneLayerItemEntityAddAction) Actor() any { return nil }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerItemEntityAddAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -33,7 +48,7 @@ func (a ZoneLayerItemEntityAddAction) Clone() sim.Action[*zonelayerstate.State] 
 
 // Apply puts the items on the ground and sets their removal.
 func (a ZoneLayerItemEntityAddAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	if a.Count == 0 {
@@ -51,17 +66,4 @@ func (a ZoneLayerItemEntityAddAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.Count))
 	a.At.Encode(w)
 	w.Uvarint(a.Expiry)
-}
-
-// decodeZoneLayerItemEntityAddAction reads what Encode wrote.
-func decodeZoneLayerItemEntityAddAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerItemEntityAddAction, error) {
-	a := ZoneLayerItemEntityAddAction{
-		ItemID: r.Uint[state.ItemID](),
-		Count:  r.Uint[uint32](),
-		At:     state.DecodeVec(r, version),
-		Expiry: r.Uvarint(),
-	}
-	return a, r.Err()
 }

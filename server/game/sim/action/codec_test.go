@@ -1,4 +1,4 @@
-package action
+package action_test
 
 import (
 	"reflect"
@@ -6,10 +6,12 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/codec"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/errs"
@@ -23,54 +25,75 @@ func everyAction() map[sim.ActionID]sim.BaseAction {
 		panic(err)
 	}
 	ch.SetHealth(80)
-	ch.SetCooldown(ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 44)
+	ch.SetCooldown(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey, 44)
 	at := state.Vec{X: -300, Y: 9000}
+	area := tilemap.AreaOf(tilemap.Tile{X: 3, Y: 0}, tilemap.Tile{X: 3, Y: 2})
+	tiles, err := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 0}})
+	if err != nil {
+		panic(err)
+	}
+	normalAttack := action.ZoneLayerCharacterNormalAttackTriggerAction{CharacterID: 3, TargetID: 4}
 	return map[sim.ActionID]sim.BaseAction{
-		WorldChatPrivateSendActionID: WorldChatPrivateSendAction{FromID: 1, ToID: 2, Text: "psst"},
-		WorldCharacterItemAddActionID: WorldCharacterItemAddAction{
+		action.WorldChatPrivateSendActionID: action.WorldChatPrivateSendAction{FromID: 1, ToID: 2,
+			Text: "psst"},
+		action.WorldCharacterItemAddActionID: action.WorldCharacterItemAddAction{
 			CharacterID: 3, ItemID: 8, Count: 5, FromZoneLayerID: 4, At: at, Expiry: 90,
 		},
-		ZoneChatSendActionID:            ZoneChatSendAction{FromID: 3, Text: "xin chào"},
-		ZoneCharacterEnterActionID:      ZoneCharacterEnterAction{Character: ch},
-		ZoneLayerChatSendActionID:       ZoneLayerChatSendAction{FromID: 3, Text: "hello"},
-		ZoneLayerCharacterEnterActionID: ZoneLayerCharacterEnterAction{Character: ch, At: at},
-		ZoneLayerCharacterMoveActionID: ZoneLayerCharacterMoveAction{
-			CharacterID: 3, Dir: state.East, Ticks: 6, reserved: true,
+		action.ZoneChatSendActionID: action.ZoneChatSendAction{FromID: 3,
+			Text: "xin chào"},
+		action.ZoneCharacterEnterActionID: action.ZoneCharacterEnterAction{Character: ch},
+		action.ZoneLayerChatSendActionID: action.ZoneLayerChatSendAction{FromID: 3,
+			Text: "hello"},
+		action.ZoneLayerCharacterEnterActionID: action.ZoneLayerCharacterEnterAction{Character: ch,
+			At: at},
+		action.ZoneLayerCharacterMoveActionID: action.ZoneLayerCharacterMoveAction{
+			CharacterID: 3, Dir: state.East, Ticks: 6,
 		},
-		ZoneLayerCharacterNormalAttackTriggerActionID: ZoneLayerCharacterNormalAttackTriggerAction{
-			CharacterID: 3, TargetID: 4,
-		},
-		ZoneLayerCharacterDamageActionID: ZoneLayerCharacterDamageAction{
+		action.ZoneLayerCharacterNormalAttackTriggerActionID: normalAttack,
+		action.ZoneLayerCharacterDamageActionID: action.ZoneLayerCharacterDamageAction{
 			SourceID: anEntityID(1), VictimID: anEntityID(2), Amount: -5,
 		},
-		ZoneLayerCharacterShieldGrantActionID: ZoneLayerCharacterShieldGrantAction{
-			CharacterID: 3, Duration: 20, started: true, until: 31,
+		action.ZoneLayerCharacterShieldGrantActionID: action.ZoneLayerCharacterShieldGrantAction{
+			CharacterID: 3, Duration: 20,
 		},
-		ZoneLayerCharacterRegenActionID: ZoneLayerCharacterRegenAction{},
-		ZoneLayerCharacterExitToActionID: ZoneLayerCharacterExitToAction{
+		action.ZoneLayerCharacterRegenActionID: action.ZoneLayerCharacterRegenAction{},
+		action.ZoneLayerCharacterExitToActionID: action.ZoneLayerCharacterExitToAction{
 			CharacterID: 3, ExitEntityID: anEntityID(9),
 		},
-		ZoneLayerCharacterItemPickupActionID: ZoneLayerCharacterItemPickupAction{
+		action.ZoneLayerCharacterItemPickupActionID: action.ZoneLayerCharacterItemPickupAction{
 			CharacterID: 3, ItemEntityID: anEntityID(12),
 		},
-		ZoneLayerItemEntityAddActionID: ZoneLayerItemEntityAddAction{
+		action.ZoneLayerItemEntityAddActionID: action.ZoneLayerItemEntityAddAction{
 			ItemID: 8, Count: 5, At: at, Expiry: 40,
 		},
-		ZoneLayerItemEntityRemoveActionID: ZoneLayerItemEntityRemoveAction{
+		action.ZoneLayerItemEntityRemoveActionID: action.ZoneLayerItemEntityRemoveAction{
 			EntityID: anEntityID(12),
+		},
+		action.WorldZoneAddActionID: action.WorldZoneAddAction{Tiles: tiles},
+		action.WorldZoneLayerAddActionID: action.WorldZoneLayerAddAction{
+			ZoneID: 3, Capacity: 40, RegenEvery: 10,
+		},
+		action.ZoneLayerAnnounceToZoneActionID: action.ZoneLayerAnnounceToZoneAction{Capacity: 40},
+		action.ZoneZoneLayerAddActionID: action.ZoneZoneLayerAddAction{ZoneLayerID: 8,
+			Capacity: 40},
+		action.ZoneExitAddActionID: action.ZoneExitAddAction{
+			Area: area, ToZoneID: 5, Arrival: state.Vec{X: 3, Y: -4},
+		},
+		action.WorldZoneExitAddActionID: action.WorldZoneExitAddAction{
+			FromZoneID: 6, Area: area, ToZoneID: 5, Arrival: state.Vec{X: 3, Y: -4},
 		},
 	}
 }
 
 // anEntityID is the ID of the entity that a zonelayer gave the number local.
 func anEntityID(local uint64) state.EntityID {
-	return state.NewEntityID(sim.NewStateID(state.ZoneLayerType, 1), local)
+	return state.EntityID(local)
 }
 
 func codecs(t testing.TB) *sim.Codecs {
 	t.Helper()
 	c := sim.NewCodecs()
-	if err := errs.Join(onfail.Register(c), Register(c)); err != nil {
+	if err := errs.Join(onfail.Register(c), action.Register(c)); err != nil {
 		t.Fatal(err)
 	}
 	return c
@@ -78,7 +101,7 @@ func codecs(t testing.TB) *sim.Codecs {
 
 func TestEveryActionOfTheRegisterHasACodecAndComesBackAsItWas(t *testing.T) {
 	actions, c := everyAction(), codecs(t)
-	for id := sim.ActionID(1); id <= ZoneLayerItemEntityRemoveActionID; id++ { // the last ID
+	for id := sim.ActionID(1); id <= action.WorldZoneExitAddActionID; id++ { // the last ID
 		a, ok := actions[id]
 		if !ok {
 			t.Fatalf("the action with the ID %d has no sample in this test", id)
@@ -145,8 +168,8 @@ func aMessageOfEveryKind() []sim.Message {
 	actions := everyAction()
 	layerActions := func() []sim.Action[*zonelayerstate.State] {
 		return []sim.Action[*zonelayerstate.State]{
-			actions[ZoneLayerCharacterMoveActionID].(sim.Action[*zonelayerstate.State]),
-			actions[ZoneLayerChatSendActionID].(sim.Action[*zonelayerstate.State]),
+			actions[action.ZoneLayerCharacterMoveActionID].(sim.Action[*zonelayerstate.State]),
+			actions[action.ZoneLayerChatSendActionID].(sim.Action[*zonelayerstate.State]),
 		}
 	}
 	layer := func(onFail sim.OnFail) sim.Message {
@@ -155,25 +178,24 @@ func aMessageOfEveryKind() []sim.Message {
 	}
 	undo := sim.NewActionMessage(
 		layerID, onfail.Drop{},
-		actions[ZoneLayerItemEntityAddActionID].(sim.Action[*zonelayerstate.State]),
+		actions[action.ZoneLayerItemEntityAddActionID].(sim.Action[*zonelayerstate.State]),
 	)
 	return []sim.Message{
 		layer(onfail.Retry{}),
 		layer(onfail.Drop{}),
 		layer(onfail.Redirect{To: layerID + 1}),
 		layer(onfail.Escalate{To: zoneID}),
-		layer(onfail.Notify{Key: "item.gone", Args: []string{"sword", "3"}}),
-		layer(onfail.Notify{Key: "item.gone"}),
 		layer(onfail.Compensate{With: undo}),
 		layer(onfail.Compensate{With: sim.NewActionMessage[*zonestate.State](
 			zoneID, onfail.Compensate{With: undo},
 		)}),
 		sim.NewActionMessage(
-			zoneID, onfail.Drop{}, actions[ZoneChatSendActionID].(sim.Action[*zonestate.State]),
+			zoneID, onfail.Drop{},
+			actions[action.ZoneChatSendActionID].(sim.Action[*zonestate.State]),
 		),
 		sim.NewActionMessage(
 			worldID, onfail.Drop{},
-			actions[WorldChatPrivateSendActionID].(sim.Action[*worldstate.State]),
+			actions[action.WorldChatPrivateSendActionID].(sim.Action[*worldstate.State]),
 		),
 		sim.NewActionMessage[*worldstate.State](worldID, onfail.Drop{}),
 	}

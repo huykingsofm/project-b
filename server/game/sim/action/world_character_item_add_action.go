@@ -21,7 +21,7 @@ var (
 
 // WorldCharacterItemAddAction puts items in the inventory of a character. It is a message from a
 // zonelayer: the items of a character belong to the world, and the zonelayer that gives them up has
-// already taken them off its ground (R28).
+// already taken them off its ground (R12).
 //
 // What does not fit in the inventory goes back to the zonelayer it came from, to the same place
 // (ZoneLayerItemEntityAddAction), so nothing is lost by a full inventory.
@@ -36,9 +36,26 @@ type WorldCharacterItemAddAction struct {
 	Expiry          uint64
 }
 
+// decodeWorldCharacterItemAddAction reads what Encode wrote.
+func decodeWorldCharacterItemAddAction(
+	r *binary.Reader, version codec.Version,
+) (WorldCharacterItemAddAction, error) {
+	a := WorldCharacterItemAddAction{
+		CharacterID:     r.Uint[state.CharacterID](),
+		ItemID:          r.Uint[state.ItemID](),
+		Count:           r.Uint[uint32](),
+		FromZoneLayerID: r.Uint[sim.StateID](),
+		At:              state.DecodeVec(r, version),
+		Expiry:          r.Uvarint(),
+	}
+	return a, r.Err()
+}
+
 func (a WorldCharacterItemAddAction) ID() sim.ActionID { return WorldCharacterItemAddActionID }
-func (a WorldCharacterItemAddAction) Priority() int16  { return PriorityResolve }
-func (a WorldCharacterItemAddAction) Actor() any       { return a.CharacterID }
+
+func (a WorldCharacterItemAddAction) Priority() int16 { return PriorityResolve }
+
+func (a WorldCharacterItemAddAction) Actor() any { return a.CharacterID }
 
 // Clone returns the action itself: it holds only values.
 func (a WorldCharacterItemAddAction) Clone() sim.Action[*worldstate.State] {
@@ -47,7 +64,7 @@ func (a WorldCharacterItemAddAction) Clone() sim.Action[*worldstate.State] {
 
 // Apply adds the items and sends back the ones that did not fit.
 func (a WorldCharacterItemAddAction) Apply(
-	c *sim.Context, s *worldstate.State, r *sim.Registry[*worldstate.State],
+	c *sim.Context, s *worldstate.State, r *sim.ActionRegistry[*worldstate.State],
 	_ *sim.Plan[*worldstate.State],
 ) {
 	left := s.AddItemToCharacter(a.CharacterID, a.ItemID, a.Count,
@@ -72,19 +89,4 @@ func (a WorldCharacterItemAddAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.FromZoneLayerID))
 	a.At.Encode(w)
 	w.Uvarint(a.Expiry)
-}
-
-// decodeWorldCharacterItemAddAction reads what Encode wrote.
-func decodeWorldCharacterItemAddAction(
-	r *binary.Reader, version codec.Version,
-) (WorldCharacterItemAddAction, error) {
-	a := WorldCharacterItemAddAction{
-		CharacterID:     r.Uint[state.CharacterID](),
-		ItemID:          r.Uint[state.ItemID](),
-		Count:           r.Uint[uint32](),
-		FromZoneLayerID: r.Uint[sim.StateID](),
-		At:              state.DecodeVec(r, version),
-		Expiry:          r.Uvarint(),
-	}
-	return a, r.Err()
 }

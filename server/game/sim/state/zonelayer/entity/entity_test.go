@@ -1,14 +1,16 @@
-package entity
+package entity_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
+	"github.com/huykingsofm/project-b/server/game/sim/state/zonelayer/entity"
 )
 
 func TestEveryKindHasItsOwnIDAndNoneIsZero(t *testing.T) {
-	all := []state.Entity{CharacterEntity{}, ItemEntity{}}
+	all := []state.Entity{entity.NewCharacterEntity(0, state.Vec{}, 0, 0, 0),
+		entity.NewItemEntity(0, state.Vec{}, 0, 0, 0)}
 	seen := map[state.KindID]state.Entity{}
 	for _, e := range all {
 		if e.KindID() == 0 {
@@ -22,12 +24,13 @@ func TestEveryKindHasItsOwnIDAndNoneIsZero(t *testing.T) {
 }
 
 func TestTheBoundingBoxComesFromThePositionAndTheRadius(t *testing.T) {
-	c := CharacterEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 5000, Y: 4000}, rad: 2000}
+	c := entity.NewCharacterEntity(aLayerEntityID(1), state.Vec{X: 5000, Y: 4000}, 2000, 0, 0)
 	want := state.Rect{Min: state.Vec{X: 3000, Y: 2000}, Max: state.Vec{X: 7000, Y: 6000}}
 	if got := c.BoundingBox(); got != want {
 		t.Fatalf("BoundingBox = %+v, want %+v", got, want)
 	}
-	if got := (ItemEntity{pos: state.Vec{X: 5, Y: 4}}).BoundingBox(); got.Min != got.Max {
+	if got := (entity.NewItemEntity(0, state.Vec{X: 5, Y: 4}, 0, 0,
+		0)).BoundingBox(); got.Min != got.Max {
 		t.Fatalf("an item of radius 0 fills more than its tile: %+v", got)
 	}
 }
@@ -38,20 +41,16 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 		e.Hash(&h)
 		return h.Sum()
 	}
-	a := ItemEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}, itemID: 5}
+	a := entity.NewItemEntity(aLayerEntityID(1), state.Vec{X: 1, Y: 1}, 5, 0, 0)
 	h1 := hash(a)
 	h2 := hash(a)
 	if h1 != h2 {
 		t.Fatal("the same entity hashes differently")
 	}
 	for name, b := range map[string]state.Entity{
-		"item kind": ItemEntity{
-			entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}, itemID: 6,
-		},
-		"position": ItemEntity{
-			entityID: aLayerEntityID(1), pos: state.Vec{X: 2, Y: 1}, itemID: 5,
-		},
-		"entity kind": CharacterEntity{entityID: aLayerEntityID(1), pos: state.Vec{X: 1, Y: 1}},
+		"item kind":   entity.NewItemEntity(aLayerEntityID(1), state.Vec{X: 1, Y: 1}, 6, 0, 0),
+		"position":    entity.NewItemEntity(aLayerEntityID(1), state.Vec{X: 2, Y: 1}, 5, 0, 0),
+		"entity kind": entity.NewCharacterEntity(aLayerEntityID(1), state.Vec{X: 1, Y: 1}, 0, 0, 0),
 	} {
 		if hash(a) == hash(b) {
 			t.Fatalf("a different %s hashes the same", name)
@@ -62,8 +61,8 @@ func TestTheHashDependsOnWhatTheEntityIsMadeOf(t *testing.T) {
 func TestEveryKindCanBeMovedAndTheOriginalDoesNotChange(t *testing.T) {
 	to := state.Vec{X: 4500, Y: 4500}
 	for _, e := range []state.Entity{
-		CharacterEntity{pos: state.Vec{X: 1, Y: 1}},
-		ItemEntity{pos: state.Vec{X: 1, Y: 1}},
+		entity.NewCharacterEntity(0, state.Vec{X: 1, Y: 1}, 0, 0, 0),
+		entity.NewItemEntity(0, state.Vec{X: 1, Y: 1}, 0, 0, 0),
 	} {
 		moved := e.MovedTo(to)
 		if moved.Position() != to {
@@ -76,7 +75,7 @@ func TestEveryKindCanBeMovedAndTheOriginalDoesNotChange(t *testing.T) {
 }
 
 func TestACharacterCanBeDamagedAndHealedWithinItsHealth(t *testing.T) {
-	var d state.DamageableEntity = CharacterEntity{hp: 10, maxHp: 10}
+	var d state.DamageableEntity = entity.NewCharacterEntity(0, state.Vec{}, 0, 10, 10)
 	hurt := d.OnDamage(4)
 	if hurt.Health() != 6 || d.Health() != 10 {
 		t.Fatalf("after 4 damage: %d (original %d), want 6 and 10", hurt.Health(), d.Health())

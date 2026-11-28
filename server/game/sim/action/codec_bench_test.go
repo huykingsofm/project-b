@@ -1,10 +1,11 @@
-package action
+package action_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
@@ -17,17 +18,19 @@ func benchMessages() map[string]sim.Message {
 	}
 	two := sim.NewActionMessage(
 		layerID, onfail.Drop{},
-		layer(ZoneLayerCharacterMoveActionID), layer(ZoneLayerChatSendActionID),
+		layer(action.ZoneLayerCharacterMoveActionID), layer(action.ZoneLayerChatSendActionID),
 	).Stamp(sim.Header{From: 2, Seq: 98765})
-	undo := sim.NewActionMessage(layerID, onfail.Drop{}, layer(ZoneLayerItemEntityAddActionID))
+	undo := sim.NewActionMessage(
+		layerID, onfail.Drop{}, layer(action.ZoneLayerItemEntityAddActionID),
+	)
 	return map[string]sim.Message{
 		"2 actions": two,
 		"enter, a character": sim.NewActionMessage(
-			layerID, onfail.Drop{}, layer(ZoneLayerCharacterEnterActionID),
+			layerID, onfail.Drop{}, layer(action.ZoneLayerCharacterEnterActionID),
 		),
 		"pickup, with compensator": sim.NewActionMessage(
 			worldID, onfail.Compensate{With: undo},
-			actions[WorldCharacterItemAddActionID].(sim.Action[*worldstate.State]),
+			actions[action.WorldCharacterItemAddActionID].(sim.Action[*worldstate.State]),
 		),
 	}
 }

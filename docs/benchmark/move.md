@@ -39,7 +39,7 @@ Conventions and how to run: [index](index.md). Behavior: [`TileMap.Reach`](../ti
 
 ## Tile storage
 
-`TileMap` keeps one bit for each tile in a `bitset.Array` ([bitset](../bitset.md)). The same benchmarks, in ns/op, with a `[]bool` (one byte each), with the bitset read one tile at a time, and with the bitset where a row of 4 or more tiles is read with `AnyInRange` (what the code does):
+`TileMap` keeps one bit for each tile in a `bitset.Array` ([bitset](../shared.md#bitset)). The same benchmarks, in ns/op, with a `[]bool` (one byte each), with the bitset read one tile at a time, and with the bitset where a row of 4 or more tiles is read with `AnyInRange` (what the code does):
 
 | Benchmark | radius | map | `[]bool` | bitset, a tile at a time | bitset, rows with `AnyInRange` |
 |---|---|---|---|---|---|

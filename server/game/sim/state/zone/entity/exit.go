@@ -16,6 +16,14 @@ type ExitEntity struct {
 	arrival  state.Vec // where a character comes out in the other zone
 }
 
+// NewExitEntity makes an exit: the area that leads to the zone toZoneID, and where a character
+// comes out there.
+func NewExitEntity(
+	id state.EntityID, area state.Rect, toZoneID sim.StateID, arrival state.Vec,
+) ExitEntity {
+	return ExitEntity{entityID: id, area: area, toZoneID: toZoneID, arrival: arrival}
+}
+
 // ID returns the ID of the exit.
 func (e ExitEntity) ID() state.EntityID { return e.entityID }
 
@@ -60,23 +68,11 @@ func (e ExitEntity) MovedTo(pos state.Vec) state.Entity {
 
 // Encode writes the exit.
 func (e ExitEntity) Encode(w *binary.Writer) {
-	w.Uvarint(e.entityID.Local)
+	w.Uvarint(uint64(e.entityID))
 	e.area.Min.Encode(w)
 	e.area.Max.Encode(w)
 	w.Uvarint(uint64(e.toZoneID))
 	e.arrival.Encode(w)
-}
-
-// decodeExitEntity reads what Encode wrote, of the data version given.
-func decodeExitEntity(
-	r *binary.Reader, version codec.Version, owner sim.StateID,
-) (state.Entity, error) {
-	e := ExitEntity{entityID: state.NewEntityID(owner, r.Uvarint())}
-	e.area.Min = state.DecodeVec(r, version)
-	e.area.Max = state.DecodeVec(r, version)
-	e.toZoneID = r.Uint[sim.StateID]()
-	e.arrival = state.DecodeVec(r, version)
-	return e, r.Err()
 }
 
 // Area is the exit, both ends included, in units.
@@ -88,10 +84,12 @@ func (e ExitEntity) ToZoneID() sim.StateID { return e.toZoneID }
 // Arrival is where a character comes out in that zone, in units.
 func (e ExitEntity) Arrival() state.Vec { return e.arrival }
 
-// NewExitEntity makes an exit: the area that leads to the zone toZoneID, and where a character
-// comes out there.
-func NewExitEntity(
-	id state.EntityID, area state.Rect, toZoneID sim.StateID, arrival state.Vec,
-) ExitEntity {
-	return ExitEntity{entityID: id, area: area, toZoneID: toZoneID, arrival: arrival}
+// decodeExitEntity reads what Encode wrote, of the data version given.
+func decodeExitEntity(r *binary.Reader, version codec.Version) (state.Entity, error) {
+	e := ExitEntity{entityID: state.EntityID(r.Uvarint())}
+	e.area.Min = state.DecodeVec(r, version)
+	e.area.Max = state.DecodeVec(r, version)
+	e.toZoneID = r.Uint[sim.StateID]()
+	e.arrival = state.DecodeVec(r, version)
+	return e, r.Err()
 }

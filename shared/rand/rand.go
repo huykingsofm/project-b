@@ -25,6 +25,19 @@ func NewPCG(seed1, seed2 uint64) *Rand {
 	return &Rand{Rand: stdrand.New(pcg), pcg: pcg}
 }
 
+// Decode reads what Encode wrote: random numbers that go on from the place that was written.
+func Decode(r *binary.Reader) (*Rand, error) {
+	place := r.String()
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	rng := NewPCG(0, 0)
+	if err := rng.pcg.UnmarshalBinary([]byte(place)); err != nil {
+		return nil, fmt.Errorf("the place of the random numbers: %w", err)
+	}
+	return rng, nil
+}
+
 // Clone returns random numbers that share nothing with these and go on from the same place: the
 // same numbers, drawn apart.
 func (r *Rand) Clone() *Rand {
@@ -40,17 +53,4 @@ func (r *Rand) Encode(w *binary.Writer) error {
 	}
 	w.String(string(place))
 	return nil
-}
-
-// Decode reads what Encode wrote: random numbers that go on from the place that was written.
-func Decode(r *binary.Reader) (*Rand, error) {
-	place := r.String()
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	rng := NewPCG(0, 0)
-	if err := rng.pcg.UnmarshalBinary([]byte(place)); err != nil {
-		return nil, fmt.Errorf("the place of the random numbers: %w", err)
-	}
-	return rng, nil
 }

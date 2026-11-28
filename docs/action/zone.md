@@ -1,6 +1,6 @@
 # Zone actions
 
-State: [`state/zone`](../../server/game/sim/state/zone): the map, the exit entities, the zonelayers and their capacity, messages said in the zone. The zone keeps no count of who is in its zonelayers. Registry: `sim.Registry[*zonestate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/zone`](../../server/game/sim/state/zone): the map, the exit entities, the zonelayers and their capacity, messages said in the zone. The zone keeps no count of who is in its zonelayers. Registry: `sim.ActionRegistry[*zonestate.State]`. Conventions, keys and priorities: [index](index.md).
 
 Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAction`](zonelayer.md#zonelayercharacterexittoaction).
 
@@ -26,3 +26,22 @@ Crossing to another zone is not a zone action: see [`ZoneLayerCharacterExitToAct
   1. `SendMessage`: last 100 kept; the events get it.
   2. For each zonelayer, sends [`ZoneLayerChatSendAction`](zonelayer.md#zonelayerchatsendaction) with the same character and text; dropped if not delivered.
 - Example: tick 5 "hello zone"; recorded at tick 5; zonelayers 1 and 2 have it at tick 6.
+
+## ZoneZoneLayerAddAction
+
+- Kind: message
+- Priority: `PriorityResolve`
+- Fields: `ZoneLayerID`, `Capacity`
+- Sent by: [`ZoneLayerAnnounceToZoneAction`](zonelayer.md#zonelayerannouncetozoneaction); dropped if not delivered
+- Steps:
+  1. `AddZoneLayer`: the zone knows the zonelayer, with room for `Capacity` characters.
+
+## ZoneExitAddAction
+
+- Kind: message
+- Priority: `PriorityResolve`
+- Fields: `Area`, `ToZoneID`, `Arrival`
+- Sent by: [`WorldZoneExitAddAction`](world.md#worldzoneexitaddaction); dropped if not delivered
+- Steps:
+  1. `AddExit`: an area that is empty or not in the map of the zone, or a target that is not a zone, adds nothing; otherwise the zone has an exit entity with the next number, and the events get `ExitAdded`.
+

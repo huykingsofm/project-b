@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
@@ -8,31 +9,25 @@ import (
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
-	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
-	"github.com/huykingsofm/project-b/shared/codec"
-	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/errs"
 )
 
-// NewCodecs makes the codecs of the game: every state, action, command and kind of OnFail, so that
-// what the engines wrote can be read back. The map of a zone is not written with its state; tilesOf
-// gives the map of the zone with an ID when a zone is read.
-func NewCodecs(tilesOf func(zoneID sim.StateID) *tilemap.TileMap) (*sim.Codecs, error) {
+// NewCodecsAndEngines makes the codecs of the game and the registry that makes its engines: every
+// state (and, with it, the way to make its engine), action, command and kind of OnFail, so that
+// what the engines wrote can be read back and the engines can be made again.
+func NewCodecsAndEngines() (*sim.Codecs, *engine.EngineRegistry, error) {
 	c := sim.NewCodecs()
+	engines := engine.NewEngineRegistry()
 	err := errs.Join(
-		c.RegisterState(worldstate.DecodeState),
-		c.RegisterState(
-			func(r *binary.Reader, version codec.Version) (*zonestate.State, error) {
-				return zonestate.DecodeState(r, version, tilesOf)
-			},
-		),
-		c.RegisterState(zonelayerstate.DecodeState),
+		engines.Register(c, worldstate.DecodeState),
+		engines.Register(c, zonestate.DecodeState),
+		engines.Register(c, zonelayerstate.DecodeState),
 		onfail.Register(c),
 		action.Register(c),
 		command.Register(c),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return c, nil
+	return c, engines, nil
 }

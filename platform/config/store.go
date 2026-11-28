@@ -12,8 +12,8 @@ type Current struct {
 }
 
 // Store holds the configuration of the world outside the game: the document that a file, a service
-// or a person gave, which a cluster brings into its configuration engine (see engine.Cluster). It
-// is not what the engines read: they read the state of the configuration engine, through their
+// or a person gave, which a cluster brings into its coordinator engine (see engine.Cluster). It
+// is not what the engines read: they read the state of the coordinator engine, through their
 // stable view, which the event log records. It is safe for any goroutine.
 type Store struct {
 	cur     atomic.Pointer[Current]

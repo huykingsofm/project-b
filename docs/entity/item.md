@@ -8,7 +8,7 @@ The fields are private; the item is a value, made with `NewItemEntity(id, pos, i
 
 | Method | Returns | Meaning |
 |---|---|---|
-| `ID()` | `EntityID` | made of the ID of the zonelayer and the number it counted |
+| `ID()` | `EntityID` | the number the zonelayer counted |
 | `KindID()` | `KindID` | `ItemKindID` |
 | `Position()` | `Vec` | position, in units |
 | `Radius()` | `int32` | radius, in units |

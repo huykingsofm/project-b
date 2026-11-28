@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
+	"github.com/huykingsofm/project-b/platform/runtime/router"
+	"github.com/huykingsofm/project-b/platform/runtime/stable"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
@@ -22,30 +23,21 @@ import (
 
 // aWorldToCheckpoint is a world of one zone with one zonelayer, that heals its characters every 10
 // ticks.
-func aWorldToCheckpoint(t testing.TB) *game.Cluster {
+func aWorldToCheckpoint(t testing.TB) *testkit.Cluster {
 	t.Helper()
 	return aWorldToCheckpointWith(t, nil)
 }
 
 // aWorldToCheckpointWith is aWorldToCheckpoint with the writer of the checkpoints given; with no
 // writer the engines take none.
-func aWorldToCheckpointWith(t testing.TB, w engine.CheckpointWriter) *game.Cluster {
+func aWorldToCheckpointWith(t testing.TB, w engine.CheckpointWriter) *testkit.Cluster {
 	t.Helper()
-	tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
-	c, err := game.NewBuilder().
-		WithSeed(7).
-		WithCheckpointWriter(w).
-		WithEventLog(&eventlog.MemLog{}).
-		WithWorld(game.WorldParams{ID: testkit.World}).
-		WithZone(game.ZoneParams{ID: testkit.Zone1, Tiles: tiles}).
-		WithZoneLayers(game.ZoneLayerParams{
-			ZoneID: testkit.Zone1, Count: 1, Capacity: 5, RegenEvery: 10,
-		}).
-		Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return c
+	o := testkit.Options(t, 7)
+	o.CheckpointWriter, o.EventLog = w, &eventlog.MemLog{}
+	return testkit.Make(t, o, nil, testkit.ZoneSpec{
+		Tiles:  tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil),
+		Layers: []testkit.LayerSpec{{Capacity: 5, RegenEvery: 10}},
+	})
 }
 
 // theLayer is the only zonelayer of aWorldToCheckpoint: the first of its type.
@@ -54,14 +46,14 @@ var theLayer = testkit.Layer1
 // aWorldWithActionsThatWait has a character that runs and is shielded, and an item on the ground
 // that will be taken off: so the zonelayer waits for things at a later tick and has set things for
 // itself for the next one.
-func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
+func aWorldWithActionsThatWait(t testing.TB) *testkit.Cluster {
 	t.Helper()
 	c := aWorldToCheckpoint(t)
 	an, err := zonelayerstate.NewCharacter(1, "An", 100, 1000, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: an})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: an})
 	testkit.Steps(t, c, 4)
 	c.Env.Router.Deliver(sim.NewActionMessage[*zonelayerstate.State](
 		theLayer, onfail.Drop{},
@@ -70,22 +62,22 @@ func aWorldWithActionsThatWait(t testing.TB) *game.Cluster {
 		},
 	).Stamp(sim.Header{From: 99, Seq: 1}))
 	l := c.ZoneLayer(theLayer)
-	l.Send(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 1, Duration: 100})
-	l.Send(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
+	l.SendCommand(command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 1, Duration: 100})
+	l.SendCommand(command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 8})
 	testkit.Steps(t, c, 3)
-	c.Zone(testkit.Zone1).Send(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
-	c.World.Send(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneChatSendCommand{FromID: 1, Text: "hello"})
+	c.World.SendCommand(command.WorldChatPrivateSendCommand{FromID: 1, ToID: 2, Text: "psst"})
 	testkit.Steps(t, c, 2)
 	return c
 }
 
 // aFreshEnv is an environment with a router, a store and a configuration of its own, in which no
 // engine has been made, and with the codecs of the cluster.
-func aFreshEnv(c *game.Cluster) *engine.Env {
-	return &engine.Env{
-		Router: engine.NewRouter(), EventLog: eventlog.NopLog{},
-		Stable: engine.NewStableStateStore(), Codecs: c.Env.Codecs, QueueSize: 16,
-		Emitter: engine.NopEmitter{},
+func aFreshEnv(c *testkit.Cluster) *engine.Environment {
+	return &engine.Environment{
+		Router: router.NewRouter(), EventLog: eventlog.NopLog{},
+		StableStore: stable.NewStateStore(), Codecs: c.Env.Codecs,
+		EngineRegistry: c.Env.EngineRegistry, Seed: 7, QueueSize: 16, Emitter: engine.NopEmitter{},
 	}
 }
 
@@ -100,7 +92,7 @@ func TestARestoredZoneLayerHasTheHashOfTheOneItCameFromAndGoesOnTheSame(t *testi
 		t.Fatal(err)
 	}
 	// in the environment of the cluster, as the engine it came from: it reads the zone as it does
-	r, err := restoreEngine[*zonelayerstate.State](data, c.Env, 7)
+	r, err := restoreEngine[*zonelayerstate.State](data, c.Env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +117,7 @@ func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := restoreEngine[*worldstate.State](world, aFreshEnv(c), 7)
+	w, err := restoreEngine[*worldstate.State](world, aFreshEnv(c))
 	if err != nil || hashOf(w) != hashOf(c.World) || w.Tick() != c.World.Tick() {
 		t.Fatalf("the world: %v", err)
 	}
@@ -139,7 +131,7 @@ func TestARestoredWorldAndZoneHaveTheHashOfTheOnesTheyCameFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	z, err := restoreEngine[*zonestate.State](zone, aFreshEnv(c), 7)
+	z, err := restoreEngine[*zonestate.State](zone, aFreshEnv(c))
 	if err != nil || hashOf(z) != hashOf(c.Zone(testkit.Zone1)) ||
 		z.Tick() != c.Zone(testkit.Zone1).Tick() {
 		t.Fatalf("the zone: %v", err)
@@ -160,19 +152,19 @@ func TestACheckpointThatIsCutOrOfAnotherTypeOfStateIsAnErrorAndNeverAPanic(t *te
 		t.Fatal(err)
 	}
 	for n := range data { // every proper prefix
-		_, err := restoreEngine[*zonelayerstate.State](data[:n], aFreshEnv(c), 7)
+		_, err := restoreEngine[*zonelayerstate.State](data[:n], aFreshEnv(c))
 		if err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 	}
 	longer := append(append([]byte{}, data...), 0)
-	if _, err := restoreEngine[*zonelayerstate.State](longer, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*zonelayerstate.State](longer, aFreshEnv(c)); err == nil {
 		t.Fatal("a checkpoint with a byte more was restored")
 	}
-	if _, err := restoreEngine[*worldstate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*worldstate.State](data, aFreshEnv(c)); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as the world")
 	}
-	if _, err := restoreEngine[*zonestate.State](data, aFreshEnv(c), 7); err == nil {
+	if _, err := restoreEngine[*zonestate.State](data, aFreshEnv(c)); err == nil {
 		t.Fatal("the checkpoint of a zonelayer was restored as a zone")
 	}
 }
@@ -190,7 +182,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 	)
 	for n := range data { // every proper prefix, which is bad after the state or before it
 		env := aFreshEnv(c)
-		if _, err := restoreEngine[*zonelayerstate.State](data[:n], env, 7); err == nil {
+		if _, err := restoreEngine[*zonelayerstate.State](data[:n], env); err == nil {
 			t.Fatalf("%d of %d bytes were restored", n, len(data))
 		}
 		if reason, ok := env.Router.Deliver(say); ok || reason != sim.DeliveryFailureNotStarted {
@@ -199,7 +191,7 @@ func TestACheckpointThatIsBadRegistersNoEngineInTheRouter(t *testing.T) {
 		}
 	}
 	env := aFreshEnv(c)
-	if _, err := restoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
+	if _, err := restoreEngine[*zonelayerstate.State](data, env); err != nil {
 		t.Fatal(err)
 	}
 	if reason, ok := env.Router.Deliver(say); !ok {
@@ -215,7 +207,7 @@ func aBigZoneLayer(t testing.TB) *engine.Engine[*zonelayerstate.State] {
 }
 
 // aBigZoneLayerOf is aBigZoneLayer, made the zonelayer of the world given.
-func aBigZoneLayerOf(t testing.TB, c *game.Cluster) *engine.Engine[*zonelayerstate.State] {
+func aBigZoneLayerOf(t testing.TB, c *testkit.Cluster) *engine.Engine[*zonelayerstate.State] {
 	t.Helper()
 	l := c.ZoneLayer(theLayer)
 	for i := range 150 {
@@ -230,7 +222,7 @@ func aBigZoneLayerOf(t testing.TB, c *game.Cluster) *engine.Engine[*zonelayersta
 		l.ScheduleAt(
 			uint64(500+i),
 			action.ZoneLayerItemEntityRemoveAction{
-				EntityID: state.NewEntityID(theLayer, uint64(i+1)),
+				EntityID: state.EntityID(uint64(i + 1)),
 			},
 		)
 	}
@@ -275,7 +267,7 @@ func BenchmarkRestoreZoneLayer(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := restoreEngine[*zonelayerstate.State](data, env, 7); err != nil {
+		if _, err := restoreEngine[*zonelayerstate.State](data, env); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -305,7 +297,7 @@ func aBigWorld(t testing.TB) *engine.Engine[*worldstate.State] {
 }
 
 // aBigWorldOf is aBigWorld, made the world given.
-func aBigWorldOf(t testing.TB, c *game.Cluster) *engine.Engine[*worldstate.State] {
+func aBigWorldOf(t testing.TB, c *testkit.Cluster) *engine.Engine[*worldstate.State] {
 	t.Helper()
 	w := c.World
 	for i := range 2000 {
@@ -359,7 +351,7 @@ func BenchmarkRestoreWorld(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := restoreEngine[*worldstate.State](data, env, 7); err != nil {
+		if _, err := restoreEngine[*worldstate.State](data, env); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -397,8 +389,9 @@ type discardingWriter struct{}
 
 func (discardingWriter) Offer(sim.StateID, uint64, func() ([]byte, error)) {}
 
-// stepping is the world of aWorldToCheckpoint that takes a checkpoint at every tick, or at none.
-func stepping(b *testing.B, checkpointAtEveryTick bool) *game.Cluster {
+// aSteppingWorld is the world of aWorldToCheckpoint that takes a checkpoint at every tick, or at
+// none.
+func aSteppingWorld(b *testing.B, checkpointAtEveryTick bool) *testkit.Cluster {
 	b.Helper()
 	if !checkpointAtEveryTick {
 		return aWorldToCheckpointWith(b, nil)
@@ -421,19 +414,19 @@ func benchmarkStep(b *testing.B, step func() error) {
 }
 
 func BenchmarkStepZoneLayer(b *testing.B) {
-	benchmarkStep(b, aBigZoneLayerOf(b, stepping(b, false)).Step)
+	benchmarkStep(b, aBigZoneLayerOf(b, aSteppingWorld(b, false)).Step)
 }
 
 func BenchmarkStepZoneLayerTakingACheckpoint(b *testing.B) {
-	benchmarkStep(b, aBigZoneLayerOf(b, stepping(b, true)).Step)
+	benchmarkStep(b, aBigZoneLayerOf(b, aSteppingWorld(b, true)).Step)
 }
 
 func BenchmarkStepWorld(b *testing.B) {
-	benchmarkStep(b, aBigWorldOf(b, stepping(b, false)).Step)
+	benchmarkStep(b, aBigWorldOf(b, aSteppingWorld(b, false)).Step)
 }
 
 func BenchmarkStepWorldTakingACheckpoint(b *testing.B) {
-	benchmarkStep(b, aBigWorldOf(b, stepping(b, true)).Step)
+	benchmarkStep(b, aBigWorldOf(b, aSteppingWorld(b, true)).Step)
 }
 
 // hashOf is the hash of an engine, from a new hasher.
@@ -441,11 +434,11 @@ func hashOf[S sim.State](e *engine.Engine[S]) uint64 { return e.Hash(sim.NewHash
 
 // restoreEngine reads a checkpoint and makes its engine, in the environment given.
 func restoreEngine[S sim.State](
-	data []byte, env *engine.Env, seed uint64,
+	data []byte, env *engine.Environment,
 ) (*engine.Engine[S], error) {
-	c, err := engine.DecodeEngineCheckpoint[S](data, env.Codecs)
+	c, err := engine.DecodeCheckpoint[S](data, env.Codecs)
 	if err != nil {
 		return nil, err
 	}
-	return c.Restore(env, seed)
+	return c.Restore(env)
 }

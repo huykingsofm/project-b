@@ -5,7 +5,6 @@
 package state
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -35,50 +34,26 @@ type (
 )
 
 // EntityID names an entity that stands in a state: the body a character has in a zonelayer, an item
-// on its ground, an exit of a zone. It is made of the ID of the state that holds the entity, its
-// owner, and a number that the state counts for itself and never gives again, so it is unique among
-// all the entities of the game for good, and an ID that names nothing any more names nothing else.
-// The zero value is no entity: an owner is never 0 and a number is counted from 1.
-type EntityID struct {
-	Owner sim.StateID // the state that holds the entity
-	Local uint64      // the number that the owner gave it
-}
+// on its ground, an exit of a zone. It is the number that the state counts for itself and never
+// gives again, from 1, so an ID names one entity among those of its own state for good; it names
+// none among those of another state. A command or an action that names an entity of another state
+// holds the ID of that state beside it (0: the state it is run on). 0 is no entity.
+type EntityID uint64
 
-// NewEntityID makes the ID of the entity that the state owner gave the number local.
-func NewEntityID(owner sim.StateID, local uint64) EntityID {
-	return EntityID{Owner: owner, Local: local}
-}
-
-// String is the ID as the owner and the number, for a log.
-func (id EntityID) String() string { return fmt.Sprintf("%d/%d", id.Owner, id.Local) }
-
-// Hash works the ID into a hash: the owner and then the number.
-func (id EntityID) Hash(h *sim.Hasher) {
-	h.U64(uint64(id.Owner))
-	h.U64(id.Local)
-}
-
-// Encode writes the ID: the owner and then the number, each as a uvarint.
-func (id EntityID) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(id.Owner))
-	w.Uvarint(id.Local)
-}
-
-// DecodeEntityID reads what Encode wrote. It reports an ID that has no owner or no number, which no
-// state gives, so a reader finds what is not an ID that was written.
+// DecodeEntityID reads what Encode wrote.
 func DecodeEntityID(r *binary.Reader) (EntityID, error) {
-	id := EntityID{Owner: sim.StateID(r.Uvarint()), Local: r.Uvarint()}
-	if err := r.Err(); err != nil {
-		return EntityID{}, err
-	}
-	if id.Owner == 0 || id.Local == 0 {
-		return EntityID{}, fmt.Errorf("%w: %v", ErrNoEntity, id)
-	}
-	return id, nil
+	id := EntityID(r.Uvarint())
+	return id, r.Err()
 }
 
-// ErrNoEntity is the error of an entity ID that has no owner or no number.
-var ErrNoEntity = errors.New("state: an entity ID has no owner or no number")
+// String is the number, for a log.
+func (id EntityID) String() string { return fmt.Sprintf("%d", uint64(id)) }
+
+// Hash works the ID into a hash.
+func (id EntityID) Hash(h *sim.Hasher) { h.U64(uint64(id)) }
+
+// Encode writes the ID as a uvarint.
+func (id EntityID) Encode(w *binary.Writer) { w.Uvarint(uint64(id)) }
 
 // ItemID names a kind of item: what a dropped item is, and what an inventory holds.
 type ItemID uint32

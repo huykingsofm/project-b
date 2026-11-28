@@ -10,7 +10,7 @@ import (
 
 // ActionScheduler keeps what an engine runs at a later tick: the actions that were set for one
 // tick, the next one included. What must happen again and again is an action that sets itself
-// again when it runs (R7), so there is nothing else for the scheduler to keep: all that the engine
+// again when it runs (R0), so there is nothing else for the scheduler to keep: all that the engine
 // will do on its own waits here. The tick count it knows is the last one it gave out, so an action
 // set for a tick that has passed runs at the next one.
 //
@@ -142,6 +142,8 @@ func (s *ActionScheduler[S]) Hash(h *Hasher) {
 	}
 }
 
+var _ ReadOnlyScheduler[State] = (*ActionScheduler[State])(nil)
+
 // ReadOnlyScheduler is what the outside of an engine may ask of its scheduler: what waits in it.
 // Only the engine changes the scheduler, at the end of its tick.
 type ReadOnlyScheduler[S State] interface {
@@ -150,5 +152,3 @@ type ReadOnlyScheduler[S State] interface {
 	// Pending returns how many actions wait for a tick.
 	Pending() int
 }
-
-var _ ReadOnlyScheduler[State] = (*ActionScheduler[State])(nil)

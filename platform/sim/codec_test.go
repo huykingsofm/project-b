@@ -1,14 +1,15 @@
-package sim
+package sim_test
 
 import (
 	"errors"
 	"reflect"
 	"testing"
 
+	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 )
 
-func mustCodecs(t testing.TB) *Codecs {
+func mustCodecs(t testing.TB) *sim.Codecs {
 	t.Helper()
 	c, err := toyCodecs()
 	if err != nil {
@@ -19,9 +20,9 @@ func mustCodecs(t testing.TB) *Codecs {
 
 func TestAnActionComesBackAsItWasWritten(t *testing.T) {
 	c := mustCodecs(t)
-	for _, a := range []BaseAction{addAction{N: -5}, anonymousAction{name: "x", priority: -9}} {
+	for _, a := range []sim.BaseAction{addAction{N: -5}, anonymousAction{name: "x", priority: -9}} {
 		var w binary.Writer
-		if err := EncodeAction(&w, a); err != nil {
+		if err := sim.EncodeAction(&w, a); err != nil {
 			t.Fatalf("%T: %v", a, err)
 		}
 		r := binary.NewReader(w.B)
@@ -48,18 +49,18 @@ func TestACodecRefusesANumberOrATypeThatTwoKindsShare(t *testing.T) {
 	}
 }
 
-func toyMessages() []Message {
-	add := func(n int64) Action[*toyState] { return addAction{N: n} }
-	undo := NewActionMessage(5, testDrop{}, add(1))
-	return []Message{
-		NewActionMessage(5, testDrop{}, add(1), add(2)).
-			Stamp(Header{From: 2, Seq: 77}).Again(),
-		NewActionMessage[*toyState](5, testDrop{}),
-		NewActionMessage(5, testCompensate{With: undo}, add(3)),
-		NewActionMessage[*toyState](
-			5, testCompensate{With: NewActionMessage[*toyState](1, testCompensate{With: undo})},
+func toyMessages() []sim.Message {
+	add := func(n int64) sim.Action[*toyState] { return addAction{N: n} }
+	undo := sim.NewActionMessage(5, testDrop{}, add(1))
+	return []sim.Message{
+		sim.NewActionMessage(5, testDrop{}, add(1), add(2)).
+			Stamp(sim.Header{From: 2, Seq: 77}).Again(),
+		sim.NewActionMessage[*toyState](5, testDrop{}),
+		sim.NewActionMessage(5, testCompensate{With: undo}, add(3)),
+		sim.NewActionMessage[*toyState](
+			5, testCompensate{With: sim.NewActionMessage[*toyState](1, testCompensate{With: undo})},
 		),
-		NewActionMessage(NewStateID(otherType, 9), testDrop{}, otherAction{}),
+		sim.NewActionMessage(sim.NewStateID(otherType, 9), testDrop{}, otherAction{}),
 	}
 }
 
@@ -67,7 +68,7 @@ func TestAMessageComesBackWholeWithItsOnFailAndTheMessageInsideIt(t *testing.T) 
 	c := mustCodecs(t)
 	for i, m := range toyMessages() {
 		var w binary.Writer
-		if err := EncodeMessage(&w, m); err != nil {
+		if err := sim.EncodeMessage(&w, m); err != nil {
 			t.Fatalf("message %d: %v", i, err)
 		}
 		r := binary.NewReader(w.B)
@@ -85,7 +86,7 @@ func TestBytesThatAreCutOffOrWrongGiveAnErrorForAMessageAndNeverAPanic(t *testin
 	c := mustCodecs(t)
 	for i, m := range toyMessages() {
 		var w binary.Writer
-		if err := EncodeMessage(&w, m); err != nil {
+		if err := sim.EncodeMessage(&w, m); err != nil {
 			t.Fatal(err)
 		}
 		for n := range w.B { // every proper prefix
@@ -111,24 +112,24 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 	w.Uvarint(0) // attempts
 	w.Uvarint(uint64(testDropID))
 	w.Uvarint(1)
-	if err := EncodeAction(&w, otherAction{}); err != nil { // an action of the other type
+	if err := sim.EncodeAction(&w, otherAction{}); err != nil { // an action of the other type
 		t.Fatal(err)
 	}
 	_, err := c.DecodeMessage(binary.NewReader(w.B), 1)
-	if !errors.Is(err, ErrUnknownCode) {
+	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("an action of another type of state: %v, want ErrUnknownCode", err)
 	}
 
-	nested := func(n int) Message {
-		m := NewActionMessage[*toyState](1, testDrop{})
+	nested := func(n int) sim.Message {
+		m := sim.NewActionMessage[*toyState](1, testDrop{})
 		for range n {
-			m = NewActionMessage[*toyState](1, testCompensate{With: m})
+			m = sim.NewActionMessage[*toyState](1, testCompensate{With: m})
 		}
 		return m
 	}
 	// 8 messages inside one another is the most that can be read back, and it is written
 	var fits binary.Writer
-	if err := EncodeMessage(&fits, nested(8)); err != nil {
+	if err := sim.EncodeMessage(&fits, nested(8)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.DecodeMessage(binary.NewReader(fits.B), 1); err != nil {
@@ -136,7 +137,7 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 	}
 	// 9 is refused when it is written, and nothing of it is left: what is written is readable
 	var d binary.Writer
-	err = EncodeMessage(&d, nested(9))
+	err = sim.EncodeMessage(&d, nested(9))
 	if !errors.Is(err, binary.ErrBadValue) || len(d.B) != 0 {
 		t.Fatalf("messages nested 9 deep were written: %v, %d bytes", err, len(d.B))
 	}
@@ -154,24 +155,27 @@ func TestAMessageWithAnActionOfAnotherStateTypeOrTooDeepIsRefused(t *testing.T) 
 // noEncodeAction is an action that cannot be written.
 type noEncodeAction struct{}
 
-func (noEncodeAction) ID() ActionID    { return addID }
-func (noEncodeAction) Priority() int16 { return 0 }
-func (noEncodeAction) Actor() any      { return nil }
-func (noEncodeAction) Apply(*Context, *toyState, *Registry[*toyState], *Plan[*toyState]) {
+func (noEncodeAction) ID() sim.ActionID { return addID }
+func (noEncodeAction) Priority() int16  { return 0 }
+func (noEncodeAction) Actor() any       { return nil }
+func (noEncodeAction) Apply(
+	*sim.Context, *toyState, *sim.ActionRegistry[*toyState], *sim.Plan[*toyState],
+) {
 }
-func (a noEncodeAction) Clone() Action[*toyState] { return a }
+func (a noEncodeAction) Clone() sim.Action[*toyState] { return a }
 
 func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testing.T) {
 	var w binary.Writer
-	err := EncodeAction(&w, noEncodeAction{})
-	if !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
+	err := sim.EncodeAction(&w, noEncodeAction{})
+	if !errors.Is(err, sim.ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("an action with no Encode: %v, %d bytes written", err, len(w.B))
 	}
-	m := NewActionMessage(1, testDrop{}, addAction{}, noEncodeAction{})
-	if err := EncodeMessage(&w, m); !errors.Is(err, ErrNoCodec) || len(w.B) != 0 {
+	m := sim.NewActionMessage(1, testDrop{}, addAction{}, noEncodeAction{})
+	if err := sim.EncodeMessage(&w, m); !errors.Is(err, sim.ErrNoCodec) || len(w.B) != 0 {
 		t.Fatalf("a message with such an action: %v, %d bytes written", err, len(w.B))
 	}
-	if err := EncodeMessage(&w, NewActionMessage[*toyState](1, nil)); !errors.Is(err, ErrNoCodec) {
+	if err := sim.EncodeMessage(&w, sim.NewActionMessage[*toyState](1, nil)); !errors.Is(err,
+		sim.ErrNoCodec) {
 		t.Fatalf("a message with no OnFail: %v, want ErrNoCodec", err)
 	}
 }
@@ -179,23 +183,23 @@ func TestAnActionWithNoEncodeAndAMessageThatHoldsOneAreNotWrittenAtAll(t *testin
 func TestACommandAndAStateComeBackAsTheyWereWritten(t *testing.T) {
 	c := mustCodecs(t)
 	var w binary.Writer
-	if err := EncodeCommand(&w, addCommand{N: 12}); err != nil {
+	if err := sim.EncodeCommand(&w, addCommand{N: 12}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := c.DecodeCommand(binary.NewReader(w.B), 1)
 	if err != nil || got != (addCommand{N: 12}) {
 		t.Fatalf("the command came back as %+v, error %v", got, err)
 	}
-	if _, ok := got.(Command[*toyState]); !ok {
+	if _, ok := got.(sim.Command[*toyState]); !ok {
 		t.Fatal("the command is not a command of the toy state")
 	}
-	if _, ok := got.(Command[*otherState]); ok {
+	if _, ok := got.(sim.Command[*otherState]); ok {
 		t.Fatal("the command is a command of another state")
 	}
 
 	w = binary.Writer{}
 	st := &toyState{id: 4, tick: 9, Total: -3}
-	if err := EncodeState(&w, st); err != nil {
+	if err := sim.EncodeState(&w, st); err != nil {
 		t.Fatal(err)
 	}
 	read, err := c.DecodeState(binary.NewReader(w.B), 1)
@@ -203,33 +207,33 @@ func TestACommandAndAStateComeBackAsTheyWereWritten(t *testing.T) {
 		t.Fatalf("the state came back as %+v, error %v", read, err)
 	}
 	_, err = c.DecodeState(binary.NewReader([]byte{99}), 1)
-	if !errors.Is(err, ErrUnknownCode) {
+	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("a state of a type that is not registered: %v", err)
 	}
 	_, err = c.DecodeCommand(binary.NewReader([]byte{99}), 1)
-	if !errors.Is(err, ErrUnknownCode) {
+	if !errors.Is(err, sim.ErrUnknownCode) {
 		t.Fatalf("a command that is not registered: %v", err)
 	}
 }
 
-type fixedReader map[StateID]State
+type fixedReader map[sim.StateID]sim.State
 
-func (f fixedReader) Read(id StateID) (State, error) {
+func (f fixedReader) Read(id sim.StateID) (sim.State, error) {
 	if s, ok := f[id]; ok {
 		return s, nil
 	}
-	return nil, ErrStateNotFound
+	return nil, sim.ErrStateNotFound
 }
 
 func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) {
-	r := &Registry[*toyState]{Stable: fixedReader{1: &toyState{id: 1}, 2: &otherState{}}}
-	if got, err := r.Get[*toyState](1); err != nil || got.ID() != 1 {
+	r := &sim.ActionRegistry[*toyState]{Stable: fixedReader{1: &toyState{id: 1}, 2: &otherState{}}}
+	if got, err := r.Get[*toyState](1); err != nil || got.id != 1 {
 		t.Fatalf("a state that is there: %v, %v", got, err)
 	}
-	if _, err := r.Get[*toyState](3); !errors.Is(err, ErrStateNotFound) {
+	if _, err := r.Get[*toyState](3); !errors.Is(err, sim.ErrStateNotFound) {
 		t.Fatalf("a state that is not there: %v", err)
 	}
-	if _, err := r.Get[*toyState](2); !errors.Is(err, ErrStateWrongType) {
+	if _, err := r.Get[*toyState](2); !errors.Is(err, sim.ErrStateWrongType) {
 		t.Fatalf("a state of another type: %v", err)
 	}
 	// an interface of the read methods is asked for as well as the type itself
@@ -239,12 +243,70 @@ func TestARegistryReadsAStateByItsIDAndTellsNotFoundFromWrongType(t *testing.T) 
 }
 
 func TestSendPutsAMessageForTheStateInTheOutboxInOrder(t *testing.T) {
-	var r Registry[*toyState]
-	other := NewStateID(otherType, 9)
+	var r sim.ActionRegistry[*toyState]
+	other := sim.NewStateID(otherType, 9)
 	r.Send(other, testDrop{}, otherAction{})
 	r.Send(5, testDrop{}, addAction{N: 1})
 	sent := r.Take()
 	if len(sent) != 2 || sent[0].Dest() != other || sent[1].Dest() != 5 || r.Take() != nil {
 		t.Fatalf("the outbox held %+v", sent)
+	}
+}
+
+func TestDirectivesComeBackAsTheyWereWrittenAndKeepNoViewOfTheBytes(t *testing.T) {
+	c := mustCodecs(t)
+	create := sim.DirectiveRequest{
+		ID: 3, Kind: sim.DirectiveCreateEngine, Tag: []byte("zone"),
+		State:        &toyState{id: 4, tick: 0, Total: -3},
+		StartActions: []sim.BaseAction{addAction{N: 2}},
+	}
+	remove := sim.DirectiveRequest{ID: 4, Kind: sim.DirectiveRetireEngine, Tag: nil, Target: 77}
+	for _, d := range []sim.DirectiveRequest{create, remove} {
+		var w binary.Writer
+		if err := sim.EncodeDirectiveRequest(&w, d); err != nil {
+			t.Fatal(err)
+		}
+		r := binary.NewReader(w.B)
+		got, err := c.DecodeDirectiveRequest(r, 1)
+		if err != nil || r.Left() != 0 || !reflect.DeepEqual(got, d) {
+			t.Fatalf("%+v came back as %+v, error %v, %d bytes left", d, got, err, r.Left())
+		}
+		for n := range w.B { // every proper prefix is an error, never a panic
+			if _, err := c.DecodeDirectiveRequest(binary.NewReader(w.B[:n]), 1); err == nil {
+				t.Fatalf("%d of %d bytes were read", n, len(w.B))
+			}
+		}
+		clear(w.B) // the bytes are reused by a reader: what was read must not look into them
+		if !reflect.DeepEqual(got, d) {
+			t.Fatalf("a request that was read holds a view of the bytes: %+v", got)
+		}
+	}
+	response := sim.DirectiveResponse{
+		ID: 3, Kind: sim.DirectiveCreateEngine, Tag: []byte("zone"), Engine: 12, Failure: "full",
+	}
+	var w binary.Writer
+	sim.EncodeDirectiveResponse(&w, response)
+	got, err := sim.DecodeDirectiveResponse(binary.NewReader(w.B))
+	if err != nil || !reflect.DeepEqual(got, response) {
+		t.Fatalf("%+v came back as %+v, error %v", response, got, err)
+	}
+	clear(w.B)
+	if !reflect.DeepEqual(got, response) {
+		t.Fatal("an answer that was read holds a view of the bytes")
+	}
+}
+
+func TestAnActionAsksTheClusterForAnEngineThroughItsRegistry(t *testing.T) {
+	var r sim.ActionRegistry[*toyState]
+	r.RequestCreateEngine([]byte("a"), &toyState{Total: 1}, addAction{N: 2})
+	r.RequestRetireEngine(9, []byte("b"))
+	got := r.TakeDirectiveRequests()
+	if len(got) != 2 || got[0].Kind != sim.DirectiveCreateEngine || string(got[0].Tag) != "a" ||
+		len(got[0].StartActions) != 1 || got[0].StartActions[0] != (addAction{N: 2}) ||
+		got[1].Kind != sim.DirectiveRetireEngine || got[1].Target != 9 {
+		t.Fatalf("the requests are %+v", got)
+	}
+	if again := r.TakeDirectiveRequests(); len(again) != 0 {
+		t.Fatalf("the requests were not forgotten: %+v", again)
 	}
 }

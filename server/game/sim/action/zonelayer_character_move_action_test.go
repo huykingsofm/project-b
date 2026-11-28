@@ -1,9 +1,10 @@
-package action
+package action_test
 
 import (
 	"testing"
 
 	"github.com/huykingsofm/project-b/platform/sim"
+	"github.com/huykingsofm/project-b/server/game/sim/action"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
@@ -23,13 +24,13 @@ func (t testStable) Read(id sim.StateID) (sim.State, error) {
 
 func newMoveTestWorld(
 	t *testing.T, zonePublished bool,
-) (*zonelayerstate.State, *sim.Registry[*zonelayerstate.State]) {
-	st := zonelayerstate.NewState(1, 1, 9)
+) (*zonelayerstate.State, *sim.ActionRegistry[*zonelayerstate.State]) {
+	st := zonelayerstate.NewState(1, 9)
 	st.AddCharacterEntity(newCharacter(1, "a", 100, 1000, 0), state.Vec{X: 1500, Y: 2500})
-	reg := &sim.Registry[*zonelayerstate.State]{}
+	reg := &sim.ActionRegistry[*zonelayerstate.State]{}
 	if zonePublished {
-		tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil, nil)
-		reg.Stable = testStable{zone: zonestate.NewState(1, 9, tiles)}
+		tiles := tilemaptest.New(t, 10, 5, tilemap.Tile{X: 1, Y: 2}, nil)
+		reg.Stable = testStable{zone: zonestate.NewState(9, tiles)}
 	} else {
 		reg.Stable = testStable{}
 	}
@@ -39,10 +40,10 @@ func newMoveTestWorld(
 func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	st, reg := newMoveTestWorld(t, true)
 	plan := sim.NewPlan[*zonelayerstate.State]()
-	run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
+	run := action.ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 5}
 
 	run.Apply(&sim.Context{Tick: 10}, st, reg, plan)
-	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 15 {
+	if got := st.CooldownUntil(1, action.ZoneLayerCharacterMoveActionCooldownKey); got != 15 {
 		t.Fatalf("the cooldown ends at %d, want 15", got)
 	}
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 2500, Y: 2500}) {
@@ -55,17 +56,17 @@ func TestARunTakesItsPlaceInTheCooldownAndAMoveCanBeCancelled(t *testing.T) {
 	if len(self) != 1 {
 		t.Fatalf("the run set itself %d times for a later tick, want once", len(self))
 	}
-	next := self[0].Action.(ZoneLayerCharacterMoveAction)
+	next := self[0].Action.(action.ZoneLayerCharacterMoveAction)
 	var cancellable sim.Cancellable[*zonelayerstate.State] = next
 	cancellable.ApplyCancel(&sim.Context{Tick: 12}, st, reg)
-	if got := st.CooldownUntil(1, ZoneLayerCharacterMoveActionCooldownKey); got != 12 {
+	if got := st.CooldownUntil(1, action.ZoneLayerCharacterMoveActionCooldownKey); got != 12 {
 		t.Fatalf("after the cancel the cooldown ends at %d, want 12", got)
 	}
 }
 
 func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 	st, reg := newMoveTestWorld(t, false)
-	run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
+	run := action.ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}
 	run.Apply(&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {
@@ -75,7 +76,7 @@ func TestAMoveThatNeedsTheMapWaitsUntilTheZoneHasPublishedIt(t *testing.T) {
 	if len(self) != 1 {
 		t.Fatal("the run did not set itself for the next tick")
 	}
-	next := self[0].Action.(ZoneLayerCharacterMoveAction)
+	next := self[0].Action.(action.ZoneLayerCharacterMoveAction)
 	if next.CharacterID != 1 || next.Ticks != 3 {
 		t.Fatalf("the run set itself again as %+v, want the same run with its 3 ticks", next)
 	}
@@ -86,7 +87,7 @@ const otherCooldownKey zonelayerstate.CooldownKey = 60000
 
 func TestACooldownKeyOfOneActionIsNotTheKeyOfAnother(t *testing.T) {
 	st, _ := newMoveTestWorld(t, true)
-	st.SetCooldown(1, ZoneLayerCharacterMoveActionCooldownKey, 99)
+	st.SetCooldown(1, action.ZoneLayerCharacterMoveActionCooldownKey, 99)
 	if got := st.CooldownUntil(1, otherCooldownKey); got != 0 {
 		t.Fatalf("the other cooldown is %d, want none", got)
 	}
@@ -100,7 +101,7 @@ func TestACharacterMovesByItsOwnSpeedEachTick(t *testing.T) {
 		st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
 		start, _ := st.CharacterEntityByCharacterID(1)
 
-		run := ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 2}
+		run := action.ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 2}
 		run.Apply(&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State]())
 		// what runs at the next tick is the copy that the run set for it
 		self := reg.TakeSelf()
@@ -126,7 +127,7 @@ func TestACharacterWithNoSpeedDoesNotMove(t *testing.T) {
 	ch, _ := st.RemoveCharacterEntity(1)
 	ch.SetSpeed(0)
 	st.AddCharacterEntity(ch, state.Vec{X: 1500, Y: 2500})
-	(ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).Apply(
+	(action.ZoneLayerCharacterMoveAction{CharacterID: 1, Dir: state.East, Ticks: 3}).Apply(
 		&sim.Context{Tick: 10}, st, reg, sim.NewPlan[*zonelayerstate.State](),
 	)
 	if e, _ := st.CharacterEntityByCharacterID(1); e.Position() != (state.Vec{X: 1500, Y: 2500}) {

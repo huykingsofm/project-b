@@ -8,23 +8,6 @@ import (
 	"io"
 )
 
-// segmentScanner reads the header and then the records of a segment.
-type segmentScanner struct {
-	r       *bufio.Reader
-	begin   uint64 // the ID of the first record of the segment
-	meta    []byte
-	offset  int64 // where the next entry starts: the end of what has been read whole
-	payload []byte
-	buf     []byte
-	commit  bool // the entry that next read is a commit, not a record
-	// committedEnd is where the last commit that was read ends, or the end of the header when there
-	// was none: what is before it is whole batches. sinceCommit is the records read since that
-	// commit, and committedRecords the records in the batches that were committed.
-	committedEnd     int64
-	sinceCommit      int
-	committedRecords int64
-}
-
 // errTorn says that the end of the segment is a record that was not finished or does not match its
 // crc; at the end of the last segment that is what a crash leaves.
 var errTorn = fmt.Errorf("%w: a record is cut off or does not match its crc", ErrCorrupt)
@@ -35,6 +18,28 @@ var errTorn = fmt.Errorf("%w: a record is cut off or does not match its crc", Er
 // written). Any other header that is not right, another format or a crc that does not match, is not
 // cut, and what is in the file is not touched.
 var errHeaderCut = fmt.Errorf("%w: the header is cut off", ErrCorrupt)
+
+// segmentScanner reads the header and then the records of a segment.
+type segmentScanner struct {
+	// what it reads: the ID of the first record of the segment, its metadata, where the next entry
+	// starts (the end of what has been read whole), and the buffers
+	r       *bufio.Reader
+	begin   uint64
+	meta    []byte
+	offset  int64
+	payload []byte
+	buf     []byte
+
+	// whether the entry that is read next is a commit, not a record
+	commit bool
+
+	// the batches: committedEnd is where the last commit that was read ends, or the end of the
+	// header when there was none (what is before it is whole batches), sinceCommit the records read
+	// since that commit, and committedRecords the records in the batches that were committed
+	committedEnd     int64
+	sinceCommit      int
+	committedRecords int64
+}
 
 func newSegmentScanner(r io.Reader) (*segmentScanner, error) {
 	s := &segmentScanner{r: bufio.NewReaderSize(r, 64<<10)}

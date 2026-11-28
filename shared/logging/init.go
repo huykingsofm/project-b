@@ -12,34 +12,6 @@ var ErrAlreadyInitialized = errors.New("logging: already initialized")
 // ErrNoConsumer is returned by Init when the consumer is nil.
 var ErrNoConsumer = errors.New("logging: a consumer is needed")
 
-type options struct {
-	capacity   int
-	flushEvery time.Duration
-}
-
-// Option changes how Init sets the log up.
-type Option func(*options)
-
-// WithCapacity sets how many entries wait for the next flush (4096 by default); a value below one
-// is ignored. A full queue drops the entry and the next flush says how many were dropped.
-func WithCapacity(n int) Option {
-	return func(o *options) {
-		if n >= 1 {
-			o.capacity = n
-		}
-	}
-}
-
-// WithFlushEvery sets how often the consumer is given the entries (one second by default); a value
-// that is not positive is ignored.
-func WithFlushEvery(d time.Duration) Option {
-	return func(o *options) {
-		if d > 0 {
-			o.flushEvery = d
-		}
-	}
-}
-
 var (
 	initMu      sync.Mutex
 	initialized bool
@@ -87,4 +59,32 @@ func Init(c Consumer, opts ...Option) (func(), error) {
 			initialized = false
 		})
 	}, nil
+}
+
+type options struct {
+	capacity   int
+	flushEvery time.Duration
+}
+
+// Option changes how Init sets the log up.
+type Option func(*options)
+
+// WithCapacity sets how many entries wait for the next flush (4096 by default); a value below one
+// is ignored. A full queue drops the entry and the next flush says how many were dropped.
+func WithCapacity(n int) Option {
+	return func(o *options) {
+		if n >= 1 {
+			o.capacity = n
+		}
+	}
+}
+
+// WithFlushEvery sets how often the consumer is given the entries (one second by default); a value
+// that is not positive is ignored.
+func WithFlushEvery(d time.Duration) Option {
+	return func(o *options) {
+		if d > 0 {
+			o.flushEvery = d
+		}
+	}
 }

@@ -10,8 +10,19 @@ import (
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	"github.com/huykingsofm/project-b/server/game/sim/state/world/event"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
+	"github.com/huykingsofm/project-b/shared/logging"
 	"github.com/huykingsofm/project-b/shared/ring"
 	"github.com/huykingsofm/project-b/shared/stablemap"
+)
+
+// chatKeep is how many private messages the world keeps.
+const chatKeep = 1000
+
+// The tags that the world gives its requests for engines, which the cluster gives back with the
+// answer: what the engine that was made is.
+const (
+	TagZone      byte = iota + 1 // the engine is a zone of the world
+	TagZoneLayer                 // the engine is a zonelayer of a zone of the world
 )
 
 // PrivateChatMessage is something a player sent privately to another player. A private message is
@@ -33,48 +44,18 @@ func NewPrivateChatMessage(
 	}
 }
 
-// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
-// is empty.
-type InventorySlot struct {
-	itemID state.ItemID
-	count  uint32
-}
-
-// ItemID is the kind of item that the slot holds.
-func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
-
-// Count is how many items the slot holds; 0 is an empty slot.
-func (i InventorySlot) Count() uint32 { return i.count }
-
-// Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R29).
-type Inventory struct {
-	slots []InventorySlot
-}
-
-// Clone returns a copy that shares nothing with the inventory.
-func (i Inventory) Clone() Inventory {
-	return Inventory{slots: slices.Clone(i.slots)}
-}
-
-// chatKeep is how many private messages the world keeps.
-const chatKeep = 1000
-
 // State is the state of the world.
 type State struct {
 	// Data.
-	id   sim.StateID
 	tick uint64
 	// zones and ZoneLayers are every zone and every zonelayer of the world, in the order they were
 	// added: the world is where an engine learns which other engines there are.
-	zones      []sim.StateID
-	zoneLayers []sim.StateID
-	// lastStateID is the number that the last state that the world made while it runs (a
-	// zonelayer) was given, counted up from 1 and never given again.
-	lastStateID uint64
+	zones       []sim.StateID
+	zoneLayers  []sim.StateID
 	privateChat ring.Ring[PrivateChatMessage]
 
 	// inventories holds the slots of every character: the items of a character belong to the world
-	// (R28).
+	// (R12).
 	inventories stablemap.Map[state.CharacterID, Inventory]
 
 	// Events: not data, never cloned.
@@ -82,30 +63,12 @@ type State struct {
 }
 
 // NewState makes the state of an empty world.
-func NewState(worldID sim.StateID) *State {
-	return &State{
-		id: worldID, privateChat: ring.New[PrivateChatMessage](chatKeep),
-	}
+func NewState() *State {
+	return &State{privateChat: ring.New[PrivateChatMessage](chatKeep)}
 }
 
-// clone returns a copy of the data, with an empty event.
-func (s *State) clone() *State {
-	return &State{
-		id:          s.id,
-		tick:        s.tick,
-		zones:       slices.Clone(s.zones),
-		zoneLayers:  slices.Clone(s.zoneLayers),
-		lastStateID: s.lastStateID,
-		privateChat: s.privateChat.Clone(),
-		inventories: s.inventories.CloneFunc(Inventory.Clone),
-	}
-}
-
-// NextTick takes the state to the next tick.
-func (s *State) NextTick() { s.tick++ }
-
-// ID is the ID of the state.
-func (s *State) ID() sim.StateID { return s.id }
+// AdvanceTick takes the state to the next tick.
+func (s *State) AdvanceTick() { s.tick++ }
 
 // Type is the type of the state of a world.
 func (s *State) Type() sim.StateType { return state.WorldType }
@@ -135,15 +98,18 @@ func (s *State) AddZone(zoneID sim.StateID) {
 	}
 }
 
-// AddZoneLayer gives a zonelayer an ID and makes the world know it.
-func (s *State) AddZoneLayer() sim.StateID {
-	s.lastStateID++
-	id := sim.NewStateID(state.ZoneLayerType, s.lastStateID)
-	s.zoneLayers = append(s.zoneLayers, id)
-	return id
+// AddZoneLayer makes the world know a zonelayer, which the cluster gave an ID. It reports false for
+// an ID that is not one of a zonelayer, and for one that the world knows already.
+func (s *State) AddZoneLayer(zoneLayerID sim.StateID) bool {
+	if zoneLayerID.Type() != state.ZoneLayerType || zoneLayerID.Local() == 0 ||
+		slices.Contains(s.zoneLayers, zoneLayerID) {
+		return false
+	}
+	s.zoneLayers = append(s.zoneLayers, zoneLayerID)
+	return true
 }
 
-// RemoveZoneLayer makes the world forget a zonelayer. Its ID is not given again. It reports false
+// RemoveZoneLayer makes the world forget a zonelayer. The ID is not given again. It reports false
 // for an ID that is not one of a zonelayer of the world.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) bool {
 	if zoneLayerID.Type() != state.ZoneLayerType || !slices.Contains(s.zoneLayers, zoneLayerID) {
@@ -212,11 +178,10 @@ func (s *State) InventorySlots(characterID state.CharacterID) []InventorySlot {
 	return slices.Clone(inventory.slots)
 }
 
-// Encode writes the data of the state: its ID and tick, the zones and zonelayers it knows, the IDs
+// Encode writes the data of the state: its tick, the zones and zonelayers it knows, the IDs
 // it gives the states it makes, the private messages, and the inventory of every character. The
-// events are not data (R18) and are not written.
+// events are not data (R9) and are not written.
 func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
 	w.Uvarint(s.tick)
 	w.Uvarint(uint64(len(s.zones)))
 	for _, id := range s.zones {
@@ -226,7 +191,6 @@ func (s *State) Encode(w *binary.Writer) error {
 	for _, id := range s.zoneLayers {
 		w.Uvarint(uint64(id))
 	}
-	w.Uvarint(s.lastStateID)
 	rows := s.privateChat.Rows()
 	w.Uvarint(uint64(len(rows)))
 	for _, m := range rows {
@@ -250,9 +214,7 @@ func (s *State) Encode(w *binary.Writer) error {
 // Hash returns a number that depends on the data of the state and on nothing else.
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.id))
 	h.U64(s.tick)
-	h.U64(s.lastStateID)
 	for _, id := range s.zones {
 		h.U64(uint64(id))
 	}
@@ -270,15 +232,72 @@ func (s *State) Hash() uint64 {
 	return h.Sum()
 }
 
+// HandleDirective takes the answer of the cluster to a request of the world for an engine: the
+// zone or the zonelayer that was made is listed by the world, which is the one that knows which
+// zones and zonelayers there are (R12). An engine that could not be made is not listed.
+func (s *State) HandleDirective(
+	_ *sim.Context, _ *sim.ActionRegistry[*State], d sim.DirectiveResponse,
+) {
+	if d.Kind != sim.DirectiveCreateEngine || len(d.Tag) == 0 {
+		return
+	}
+	if d.Failure != "" {
+		logging.Warn("the world asked for an engine that was not made", "failure", d.Failure)
+		return
+	}
+	switch d.Tag[0] {
+	case TagZone:
+		s.AddZone(d.Engine)
+	case TagZoneLayer:
+		s.AddZoneLayer(d.Engine)
+	}
+}
+
+// clone returns a copy of the data, with an empty event.
+func (s *State) clone() *State {
+	return &State{
+		tick:        s.tick,
+		zones:       slices.Clone(s.zones),
+		zoneLayers:  slices.Clone(s.zoneLayers),
+		privateChat: s.privateChat.Clone(),
+		inventories: s.inventories.CloneFunc(Inventory.Clone),
+	}
+}
+
+var _ ReadOnlyWorldState = (*State)(nil)
+
+var _ sim.DirectiveHandler[*State] = (*State)(nil)
+
+// Inventory is the slots of one character, in order. It holds a slice, so it has a Clone (R13).
+type Inventory struct {
+	slots []InventorySlot
+}
+
+// Clone returns a copy that shares nothing with the inventory.
+func (i Inventory) Clone() Inventory {
+	return Inventory{slots: slices.Clone(i.slots)}
+}
+
+// InventorySlot is one slot of an inventory: a stack of items of one kind. A slot with a count of 0
+// is empty.
+type InventorySlot struct {
+	itemID state.ItemID
+	count  uint32
+}
+
+// ItemID is the kind of item that the slot holds.
+func (i InventorySlot) ItemID() state.ItemID { return i.itemID }
+
+// Count is how many items the slot holds; 0 is an empty slot.
+func (i InventorySlot) Count() uint32 { return i.count }
+
 // ReadOnlyWorldState is the read methods of the state of the world: what an action may use of a
-// copy that another engine published, which it must never change (R26, R28).
+// copy that another engine published, which it must never change (R5, R12).
 type ReadOnlyWorldState interface {
 	Hash() uint64
 	ZoneIDs() []sim.StateID
 	ZoneLayerIDs() []sim.StateID
 }
-
-var _ ReadOnlyWorldState = (*State)(nil)
 
 // topUpInventorySlotsOfKind puts items in the slots that already hold the kind, in order, up to
 // stackLimit in each, and returns how many are left.

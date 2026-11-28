@@ -1,4 +1,4 @@
-package command
+package command_test
 
 import (
 	"errors"
@@ -13,10 +13,12 @@ import (
 
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
+	"github.com/huykingsofm/project-b/server/game/sim/command"
 	"github.com/huykingsofm/project-b/server/game/sim/state"
 	worldstate "github.com/huykingsofm/project-b/server/game/sim/state/world"
 	zonestate "github.com/huykingsofm/project-b/server/game/sim/state/zone"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
+	"github.com/huykingsofm/project-b/server/game/sim/tilemap"
 	"github.com/huykingsofm/project-b/shared/codec/binary"
 	"github.com/huykingsofm/project-b/shared/testing/aliasing"
 )
@@ -45,29 +47,44 @@ func characterWithCooldowns() zonelayerstate.Character {
 
 // examples has a command of every kind.
 var examples = []sim.BaseCommand{
-	WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"},
-	ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
-	ZoneCharacterEnterCommand{
+	command.WorldChatPrivateSendCommand{FromID: 10, ToID: 20, Text: "psst"},
+	command.ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
+	command.ZoneCharacterEnterCommand{
 		Character: aCharacter(1, "An"),
 	},
-	ZoneChatSendCommand{FromID: 1, Text: "hello zone"},
-	ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
-	ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
-	ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"},
-	ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: anEntityID(9)},
-	ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: anEntityID(1 << 40)},
-	ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
+	command.ZoneChatSendCommand{FromID: 1, Text: "hello zone"},
+	command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 5},
+	command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
+	command.ZoneLayerChatSendCommand{FromID: 1, Text: "xin chào"},
+	command.ZoneLayerCharacterExitToCommand{CharacterID: 1, ExitEntityID: anEntityID(9)},
+	command.ZoneLayerCharacterItemPickupCommand{CharacterID: 2, ItemEntityID: anEntityID(1 << 40)},
+	command.ZoneLayerCharacterShieldGrantCommand{CharacterID: 2, Duration: 100},
+	command.WorldZoneAddCommand{Tiles: aMap()},
+	command.WorldZoneLayerAddCommand{ZoneID: 3, Capacity: 40, RegenEvery: 10},
+	command.WorldZoneExitAddCommand{
+		FromZoneID: 6, Area: tilemap.AreaOf(tilemap.Tile{X: 3}, tilemap.Tile{X: 3, Y: 2}),
+		ToZoneID: 5, Arrival: state.Vec{X: 3, Y: -4},
+	},
+}
+
+// aMap is a map of 4 by 3 tiles with a wall.
+func aMap() *tilemap.TileMap {
+	tiles, err := tilemap.New(4, 3, tilemap.Tile{X: 1, Y: 1}, []tilemap.Tile{{X: 2, Y: 0}})
+	if err != nil {
+		panic(err)
+	}
+	return tiles
 }
 
 // anEntityID is the ID of the entity that a zonelayer gave the number local.
 func anEntityID(local uint64) state.EntityID {
-	return state.NewEntityID(sim.NewStateID(state.ZoneLayerType, 1), local)
+	return state.EntityID(local)
 }
 
 func codecs(t testing.TB) *sim.Codecs {
 	t.Helper()
 	c := sim.NewCodecs()
-	if err := Register(c); err != nil {
+	if err := command.Register(c); err != nil {
 		t.Fatal(err)
 	}
 	return c
@@ -95,12 +112,12 @@ func TestTheCooldownsOfACharacterKeepTheirOrder(t *testing.T) {
 	codecs := codecs(t)
 	var w binary.Writer
 	if err := sim.EncodeCommand(
-		&w, ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
+		&w, command.ZoneCharacterEnterCommand{Character: characterWithCooldowns()},
 	); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := codecs.DecodeCommand(binary.NewReader(w.B), 1)
-	ch := got.(ZoneCharacterEnterCommand).Character
+	ch := got.(command.ZoneCharacterEnterCommand).Character
 	keys := ch.CooldownKeys()
 	if len(keys) != 2 ||
 		keys[0] != any(action.ZoneLayerCharacterNormalAttackTriggerActionCooldownKey) {
@@ -133,7 +150,7 @@ func (strangerCommand) Encode(*binary.Writer) error { return nil }
 // failingCommand is in the register but cannot be written.
 type failingCommand struct{}
 
-func (failingCommand) ID() sim.CommandID { return ZoneChatSendCommandID }
+func (failingCommand) ID() sim.CommandID { return command.ZoneChatSendCommandID }
 func (failingCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(1) // some bytes before it fails
 	return errors.New("cannot write")
@@ -285,10 +302,13 @@ func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *tes
 			"the commands declared are\n%v\nand the ones in examples are\n%v", declared, listed,
 		)
 	}
-	// the command of the configuration engine is in every codecs and is not one of the game
+	// the command of the coordinator engine is in every codecs and is not one of the game
 	decoders := len(slices.DeleteFunc(
 		slices.Clone(codecs.Commands.Numbers()),
-		func(id sim.CommandID) bool { return id == sim.UpdateConfigCommandID },
+		func(id sim.CommandID) bool {
+			return id == sim.UpdateConfigCommandID || id == sim.CreateEngineCommandID ||
+				id == sim.RetireEngineCommandID
+		},
 	))
 	if n := registerSize(t); n != decoders || n != len(declared) {
 		t.Fatalf(
@@ -304,14 +324,15 @@ func TestExamplesHaveACommandOfEveryKindAndTheRegisterAndTheDecodersAgree(t *tes
 func TestTheIDsOfTheCommandsAreFixedForTheFormatOfTheLog(t *testing.T) {
 	// A number that changes breaks every log that was written: add commands at the end, never
 	// renumber.
-	if WorldChatPrivateSendCommandID != 1 || ZoneCharacterEnterCommandID != 2 ||
-		ZoneLayerCharacterMoveCommandID != 4 || ZoneLayerCharacterShieldGrantCommandID != 9 {
+	if command.WorldChatPrivateSendCommandID != 1 || command.ZoneCharacterEnterCommandID != 2 ||
+		command.ZoneLayerCharacterMoveCommandID != 4 ||
+		command.ZoneLayerCharacterShieldGrantCommandID != 9 {
 		t.Fatal("the ID of a command changed")
 	}
 }
 
 // Commands come from outside, with the goroutine that sends one still holding what it sent, so what
-// a command holds is a value or has Clone, and the state that takes it copies it (R29).
+// a command holds is a value or has Clone, and the state that takes it copies it (R13).
 func TestEveryCommandHoldsOnlyValuesOrTypesWithClone(t *testing.T) {
 	rules := aliasing.Rules{Boundary: true}
 	for _, c := range examples {
@@ -352,8 +373,8 @@ func TestTheCloneOfEveryCommandIsTheSameCommandAndSharesNothingWithIt(t *testing
 }
 
 func TestTheCloneOfACommandThatHoldsCooldownsIsNotChangedByItsSender(t *testing.T) {
-	sent := ZoneCharacterEnterCommand{Character: characterWithCooldowns()}
-	kept := sent.Clone().(ZoneCharacterEnterCommand)
+	sent := command.ZoneCharacterEnterCommand{Character: characterWithCooldowns()}
+	kept := sent.Clone().(command.ZoneCharacterEnterCommand)
 	key := action.ZoneLayerCharacterMoveActionCooldownKey
 	sent.Character.SetCooldown(key, 999)
 	if until, _ := kept.Character.CooldownUntil(key); until == 999 {

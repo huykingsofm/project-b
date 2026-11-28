@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/checkpoint"
 	"github.com/huykingsofm/project-b/platform/config"
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/journal/checkpoint"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
 	"github.com/huykingsofm/project-b/platform/sim"
 	"github.com/huykingsofm/project-b/platform/sim/onfail"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/sim/action"
 	zonelayerstate "github.com/huykingsofm/project-b/server/game/sim/state/zonelayer"
 	"github.com/huykingsofm/project-b/server/game/testkit"
@@ -25,8 +25,8 @@ func aWorldInWhichAnEngineWasRemoved(
 	t *testing.T, dir string, id sim.StateID, before, after int,
 ) {
 	t.Helper()
-	aWorldInWhichAnEngineWasRemovedBy(t, dir, id, before, after, func(c *engine.Cluster) {
-		if !c.Remove(id) {
+	aWorldInWhichAnEngineWasRemovedBy(t, dir, id, before, after, func(c *cluster.Cluster) {
+		if !stepping.RetireEngine(c, id) {
 			t.Fatalf("the world has no engine %v", id)
 		}
 	})
@@ -35,7 +35,7 @@ func aWorldInWhichAnEngineWasRemoved(
 // aWorldInWhichAnEngineWasRemovedBy is aWorldInWhichAnEngineWasRemoved with the removal made by
 // remove, between the two runs of ticks.
 func aWorldInWhichAnEngineWasRemovedBy(
-	t *testing.T, dir string, id sim.StateID, before, after int, remove func(*engine.Cluster),
+	t *testing.T, dir string, id sim.StateID, before, after int, remove func(*cluster.Cluster),
 ) {
 	t.Helper()
 	store := config.NewStore()
@@ -44,11 +44,9 @@ func aWorldInWhichAnEngineWasRemovedBy(
 		OnSafe: replay.NewLineCacheWriter(dir, store),
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
-	c, err := testkit.WorldBuilder(t, 7, 10).WithConfigStore(store).WithEventLog(file).
-		WithCheckpointWriter(files).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	o := testkit.Options(t, 7)
+	o.EventLog, o.CheckpointWriter = file, files
+	c := testkit.NewClusterIn(t, o, store, 10)
 	testkit.SetConfig(t, c, everySeventhTick)
 	testkit.Steps(t, c, before)
 	remove(c.Cluster)
@@ -62,9 +60,10 @@ func aWorldInWhichAnEngineWasRemovedBy(
 func TestAReplayRemovesTheEngineThatItsLogSaysWasRemovedAndRunsNoTickOfIt(t *testing.T) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 20)
-	c.Cluster.Remove(testkit.Layer3)
+	ranBefore := c.ZoneLayer(testkit.Layer3).Tick()
+	stepping.RetireEngine(c.Cluster, testkit.Layer3)
 	testkit.Steps(t, c, 20)
-	result, err := runOn(testkit.WorldBuilder(t, 7, 10), mem.ByEngine())
+	result, err := runOn(testkit.Options(t, 7), mem.ByEngine())
 	if err != nil || len(result.Divergences) != 0 {
 		t.Fatalf("%v %v", err, result.Divergences)
 	}
@@ -74,15 +73,16 @@ func TestAReplayRemovesTheEngineThatItsLogSaysWasRemovedAndRunsNoTickOfIt(t *tes
 	if _, ok := result.Cluster.Find(testkit.Layer3); ok {
 		t.Fatal("the cluster of the replay still has the engine that was removed")
 	}
-	if got := result.Ticks[testkit.Layer3]; got != 21 {
-		t.Fatalf("the engine was replayed to the tick %d, want 21: 20 ticks and its removal", got)
+	if got := result.Ticks[testkit.Layer3]; got != ranBefore+1 {
+		t.Fatalf("the engine was replayed to the tick %d, want %d: its ticks and its removal",
+			got, ranBefore+1)
 	}
 }
 
 func TestALogWhoseRemovalIsNotAloneInItsTickOrIsFollowedByAnotherIsRefused(t *testing.T) {
 	c, _, mem := testkit.NewWorld(t, 7, 10)
 	testkit.Steps(t, c, 20)
-	c.Cluster.Remove(testkit.Layer3)
+	stepping.RetireEngine(c.Cluster, testkit.Layer3)
 	testkit.Steps(t, c, 5)
 	for name, forge := range map[string]func(logs eventlog.MemoryLogs){
 		"another record in the tick of the removal": func(logs eventlog.MemoryLogs) {
@@ -107,7 +107,7 @@ func TestALogWhoseRemovalIsNotAloneInItsTickOrIsFollowedByAnotherIsRefused(t *te
 				logs[id] = slices.Clone(logs[id])
 			}
 			forge(logs)
-			_, err := runOn(testkit.WorldBuilder(t, 7, 10), logs)
+			_, err := runOn(testkit.Options(t, 7), logs)
 			if err == nil {
 				t.Fatal("a log that cannot be the log of an engine that was removed was replayed")
 			}
@@ -119,7 +119,7 @@ func TestALogWhoseRemovalIsNotAloneInItsTickOrIsFollowedByAnotherIsRefused(t *te
 func TestAWorldInWhichAnEngineWasRemovedRecoversWithNoDivergence(t *testing.T) {
 	dir := t.TempDir()
 	aWorldInWhichAnEngineWasRemoved(t, dir, testkit.Layer3, 20, 20)
-	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10))
+	result, err := replay.Recover(dir, testkit.Options(t, 7))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,31 +173,30 @@ func TestAMessageForAnEngineThatWasRemovedBeforeAHandoverComesBackAsRetired(t *t
 	closeLog()
 }
 
-// orphansOf is a builder that says that the engines of ids are ones that nothing refers to any
-// more.
-type orphansOf struct {
-	*game.ClusterBuilder
-	ids []sim.StateID
-}
-
-func (o orphansOf) Orphans(*engine.Cluster) []sim.StateID { return o.ids }
+// layerTicksOfTheBuild is how many ticks a zonelayer of testkit.NewCluster has run when it returns.
+const layerTicksOfTheBuild = 6
 
 func TestAnEngineThatAnActionAskedToRemoveIsRemovedAtTheEndOfTheStepAndTheWorldRecovers(
 	t *testing.T,
 ) {
 	dir := t.TempDir()
 	aWorldInWhichAnEngineWasRemovedBy(t, dir, testkit.Layer3, 20, 20,
-		func(c *engine.Cluster) { c.RequestEngineRemoval(testkit.Layer3) })
-	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10))
+		func(c *cluster.Cluster) {
+			if !c.CoordinatorEngine().SendCommand(sim.RetireEngineCommand{Target: testkit.Layer3}) {
+				t.Fatal("the queue of the coordinator engine is full")
+			}
+		})
+	result, err := replay.Recover(dir, testkit.Options(t, 7))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(result.Retired, []sim.StateID{testkit.Layer3}) {
 		t.Fatalf("the recovery removed %v, want only the third zonelayer", result.Retired)
 	}
-	// the engine ran the tick of the step that asked for it, and then its removal
-	if got := result.Ticks[testkit.Layer3]; got != 22 {
-		t.Fatalf("the engine was replayed to the tick %d, want 22", got)
+	// the zonelayer ran the ticks of the build, of the 20 steps before the command, and of the two
+	// steps in which the coordinator engine asked and the cluster ended it, and then its removal
+	if got, want := result.Ticks[testkit.Layer3], uint64(layerTicksOfTheBuild+20+2+1); got != want {
+		t.Fatalf("the engine was replayed to the tick %d, want %d", got, want)
 	}
 }
 
@@ -211,16 +210,14 @@ func TestAClusterThatRunsOnItsOwnAndRemovesAnEngineWritesLogsThatRecover(
 		OnSafe: replay.NewLineCacheWriter(dir, store),
 	})
 	files := checkpoint.NewFileWriter(dir, 64)
-	c, err := testkit.WorldBuilder(t, 7, 10).WithConfigStore(store).WithEventLog(file).
-		WithCheckpointWriter(files).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	o := testkit.Options(t, 7)
+	o.EventLog, o.CheckpointWriter = file, files
+	c := testkit.NewClusterIn(t, o, store, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan struct{})
 	go func() { c.Run(ctx, time.Millisecond); close(finished) }()
 	time.Sleep(100 * time.Millisecond)
-	c.Cluster.RequestEngineRemoval(testkit.Layer3)
+	c.Cluster.RequestEngineRetirement(testkit.Layer3)
 	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(time.Millisecond) {
 		if _, ok := c.Cluster.Find(testkit.Layer3); !ok {
 			break
@@ -236,52 +233,12 @@ func TestAClusterThatRunsOnItsOwnAndRemovesAnEngineWritesLogsThatRecover(
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	result, err := replay.Recover(dir, testkit.WorldBuilder(t, 7, 10))
+	result, err := replay.Recover(dir, testkit.Options(t, 7))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(result.Retired, []sim.StateID{testkit.Layer3}) {
 		t.Fatalf("the recovery removed %v, want only the third zonelayer", result.Retired)
-	}
-}
-
-func TestTheBuilderOfTheWorldSaysWhichEnginesTheWorldNoLongerLists(t *testing.T) {
-	c, _, _ := testkit.NewWorld(t, 7, 10)
-	builder := testkit.WorldBuilder(t, 7, 10)
-	if got := builder.Orphans(c.Cluster); len(got) != 0 {
-		t.Fatalf("a world that lists them all has the orphans %v", got)
-	}
-	if !c.World.State().RemoveZoneLayer(testkit.Layer3) {
-		t.Fatal("the world did not know the zonelayer")
-	}
-	if got := builder.Orphans(c.Cluster); !slices.Equal(got, []sim.StateID{testkit.Layer3}) {
-		t.Fatalf("orphans %v, want the zonelayer that the world forgot", got)
-	}
-}
-
-func TestAHandoverRemovesTheEngineThatTheWorldForgotAndWritesItsRemoval(t *testing.T) {
-	dir := t.TempDir()
-	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
-	before := len(recordsOnDisk(t, dir, testkit.Layer3))
-	first, live, closeLog := handedOverAs(t, dir, func(b *game.ClusterBuilder) replay.Builder {
-		return orphansOf{ClusterBuilder: b, ids: []sim.StateID{testkit.Layer3}}
-	})
-	if _, ok := live.Find(testkit.Layer3); ok {
-		t.Fatal("the cluster that went live has the engine that nothing refers to")
-	}
-	step(t, live, 20)
-	closeLog()
-	records := recordsOnDisk(t, dir, testkit.Layer3)
-	last := records[len(records)-1]
-	if _, isRetired := last.Body.(eventlog.Retired); !isRetired ||
-		len(records) != before+1 || last.Tick != first.Ticks[testkit.Layer3]+1 {
-		t.Fatalf("the log of the engine ends with %+v and holds %d records, had %d",
-			last, len(records), before)
-	}
-	second := recoverTheWorld(t, dir, everySeventhTick)
-	if !slices.Equal(second.Retired, []sim.StateID{testkit.Layer3}) {
-		t.Fatalf("the second recovery removed %v, want the engine that the handover removed",
-			second.Retired)
 	}
 }
 
@@ -294,7 +251,8 @@ func TestAnEngineWhoseRemovalWasLostToACrashIsMadeAgainAndGoesOn(t *testing.T) {
 	if len(first.Retired) != 0 {
 		t.Fatalf("the recovery removed %v: the log no longer says it was", first.Retired)
 	}
-	if e, ok := live.Find(testkit.Layer3); !ok || e.Tick() != 20 {
+	e, ok := live.Find(testkit.Layer3)
+	if !ok || e.(engineReading).Tick() != 20 {
 		t.Fatalf("the engine is not back at the tick 20: %v %v", e, ok)
 	}
 	step(t, live, 15)

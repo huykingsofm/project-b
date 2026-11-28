@@ -12,7 +12,6 @@
 package zone
 
 import (
-	"fmt"
 	"iter"
 
 	"github.com/huykingsofm/project-b/platform/sim"
@@ -26,17 +25,8 @@ import (
 	"github.com/huykingsofm/project-b/shared/table"
 )
 
-// ZoneLayerSlot is what a zone knows of one of its zonelayers: how many characters it takes.
-type ZoneLayerSlot struct {
-	id       sim.StateID
-	capacity int32
-}
-
-// ID is the ID of the zonelayer.
-func (z ZoneLayerSlot) ID() sim.StateID { return z.id }
-
-// Capacity is how many characters the zonelayer takes.
-func (z ZoneLayerSlot) Capacity() int32 { return z.capacity }
+// chatKeep is how many messages a zone keeps of what was said in it.
+const chatKeep = 100
 
 // ChatMessage is something a character said in the zone.
 type ChatMessage struct {
@@ -52,13 +42,9 @@ func NewChatMessage(fromID state.CharacterID, text string, tick uint64) ChatMess
 	}
 }
 
-// chatKeep is how many messages a zone keeps of what was said in it.
-const chatKeep = 100
-
 // State is the state of a zone.
 type State struct {
 	// Data.
-	id         sim.StateID
 	worldID    sim.StateID
 	tick       uint64
 	tiles      *tilemap.TileMap
@@ -73,34 +59,14 @@ type State struct {
 	events sim.Events[sim.Event]
 }
 
-// NewState makes the state of a zone with no zonelayer, on a map. The exits of the map stand in the
-// zone as entities.
-func NewState(zoneID, worldID sim.StateID, tiles *tilemap.TileMap) *State {
+// NewState makes the state of a zone with no zonelayer and no exit, on a map. The world joins it to
+// other zones with exits while the game runs (AddExit).
+func NewState(worldID sim.StateID, tiles *tilemap.TileMap) *State {
 	s := &State{
-		id: zoneID, worldID: worldID, tiles: tiles,
+		worldID: worldID, tiles: tiles,
 		chat: ring.New[ChatMessage](chatKeep),
 	}
-	for _, exit := range tiles.Exits() {
-		s.lastEntityID++ // a map has no more than a few exits
-		id := state.NewEntityID(zoneID, s.lastEntityID)
-		s.entities.Set(id, entity.NewExitEntity(id, exit.Area, exit.ToZoneID, exit.Arrival))
-	}
 	return s
-}
-
-// clone returns a copy of the data, with an empty event. The copy shares the map, which never
-// changes.
-func (s *State) clone() *State {
-	return &State{
-		id:           s.id,
-		worldID:      s.worldID,
-		tick:         s.tick,
-		tiles:        s.tiles,
-		entities:     s.entities.Clone(),
-		zoneLayers:   s.zoneLayers.Clone(),
-		chat:         s.chat.Clone(),
-		lastEntityID: s.lastEntityID,
-	}
 }
 
 // ExitEntityByID returns the entity with the ID when it is an exit.
@@ -121,14 +87,11 @@ func (s *State) ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot] {
 	return s.zoneLayers.All()
 }
 
-// NextTick takes the state to the next tick.
-func (s *State) NextTick() { s.tick++ }
+// AdvanceTick takes the state to the next tick.
+func (s *State) AdvanceTick() { s.tick++ }
 
 // WorldID is the ID of the world that the zone is in.
 func (s *State) WorldID() sim.StateID { return s.worldID }
-
-// ID is the ID of the state.
-func (s *State) ID() sim.StateID { return s.id }
 
 // Type is the type of the state of a zone.
 func (s *State) Type() sim.StateType { return state.ZoneType }
@@ -142,6 +105,23 @@ func (s *State) Clone() sim.State { return s.clone() }
 
 // TakeEvents returns the events of the tick and empties them.
 func (s *State) TakeEvents() []sim.Event { return s.events.Take() }
+
+// AddExit puts an exit in the zone: the area (in units, in the map) that leads to the zone
+// toZoneID, where a character comes out at the position arrival of that zone. It returns the
+// entity of the exit, and false, changing nothing, for an area that is empty or not in the map,
+// and for a zone that is not a zone. The clients are told (ExitAdded).
+func (s *State) AddExit(
+	area state.Rect, toZoneID sim.StateID, arrival state.Vec,
+) (state.EntityID, bool) {
+	if !s.tiles.Holds(area) || toZoneID.Type() != state.ZoneType || toZoneID.Local() == 0 {
+		return 0, false
+	}
+	s.lastEntityID++
+	id := state.EntityID(s.lastEntityID)
+	s.entities.Set(id, entity.NewExitEntity(id, area, toZoneID, arrival))
+	s.events.Add(event.ExitAdded{EntityID: id, Area: area, ToZoneID: toZoneID, Arrival: arrival})
+	return id, true
+}
 
 // AddZoneLayer makes the zone know a zonelayer with room for capacity characters.
 func (s *State) AddZoneLayer(zoneLayerID sim.StateID, capacity int32) {
@@ -166,18 +146,15 @@ func (s *State) ZoneLayerCount() int { return s.zoneLayers.Len() }
 // RemoveZoneLayer makes the zone forget a zonelayer.
 func (s *State) RemoveZoneLayer(zoneLayerID sim.StateID) { s.zoneLayers.Delete(zoneLayerID) }
 
-// Encode writes the data of the state: its ID and tick, its entities, the zonelayers it knows, what
-// was said, and the ID the next entity gets. The map is not written: it never changes and the ID of
-// the zone finds it. The events are not data (R18) and are not written.
+// Encode writes the data of the state: its tick, its map, its entities, the zonelayers it knows,
+// what was said, and the number the next entity gets. The events are not data (R9) and are not
+// written.
 func (s *State) Encode(w *binary.Writer) error {
-	w.Uvarint(uint64(s.id))
 	w.Uvarint(uint64(s.worldID))
 	w.Uvarint(s.tick)
+	s.tiles.Encode(w)
 	w.Uvarint(uint64(s.entities.Len()))
-	for id, e := range s.entities.All() {
-		if id.Owner != s.id {
-			return fmt.Errorf("the entity %v is not of the state %d", id, s.id)
-		}
+	for _, e := range s.entities.All() {
 		if err := entity.Encode(w, e); err != nil {
 			return err
 		}
@@ -201,7 +178,6 @@ func (s *State) Encode(w *binary.Writer) error {
 // Hash returns a number that depends on the data of the state and on nothing else.
 func (s *State) Hash() uint64 {
 	h := sim.NewHasher()
-	h.U64(uint64(s.id))
 	h.U64(uint64(s.worldID))
 	h.U64(s.tick)
 	h.U64(s.lastEntityID)
@@ -216,8 +192,24 @@ func (s *State) Hash() uint64 {
 	return h.Sum()
 }
 
+// clone returns a copy of the data, with an empty event. The copy shares the map, which never
+// changes.
+func (s *State) clone() *State {
+	return &State{
+		worldID:      s.worldID,
+		tick:         s.tick,
+		tiles:        s.tiles,
+		entities:     s.entities.Clone(),
+		zoneLayers:   s.zoneLayers.Clone(),
+		chat:         s.chat.Clone(),
+		lastEntityID: s.lastEntityID,
+	}
+}
+
+var _ ReadOnlyZoneState = (*State)(nil)
+
 // ReadOnlyZoneState is the read methods of the state of a zone: what an action may use of a copy
-// that another engine published, which it must never change (R26, R28).
+// that another engine published, which it must never change (R5, R12).
 type ReadOnlyZoneState interface {
 	ExitEntityByID(entityID state.EntityID) (entity.ExitEntity, bool)
 	WorldID() sim.StateID
@@ -225,4 +217,14 @@ type ReadOnlyZoneState interface {
 	ZoneLayerSlots() iter.Seq2[sim.StateID, ZoneLayerSlot]
 }
 
-var _ ReadOnlyZoneState = (*State)(nil)
+// ZoneLayerSlot is what a zone knows of one of its zonelayers: how many characters it takes.
+type ZoneLayerSlot struct {
+	id       sim.StateID
+	capacity int32
+}
+
+// ID is the ID of the zonelayer.
+func (z ZoneLayerSlot) ID() sim.StateID { return z.id }
+
+// Capacity is how many characters the zonelayer takes.
+func (z ZoneLayerSlot) Capacity() int32 { return z.capacity }

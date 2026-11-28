@@ -14,6 +14,14 @@ type ZoneCharacterEnterCommand struct {
 	Character zonelayerstate.Character
 }
 
+// decodeZoneCharacterEnterCommand reads what Encode wrote.
+func decodeZoneCharacterEnterCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneCharacterEnterCommand, error) {
+	ch, err := zonelayerstate.DecodeCharacter(r, version)
+	return ZoneCharacterEnterCommand{Character: ch}, err
+}
+
 func (ZoneCharacterEnterCommand) ID() sim.CommandID { return ZoneCharacterEnterCommandID }
 
 // Clone returns a copy of the command that shares nothing with it: the character holds cooldowns.
@@ -30,12 +38,4 @@ func (c ZoneCharacterEnterCommand) Translate() []sim.Action[*zonestate.State] {
 func (c ZoneCharacterEnterCommand) Encode(w *binary.Writer) error {
 	c.Character.Encode(w)
 	return nil
-}
-
-// decodeZoneCharacterEnterCommand reads what Encode wrote.
-func decodeZoneCharacterEnterCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneCharacterEnterCommand, error) {
-	ch, err := zonelayerstate.DecodeCharacter(r, version)
-	return ZoneCharacterEnterCommand{Character: ch}, err
 }

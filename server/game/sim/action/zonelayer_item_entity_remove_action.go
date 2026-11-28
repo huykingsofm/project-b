@@ -15,30 +15,6 @@ type ZoneLayerItemEntityRemoveAction struct {
 	EntityID state.EntityID
 }
 
-func (a ZoneLayerItemEntityRemoveAction) ID() sim.ActionID {
-	return ZoneLayerItemEntityRemoveActionID
-}
-func (a ZoneLayerItemEntityRemoveAction) Priority() int16 { return PriorityResolve }
-func (a ZoneLayerItemEntityRemoveAction) Actor() any      { return nil }
-
-// Clone returns the action itself: it holds only values.
-func (a ZoneLayerItemEntityRemoveAction) Clone() sim.Action[*zonelayerstate.State] {
-	return a
-}
-
-// Apply removes the item if it is still on the ground.
-func (a ZoneLayerItemEntityRemoveAction) Apply(
-	_ *sim.Context, s *zonelayerstate.State, _ *sim.Registry[*zonelayerstate.State],
-	_ *sim.Plan[*zonelayerstate.State],
-) {
-	s.RemoveItemEntity(a.EntityID)
-}
-
-// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
-func (a ZoneLayerItemEntityRemoveAction) Encode(w *binary.Writer) {
-	a.EntityID.Encode(w)
-}
-
 // decodeZoneLayerItemEntityRemoveAction reads what Encode wrote.
 func decodeZoneLayerItemEntityRemoveAction(
 	r *binary.Reader, version codec.Version,
@@ -48,4 +24,30 @@ func decodeZoneLayerItemEntityRemoveAction(
 		return ZoneLayerItemEntityRemoveAction{}, err
 	}
 	return ZoneLayerItemEntityRemoveAction{EntityID: entityID}, nil
+}
+
+func (a ZoneLayerItemEntityRemoveAction) ID() sim.ActionID {
+	return ZoneLayerItemEntityRemoveActionID
+}
+
+func (a ZoneLayerItemEntityRemoveAction) Priority() int16 { return PriorityResolve }
+
+func (a ZoneLayerItemEntityRemoveAction) Actor() any { return nil }
+
+// Clone returns the action itself: it holds only values.
+func (a ZoneLayerItemEntityRemoveAction) Clone() sim.Action[*zonelayerstate.State] {
+	return a
+}
+
+// Apply removes the item if it is still on the ground.
+func (a ZoneLayerItemEntityRemoveAction) Apply(
+	_ *sim.Context, s *zonelayerstate.State, _ *sim.ActionRegistry[*zonelayerstate.State],
+	_ *sim.Plan[*zonelayerstate.State],
+) {
+	s.RemoveItemEntity(a.EntityID)
+}
+
+// Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
+func (a ZoneLayerItemEntityRemoveAction) Encode(w *binary.Writer) {
+	a.EntityID.Encode(w)
 }

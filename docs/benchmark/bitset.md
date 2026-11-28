@@ -1,6 +1,6 @@
 # Benchmarks of the bitset
 
-Conventions and how to run: [index](index.md). Behavior: [bitset](../bitset.md).
+Conventions and how to run: [index](index.md). Behavior: [bitset](../shared.md#bitset).
 
 ## Benchmarks
 

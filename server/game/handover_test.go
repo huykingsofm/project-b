@@ -4,11 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huykingsofm/project-b/platform/engine"
-	"github.com/huykingsofm/project-b/platform/eventlog"
-	"github.com/huykingsofm/project-b/platform/replay"
+	"github.com/huykingsofm/project-b/platform/config"
+	"github.com/huykingsofm/project-b/platform/journal/eventlog"
+	"github.com/huykingsofm/project-b/platform/journal/replay"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster"
+	"github.com/huykingsofm/project-b/platform/runtime/cluster/stepping"
+	"github.com/huykingsofm/project-b/platform/runtime/engine"
 	"github.com/huykingsofm/project-b/platform/sim"
-	"github.com/huykingsofm/project-b/server/game"
 	"github.com/huykingsofm/project-b/server/game/testkit"
 	"github.com/huykingsofm/project-b/shared/segmentlog"
 )
@@ -17,27 +19,16 @@ import (
 // log writes on after the cut. closeLog closes that log, so that the files can be recovered again.
 func handedOver(
 	t *testing.T, dir string,
-) (result *replay.Result, live *engine.Cluster, closeLog func()) {
-	t.Helper()
-	return handedOverAs(t, dir, func(b *game.ClusterBuilder) replay.Builder { return b })
-}
-
-// handedOverAs is handedOver with the builder that the handover is given made from the builder of
-// the world by as.
-func handedOverAs(
-	t *testing.T, dir string, as func(*game.ClusterBuilder) replay.Builder,
-) (result *replay.Result, live *engine.Cluster, closeLog func()) {
+) (result *replay.Result, live *cluster.Cluster, closeLog func()) {
 	t.Helper()
 	result = recoverTheWorld(t, dir, everySeventhTick)
 	file := eventlog.NewFileLog(dir, eventlog.FileLogOptions{
 		Seed: 7, SegmentBytes: 2048, SyncEvery: time.Hour, Backlog: 8,
 	})
-	builder := testkit.WorldBuilder(t, 7, 10).WithEventLog(file)
-	env, err := builder.NewEnv()
+	o := testkit.Options(t, 7)
+	o.EventLog = file
+	live, err := result.Handover(engine.NewEnvironment(o), config.NewStore())
 	if err != nil {
-		t.Fatal(err)
-	}
-	if live, err = result.Handover(as(builder), env); err != nil {
 		t.Fatal(err)
 	}
 	return result, live, func() {
@@ -48,6 +39,15 @@ func handedOverAs(
 	}
 }
 
+// engineReading is what these tests read of an engine that a cluster holds: where it is, what it
+// hashes to and the messages it holds. A handle of the cluster is converted to it.
+type engineReading interface {
+	StateID() sim.StateID
+	Tick() uint64
+	Hash(h sim.Hasher) uint64
+	GetSentMessages() []sim.Message
+}
+
 func TestEveryEngineThatTheHandoverMakesHasTheTickAndTheHashOfTheOneThatWasReplayed(t *testing.T) {
 	dir := t.TempDir()
 	aWorldThatWroteItsFilesAndStopped(t, dir, everySeventhTick, 0)
@@ -56,12 +56,14 @@ func TestEveryEngineThatTheHandoverMakesHasTheTickAndTheHashOfTheOneThatWasRepla
 	if got, want := len(live.Engines()), len(result.Cluster.Engines()); got != want {
 		t.Fatalf("%d engines were made, %d were replayed", got, want)
 	}
-	for _, replayed := range result.Cluster.Engines() {
+	for _, handle := range result.Cluster.Engines() {
+		replayed := handle.(engineReading)
 		id := replayed.StateID()
-		e, ok := live.Find(id)
+		found, ok := live.Find(id)
 		if !ok {
 			t.Fatalf("%v was not made", id)
 		}
+		e := found.(engineReading)
 		if e.Tick() != replayed.Tick() {
 			t.Fatalf("%v is at tick %d, was replayed to %d", id, e.Tick(), replayed.Tick())
 		}
@@ -77,7 +79,7 @@ func TestTheLogsThatAHandedOverClusterWritesAreRecoveredWithNoDivergence(t *test
 	first, live, closeLog := handedOver(t, dir)
 	const ticks = 40
 	for range ticks {
-		if err := live.Step(); err != nil {
+		if err := stepping.Step(live); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -93,7 +95,7 @@ func TestTheLogsThatAHandedOverClusterWritesAreRecoveredWithNoDivergence(t *test
 // takenMessages are the messages that the log of the engine says it took, and how many times.
 func takenMessages(t *testing.T, dir string, id sim.StateID) map[[2]uint64]int {
 	t.Helper()
-	logs, err := eventlog.NewFileLogs(dir, testkit.WorldBuilder(t, 7, 10).Codecs())
+	logs, err := eventlog.NewFileLogs(dir, testkit.Options(t, 7).Codecs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,8 +131,8 @@ func TestAMessageThatItsReceiverLostIsTakenOnceAfterTheHandoverAndOneItTookIsNot
 	_, live, closeLog := handedOver(t, dir)
 	tookBefore := takenMessages(t, dir, testkit.Layer2)
 	var lost [][2]uint64
-	for _, e := range live.Engines() {
-		for _, m := range e.SentMessages() {
+	for _, handle := range live.Engines() {
+		for _, m := range handle.(engineReading).GetSentMessages() {
 			h := m.Head()
 			key := [2]uint64{uint64(h.From), h.Seq}
 			if m.Dest() == testkit.Layer2 && tookBefore[key] == 0 {
@@ -142,7 +144,7 @@ func TestAMessageThatItsReceiverLostIsTakenOnceAfterTheHandoverAndOneItTookIsNot
 		t.Fatal("no message to the second zonelayer was lost: the test has nothing to show")
 	}
 	for range 40 {
-		if err := live.Step(); err != nil {
+		if err := stepping.Step(live); err != nil {
 			t.Fatal(err)
 		}
 	}

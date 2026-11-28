@@ -1,6 +1,6 @@
 # Zonelayer actions
 
-State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `sim.Registry[*zonelayerstate.State]`. Conventions, keys and priorities: [index](index.md).
+State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities of one copy of a zone's map ([character](../entity/character.md), [item](../entity/item.md); the [exits](../entity/exit.md) are the zone's), cooldowns, chat. Registry: `sim.ActionRegistry[*zonelayerstate.State]`. Conventions, keys and priorities: [index](index.md).
 
 ## Character
 
@@ -19,7 +19,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
   3. Reads the map.
   4. `MoveEntity` by `Character.Speed` units towards `Dir` (`TileMap.Reach` follows the whole path and stops at the last unit before the body, a square of the entity's radius, touches a tile that cannot be stood on; a diagonal across a corner needs both tiles beside it free). Cost: [benchmarks](../benchmark/move.md).
   5. `Ticks` -= 1; if any left, `ToSelf`.
-- On cancel: `ApplyZoneLayerCancel`: if the run had taken its place and the cooldown is still ahead, the cooldown becomes this tick.
+- On cancel: `ApplyCancel`: if the run had taken its place and the cooldown is still ahead, the cooldown becomes this tick.
 - Example: tick 10, `{East, 3}` then `{South, 2}`. Run 1: cooldown 13, moves at 10, 11, 12. Run 2: start 13, cooldown 15, moves at 13, 14. Ends three steps east and two south; the runs never overlap.
 
 ### ZoneLayerCharacterNormalAttackTriggerAction
@@ -44,7 +44,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Kind: made
 - Priority: `PriorityResolve`
 - Fields: `SourceID`, `VictimID` (entities), `Amount`
-- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattackaction); found in the plan by ID only (`FindByID` with `ZoneLayerCharacterDamageActionID`)
+- Created by: [`ZoneLayerCharacterNormalAttackTriggerAction`](#zonelayercharacternormalattacktriggeraction); found in the plan by ID only (`FindByID` with `ZoneLayerCharacterDamageActionID`)
 - Steps:
   1. Nothing if `Amount` <= 0.
   2. `DamageEntity` on the victim (a [`DamageableEntity`](../entity/entity.md#damageableentity-interface)).
@@ -69,7 +69,7 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
 - Kind: system
 - Priority: `PrioritySystem`
 - Fields: `Every`, the ticks between two heals; 0 heals once
-- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is set by `game.EnsureRegen(engine, RegenEvery)` when the cluster is built, 0 never
+- Schedule: it sets itself again at `tick + Every` after each run (`ToSelfAt`); the first is an action that the zonelayer starts with, given by `WorldZoneLayerAddAction` when `RegenEvery` is above 0 (0: never)
 - Steps:
   1. `HealAllEntities(1)`: every damageable entity above 0 health gets 1, up to its most; one health-changed event per change.
   2. When `Every` is more than 0, `ToSelfAt(tick + Every, itself)`.
@@ -166,3 +166,14 @@ State: [`state/zonelayer`](../../server/game/sim/state/zonelayer): the entities 
   1. `SendMessage`: kept in the chat table (last 100); the events get it with its tick.
 - Note: the sender need not be in this zonelayer (a zone message may come from another).
 - Example: tick 5 "hello zonelayer": recorded, its clients told. A zone message at tick 5 reaches zonelayers 1 and 2 at tick 6.
+
+### ZoneLayerAnnounceToZoneAction
+
+- Kind: system
+- Priority: `PriorityResolve`
+- Fields: `Capacity`
+- Set by: [`WorldZoneLayerAddAction`](world.md#worldzonelayeraddaction), as an action that the zonelayer starts with, for its first tick
+- Steps:
+  1. Sends [`ZoneZoneLayerAddAction`](zone.md#zonezonelayeraddaction) to the zone of the zonelayer with its own ID (`Context.Self`) and `Capacity`; dropped if not delivered.
+- Note: only the zonelayer knows its own ID, which the cluster gave it after the request.
+

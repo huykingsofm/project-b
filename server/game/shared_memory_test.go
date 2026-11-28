@@ -14,7 +14,7 @@ import (
 
 // A caller that keeps the character it sent (a gateway, an adapter that saves it) and reads it
 // while the engine runs must not race with the engine: the state that the character enters owns its
-// own copy of it (R29).
+// own copy of it (R13).
 func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCooldowns(
 	t *testing.T,
 ) {
@@ -28,16 +28,16 @@ func TestACallerThatKeepsTheCharacterItSentCanReadItWhileTheEngineChangesItsCool
 	var wg sync.WaitGroup
 	wg.Go(func() { c.Run(ctx, time.Millisecond) })
 
-	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: kept})
-	c.Zone(testkit.Zone1).Send(command.ZoneCharacterEnterCommand{Character: target})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: kept})
+	c.Zone(testkit.Zone1).SendCommand(command.ZoneCharacterEnterCommand{Character: target})
 	time.Sleep(20 * time.Millisecond)
 
 	deadline := time.Now().Add(150 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		c.ZoneLayer(testkit.Layer1).Send(
+		c.ZoneLayer(testkit.Layer1).SendCommand(
 			command.ZoneLayerCharacterNormalAttackTriggerCommand{CharacterID: 1, TargetID: 2},
 		)
-		c.ZoneLayer(testkit.Layer1).Send(
+		c.ZoneLayer(testkit.Layer1).SendCommand(
 			command.ZoneLayerCharacterMoveCommand{CharacterID: 1, Dir: state.East, Ticks: 1},
 		)
 		// the caller reads what it kept, as a gateway that saves the character would

@@ -17,9 +17,19 @@ type ZoneLayerCharacterRegenAction struct {
 	Every uint64
 }
 
+// decodeZoneLayerCharacterRegenAction reads what Encode wrote.
+func decodeZoneLayerCharacterRegenAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneLayerCharacterRegenAction, error) {
+	a := ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
+	return a, r.Err()
+}
+
 func (a ZoneLayerCharacterRegenAction) ID() sim.ActionID { return ZoneLayerCharacterRegenActionID }
-func (a ZoneLayerCharacterRegenAction) Priority() int16  { return PrioritySystem }
-func (a ZoneLayerCharacterRegenAction) Actor() any       { return nil }
+
+func (a ZoneLayerCharacterRegenAction) Priority() int16 { return PrioritySystem }
+
+func (a ZoneLayerCharacterRegenAction) Actor() any { return nil }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneLayerCharacterRegenAction) Clone() sim.Action[*zonelayerstate.State] {
@@ -28,7 +38,7 @@ func (a ZoneLayerCharacterRegenAction) Clone() sim.Action[*zonelayerstate.State]
 
 // Apply heals everyone and sets the action again.
 func (a ZoneLayerCharacterRegenAction) Apply(
-	c *sim.Context, s *zonelayerstate.State, r *sim.Registry[*zonelayerstate.State],
+	c *sim.Context, s *zonelayerstate.State, r *sim.ActionRegistry[*zonelayerstate.State],
 	_ *sim.Plan[*zonelayerstate.State],
 ) {
 	s.HealAllEntities(regenAmount)
@@ -40,12 +50,4 @@ func (a ZoneLayerCharacterRegenAction) Apply(
 // Encode writes the fields of the action, not its ID: EncodeAction writes the ID first.
 func (a ZoneLayerCharacterRegenAction) Encode(w *binary.Writer) {
 	w.Uvarint(a.Every)
-}
-
-// decodeZoneLayerCharacterRegenAction reads what Encode wrote.
-func decodeZoneLayerCharacterRegenAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneLayerCharacterRegenAction, error) {
-	a := ZoneLayerCharacterRegenAction{Every: r.Uvarint()}
-	return a, r.Err()
 }

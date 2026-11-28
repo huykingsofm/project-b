@@ -18,25 +18,6 @@ type column[K comparable, V any] interface {
 	reset()
 }
 
-// bucket is the keys that have one key of a column, in a stable order: the order they were added
-// in, except that removing one moves the last into its place, so the order is a function of the
-// calls and nothing else. Removing costs the size of the bucket (it looks for the key).
-type bucket[K comparable] []K
-
-func (b *bucket[K]) add(k K) { *b = append(*b, k) }
-
-func (b *bucket[K]) remove(k K) {
-	i := slices.Index(*b, k)
-	if i < 0 {
-		return
-	}
-	last := len(*b) - 1
-	(*b)[i] = (*b)[last]
-	var zero K
-	(*b)[last] = zero
-	*b = (*b)[:last]
-}
-
 // column1 is a column of one key: the keys of the data, by the key of their value.
 type column1[K comparable, V any, IK comparable] struct {
 	keyOf   func(V) (IK, bool)
@@ -93,6 +74,30 @@ func (c *column1[K, V, IK]) clone() column[K, V] {
 func (c *column1[K, V, IK]) keys(ik IK) []K {
 	b, _ := c.buckets.Get(ik)
 	return b
+}
+
+type node[K, B comparable] struct {
+	all bucket[K]
+	byB stablemap.Map[B, bucket[K]]
+}
+
+// bucket is the keys that have one key of a column, in a stable order: the order they were added
+// in, except that removing one moves the last into its place, so the order is a function of the
+// calls and nothing else. Removing costs the size of the bucket (it looks for the key).
+type bucket[K comparable] []K
+
+func (b *bucket[K]) add(k K) { *b = append(*b, k) }
+
+func (b *bucket[K]) remove(k K) {
+	i := slices.Index(*b, k)
+	if i < 0 {
+		return
+	}
+	last := len(*b) - 1
+	(*b)[i] = (*b)[last]
+	var zero K
+	(*b)[last] = zero
+	*b = (*b)[:last]
 }
 
 // column2 is a column of two keys: for the first key, all the keys of the data, and for each
@@ -180,9 +185,4 @@ func (c *column2[K, V, A, B]) keysOf(a A, b B) []K {
 	}
 	s, _ := n.byB.Get(b)
 	return s
-}
-
-type node[K, B comparable] struct {
-	all bucket[K]
-	byB stablemap.Map[B, bucket[K]]
 }

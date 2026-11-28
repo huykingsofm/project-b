@@ -15,6 +15,14 @@ type ZoneChatSendCommand struct {
 	Text   string
 }
 
+// decodeZoneChatSendCommand reads what Encode wrote.
+func decodeZoneChatSendCommand(
+	r *binary.Reader, version codec.Version,
+) (ZoneChatSendCommand, error) {
+	c := ZoneChatSendCommand{FromID: r.Uint[state.CharacterID](), Text: r.String()}
+	return c, r.Err()
+}
+
 func (ZoneChatSendCommand) ID() sim.CommandID { return ZoneChatSendCommandID }
 
 // Clone returns the command itself: it holds only values.
@@ -31,12 +39,4 @@ func (c ZoneChatSendCommand) Encode(w *binary.Writer) error {
 	w.Uvarint(uint64(c.FromID))
 	w.String(c.Text)
 	return nil
-}
-
-// decodeZoneChatSendCommand reads what Encode wrote.
-func decodeZoneChatSendCommand(
-	r *binary.Reader, version codec.Version,
-) (ZoneChatSendCommand, error) {
-	c := ZoneChatSendCommand{FromID: r.Uint[state.CharacterID](), Text: r.String()}
-	return c, r.Err()
 }

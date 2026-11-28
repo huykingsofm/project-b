@@ -17,31 +17,6 @@ var ErrUnknownCode = errors.New(
 	"sim: the number is not one of an action, a command, a state or an OnFail",
 )
 
-// Header says who sent a message, which message of its sender it was, and at which tick of its
-// sender it was sent. The first two let a replay put the messages of an engine back in the order
-// they came and a receiver tell two messages apart; the tick says which tick of the sender the
-// receiver depends on once it takes the message (see StateDependency).
-type Header struct {
-	From StateID
-	Seq  uint64
-	Tick uint64 // the tick of the sender at which it sent the message; 0 for one that was not sent
-}
-
-// Encode writes a header.
-func (h Header) Encode(w *binary.Writer) {
-	w.Uvarint(uint64(h.From))
-	w.Uvarint(h.Seq)
-	w.Uvarint(h.Tick)
-}
-
-// DecodeHeader reads what Header.Encode wrote.
-func DecodeHeader(r *binary.Reader) Header {
-	return Header{From: r.Uint[StateID](), Seq: r.Uvarint(), Tick: r.Uvarint()}
-}
-
-// DeliveryFailure says why a message could not be delivered.
-type DeliveryFailure uint8
-
 // The reasons.
 const (
 	// DeliveryFailureRetired: the engine was removed.
@@ -54,18 +29,16 @@ const (
 	DeliveryFailureFull
 )
 
-func (r DeliveryFailure) String() string {
-	switch r {
-	case DeliveryFailureRetired:
-		return "retired"
-	case DeliveryFailureNotStarted:
-		return "not started"
-	case DeliveryFailureStopping:
-		return "stopping"
-	case DeliveryFailureFull:
-		return "full"
-	}
-	return "unknown"
+// Bouncer is what an OnFail may ask of the engine that sent a message that could not be delivered.
+type Bouncer interface {
+	// Resend makes the engine send the message at its next flush.
+	Resend(m Message)
+	// Drop forgets a message and counts it.
+	Drop()
+	// Stopping reports whether the engine is stopping, when nothing is sent again.
+	Stopping() bool
+	// MaxAttempts is how many times a message is tried before it is dropped.
+	MaxAttempts() int
 }
 
 // Message is a message with its type taken away, which is what travels between the engines: the
@@ -75,10 +48,6 @@ type Message interface {
 	// Dest is the ID of the state, and so of the engine, that the message is for.
 	Dest() StateID
 	Head() Header
-	// Subject is the actor that the message is about (the author of its first action that has
-	// one): the one that is told when the message could not be delivered and the OnFail is to
-	// notify. It is nil when no action of the message has an author.
-	Subject() any
 	OnFail() OnFail
 	Attempts() int
 	// Stamp, Again and Redirected return copies.
@@ -93,10 +62,6 @@ type Message interface {
 	// copied with their Clone. Stamp, Again and Redirected copy the message and share them.
 	Clone() Message
 }
-
-// MessageDecoder reads a message that Message.Encode wrote, of the data version given. A kind of
-// OnFail that holds a message is given one to read it with.
-type MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
 
 // OnFailID names a kind of OnFail, by a number: see the register in package onfail. A kind returns
 // its own with its method ID(). A number is never changed or reused, because the event log writes
@@ -120,23 +85,51 @@ type OnFail interface {
 	Clone() OnFail
 }
 
+// DeliveryFailure says why a message could not be delivered.
+type DeliveryFailure uint8
+
+func (r DeliveryFailure) String() string {
+	switch r {
+	case DeliveryFailureRetired:
+		return "retired"
+	case DeliveryFailureNotStarted:
+		return "not started"
+	case DeliveryFailureStopping:
+		return "stopping"
+	case DeliveryFailureFull:
+		return "full"
+	}
+	return "unknown"
+}
+
+// Header says who sent a message, which message of its sender it was, and at which tick of its
+// sender it was sent. The first two let a replay put the messages of an engine back in the order
+// they came and a receiver tell two messages apart; the tick says which tick of the sender the
+// receiver depends on once it takes the message (see StateDependency).
+type Header struct {
+	From StateID
+	Seq  uint64
+	Tick uint64 // the tick of the sender at which it sent the message; 0 for one that was not sent
+}
+
+// DecodeHeader reads what Header.Encode wrote.
+func DecodeHeader(r *binary.Reader) Header {
+	return Header{From: r.Uint[StateID](), Seq: r.Uvarint(), Tick: r.Uvarint()}
+}
+
+// Encode writes a header.
+func (h Header) Encode(w *binary.Writer) {
+	w.Uvarint(uint64(h.From))
+	w.Uvarint(h.Seq)
+	w.Uvarint(h.Tick)
+}
+
+// MessageDecoder reads a message that Message.Encode wrote, of the data version given. A kind of
+// OnFail that holds a message is given one to read it with.
+type MessageDecoder func(r *binary.Reader, version codec.Version) (Message, error)
+
 // NestedOnFail is implemented by a kind of OnFail that holds a message, so that the depth of
 // messages inside messages can be checked before one is written.
 type NestedOnFail interface {
 	Nested() Message
-}
-
-// Bouncer is what an OnFail may ask of the engine that sent a message that could not be delivered.
-type Bouncer interface {
-	// Resend makes the engine send the message at its next flush.
-	Resend(m Message)
-	// Tell tells an actor something, as a text key with arguments. An actor that is nil is told
-	// nothing.
-	Tell(actor any, key string, args []string)
-	// Drop forgets a message and counts it.
-	Drop()
-	// Stopping reports whether the engine is stopping, when nothing is sent again.
-	Stopping() bool
-	// MaxAttempts is how many times a message is tried before it is dropped.
-	MaxAttempts() int
 }

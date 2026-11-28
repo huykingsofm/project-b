@@ -18,7 +18,7 @@ What stands in a zone or a zonelayer. The interface `Entity` and the list of kin
 
 | Method | Returns |
 |---|---|
-| `ID()` | `state.EntityID`, unique among all entities: the ID of the state that holds the entity and the number that state counted (`state.NewEntityID(owner, local)`) |
+| `ID()` | `state.EntityID`, a number that the state that holds the entity counted, unique among the entities of that state ([IDs](../ids.md)) |
 | `KindID()` | the kind |
 | `Position()` | where it stands, in units |
 | `Radius()` | how far it reaches from its position, in units; 0 is a point |
@@ -41,7 +41,7 @@ Implemented by: character body.
 
 ## Rules for every entity
 
-- **Value type** (R29): a change builds a new value and replaces the old one in its container.
+- **Value type** (R13): a change builds a new value and replaces the old one in its container.
 - **Units**: positions, radii and distances are in units; an entity may stand anywhere on the map. Only the map is cut into tiles (1024 units each) and only its constructor takes tiles.
 - **Hash**: the ID, the kind and the bounding box, then the fields of the kind.
 - **Add a kind**: a type that implements `state.Entity` in the package `entity` of the state that holds it, with a constructor (its fields are private), a `KindID` at the end of the list, a decoder in the table of that package, a document here.

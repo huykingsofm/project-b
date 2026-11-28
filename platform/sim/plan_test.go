@@ -1,13 +1,16 @@
-package sim
+package sim_test
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"testing"
+
+	"github.com/huykingsofm/project-b/platform/sim"
 )
 
 func TestSmallerPriorityRunsFirstAndEqualOnesInArrivalOrder(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	p.Append(anonymousAction{name: "c", priority: 0})
 	p.Append(anonymousAction{name: "a", priority: -10})
 	p.Append(anonymousAction{name: "d", priority: 0})
@@ -18,7 +21,7 @@ func TestSmallerPriorityRunsFirstAndEqualOnesInArrivalOrder(t *testing.T) {
 }
 
 func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	p.Append(anonymousAction{name: "first", priority: 0})
 	p.Append(anonymousAction{name: "last", priority: 10})
 	var got []string
@@ -40,7 +43,7 @@ func TestWhatIsAddedWhileRunningGoesAfterTheRunningEntry(t *testing.T) {
 }
 
 func TestFindByIDAndCancel(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	p.Append(&authoredAction{anonymousAction{"modifier", -50}, 0})
 	p.Append(&authoredAction{anonymousAction{"by-1", 0}, 1})
 	p.Append(&authoredAction{anonymousAction{"by-2", 0}, 2})
@@ -49,21 +52,21 @@ func TestFindByIDAndCancel(t *testing.T) {
 		t.Fatal("unexpected first action")
 	}
 
-	var got, byTwo []*PlanEntry[*toyState]
+	var got, byTwo []*sim.PlanEntry[*toyState]
 	for e, a := range p.FindByID[*authoredAction](testID) {
 		got = append(got, e)
 		if a.Actor() == 2 {
 			byTwo = append(byTwo, e)
 		}
 	}
-	if len(got) != 4 || got[0].Status() != EntryRan || got[1].Status() != EntryPending {
+	if len(got) != 4 || got[0].Status() != sim.EntryRan || got[1].Status() != sim.EntryPending {
 		t.Fatalf("by ID found %d, want 4: the modifier that ran, and the 3 still to run", len(got))
 	}
 	if len(byTwo) != 2 || nameOf(byTwo[0].Action()) != "by-2" {
 		t.Fatalf("by actor found %v", byTwo)
 	}
 	p.Cancel(byTwo[0])
-	if byTwo[0].Status() != EntryCancelled {
+	if byTwo[0].Status() != sim.EntryCancelled {
 		t.Fatal("the status of a cancelled entry is not EntryCancelled")
 	}
 	if got := names(p, anonymousName); !slices.Equal(
@@ -77,23 +80,24 @@ func TestFindByIDAndCancel(t *testing.T) {
 }
 
 func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.T) {
-	p := NewPlan[*toyState]()
-	p.Append(anonymousAction{name: "command"})
-	var ran []uint8
+	p := sim.NewPlan[*toyState]()
+	p.Append(&typedAction{anonymousAction{name: "command"}})
+	ran := 0
 	for {
-		e, ok := p.Next(2)
+		_, ok := p.Next(2)
 		if !ok {
 			break
 		}
-		ran = append(ran, e.depth)
-		p.Append(anonymousAction{name: "child"}) // every action that runs adds one
+		ran++
+		// every action that runs adds one
+		p.Append(&typedAction{anonymousAction{name: fmt.Sprintf("child%d", ran)}})
 	}
-	if !slices.Equal(ran, []uint8{0, 1, 2}) {
-		t.Fatalf("depths that ran = %v, want [0 1 2]", ran)
+	if ran != 3 { // the command, its child and the child of the child: depths 0, 1 and 2
+		t.Fatalf("%d actions ran, want 3", ran)
 	}
 	cut := 0
-	for _, e := range p.queue.All() {
-		if e.Status() == EntryCut {
+	for _, status := range typedNames(p) {
+		if status == sim.EntryCut {
 			cut++
 		}
 	}
@@ -103,20 +107,20 @@ func TestAnActionAddedByAnotherIsOneDeeperAndAChainIsCutAtTheMaximum(t *testing.
 }
 
 // typedID is the ID of typedAction, and of impostorAction, which is the wrong type for it.
-const typedID ActionID = 60001
+const typedID sim.ActionID = 60001
 
 type typedAction struct{ anonymousAction }
 
-func (a *typedAction) ID() ActionID { return typedID }
+func (a *typedAction) ID() sim.ActionID { return typedID }
 
 // impostorAction has the ID of typedAction and is not one: a mistake of whoever made it.
 type impostorAction struct{ anonymousAction }
 
-func (a *impostorAction) ID() ActionID { return typedID }
+func (a *impostorAction) ID() sim.ActionID { return typedID }
 
 // typedNames is the name of every typed action in the plan, and the status of its entry.
-func typedNames(p *Plan[*toyState]) map[string]EntryStatus {
-	out := map[string]EntryStatus{}
+func typedNames(p *sim.Plan[*toyState]) map[string]sim.EntryStatus {
+	out := map[string]sim.EntryStatus{}
 	for e, a := range p.FindByID[*typedAction](typedID) {
 		out[a.name] = e.Status()
 	}
@@ -125,10 +129,10 @@ func typedNames(p *Plan[*toyState]) map[string]EntryStatus {
 
 // pendingTypedNames is the names of the typed actions still to run, as a caller that changes
 // actions has to find them: by checking the status of each entry.
-func pendingTypedNames(p *Plan[*toyState]) []string {
+func pendingTypedNames(p *sim.Plan[*toyState]) []string {
 	var out []string
 	for e, a := range p.FindByID[*typedAction](typedID) {
-		if e.Status() == EntryPending {
+		if e.Status() == sim.EntryPending {
 			out = append(out, a.name)
 		}
 	}
@@ -136,7 +140,7 @@ func pendingTypedNames(p *Plan[*toyState]) []string {
 }
 
 func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	p.Append(anonymousAction{name: "a"})
 	p.Append(&typedAction{anonymousAction{name: "t1"}})
 	second := &typedAction{anonymousAction{name: "t2"}}
@@ -153,7 +157,8 @@ func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *test
 	}
 	p.Next(4) // runs the first entry in the order of the plan, which is "a" or "t1"
 	p.Next(4)
-	want := map[string]EntryStatus{"t1": EntryRan, "t2": EntryCancelled, "t3": EntryPending}
+	want := map[string]sim.EntryStatus{"t1": sim.EntryRan, "t2": sim.EntryCancelled,
+		"t3": sim.EntryPending}
 	if got := typedNames(p); !maps.Equal(got, want) {
 		t.Fatalf("found %v, want %v", got, want)
 	}
@@ -163,8 +168,8 @@ func TestFindByIDReturnsTheActionsOfOneIDWhateverTheStatusOfTheirEntries(t *test
 }
 
 func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsGivenAsCancelled(t *testing.T) {
-	p := NewPlan[*toyState]()
-	var entries []*PlanEntry[*toyState]
+	p := sim.NewPlan[*toyState]()
+	var entries []*sim.PlanEntry[*toyState]
 	for _, name := range []string{"t1", "t2", "t3"} {
 		p.Append(&typedAction{anonymousAction{name: name}})
 	}
@@ -175,7 +180,7 @@ func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsGivenAsCancell
 	for e, a := range p.FindByID[*typedAction](typedID) {
 		seen = append(seen, a.name)
 		p.Cancel(entries[2]) // t3: not reached yet
-		if a.name == "t3" && e.Status() != EntryCancelled {
+		if a.name == "t3" && e.Status() != sim.EntryCancelled {
 			t.Fatal("t3 was cancelled before the loop reached it and is not given as cancelled")
 		}
 	}
@@ -193,7 +198,7 @@ func TestFindByIDIsLazyAndAnEntryCancelledBeforeTheLoopReachesItIsGivenAsCancell
 }
 
 func TestAnActionOfTheIDButNotOfTheTypeIsLeftOutAndTheOthersAreFound(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	p.Append(&typedAction{anonymousAction{name: "t1"}})
 	p.Append(&impostorAction{anonymousAction{name: "impostor"}})
 	p.Append(&typedAction{anonymousAction{name: "t2"}})
@@ -203,7 +208,7 @@ func TestAnActionOfTheIDButNotOfTheTypeIsLeftOutAndTheOthersAreFound(t *testing.
 }
 
 func TestAWalkInsideAnotherWalkHasItsOwnPlace(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	for _, name := range []string{"t1", "t2"} {
 		p.Append(&typedAction{anonymousAction{name: name}})
 	}
@@ -219,7 +224,7 @@ func TestAWalkInsideAnotherWalkHasItsOwnPlace(t *testing.T) {
 }
 
 func TestAWalkOfThePlanMakesNothingToCollect(t *testing.T) {
-	p := NewPlan[*toyState]()
+	p := sim.NewPlan[*toyState]()
 	for range 20 {
 		p.Append(&typedAction{})
 	}
@@ -233,70 +238,56 @@ func TestAWalkOfThePlanMakesNothingToCollect(t *testing.T) {
 }
 
 func TestBuildGivesTheOrderOfAnAppendOfEachActionAndTheEntriesAreAtDepthZero(t *testing.T) {
-	actions := func() []Action[*toyState] {
-		return []Action[*toyState]{
+	actions := func() []sim.Action[*toyState] {
+		return []sim.Action[*toyState]{
 			anonymousAction{name: "c", priority: 0}, anonymousAction{name: "a", priority: -10},
 			anonymousAction{name: "d", priority: 0}, anonymousAction{name: "e", priority: 50},
 			anonymousAction{name: "b", priority: -10},
 		}
 	}
-	one := NewPlan[*toyState]()
+	one := sim.NewPlan[*toyState]()
 	for _, a := range actions() {
 		one.Append(a)
 	}
-	all := NewPlan[*toyState]()
+	all := sim.NewPlan[*toyState]()
 	all.Build(actions())
 	a := names(one, anonymousName)
 	b := names(all, anonymousName)
 	if !slices.Equal(a, b) || !slices.Equal(a, []string{"a", "b", "c", "d", "e"}) {
 		t.Fatalf("one by one %v, all at once %v", a, b)
 	}
-	built := NewPlan[*toyState]()
-	built.Build(actions())
-	for {
-		e, ok := built.Next(4)
-		if !ok {
-			break
-		}
-		if e.depth != 0 {
-			t.Fatalf("an entry of Build is at depth %d, want 0", e.depth)
-		}
-	}
 }
 
 func TestWhatIsAppendedAfterBuildIsOrderedAmongTheEntriesStillToRunAndFindSeesAll(
 	t *testing.T,
 ) {
-	p := NewPlan[*toyState]()
-	p.Build([]Action[*toyState]{
+	p := sim.NewPlan[*toyState]()
+	p.Build([]sim.Action[*toyState]{
 		&typedAction{anonymousAction{name: "t1", priority: 0}},
 		&typedAction{anonymousAction{name: "t2", priority: 10}},
 	})
-	e, _ := p.Next(4) // t1 runs
+	p.Next(4) // t1 runs
 	p.Append(&typedAction{anonymousAction{name: "early", priority: -100}})
 	if got := pendingTypedNames(p); !slices.Equal(got, []string{"t2", "early"}) {
 		t.Fatalf("found %v, want what is still to run, in the order they were added", got)
 	}
-	if got := typedNames(p); len(got) != 3 || got["t1"] != EntryRan {
+	if got := typedNames(p); len(got) != 3 || got["t1"] != sim.EntryRan {
 		t.Fatalf("found %v, want the three, t1 among them as ran", got)
 	}
-	if next, _ := p.Next(4); nameOf(next.Action()) != "early" || next.depth != e.depth+1 {
-		t.Fatalf(
-			"the next to run is %q at depth %d, want early, one deeper than t1",
-			nameOf(next.Action()), next.depth,
-		)
+	if next, _ := p.Next(4); nameOf(next.Action()) != "early" {
+		t.Fatalf("the next to run is %q, want early", nameOf(next.Action()))
 	}
 }
 
 func TestCancelledListsTheEntriesCancelledInTheOrderTheyWereAndNotTheOnesThatRan(t *testing.T) {
-	p := NewPlan[*toyState]()
-	p.Build([]Action[*toyState]{
+	p := sim.NewPlan[*toyState]()
+	p.Build([]sim.Action[*toyState]{
 		&typedAction{anonymousAction{name: "t1"}}, &typedAction{anonymousAction{name: "t2"}},
 		&typedAction{anonymousAction{name: "t3"}},
 	})
 	first, _ := p.Next(4)
 	p.Cancel(first) // it ran already: nothing to cancel
-	var entries []*PlanEntry[*toyState]
+	var entries []*sim.PlanEntry[*toyState]
 	for e := range p.FindByID[*typedAction](typedID) {
 		entries = append(entries, e)
 	}

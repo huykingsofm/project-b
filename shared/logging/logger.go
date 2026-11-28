@@ -14,6 +14,31 @@ import (
 	"time"
 )
 
+// global is the logger of the package functions.
+var global atomic.Pointer[Logger]
+
+func init() { setGlobal(defaultLogger()) }
+
+// Global returns the logger of the package functions: a synchronous one until Init is called.
+func Global() Logger { return *global.Load() }
+
+// Debug logs at LevelDebug through the global logger.
+func Debug(msg string, kv ...any) { Global().Debug(msg, kv...) }
+
+// Info logs at LevelInfo through the global logger.
+func Info(msg string, kv ...any) { Global().Info(msg, kv...) }
+
+// Warn logs at LevelWarn through the global logger.
+func Warn(msg string, kv ...any) { Global().Warn(msg, kv...) }
+
+// Error logs at LevelError through the global logger.
+func Error(msg string, kv ...any) { Global().Error(msg, kv...) }
+
+// With returns a logger of the global logger that starts its lines with the pairs kv. It keeps
+// writing where it was made from: a logger made after Init puts its entries in the queue, and after
+// close the queue is no longer read.
+func With(kv ...any) Logger { return Global().With(kv...) }
+
 // Logger writes log lines. A value in a field is read later, when the Consumer encodes it, so it
 // must not change after the call: pass numbers, strings, errors and values, not a pointer to state
 // that is still changing.
@@ -36,32 +61,7 @@ type Entry struct {
 	Fields  []any
 }
 
-// global is the logger of the package functions.
-var global atomic.Pointer[Logger]
-
-func init() { setGlobal(defaultLogger()) }
-
 func setGlobal(l Logger) { global.Store(&l) }
-
-// Global returns the logger of the package functions: a synchronous one until Init is called.
-func Global() Logger { return *global.Load() }
-
-// Debug logs at LevelDebug through the global logger.
-func Debug(msg string, kv ...any) { Global().Debug(msg, kv...) }
-
-// Info logs at LevelInfo through the global logger.
-func Info(msg string, kv ...any) { Global().Info(msg, kv...) }
-
-// Warn logs at LevelWarn through the global logger.
-func Warn(msg string, kv ...any) { Global().Warn(msg, kv...) }
-
-// Error logs at LevelError through the global logger.
-func Error(msg string, kv ...any) { Global().Error(msg, kv...) }
-
-// With returns a logger of the global logger that starts its lines with the pairs kv. It keeps
-// writing where it was made from: a logger made after Init puts its entries in the queue, and after
-// close the queue is no longer read.
-func With(kv ...any) Logger { return Global().With(kv...) }
 
 // appendFields returns the fixed fields followed by kv, in a slice of its own.
 func appendFields(fixed, kv []any) []any {

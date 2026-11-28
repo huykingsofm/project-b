@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 
@@ -27,6 +28,136 @@ type (
 // maxNesting is how deep messages may go inside messages (a message whose OnFail holds a message).
 const maxNesting = 8
 
+// EncodeAction writes an action: its ID and its fields.
+func EncodeAction(w *binary.Writer, a BaseAction) error {
+	if a == nil {
+		return fmt.Errorf("%w: nil", ErrNoCodec)
+	}
+	e, ok := a.(Encoder)
+	if !ok {
+		return fmt.Errorf("%w: %T has no Encode", ErrNoCodec, a)
+	}
+	w.Uvarint(uint64(a.ID()))
+	e.Encode(w)
+	return nil
+}
+
+// EncodeCommand writes a command: its ID and its fields. Nothing of a command that cannot be
+// written is left in w.
+func EncodeCommand(w *binary.Writer, c BaseCommand) error {
+	if c == nil {
+		return fmt.Errorf("%w: nil command", ErrNoCodec)
+	}
+	start := len(w.B)
+	w.Uvarint(uint64(c.ID()))
+	if err := c.Encode(w); err != nil {
+		w.B = w.B[:start]
+		return err
+	}
+	return nil
+}
+
+// EncodeState writes a state: its type and its fields.
+func EncodeState(w *binary.Writer, s State) error {
+	if s == nil {
+		return fmt.Errorf("%w: nil state", ErrNoCodec)
+	}
+	start := len(w.B)
+	w.Uvarint(uint64(s.Type()))
+	if err := s.Encode(w); err != nil {
+		w.B = w.B[:start]
+		return err
+	}
+	return nil
+}
+
+// EncodeOnFail writes an OnFail: its ID and what it holds. Nothing of an OnFail that cannot be
+// written is left in w.
+func EncodeOnFail(w *binary.Writer, f OnFail) error {
+	if f == nil {
+		return fmt.Errorf("%w: nil OnFail", ErrNoCodec)
+	}
+	start := len(w.B)
+	w.Uvarint(uint64(f.ID()))
+	if err := f.Encode(w); err != nil {
+		w.B = w.B[:start]
+		return err
+	}
+	return nil
+}
+
+// EncodeMessage writes a message whole. A message whose OnFail holds a message that holds a message
+// and so on deeper than DecodeMessage reads is refused: what is written must be readable.
+func EncodeMessage(w *binary.Writer, m Message) error {
+	if m == nil {
+		return fmt.Errorf("%w: nil message", ErrNoCodec)
+	}
+	if nesting(m) > maxNesting {
+		return fmt.Errorf(
+			"%w: messages inside messages go deeper than %d", binary.ErrBadValue, maxNesting,
+		)
+	}
+	return m.Encode(w)
+}
+
+// EncodeDirectiveRequest writes a request of an engine to its cluster: its number, its kind, its
+// tag and what the kind needs (the state and the start actions of an engine to make, or the ID of
+// the engine to remove). Nothing of a request that cannot be written is left in w.
+func EncodeDirectiveRequest(w *binary.Writer, d DirectiveRequest) error {
+	start := len(w.B)
+	w.Uvarint(d.ID)
+	w.Uvarint(d.Tick)
+	w.Uvarint(uint64(d.Kind))
+	w.Bytes(d.Tag)
+	w.Uvarint(uint64(d.Target))
+	if d.Kind == DirectiveCreateEngine {
+		if err := EncodeState(w, d.State); err != nil {
+			w.B = w.B[:start]
+			return err
+		}
+		w.Uvarint(uint64(len(d.StartActions)))
+		for _, a := range d.StartActions {
+			if err := EncodeAction(w, a); err != nil {
+				w.B = w.B[:start]
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// EncodeDirectiveResponse writes the answer of a cluster to an engine.
+func EncodeDirectiveResponse(w *binary.Writer, d DirectiveResponse) {
+	w.Uvarint(d.ID)
+	w.Uvarint(uint64(d.Kind))
+	w.Bytes(d.Tag)
+	w.Uvarint(uint64(d.Engine))
+	w.Uvarint(d.Tick)
+	w.String(d.Failure)
+}
+
+// DecodeDirectiveResponse reads what EncodeDirectiveResponse wrote.
+func DecodeDirectiveResponse(r *binary.Reader) (DirectiveResponse, error) {
+	d := DirectiveResponse{
+		ID: r.Uvarint(), Kind: DirectiveKind(r.Uvarint()), Tag: copyOf(r.Bytes()),
+	}
+	d.Engine, d.Tick = r.Uint[StateID](), r.Uvarint()
+	d.Failure = r.String()
+	return d, r.Err()
+}
+
+// EncodeActions writes a list of actions: how many, and each. It returns an error, and the writer
+// holds a partial list, when an action cannot be written.
+func EncodeActions[S State](w *binary.Writer, actions []Action[S]) error {
+	w.Uvarint(uint64(len(actions)))
+	for _, a := range actions {
+		if err := EncodeAction(w, a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Codecs holds what is needed to read back what the engines write: the actions, the commands, the
 // states and the kinds of OnFail of a game, each in a register of its own, and the readers of the
 // messages of each type of state. Writing needs none of it, because everything that is written
@@ -40,7 +171,7 @@ type Codecs struct {
 	messages map[StateType]stateMessageDecoder
 }
 
-// NewCodecs makes codecs that know what every cluster has, the configuration engine, and nothing
+// NewCodecs makes codecs that know what every cluster has, the coordinator engine, and nothing
 // else: the game registers its own states, actions and commands in them.
 func NewCodecs() *Codecs {
 	c := &Codecs{
@@ -52,9 +183,17 @@ func NewCodecs() *Codecs {
 	}
 	// the registers are empty, so this fails only when the numbers of the configuration meet others
 	err := errs.Join(
-		c.RegisterState(DecodeConfigState),
+		c.RegisterState(DecodeCoordinatorState),
 		c.RegisterCommand(decodeUpdateConfigCommand),
 		c.RegisterAction(decodeUpdateConfigAction),
+		c.RegisterCommand(func(r *binary.Reader, v codec.Version) (CreateEngineCommand, error) {
+			return decodeCreateEngineCommand(c, r, v)
+		}),
+		c.RegisterCommand(decodeRetireEngineCommand),
+		c.RegisterAction(func(r *binary.Reader, v codec.Version) (CreateEngineAction, error) {
+			return decodeCreateEngineAction(c, r, v)
+		}),
+		c.RegisterAction(decodeRetireEngineAction),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("the codecs of the configuration cannot be registered: %v", err))
@@ -130,20 +269,6 @@ func (c *Codecs) RegisterOnFail(prototype OnFail, decode OnFailDecoder) error {
 	return c.OnFails.Register(prototype, decode)
 }
 
-// EncodeAction writes an action: its ID and its fields.
-func EncodeAction(w *binary.Writer, a BaseAction) error {
-	if a == nil {
-		return fmt.Errorf("%w: nil", ErrNoCodec)
-	}
-	e, ok := a.(Encoder)
-	if !ok {
-		return fmt.Errorf("%w: %T has no Encode", ErrNoCodec, a)
-	}
-	w.Uvarint(uint64(a.ID()))
-	e.Encode(w)
-	return nil
-}
-
 // DecodeAction reads what EncodeAction wrote, of the data version given.
 func (c *Codecs) DecodeAction(
 	r *binary.Reader, version codec.Version,
@@ -160,21 +285,6 @@ func (c *Codecs) DecodeAction(
 		return nil, fmt.Errorf("%w: action %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)
-}
-
-// EncodeCommand writes a command: its ID and its fields. Nothing of a command that cannot be
-// written is left in w.
-func EncodeCommand(w *binary.Writer, c BaseCommand) error {
-	if c == nil {
-		return fmt.Errorf("%w: nil command", ErrNoCodec)
-	}
-	start := len(w.B)
-	w.Uvarint(uint64(c.ID()))
-	if err := c.Encode(w); err != nil {
-		w.B = w.B[:start]
-		return err
-	}
-	return nil
 }
 
 // DecodeCommand reads what EncodeCommand wrote, of the data version given. The command is of the
@@ -194,20 +304,6 @@ func (c *Codecs) DecodeCommand(
 		return nil, fmt.Errorf("%w: command %d", ErrUnknownCode, code)
 	}
 	return decode(r, version)
-}
-
-// EncodeState writes a state: its type and its fields.
-func EncodeState(w *binary.Writer, s State) error {
-	if s == nil {
-		return fmt.Errorf("%w: nil state", ErrNoCodec)
-	}
-	start := len(w.B)
-	w.Uvarint(uint64(s.Type()))
-	if err := s.Encode(w); err != nil {
-		w.B = w.B[:start]
-		return err
-	}
-	return nil
 }
 
 // DecodeState reads what EncodeState wrote, of the data version given.
@@ -230,47 +326,82 @@ func (c *Codecs) DecodeStateOfType(
 	return decode(r, version)
 }
 
-// EncodeOnFail writes an OnFail: its ID and what it holds. Nothing of an OnFail that cannot be
-// written is left in w.
-func EncodeOnFail(w *binary.Writer, f OnFail) error {
-	if f == nil {
-		return fmt.Errorf("%w: nil OnFail", ErrNoCodec)
-	}
-	start := len(w.B)
-	w.Uvarint(uint64(f.ID()))
-	if err := f.Encode(w); err != nil {
-		w.B = w.B[:start]
-		return err
-	}
-	return nil
-}
-
-// EncodeMessage writes a message whole. A message whose OnFail holds a message that holds a message
-// and so on deeper than DecodeMessage reads is refused: what is written must be readable.
-func EncodeMessage(w *binary.Writer, m Message) error {
-	if m == nil {
-		return fmt.Errorf("%w: nil message", ErrNoCodec)
-	}
-	if nesting(m) > maxNesting {
-		return fmt.Errorf(
-			"%w: messages inside messages go deeper than %d", binary.ErrBadValue, maxNesting,
-		)
-	}
-	return m.Encode(w)
-}
-
-func nesting(m Message) int {
-	if n, ok := m.OnFail().(NestedOnFail); ok && n.Nested() != nil {
-		return 1 + nesting(n.Nested())
-	}
-	return 0
-}
-
 // DecodeMessage reads a message that EncodeMessage wrote, of the data version given.
 func (c *Codecs) DecodeMessage(
 	r *binary.Reader, version codec.Version,
 ) (Message, error) {
 	return c.decodeMessage(r, version, 0)
+}
+
+// DecodeOnFail reads what EncodeOnFail wrote, of the data version given. A kind that holds a
+// message reads it with nested, which may be nil for a reader that expects none.
+func (c *Codecs) DecodeOnFail(
+	r *binary.Reader, version codec.Version, nested MessageDecoder,
+) (OnFail, error) {
+	return c.decodeOnFail(r, version, nested)
+}
+
+// DecodeDirectiveRequest reads what EncodeDirectiveRequest wrote, of the data version given.
+func (c *Codecs) DecodeDirectiveRequest(
+	r *binary.Reader, version codec.Version,
+) (DirectiveRequest, error) {
+	d := DirectiveRequest{ID: r.Uvarint(), Tick: r.Uvarint()}
+	d.Kind, d.Tag = DirectiveKind(r.Uvarint()), copyOf(r.Bytes())
+	d.Target = r.Uint[StateID]()
+	if err := r.Err(); err != nil {
+		return DirectiveRequest{}, err
+	}
+	if d.Kind == DirectiveCreateEngine {
+		var err error
+		if d.State, err = c.DecodeState(r, version); err != nil {
+			return DirectiveRequest{}, err
+		}
+		n := r.Uvarint()
+		if err := r.Err(); err != nil {
+			return DirectiveRequest{}, err
+		}
+		if n > uint64(r.Left()) { // an action takes at least one byte
+			return DirectiveRequest{}, fmt.Errorf("%w: %d start actions", binary.ErrShort, n)
+		}
+		for range n {
+			a, err := c.DecodeAction(r, version)
+			if err != nil {
+				return DirectiveRequest{}, err
+			}
+			d.StartActions = append(d.StartActions, a)
+		}
+	}
+	return d, r.Err()
+}
+
+// DecodeActions reads a list of actions of the states of type S, as EncodeActions wrote it. An
+// action that is not an Action[S] is an error.
+func (c *Codecs) DecodeActions[S State](
+	r *binary.Reader, version codec.Version,
+) ([]Action[S], error) {
+	n := r.Uvarint()
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	if n > uint64(r.Left()) { // an action takes at least one byte
+		return nil, fmt.Errorf("%w: %d actions", binary.ErrShort, n)
+	}
+	var out []Action[S] // nil, not empty, when there is none, as a list made in code has it
+	for range n {
+		decoded, err := c.DecodeAction(r, version)
+		if err != nil {
+			return nil, err
+		}
+		a, ok := decoded.(Action[S])
+		if !ok {
+			return nil, fmt.Errorf(
+				"%w: %T is not an action of the type of state %d",
+				ErrUnknownCode, decoded, StateTypeOf[S](),
+			)
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 func (c *Codecs) decodeMessage(
@@ -330,52 +461,18 @@ func (c *Codecs) decodeOnFail(
 	return decode(r, version, nested)
 }
 
-// DecodeOnFail reads what EncodeOnFail wrote, of the data version given. A kind that holds a
-// message reads it with nested, which may be nil for a reader that expects none.
-func (c *Codecs) DecodeOnFail(
-	r *binary.Reader, version codec.Version, nested MessageDecoder,
-) (OnFail, error) {
-	return c.decodeOnFail(r, version, nested)
+func nesting(m Message) int {
+	if n, ok := m.OnFail().(NestedOnFail); ok && n.Nested() != nil {
+		return 1 + nesting(n.Nested())
+	}
+	return 0
 }
 
-// EncodeActions writes a list of actions: how many, and each. It returns an error, and the writer
-// holds a partial list, when an action cannot be written.
-func EncodeActions[S State](w *binary.Writer, actions []Action[S]) error {
-	w.Uvarint(uint64(len(actions)))
-	for _, a := range actions {
-		if err := EncodeAction(w, a); err != nil {
-			return err
-		}
+// copyOf is a copy of the bytes that shares nothing with the reader they were read from, and nil
+// for none.
+func copyOf(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
 	}
-	return nil
-}
-
-// DecodeActions reads a list of actions of the states of type S, as EncodeActions wrote it. An
-// action that is not an Action[S] is an error.
-func (c *Codecs) DecodeActions[S State](
-	r *binary.Reader, version codec.Version,
-) ([]Action[S], error) {
-	n := r.Uvarint()
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	if n > uint64(r.Left()) { // an action takes at least one byte
-		return nil, fmt.Errorf("%w: %d actions", binary.ErrShort, n)
-	}
-	var out []Action[S] // nil, not empty, when there is none, as a list made in code has it
-	for range n {
-		decoded, err := c.DecodeAction(r, version)
-		if err != nil {
-			return nil, err
-		}
-		a, ok := decoded.(Action[S])
-		if !ok {
-			return nil, fmt.Errorf(
-				"%w: %T is not an action of the type of state %d",
-				ErrUnknownCode, decoded, StateTypeOf[S](),
-			)
-		}
-		out = append(out, a)
-	}
-	return out, nil
+	return bytes.Clone(b)
 }

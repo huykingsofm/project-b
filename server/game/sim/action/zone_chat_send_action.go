@@ -17,9 +17,19 @@ type ZoneChatSendAction struct {
 	Text   string
 }
 
+// decodeZoneChatSendAction reads what Encode wrote.
+func decodeZoneChatSendAction(
+	r *binary.Reader, version codec.Version,
+) (ZoneChatSendAction, error) {
+	a := ZoneChatSendAction{FromID: r.Uint[state.CharacterID](), Text: r.String()}
+	return a, r.Err()
+}
+
 func (a ZoneChatSendAction) ID() sim.ActionID { return ZoneChatSendActionID }
-func (a ZoneChatSendAction) Priority() int16  { return PriorityResolve }
-func (a ZoneChatSendAction) Actor() any       { return a.FromID }
+
+func (a ZoneChatSendAction) Priority() int16 { return PriorityResolve }
+
+func (a ZoneChatSendAction) Actor() any { return a.FromID }
 
 // Clone returns the action itself: it holds only values.
 func (a ZoneChatSendAction) Clone() sim.Action[*zonestate.State] {
@@ -28,7 +38,7 @@ func (a ZoneChatSendAction) Clone() sim.Action[*zonestate.State] {
 
 // Apply records the message and gives it to each zonelayer.
 func (a ZoneChatSendAction) Apply(
-	c *sim.Context, s *zonestate.State, r *sim.Registry[*zonestate.State],
+	c *sim.Context, s *zonestate.State, r *sim.ActionRegistry[*zonestate.State],
 	_ *sim.Plan[*zonestate.State],
 ) {
 	s.SendMessage(zonestate.NewChatMessage(a.FromID, a.Text, c.Tick))
@@ -43,12 +53,4 @@ func (a ZoneChatSendAction) Apply(
 func (a ZoneChatSendAction) Encode(w *binary.Writer) {
 	w.Uvarint(uint64(a.FromID))
 	w.String(a.Text)
-}
-
-// decodeZoneChatSendAction reads what Encode wrote.
-func decodeZoneChatSendAction(
-	r *binary.Reader, version codec.Version,
-) (ZoneChatSendAction, error) {
-	a := ZoneChatSendAction{FromID: r.Uint[state.CharacterID](), Text: r.String()}
-	return a, r.Err()
 }

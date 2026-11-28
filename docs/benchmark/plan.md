@@ -19,26 +19,26 @@ Conventions and how to run: [index](index.md). Behavior: [`Plan`](../simulation.
 
 | Benchmark | N | ns/op | B/op | allocs/op |
 |---|---|---|---|---|
-| PlanAppend | 20 | 1,490 (75 ns for each action) | 768 | 33 |
-| PlanAppend | 100 | 7,360 (74 ns for each action) | 4,928 | 125 |
-| PlanAppend | 1,000 | 72,700 (73 ns for each action) | 44,452 | 1,037 |
-| PlanAppendAndRun | 20 | 1,550 | 768 | 33 |
-| PlanAppendAndRun | 100 | 7,900 | 4,928 | 125 |
-| PlanAppendAndRun | 1,000 | 76,600 | 44,452 | 1,037 |
-| PlanBuildAndRun | 20 | 1,100 | 288 | 13 |
-| PlanBuildAndRun | 100 | 5,300 | 2,528 | 25 |
-| PlanBuildAndRun | 1,000 | 48,200 | 20,452 | 37 |
-| PlanFindByID | 20 | 31 | 0 | 0 |
-| PlanFindByID | 100 | 81 | 0 | 0 |
-| PlanFindByID | 1,000 | 685 | 0 | 0 |
-| PlanFindByIDNested | 20 | 108 | 0 | 0 |
-| PlanFindByIDNested | 100 | 156 | 0 | 0 |
-| PlanFindByIDNested | 1,000 | 820 | 0 | 0 |
+| PlanAppend | 20 | 1,265 (63 ns for each action) | 768 | 33 |
+| PlanAppend | 100 | 6,340 (63 ns for each action) | 4,928 | 125 |
+| PlanAppend | 1,000 | 64,300 (64 ns for each action) | 44,451 | 1,037 |
+| PlanAppendAndRun | 20 | 1,340 | 768 | 33 |
+| PlanAppendAndRun | 100 | 6,670 | 4,928 | 125 |
+| PlanAppendAndRun | 1,000 | 67,500 | 44,451 | 1,037 |
+| PlanBuildAndRun | 20 | 777 | 288 | 13 |
+| PlanBuildAndRun | 100 | 3,590 | 2,528 | 25 |
+| PlanBuildAndRun | 1,000 | 32,100 | 20,451 | 37 |
+| PlanFindByID | 20 | 19 | 0 | 0 |
+| PlanFindByID | 100 | 66 | 0 | 0 |
+| PlanFindByID | 1,000 | 667 | 0 | 0 |
+| PlanFindByIDNested | 20 | 55 | 0 | 0 |
+| PlanFindByIDNested | 100 | 105 | 0 | 0 |
+| PlanFindByIDNested | 1,000 | 752 | 0 | 0 |
 
 The plan is a `table.PriorityQueue` whose entries keep their own status (pending, ran, cancelled, cut), with one column, for the ID of its actions. Taking out the column for the actor (the plan no longer has `Find`, and no code asked for it) took Append from 135 to 75 ns for each action, 16 to 30 percent fewer bytes and 40 to 50 percent fewer allocations; `FindByID` and the nested walk are as before. Before the status was in the entries, the queue kept an array of states and a list of what was cancelled: against it, Append and Build took the same time and 8 to 11 percent fewer bytes, and the nested walk was 4 to 10 percent faster. Before it was a sorted slice with two maps of buckets; the same benchmarks on that plan gave: Append 2,340, 14,143 and 176,287 ns (20, 100, 1,000), FindByID 29, 69 and 577 ns, FindByIDNested 103, 154 and 719 ns.
 
 - `Append` keeps one column, for the ID of each action, and none for the actor or the Go type.
-- **`Build` is about 25 to 35 percent faster than `Append` of each action and allocates about half the bytes and far fewer times,** because it orders the actions once and takes the entries from one array. An engine starts every tick with `Build`; `Append` is for what an action adds while the plan runs.
+- **`Build` is about 40 to 50 percent faster than `Append` of each action and allocates about half the bytes and far fewer times,** because it orders the actions once and takes the entries from one array. An engine starts every tick with `Build`; `Append` is for what an action adds while the plan runs.
 - **What the queue costs:** `FindByID` is 17 to 20 percent slower than on the sorted slice with two maps, at most 120 ns in 1,000 actions (the lookup goes through the column of the queue and reads each entry from its array); `Append` is faster than on that plan (36 to 59 percent faster).
 - `FindByID` makes no slice, so it allocates nothing and a walk inside a walk costs no more than two walks.
 - `FindByID` stops when the loop stops: the nested benchmark leaves the walk of the damage after 3 entries.

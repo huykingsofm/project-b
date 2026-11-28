@@ -24,4 +24,10 @@ const (
 	ZoneLayerCharacterItemPickupActionID
 	ZoneLayerItemEntityAddActionID
 	ZoneLayerItemEntityRemoveActionID
+	WorldZoneAddActionID
+	WorldZoneLayerAddActionID
+	ZoneLayerAnnounceToZoneActionID
+	ZoneZoneLayerAddActionID
+	ZoneExitAddActionID
+	WorldZoneExitAddActionID
 )

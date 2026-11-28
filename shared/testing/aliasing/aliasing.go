@@ -15,13 +15,6 @@ import (
 	"strings"
 )
 
-// ref is a piece of memory that a value refers to: the map, the pointee or the array behind a
-// slice.
-type ref struct {
-	start, end uintptr
-	path       string
-}
-
 // Disjoint returns nil when a and b share no memory that can be changed, and otherwise an error
 // that says, by the path to each, what they share. Strings are not looked at: they cannot be
 // changed. Functions are not looked at either: two closures of one function literal have one
@@ -51,77 +44,20 @@ func Disjoint(a, b any) error {
 	return nil
 }
 
-type visit struct {
-	addr uintptr
-	typ  reflect.Type
-}
-
-func collect(v reflect.Value) []ref {
-	var out []ref
-	walk(v, "value", map[visit]bool{}, &out)
-	return out
-}
-
-func add(out *[]ref, start uintptr, size uintptr, path string) {
-	if start == 0 {
-		return
-	}
-	*out = append(*out, ref{start: start, end: start + max(size, 1), path: path})
-}
-
-func walk(v reflect.Value, path string, seen map[visit]bool, out *[]ref) {
-	switch v.Kind() {
-	case reflect.Pointer:
-		if v.IsNil() {
-			return
-		}
-		add(out, v.Pointer(), v.Type().Elem().Size(), path)
-		if key := (visit{v.Pointer(), v.Type()}); !seen[key] {
-			seen[key] = true
-			walk(v.Elem(), "(*"+path+")", seen, out)
-		}
-	case reflect.Map:
-		if v.IsNil() {
-			return
-		}
-		add(out, v.Pointer(), 1, path)
-		if key := (visit{v.Pointer(), v.Type()}); !seen[key] {
-			seen[key] = true
-			it := v.MapRange()
-			for it.Next() {
-				walk(it.Key(), path+"[key]", seen, out)
-				walk(it.Value(), path+"[value]", seen, out)
-			}
-		}
-	case reflect.Slice:
-		if v.IsNil() {
-			return
-		}
-		// the elements of a slice of zero-size values (a set is a map to struct{}) take no memory,
-		// and Go gives all such slices the same address: there is nothing there to share
-		if size := v.Type().Elem().Size(); size > 0 {
-			add(out, v.Pointer(), size*uintptr(v.Cap()), path)
-		}
-		for i := range v.Len() {
-			walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i), seen, out)
-		}
-	case reflect.Array:
-		for i := range v.Len() {
-			walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i), seen, out)
-		}
-	case reflect.Struct:
-		for i := range v.NumField() {
-			walk(v.Field(i), path+"."+v.Type().Field(i).Name, seen, out)
-		}
-	case reflect.Interface:
-		if !v.IsNil() {
-			walk(v.Elem(), path, seen, out)
-		}
-	case reflect.Chan, reflect.UnsafePointer:
-		if !v.IsNil() {
-			add(out, v.Pointer(), 1, path)
-		}
-	}
+// CheckCloneable returns nil when t obeys the rule of data that is copied, and otherwise an error
+// that says, by the path of its fields, where it does not.
+//
+//   - A value type (numbers, bool, string, and arrays and structs of them) is copied by assignment.
+//   - Any other type must have a method Clone() T (or Clone() *T, or Clone() I for an interface I
+//     that *T implements), which is trusted to copy what
+//     the type holds. What the type holds is still looked at: a slice, a map or a pointer inside it
+//     is allowed, but the types they hold must be values or have Clone too, because a container
+//     copies them with Clone when they have it and by assignment when they have not.
+//   - A channel and a function are never allowed. An interface is allowed when Rules says so, and
+//     as the key of a map, because a key is an identifier.
+func CheckCloneable(t reflect.Type, rules Rules) error {
+	c := checker{rules: rules, active: map[reflect.Type]bool{}}
+	return c.element(t, t.String(), false, false)
 }
 
 // Rules are what CheckCloneable allows besides values and types with Clone.
@@ -146,59 +82,21 @@ func (r Rules) has(list []reflect.Type, t reflect.Type) bool {
 	return slices.Contains(list, t)
 }
 
-// CheckCloneable returns nil when t obeys the rule of data that is copied, and otherwise an error
-// that says, by the path of its fields, where it does not.
-//
-//   - A value type (numbers, bool, string, and arrays and structs of them) is copied by assignment.
-//   - Any other type must have a method Clone() T (or Clone() *T, or Clone() I for an interface I
-//     that *T implements), which is trusted to copy what
-//     the type holds. What the type holds is still looked at: a slice, a map or a pointer inside it
-//     is allowed, but the types they hold must be values or have Clone too, because a container
-//     copies them with Clone when they have it and by assignment when they have not.
-//   - A channel and a function are never allowed. An interface is allowed when Rules says so, and
-//     as the key of a map, because a key is an identifier.
-func CheckCloneable(t reflect.Type, rules Rules) error {
-	c := checker{rules: rules, active: map[reflect.Type]bool{}}
-	return c.element(t, t.String(), false, false)
+// ref is a piece of memory that a value refers to: the map, the pointee or the array behind a
+// slice.
+type ref struct {
+	start, end uintptr
+	path       string
+}
+
+type visit struct {
+	addr uintptr
+	typ  reflect.Type
 }
 
 type checker struct {
 	rules  Rules
 	active map[reflect.Type]bool
-}
-
-// hasClone says whether the type, or its pointer, has a method Clone that returns the type, a
-// pointer to it, or an interface that the pointer implements (a type that is copied behind an
-// interface, as a state is).
-func hasClone(t reflect.Type) bool {
-	p := reflect.PointerTo(t)
-	m, ok := p.MethodByName("Clone")
-	if !ok || m.Type.NumIn() != 1 || m.Type.NumOut() != 1 {
-		return false
-	}
-	out := m.Type.Out(0)
-	return out == t || out == p || (out.Kind() == reflect.Interface && p.Implements(out))
-}
-
-// pure says whether assignment copies everything the type holds.
-func pure(t reflect.Type) bool {
-	switch t.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Uintptr,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
-		return true
-	case reflect.Array:
-		return pure(t.Elem())
-	case reflect.Struct:
-		for field := range t.Fields() {
-			if !pure(field.Type) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
 }
 
 // element checks a type that is held as a value, as an element of a container or a field: it is a
@@ -284,4 +182,106 @@ func (c *checker) held(t reflect.Type, path string) error {
 	default:
 		return c.element(t, path, false, true)
 	}
+}
+
+func collect(v reflect.Value) []ref {
+	var out []ref
+	walk(v, "value", map[visit]bool{}, &out)
+	return out
+}
+
+func add(out *[]ref, start uintptr, size uintptr, path string) {
+	if start == 0 {
+		return
+	}
+	*out = append(*out, ref{start: start, end: start + max(size, 1), path: path})
+}
+
+func walk(v reflect.Value, path string, seen map[visit]bool, out *[]ref) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return
+		}
+		add(out, v.Pointer(), v.Type().Elem().Size(), path)
+		if key := (visit{v.Pointer(), v.Type()}); !seen[key] {
+			seen[key] = true
+			walk(v.Elem(), "(*"+path+")", seen, out)
+		}
+	case reflect.Map:
+		if v.IsNil() {
+			return
+		}
+		add(out, v.Pointer(), 1, path)
+		if key := (visit{v.Pointer(), v.Type()}); !seen[key] {
+			seen[key] = true
+			it := v.MapRange()
+			for it.Next() {
+				walk(it.Key(), path+"[key]", seen, out)
+				walk(it.Value(), path+"[value]", seen, out)
+			}
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			return
+		}
+		// the elements of a slice of zero-size values (a set is a map to struct{}) take no memory,
+		// and Go gives all such slices the same address: there is nothing there to share
+		if size := v.Type().Elem().Size(); size > 0 {
+			add(out, v.Pointer(), size*uintptr(v.Cap()), path)
+		}
+		for i := range v.Len() {
+			walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i), seen, out)
+		}
+	case reflect.Array:
+		for i := range v.Len() {
+			walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i), seen, out)
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			walk(v.Field(i), path+"."+v.Type().Field(i).Name, seen, out)
+		}
+	case reflect.Interface:
+		if !v.IsNil() {
+			walk(v.Elem(), path, seen, out)
+		}
+	case reflect.Chan, reflect.UnsafePointer:
+		if !v.IsNil() {
+			add(out, v.Pointer(), 1, path)
+		}
+	}
+}
+
+// hasClone says whether the type, or its pointer, has a method Clone that returns the type, a
+// pointer to it, or an interface that the pointer implements (a type that is copied behind an
+// interface, as a state is).
+func hasClone(t reflect.Type) bool {
+	p := reflect.PointerTo(t)
+	m, ok := p.MethodByName("Clone")
+	if !ok || m.Type.NumIn() != 1 || m.Type.NumOut() != 1 {
+		return false
+	}
+	out := m.Type.Out(0)
+	return out == t || out == p || (out.Kind() == reflect.Interface && p.Implements(out))
+}
+
+// pure says whether assignment copies everything the type holds.
+func pure(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
+		return true
+	case reflect.Array:
+		return pure(t.Elem())
+	case reflect.Struct:
+		for field := range t.Fields() {
+			if !pure(field.Type) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
